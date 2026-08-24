@@ -1,0 +1,11 @@
+{
+  "mode": "EDIT",
+  "selection_mode": "FACE",
+  "selection_counts": {"objects": 1, "verts": 4, "edges": 4, "faces": 1},
+  "active_tool": "MOVE",
+  "orientation": "GLOBAL",
+  "pivot": "MEDIAN",
+  "available_tools": ["SELECT", "MOVE", "ROTATE", "SCALE", "EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT"],
+  "available_constraints": ["FREE", "X", "Y", "Z", "XY", "XZ", "YZ", "NORMAL", "VIEW"],
+  "available_snap_types": ["NONE", "INCREMENT", "GRID", "VERTEX", "EDGE", "FACE", "CURSOR"]
+}

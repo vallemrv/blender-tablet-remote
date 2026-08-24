@@ -1,0 +1,19 @@
+{
+  "active": true,
+  "session_id": "00000000-0000-4000-8000-000000000000",
+  "owner": 1,
+  "phase": "ACTIVE",
+  "mode": "MOVE",
+  "tool": "MOVE",
+  "orientation": "GLOBAL",
+  "value_mode": "RELATIVE",
+  "axes": ["X"],
+  "snap": true,
+  "snap_type": "INCREMENT",
+  "snap_candidate": null,
+  "snap_locked": false,
+  "step": 0.01,
+  "objects": ["Cube"],
+  "values": [1.25, 0.0, 0.0],
+  "angle": 0.0
+}

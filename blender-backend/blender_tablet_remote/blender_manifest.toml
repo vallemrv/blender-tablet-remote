@@ -1,0 +1,17 @@
+schema_version = "1.0.0"
+
+id = "blender_tablet_remote"
+version = "0.1.0"
+name = "Blender Tablet Remote"
+tagline = "Controla Blender desde una tablet Android por WebSocket"
+maintainer = "blender_remoto"
+type = "add-on"
+
+website = "https://github.com/"
+tags = ["System", "3D View"]
+
+blender_version_min = "4.2.0"
+license = ["SPDX:GPL-3.0-or-later"]
+
+[permissions]
+network = "Servidor WebSocket local que recibe comandos de la tablet"

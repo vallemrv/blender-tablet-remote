@@ -1,0 +1,208 @@
+package com.blendertablet.remote.network
+
+import com.blendertablet.remote.model.Axis
+import com.blendertablet.remote.model.BlenderMode
+import com.blendertablet.remote.model.BlenderState
+import com.blendertablet.remote.model.ConnectionStatus
+import com.blendertablet.remote.model.EditTool
+import com.blendertablet.remote.model.FileInfo
+import com.blendertablet.remote.model.Gesture
+import com.blendertablet.remote.model.GesturePhase
+import com.blendertablet.remote.model.AddObject
+import com.blendertablet.remote.model.Orientation
+import com.blendertablet.remote.model.Projection
+import com.blendertablet.remote.model.RecentFile
+import com.blendertablet.remote.model.SelectionMode
+import com.blendertablet.remote.model.SnapAction
+import com.blendertablet.remote.model.SnapType
+import com.blendertablet.remote.model.ToolSession
+import com.blendertablet.remote.model.TouchProbe
+import com.blendertablet.remote.model.TransformMode
+import com.blendertablet.remote.model.TransformSession
+import com.blendertablet.remote.model.ValueMode
+import kotlinx.coroutines.flow.StateFlow
+import com.blendertablet.remote.model.ModifierDefault
+
+/** Dónde está el vídeo del viewport. Lo anuncia el servidor, no se configura a mano. */
+data class StreamEndpoint(val host: String, val port: Int, val token: String)
+
+interface RemoteBlenderClient {
+    val connection: StateFlow<ConnectionStatus>
+    val state: StateFlow<BlenderState>
+    val errors: StateFlow<String?>
+
+    /** Reintentos encadenados sin éxito; vuelve a 0 en cuanto la conexión se abre. */
+    val retryAttempt: StateFlow<Int>
+
+    /** El .blend abierto en el PC. */
+    val file: StateFlow<FileInfo>
+
+    /** Recientes de Blender. Se piden bajo demanda, al abrir el menú Archivo. */
+    val recentFiles: StateFlow<List<RecentFile>>
+
+    /** La transformación modal en curso, según el servidor. */
+    val transformSession: StateFlow<TransformSession>
+
+    /** La herramienta paramétrica de Edit Mode en curso, según el servidor. */
+    val toolSession: StateFlow<ToolSession>
+
+    /**
+     * Qué había bajo el dedo en la última pulsación larga. null = sin sondear.
+     * Lo alimenta [probeTouch], que **no toca la selección**.
+     */
+    val touchProbe: StateFlow<TouchProbe?>
+
+    /** null cuando no hay vídeo disponible (desconectado o captura apagada). */
+    val streamEndpoint: StateFlow<StreamEndpoint?>
+
+    /**
+     * Fija el destino y se queda enganchado a él: si la conexión se cae, el cliente
+     * reintenta solo con espera creciente hasta que [disconnect] diga lo contrario.
+     */
+    fun connect(host: String, port: Int, token: String)
+
+    /** Corta y deja de reintentar. Solo lo pide el usuario. */
+    fun disconnect()
+
+    /**
+     * Reintenta ya, sin esperar al backoff. Lo llaman los eventos que hacen probable
+     * que ahora sí funcione: volver a primer plano o recuperar la red.
+     */
+    fun retryNow()
+    fun requestState()
+    fun select(name: String? = null)
+
+    /**
+     * Selección por toque: [u] y [v] normalizados 0..1 con origen arriba-izquierda.
+     * El servidor lanza un rayo desde la cámara del viewport.
+     */
+    fun pick(u: Double, v: Double, threshold: Double = 0.035)
+
+    /**
+     * Pregunta qué hay en [u], [v] **sin seleccionarlo**: es lo que necesita el menú
+     * radial para responder a lo que hay bajo el dedo. La respuesta aparece en
+     * [touchProbe].
+     */
+    fun probeTouch(u: Double, v: Double, snapType: SnapType)
+
+    /** Olvida el último sondeo, al cerrar el menú radial. */
+    fun clearProbe()
+
+    fun delete()
+    fun duplicate()
+    fun duplicateLinked()
+    /**
+     * Renombra [target], o el objeto activo si no se dice cuál. El menú radial manda
+     * siempre el que hay bajo el dedo: puede no ser el activo.
+     */
+    fun rename(newName: String, target: String? = null)
+    fun selectAll(value: Boolean = true)
+
+    /** Selecciona el objeto tocado; [add] lo añade a la selección en vez de sustituirla. */
+    fun selectObject(name: String, add: Boolean)
+    fun setMode(mode: BlenderMode)
+    fun setSelectionMode(mode: SelectionMode)
+    fun invertSelection()
+    fun hideSelection()
+    fun revealSelection()
+    fun hideObjects(objects: List<String>? = null, unselected: Boolean = false)
+    fun revealObjects(objects: List<String>? = null, select: Boolean = true)
+    fun transformApply(location: Boolean, rotation: Boolean, scale: Boolean)
+    fun requestModifierOptions()
+    fun modifierAdd(type: String, parameters: Map<String, Any?> = emptyMap())
+    fun modifierRemove(name: String)
+    fun modifierMove(name: String, index: Int)
+    fun modifierSet(name: String, parameters: Map<String, Any?>)
+    fun modifierToggle(name: String, viewport: Boolean? = null, render: Boolean? = null)
+    fun modifierApply(name: String)
+
+    /** Loop y Ring parten de una arista ya seleccionada. */
+    fun selectLoop()
+    fun selectRing()
+    fun meshDelete(what: String)
+    fun undo()
+    fun redo()
+
+    /**
+     * Gesto continuo. [dx] y [dy] son fracción de pantalla (1.0 = ancho completo),
+     * no píxeles; [factor] es multiplicativo y solo lo usan ZOOM y SCALE.
+     *
+     * [axis] restringe el movimiento a un eje: es lo que manda el manipulador al
+     * arrastrar una de sus flechas. El servidor lo lee en la fase BEGIN.
+     */
+    fun gesture(
+        gesture: Gesture,
+        phase: GesturePhase,
+        dx: Double = 0.0,
+        dy: Double = 0.0,
+        factor: Double = 1.0,
+        axis: Axis? = null,
+    )
+
+    fun frameSelected()
+
+    /** Vista estándar: FRONT/BACK/LEFT/RIGHT/TOP/BOTTOM. */
+    fun viewAxis(name: String)
+    fun viewFrameAll()
+
+    /** Cambia la proyección de la cámara remota. */
+    fun viewPerspective(projection: Projection)
+
+    /** Coloca el objeto activo en coordenadas absolutas (panel numérico). */
+    fun setLocation(x: Double, y: Double, z: Double)
+
+    /** Rotación absoluta en radianes. */
+    fun setRotation(x: Double, y: Double, z: Double)
+
+    fun setScale(x: Double, y: Double, z: Double)
+
+    /** Añade una primitiva en el cursor 3D. */
+    fun addPrimitive(primitive: AddObject)
+
+    /** Ejecuta una entrada del menú de cursor/origen. */
+    fun snap(action: SnapAction)
+
+    fun fileInfo()
+    fun fileNew()
+    fun fileOpen(path: String)
+
+    /** Falla con código `no_path` si el archivo no se ha guardado nunca. */
+    fun fileSave()
+    fun fileSaveAs(path: String)
+    fun requestRecentFiles()
+
+    /**
+     * Transformación modal: se abre, se ajusta cuantas veces haga falta y **solo
+     * termina con [transformConfirm] o [transformCancel]**. Soltar el dedo no la
+     * cierra, para poder recolocar la mano a mitad de un desplazamiento largo.
+     */
+    fun transformBegin(
+        mode: TransformMode,
+        axes: Set<Axis>,
+        step: Double,
+        snapType: SnapType = SnapType.NONE,
+        orientation: Orientation = Orientation.GLOBAL,
+        valueMode: ValueMode = ValueMode.RELATIVE,
+    )
+
+    fun transformAxes(axes: Set<Axis>)
+    fun transformSnap(snapType: SnapType, step: Double)
+
+    /**
+     * Engancha el movimiento al elemento que haya en [u], [v]. Solo vale en MOVE: el
+     * servidor responde `wrong_tool` en rotar y escalar.
+     */
+    fun transformSnapCandidate(u: Double, v: Double, snapType: SnapType, lock: Boolean = true)
+
+    /** Valor exacto: [values] para mover/escalar, [angleDegrees] para rotar. */
+    fun transformValue(values: List<Double>?, angleDegrees: Double?)
+    fun transformConfirm()
+    fun transformCancel()
+
+    /** Herramientas paramétricas de Edit Mode (preview → confirmar/cancelar). */
+    fun toolBegin(tool: EditTool, parameters: Map<String, Double>)
+    fun toolParameter(parameters: Map<String, Double>)
+    fun toolNudge(delta: Double)
+    fun toolConfirm()
+    fun toolCancel()
+}

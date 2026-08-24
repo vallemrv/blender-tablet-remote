@@ -1,0 +1,110 @@
+# ============================================================
+# SECRETOS Y DATOS PELIGROSOS — NO SUBIR NUNCA
+# ============================================================
+
+# Credenciales, claves y tokens
+*.pem
+*.key
+*.crt
+*.cer
+*.der
+*.p12
+*.pfx
+*.p8
+*.jks
+*.keystore
+*.keystore.jks
+token.pickle
+credentials.json
+credentials*.json
+google-services.json
+GoogleService-Info.plist
+service-account*.json
+*service_account*.json
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+id_dsa
+id_dsa.*
+id_ecdsa
+id_ecdsa.*
+*.secret
+*_secret
+*.secrets
+*_secrets
+.secrets/
+secrets/
+.vault
+.vault-token
+
+# Variables de entorno y configuracion sensible
+.env
+.env.*
+!.env.example
+*.env.local
+env.local
+local.properties
+*.local.properties
+
+# Bases de datos y dumps
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.rdb
+*.aof
+
+# Backups y copias de seguridad
+backup/
+backups/
+*.bak
+*.backup
+*.old
+*.orig
+
+# Logs que pueden filtrar datos
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+nohup.out
+
+# Archivos de sesion / estado local
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ============================================================
+# ARTEFACTOS DE BUILD Y ENTORNOS
+# ============================================================
+
+# Android / Gradle
+.gradle/
+.kotlin/
+.idea/
+**/build/
+*.iml
+captures/
+build/
+captures/
+
+# Python / Blender add-on
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+dist/
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
