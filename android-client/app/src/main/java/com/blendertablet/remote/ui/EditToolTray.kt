@@ -1,27 +1,22 @@
 package com.blendertablet.remote.ui
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -63,8 +58,8 @@ private fun specsFor(tool: EditTool): List<ParamSpec> = when (tool) {
         ParamSpec("depth", "Profundidad", 0.01, false, TransformMode.MOVE),
     )
     EditTool.SUBDIVIDE -> listOf(ParamSpec("cuts", "Cortes", 1.0, true, TransformMode.SCALE))
-    // Loop Cut tiene su propia bandeja (slider de posición, falloff y toggles del
-    // modal); aquí solo los steppers que comparte con el resto.
+    // Loop Cut: la posición es un stepper propio (porcentaje) y añade falloff y
+    // toggles del modal; aquí solo los steppers numéricos que comparte con el resto.
     EditTool.LOOP_CUT -> listOf(
         ParamSpec("cuts", "Cortes", 1.0, true, TransformMode.SCALE),
         ParamSpec("smoothness", "Suavidad", 0.05, false, TransformMode.SCALE),
@@ -74,19 +69,18 @@ private fun specsFor(tool: EditTool): List<ParamSpec> = when (tool) {
 private fun defaultValue(spec: ParamSpec): Double = if (spec.isInt) 1.0 else 0.0
 
 /**
- * Bandeja de la herramienta paramétrica de Edit Mode.
+ * Bandeja de la herramienta paramétrica de Edit Mode, en una franja horizontal.
  *
- * El rail eligió la herramienta y abrió la sesión `tool.*`; aquí se ajustan sus
- * parámetros y se confirma o descarta. Cada cambio reconstruye el preview desde la
- * copia BMesh inicial, así que cancelar devuelve la topología exacta.
+ * Antes era una columna que apilaba los parámetros y tapaba el viewport; ahora es una
+ * sola línea: el rótulo a la izquierda, los parámetros en una fila desplazable y las
+ * dos salidas (descartar/confirmar) fijas a la derecha. Loop Cut coloca la posición
+ * con un stepper numérico (porcentaje) y el lápiz puede seguir deslizándola sobre el
+ * viewport, que ya alimenta `tool.nudge`; cortes, suavidad, perfil y toggles viven en
+ * la misma línea.
  *
- * Loop Cut añade el flujo táctil del Ctrl+R: un slider de posición, el perfil
- * (falloff) y los toggles del modal (uniforme/invertir/fijar), todos como botones
- * porque no hay teclado. Con `awaitingPick` (herramienta armada, sin sesión) se
- * muestra el hint de tocar la malla en vez de los parámetros.
- *
- * Sin sesión ni hint no se dibuja nada: comparte el hueco de abajo con [TransformBar]
- * y las dos a la vez se solaparían.
+ * Con `awaitingPick` (herramienta armada, sin sesión) se muestra el hint de tocar la
+ * malla en vez de los parámetros. Sin sesión ni hint no se dibuja nada: comparte el
+ * hueco de abajo con [TransformBar] y las dos a la vez se solaparían.
  */
 @Composable
 fun EditToolTray(
@@ -99,7 +93,21 @@ fun EditToolTray(
 ) {
     if (!session.active && !awaitingPick) return
     FloatingPanel(modifier) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        if (!session.active) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Toca una arista de la malla para colocar el corte",
+                    color = Ink.Muted,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                RoundAction(Icons.Default.Close, "Cancelar", Ink.Bad, onCancel)
+            }
+            return@FloatingPanel
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
             // Rótulo, no botón: la herramienta ya la eligió el rail y volver a
             // ofrecerla aquí sería la duplicidad que el plan prohíbe.
             Text(
@@ -108,123 +116,105 @@ fun EditToolTray(
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
             )
-            Spacer(Modifier.height(6.dp))
-
-            if (!session.active) {
-                Text(
-                    "Toca una arista de la malla para colocar el corte",
-                    color = Ink.Muted,
-                    fontSize = 12.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                )
-                Spacer(Modifier.height(6.dp))
-                RoundAction(Icons.Default.Close, "Cancelar", Ink.Bad, onCancel)
-                return@Column
-            }
-
-            if (session.tool == EditTool.LOOP_CUT) {
-                LoopCutControls(session, onParameter)
-            } else {
-                for (spec in specsFor(session.tool)) {
-                    ParamStepper(
-                        spec = spec,
-                        value = session.double(spec.key) ?: defaultValue(spec),
-                        onCommit = { onParameter(spec.key, it) },
-                    )
-                    Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.width(10.dp))
+            Row(
+                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (session.tool == EditTool.LOOP_CUT) {
+                    LoopCutParams(session, onParameter)
+                } else {
+                    for (spec in specsFor(session.tool)) {
+                        ParamStepper(
+                            spec = spec,
+                            value = session.double(spec.key) ?: defaultValue(spec),
+                            onCommit = { onParameter(spec.key, it) },
+                        )
+                    }
                 }
             }
-            Spacer(Modifier.height(2.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                RoundAction(Icons.Default.Close, "Descartar", Ink.Bad, onCancel)
-                RoundAction(Icons.Default.Check, "Confirmar", Ink.Ok, onConfirm)
-            }
+            Spacer(Modifier.width(10.dp))
+            RoundAction(Icons.Default.Close, "Descartar", Ink.Bad, onCancel)
+            Spacer(Modifier.width(4.dp))
+            RoundAction(Icons.Default.Check, "Confirmar", Ink.Ok, onConfirm)
         }
     }
 }
 
-/** Parámetros propios de Loop Cut: posición, cortes, suavidad, perfil y toggles. */
+/** Parámetros de Loop Cut en una línea: posición, cortes, suavidad, perfil y toggles. */
 @Composable
-private fun LoopCutControls(session: ToolSession, onParameter: (String, Any?) -> Unit) {
-    PositionSlider(session.double("factor") ?: 0.0, onParameter)
-
-    Spacer(Modifier.height(2.dp))
+private fun LoopCutParams(session: ToolSession, onParameter: (String, Any?) -> Unit) {
+    PositionStepper(
+        factor = session.double("factor") ?: 0.0,
+        clamp = session.flag("clamp", true),
+        onFactor = { onParameter("factor", it) },
+    )
     for (spec in specsFor(EditTool.LOOP_CUT)) {
         ParamStepper(
             spec = spec,
             value = session.double(spec.key) ?: defaultValue(spec),
             onCommit = { onParameter(spec.key, it) },
         )
-        Spacer(Modifier.height(4.dp))
     }
-
     val falloff = session.falloff()
-    PillButton(
-        label = "Perfil: ${falloff.label}",
-        modifier = Modifier.fillMaxWidth(),
-        onClick = { onParameter("falloff", falloff.next().wire) },
-    )
-    Spacer(Modifier.height(4.dp))
-
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        PillButton("Uniforme", selected = session.flag("even"), onClick = {
-            onParameter("even", !session.flag("even"))
-        })
-        PillButton("Invertir", selected = session.flag("flip"), onClick = {
-            onParameter("flip", !session.flag("flip"))
-        })
-        PillButton("Fijar", selected = session.flag("clamp", true), onClick = {
-            onParameter("clamp", !session.flag("clamp", true))
-        })
+    PillButton("Perfil: ${falloff.label}") { onParameter("falloff", falloff.next().wire) }
+    PillButton("Uniforme", selected = session.flag("even")) {
+        onParameter("even", !session.flag("even"))
+    }
+    PillButton("Invertir", selected = session.flag("flip")) {
+        onParameter("flip", !session.flag("flip"))
+    }
+    PillButton("Fijar", selected = session.flag("clamp", true)) {
+        onParameter("clamp", !session.flag("clamp", true))
     }
 }
 
+/** factor (−1..1, o ±2 sin fijar) <-> posición 0..100%. */
+private fun factorToPercent(factor: Double): Int = (((factor + 1.0) / 2.0) * 100.0).roundToInt()
+private fun percentToFactor(percent: Double): Double = (percent / 100.0) * 2.0 - 1.0
+
 /**
- * Posición del corte a lo largo del anillo (0%..100%), equivalente al factor del
- * modal: 0% = extremo inicial, 50% = centro, 100% = extremo final.
- *
- * El arrastre se manda vivo pero con un ritmo limitado (el servidor reconstruye el
- * preview entero en cada cambio), y al soltar se confirma el valor final.
+ * Posición del corte como porcentaje (0 = extremo, 50 = centro, 100 = el otro
+ * extremo), con steppers numéricos y valor editable. Es el equivalente del slider
+ * anterior, pero numérico; el arrastre fino sigue siendo deslizar el lápiz por el
+ * viewport (`tool.nudge`). Con "Fijar" desactivado el corte puede salirse del borde y
+ * el rango se ensancha a −50%..150%.
  */
 @Composable
-private fun PositionSlider(factor: Double, onParameter: (String, Any?) -> Unit) {
-    var dragging by remember { mutableStateOf(false) }
-    var local by remember { mutableFloatStateOf(((factor + 1.0) / 2.0).toFloat().coerceIn(0f, 1f)) }
-    var lastSent by remember { mutableLongStateOf(0L) }
-    val shown = if (dragging) local else ((factor + 1.0) / 2.0).toFloat().coerceIn(0f, 1f)
+private fun PositionStepper(factor: Double, clamp: Boolean, onFactor: (Double) -> Unit) {
+    var text by remember { mutableStateOf("") }
+    val percent = factorToPercent(factor)
+    val min = if (clamp) 0 else -50
+    val max = if (clamp) 100 else 150
+    val shown = if (text.isEmpty()) "$percent" else text
+
+    fun commit() {
+        val parsed = text.trim().replace(',', '.').removeSuffix("%").toDoubleOrNull() ?: return
+        onFactor(percentToFactor(parsed.coerceIn(min.toDouble(), max.toDouble())))
+        text = ""
+    }
 
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Posición", color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.padding(end = 6.dp))
-        Slider(
+        Text("Posición", color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.padding(end = 4.dp))
+        StepperButton("−") { onFactor(percentToFactor((percent - 5).coerceAtLeast(min).toDouble())) }
+        TextField(
             value = shown,
-            onValueChange = { value ->
-                local = value
-                dragging = true
-                val now = System.currentTimeMillis()
-                if (now - lastSent >= 100L) {
-                    lastSent = now
-                    onParameter("factor", (value * 2.0 - 1.0).toDouble())
-                }
-            },
-            onValueChangeFinished = {
-                onParameter("factor", (local * 2.0 - 1.0).toDouble())
-                dragging = false
-            },
-            colors = SliderDefaults.colors(
-                thumbColor = Ink.Accent,
-                activeTrackColor = Ink.Accent,
-                inactiveTrackColor = Ink.Divider,
+            onValueChange = { text = it },
+            singleLine = true,
+            textStyle = TextStyle(fontSize = 13.sp, textAlign = TextAlign.Center),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                focusedTextColor = Ink.OnPanel,
+                unfocusedTextColor = Ink.Muted,
             ),
-            modifier = Modifier.weight(1f),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { commit() }),
+            modifier = Modifier.width(44.dp),
         )
-        Text(
-            "${(shown * 100).roundToInt()}%",
-            color = Ink.OnPanel,
-            fontSize = 12.sp,
-            textAlign = TextAlign.End,
-            modifier = Modifier.width(40.dp),
-        )
+        StepperButton("+") { onFactor(percentToFactor((percent + 5).coerceAtMost(max).toDouble())) }
+        Text("%", color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.padding(start = 2.dp))
     }
 }
 
@@ -242,7 +232,7 @@ private fun ParamStepper(spec: ParamSpec, value: Double, onCommit: (Double) -> U
     }
 
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(spec.label, color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.padding(end = 6.dp))
+        Text(spec.label, color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.padding(end = 4.dp))
         StepperButton("−") {
             val next = if (spec.isInt) maxOf(1.0, value - spec.step) else value - spec.step
             onCommit(next)
@@ -260,7 +250,7 @@ private fun ParamStepper(spec: ParamSpec, value: Double, onCommit: (Double) -> U
             ),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { commit() }),
-            modifier = Modifier.width(72.dp),
+            modifier = Modifier.width(64.dp),
         )
         StepperButton("+") {
             val next = if (spec.isInt) maxOf(1.0, value + spec.step) else value + spec.step

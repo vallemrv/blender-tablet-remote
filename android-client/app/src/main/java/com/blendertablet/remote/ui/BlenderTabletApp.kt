@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -354,7 +355,10 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     onCancel = vm::cancelTool,
                     awaitingPick = state.activeTool == ActiveTool.LOOP_CUT &&
                         !toolSession.active && state.loopCutAwaitingTap,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(Metrics.EdgeMargin),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(Metrics.EdgeMargin),
                 )
 
                 ViewFooter(

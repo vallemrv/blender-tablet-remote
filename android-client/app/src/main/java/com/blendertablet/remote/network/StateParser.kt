@@ -113,7 +113,10 @@ object StateParser {
             else -> ModifierDefault.Text(p.optString("default"))
         }
     }
-    private fun objects(a: JSONArray?): List<Pair<String,String>> = if (a == null) emptyList() else (0 until a.length()).mapNotNull { a.optJSONObject(it) }.map { it.optString("name") to it.optString("type") }
+    /** Lista de objetos de la escena (nombre a tipo), para el picker de operando. */
+    fun objects(a: JSONArray?): List<Pair<String, String>> =
+        if (a == null) emptyList() else (0 until a.length()).mapNotNull { a.optJSONObject(it) }
+            .map { it.optString("name") to it.optString("type") }
     private fun strings(a: JSONArray?): List<String> = if (a == null) emptyList() else (0 until a.length()).map { a.optString(it) }
     private fun doubles(a: JSONArray?): List<Double> = if (a == null) emptyList() else (0 until a.length()).map { a.optDouble(it) }
     private fun jsonMap(o: JSONObject?): Map<String, Any?> = if (o == null) emptyMap() else o.keys().asSequence().associateWith { k -> if (o.isNull(k)) null else o.get(k) }

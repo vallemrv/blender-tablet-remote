@@ -26,8 +26,8 @@ import com.blendertablet.remote.model.Shading
  * Barra horizontal de tools, al lado del ojo (arriba a la derecha).
  *
  * Agrupa lo que se usa a cada toque sin abrir el rail: wireframe (toggle), los
- * modificadores Mayús/Ctrl/Alt (alternar/añadir/quitar de la selección) y
- * undo/redo, que salen del rail para quedarse aquí con iconos. En Edit Mode, en el
+ * modificadores Mayús/Ctrl/Alt (alternar/añadir/quitar de la selección) y undo/redo,
+ * que salen del rail para quedarse aquí con iconos. En Edit Mode, en el
  * lado derecho de la misma barra, se muestran los submodos vértice/arista/cara
  * para cambiar de selección sin abrir nada. La selección por caja B y círculo C
  * vive en el long-click (RADIAL); armada, un chip sobre el viewport la señala y

@@ -122,6 +122,9 @@ interface RemoteBlenderClient {
     fun revealObjects(objects: List<String>? = null, select: Boolean = true)
     fun transformApply(location: Boolean, rotation: Boolean, scale: Boolean)
     fun requestModifierOptions()
+
+    /** Lista de objetos de la escena, para el picker de operando del Booleano. */
+    fun listObjects()
     fun modifierAdd(type: String, parameters: Map<String, Any?> = emptyMap())
     fun modifierRemove(name: String)
     fun modifierMove(name: String, index: Int)

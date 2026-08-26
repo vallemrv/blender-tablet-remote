@@ -341,6 +341,7 @@ class WebSocketRemoteBlenderClient(
     override fun transformApply(location: Boolean, rotation: Boolean, scale: Boolean) = command(
         "transform.apply", JSONObject().put("location", location).put("rotation", rotation).put("scale", scale))
     override fun requestModifierOptions() = command("modifier.add_options")
+    override fun listObjects() = command("scene.list_objects")
     override fun modifierAdd(type: String, parameters: Map<String, Any?>) = command("modifier.add", JSONObject().put("type", type).put("parameters", JSONObject(parameters)))
     override fun modifierRemove(name: String) = command("modifier.remove", JSONObject().put("name", name))
     override fun modifierMove(name: String, index: Int) = command("modifier.move", JSONObject().put("name", name).put("index", index))
@@ -605,6 +606,9 @@ class WebSocketRemoteBlenderClient(
                     }
                     command == "modifier.add_options" -> result?.let { options ->
                         _state.value = _state.value.copy(modifierOptions = StateParser.modifierOptions(options))
+                    }
+                    command == "scene.list_objects" -> result?.let { listing ->
+                        _state.value = _state.value.copy(objects = StateParser.objects(listing.optJSONArray("objects")))
                     }
                     command != null && command.startsWith("modifier.") -> result?.let { stack ->
                         _state.value = _state.value.copy(modifiers = StateParser.modifiers(stack.optJSONArray("modifiers")))

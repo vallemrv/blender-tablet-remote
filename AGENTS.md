@@ -156,14 +156,18 @@ README.md                           entrada para humanos
   la respuesta remota del picking.
 - Transformación modal con restricciones, orientación (desplegable de tipos de snap
   válidos por modo), unidades y confirm/cancel.
-- Bandeja paramétrica para Extrude/Bevel/Inset/Subdivide/Loop Cut (`EditToolTray`).
+- Bandeja paramétrica para Extrude/Bevel/Inset/Subdivide/Loop Cut (`EditToolTray`), en
+  una franja horizontal desplazable (no apilada en vertical): rótulo a la izquierda,
+  parámetros en fila y descartar/confirmar fijos a la derecha.
 - Loop Cut táctil: sin arista elegida, el rail arma `loopCutAwaitingTap` y el PRÓXIMO
   toque en la malla coloca el corte (`mesh.loop_probe` → `tool.begin` con `edge`+`factor`),
-  y con sesión abierta el toque re-ubica (`tool.loop_pick`). La bandeja ofrece slider
-  "Posición" 0-100% (↔ `factor`), steppers de cortes/suavidad, botón ciclado de perfil
-  (`LoopFalloff`) y toggles Uniforme/Invertir/Fijar (`ToolSession.parameters` pasó a
-  `Map<String, Any?>` para conservar bools y string). Con `loopCutPick` no anunciado se
-  conserva el flujo legacy (seleccionar arista y esperar el snapshot).
+  y con sesión abierta el toque re-ubica (`tool.loop_pick`). La bandeja ofrece un
+  stepper numérico "Posición" 0-100% (↔ `factor`, con `−`/`+` y valor editable; el
+  arrastre fino sigue siendo deslizar el lápiz por el viewport, que alimenta
+  `tool.nudge`), steppers de cortes/suavidad, botón ciclado de perfil (`LoopFalloff`) y
+  toggles Uniforme/Invertir/Fijar (`ToolSession.parameters` pasó a `Map<String, Any?>`
+  para conservar bools y string). Con `loopCutPick` no anunciado se conserva el flujo
+  legacy (seleccionar arista y esperar el snapshot).
 - `ui/ModifierPanel.kt`: inspector schema-driven desde `modifier.add_options` (add,
   parámetros tipados, viewport/render, reorder, apply, remove; Boolean con picker de
   objeto MESH excluyendo el activo).
@@ -204,9 +208,9 @@ README.md                           entrada para humanos
   `SurfaceCatalog`, con test que fija que solo aparece en el vacío de Object Mode.
   Verificado: 76 tests JVM en verde y `assembleDebug` correcto.
 - Barra superior de tools (`ui/TopToolbar.kt`) junto al ojo: wireframe (`view.shading`
-  TOGGLE, pintado desde `state.blender.view.shading`), modificadores Ctrl/Alt (fijan
-  `selection.pick`/box/circle a ADD/REMOVE) y undo/redo, movidos desde el rail. En Edit
-  Mode, a la derecha de la misma barra, los submodos vértice/arista/cara para cambiar de
+  TOGGLE, pintado desde `state.blender.view.shading`), modificadores Mayús/Ctrl/Alt (fijan
+  `selection.pick`/box/circle a TOGGLE/ADD/REMOVE) y undo/redo, movidos desde el rail. En
+  Edit Mode, a la derecha de la misma barra, los submodos vértice/arista/cara para cambiar de
   selección sin abrir el rail. Cada botón se oculta si el backend no anuncia su
   capability (`view.shading`).
 - Selección por caja B y círculo C en el long-click (`RADIAL`): arman el arrastre por
@@ -229,7 +233,7 @@ README.md                           entrada para humanos
 Cada acción ejecutable vive en una sola superficie visible:
 
 - Top: archivo, estructura global, objeto (sin Add), modifiers y objetos ocultos.
-- Barra superior de tools (`TOP_TOOLS`, junto al ojo): wireframe, Ctrl/Alt, undo/redo
+- Barra superior de tools (`TOP_TOOLS`, junto al ojo): wireframe, Mayús/Ctrl/Alt, undo/redo
   y, en Edit, el submodo de selección.
 - Rail: modo y herramienta activa.
 - Footer/bandeja: parámetros de la herramienta activa.

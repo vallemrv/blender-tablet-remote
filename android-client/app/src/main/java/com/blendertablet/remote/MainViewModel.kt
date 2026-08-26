@@ -359,7 +359,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun revealAllObjects() = client.revealObjects()
     fun applyTransform(location: Boolean, rotation: Boolean, scale: Boolean) =
         client.transformApply(location, rotation, scale)
-    fun openModifiers() = client.requestModifierOptions()
+    fun openModifiers() {
+        client.requestModifierOptions()
+        // La lista de objetos (para el picker de operando) no viene en el snapshot
+        // habitual: se pide aparte al abrir el inspector.
+        client.listObjects()
+    }
     fun addModifier(type: String, parameters: Map<String, Any?> = emptyMap()) = client.modifierAdd(type, parameters)
     fun removeModifier(name: String) = client.modifierRemove(name)
     fun moveModifier(name: String, index: Int) = client.modifierMove(name, index)
