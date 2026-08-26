@@ -12,8 +12,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.blendertablet.remote.model.Gesture
 import com.blendertablet.remote.model.GesturePhase
 import com.blendertablet.remote.model.InputDebug
+import com.blendertablet.remote.model.NavigationOrbitLayout
 import com.blendertablet.remote.model.ShapeTool
 import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.math.pow
 
@@ -45,8 +47,12 @@ fun InputSurface(
     onLongPress: (px: Float, py: Float, u: Float, v: Float) -> Unit = { _, _, _, _ -> },
     /** Herramienta de forma armada (B/C); NONE = gesto normal de un dedo. */
     shapeTool: ShapeTool = ShapeTool.NONE,
+    /** Círculo derecho que navega sin alimentar una sesión modal. */
+    navigationOrbitEnabled: Boolean = false,
     /** Forma terminada: esquinas (box) o centro+borde (circle) normalizados. */
     onShape: (ShapeTool, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> },
+    /** Puntos del Knife en pantalla, para dibujarlos sobre el vídeo. */
+    knifePoints: List<Pair<Float, Float>> = emptyList(),
 ) {
     AndroidView(
         modifier = modifier,
@@ -55,7 +61,10 @@ fun InputSurface(
             view.updateCallbacks(onDebug, onToolGesture, onViewGesture, onTap, onDoubleTap)
             view.onLongPress = onLongPress
             view.shapeTool = shapeTool
+            view.navigationOrbitEnabled = navigationOrbitEnabled
             view.onShape = onShape
+            view.knifePoints = knifePoints
+            view.invalidate()
         },
     )
 }
@@ -98,6 +107,7 @@ private class GestureView(
     private var lastY = 0f
     private var lastSpan = 0f
     private var startSpan = 0f
+    private var lastAngle = 0f
     private var startX = 0f
     private var startY = 0f
     private var lastTapAt = 0L
@@ -110,6 +120,9 @@ private class GestureView(
     /** Sesión de dos dedos abierta (pan y zoom van juntos). */
     private var pairActive = false
     private var toolActive = false
+    /** Un DOWN dentro del círculo queda capturado hasta UP/CANCEL. */
+    private var navigationOrbitActive = false
+    private var navigationOrbitBegan = false
 
     /**
      * Pulsación larga. Llegan las dos coordenadas porque hacen falta las dos: los
@@ -124,7 +137,15 @@ private class GestureView(
 
     /** Herramienta de forma (B/C). Con una armada, el dedo dibuja en vez de orbitar. */
     var shapeTool: ShapeTool = ShapeTool.NONE
+    var navigationOrbitEnabled: Boolean = false
     var onShape: (ShapeTool, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> }
+    /** Puntos del Knife (normalizados) para el overlay. */
+    var knifePoints: List<Pair<Float, Float>> = emptyList()
+    private val knifePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.parseColor("#FFB84C")
+        style = Paint.Style.STROKE
+        strokeWidth = 2.5f * resources.displayMetrics.density
+    }
     private var shapeDrawing = false
     private var shapeStartX = 0f
     private var shapeStartY = 0f
@@ -135,6 +156,7 @@ private class GestureView(
     private var pendingDx = 0f
     private var pendingDy = 0f
     private var pendingFactor = 1f
+    private var pendingRoll = 0f
 
     init { setBackgroundColor(android.graphics.Color.TRANSPARENT) }
 
@@ -168,6 +190,19 @@ private class GestureView(
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 parent?.requestDisallowInterceptTouchEvent(true)
+                lastX = event.x; lastY = event.y
+                startX = event.x; startY = event.y
+                downToolType = event.getToolType(0)
+                moved = false
+                longPressFired = false
+                // El hit-test se hace solo al bajar: si el dedo entra después en el
+                // círculo continúa el nudge que ya había empezado fuera.
+                if (navigationOrbitEnabled && NavigationOrbitLayout.contains(width, height, event.x, event.y)) {
+                    navigationOrbitActive = true
+                    navigationOrbitBegan = false
+                    invalidate()
+                    return true
+                }
                 // Con B/C armada, un dedo dibuja la forma: no orbita, no selecciona
                 // y no abre el menú. El tap simple no hace nada (se resuelve al soltar).
                 if (shapeTool != ShapeTool.NONE) {
@@ -179,11 +214,6 @@ private class GestureView(
                     invalidate()
                     return true
                 }
-                lastX = event.x; lastY = event.y
-                startX = event.x; startY = event.y
-                downToolType = event.getToolType(0)
-                moved = false
-                longPressFired = false
                 if (isStylus(downToolType) &&
                     event.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY != 0
                 ) {
@@ -204,6 +234,7 @@ private class GestureView(
                     invalidate()
                 }
                 endToolGesture()
+                endNavigationOrbit()
                 // La sesión de navegación NO se cierra: solo se reancla. Cerrarla
                 // cortaría el gesto en seco al apoyar un dedo de más.
                 rememberPointers(event)
@@ -216,7 +247,7 @@ private class GestureView(
                 else if (shapeDrawing) {
                     shapeCurrentX = event.x; shapeCurrentY = event.y
                     invalidate()
-                } else handleSingle(event)
+                } else if (navigationOrbitActive) handleNavigationOrbit(event) else handleSingle(event)
 
             MotionEvent.ACTION_POINTER_UP -> {
                 // Si baja de dos dedos se acaba la navegación; si aún quedan dos o
@@ -233,9 +264,11 @@ private class GestureView(
                     parent?.requestDisallowInterceptTouchEvent(false)
                     return true
                 }
+                val wasNavigationOrbit = navigationOrbitActive
                 endToolGesture()
+                endNavigationOrbit()
                 endViewGesture()
-                if (!moved && !longPressFired) handleTap(event)
+                if (!wasNavigationOrbit && !moved && !longPressFired) handleTap(event)
                 parent?.requestDisallowInterceptTouchEvent(false)
             }
 
@@ -275,6 +308,28 @@ private class GestureView(
         }
     }
 
+    /** Arrastre reservado al círculo: siempre envía ORBIT, nunca un nudge. */
+    private fun handleNavigationOrbit(e: MotionEvent) {
+        val dx = e.x - lastX
+        val dy = e.y - lastY
+        lastX = e.x; lastY = e.y
+        val slop = if (isStylus(downToolType)) stylusTouchSlop else systemTouchSlop
+        if (!moved && hypot(e.x - startX, e.y - startY) <= slop) return
+        moved = true
+        if (!navigationOrbitBegan) {
+            onViewGesture(Gesture.ORBIT, GesturePhase.BEGIN, 0f, 0f, 1f)
+            navigationOrbitBegan = true
+            lastDispatchAt = e.eventTime
+        }
+        pendingDx += dx
+        pendingDy += dy
+        if (e.eventTime - lastDispatchAt >= DISPATCH_MS) {
+            onViewGesture(Gesture.ORBIT, GesturePhase.UPDATE, nx(pendingDx), ny(pendingDy), 1f)
+            pendingDx = 0f; pendingDy = 0f
+            lastDispatchAt = e.eventTime
+        }
+    }
+
     /**
      * Ancla el punto medio y la separación de los dos primeros dedos.
      *
@@ -291,6 +346,7 @@ private class GestureView(
             lastX = (e.getX(idx[0]) + e.getX(idx[1])) / 2f
             lastY = (e.getY(idx[0]) + e.getY(idx[1])) / 2f
             lastSpan = hypot(e.getX(idx[1]) - e.getX(idx[0]), e.getY(idx[1]) - e.getY(idx[0]))
+            lastAngle = atan2(e.getY(idx[1]) - e.getY(idx[0]), e.getX(idx[1]) - e.getX(idx[0]))
         }
         startX = lastX
         startY = lastY
@@ -311,11 +367,16 @@ private class GestureView(
         val cx = (e.getX(0) + e.getX(1)) / 2f
         val cy = (e.getY(0) + e.getY(1)) / 2f
         val span = hypot(e.getX(1) - e.getX(0), e.getY(1) - e.getY(0))
+        val angle = atan2(e.getY(1) - e.getY(0), e.getX(1) - e.getX(0))
 
         val dx = cx - lastX
         val dy = cy - lastY
         val rawRatio = if (lastSpan > 1f) span / lastSpan else 1f
-        lastX = cx; lastY = cy; lastSpan = span
+        // Giro de la cuerda entre los dos dedos (rueda). Normalizado a [-π, π].
+        var deltaAngle = angle - lastAngle
+        while (deltaAngle > Math.PI) deltaAngle -= (2 * Math.PI).toFloat()
+        while (deltaAngle < -Math.PI) deltaAngle += (2 * Math.PI).toFloat()
+        lastX = cx; lastY = cy; lastSpan = span; lastAngle = angle
 
         if (!moved && hypot(cx - startX, cy - startY) <= systemTouchSlop &&
             abs(span - startSpan) <= PINCH_SLOP_PX
@@ -326,6 +387,7 @@ private class GestureView(
             pairActive = true
             onViewGesture(Gesture.PAN, GesturePhase.BEGIN, 0f, 0f, 1f)
             onViewGesture(Gesture.ZOOM, GesturePhase.BEGIN, 0f, 0f, 1f)
+            onViewGesture(Gesture.ROLL, GesturePhase.BEGIN, 0f, 0f, 1f)
             lastDispatchAt = e.eventTime
         }
 
@@ -333,6 +395,7 @@ private class GestureView(
         pendingDy += dy
         // Ganancia < 1: el pellizco crudo resultaba demasiado brusco para afinar.
         pendingFactor *= if (rawRatio > 0f) rawRatio.pow(ZOOM_GAIN) else 1f
+        pendingRoll += deltaAngle
 
         if (e.eventTime - lastDispatchAt >= DISPATCH_MS) {
             flushPair()
@@ -348,7 +411,10 @@ private class GestureView(
         if (abs(pendingFactor - 1f) > ZOOM_DEADZONE) {
             onViewGesture(Gesture.ZOOM, GesturePhase.UPDATE, 0f, 0f, pendingFactor)
         }
-        pendingDx = 0f; pendingDy = 0f; pendingFactor = 1f
+        if (pendingRoll != 0f) {
+            onViewGesture(Gesture.ROLL, GesturePhase.UPDATE, pendingRoll, 0f, 1f)
+        }
+        pendingDx = 0f; pendingDy = 0f; pendingFactor = 1f; pendingRoll = 0f
     }
 
     private fun endToolGesture() {
@@ -366,8 +432,21 @@ private class GestureView(
         flushPair()
         onViewGesture(Gesture.PAN, GesturePhase.END, 0f, 0f, 1f)
         onViewGesture(Gesture.ZOOM, GesturePhase.END, 0f, 0f, 1f)
+        onViewGesture(Gesture.ROLL, GesturePhase.END, 0f, 0f, 1f)
         pairActive = false
         resetPending()
+    }
+
+    private fun endNavigationOrbit() {
+        if (!navigationOrbitActive) return
+        if (pendingDx != 0f || pendingDy != 0f) {
+            onViewGesture(Gesture.ORBIT, GesturePhase.UPDATE, nx(pendingDx), ny(pendingDy), 1f)
+        }
+        if (navigationOrbitBegan) onViewGesture(Gesture.ORBIT, GesturePhase.END, 0f, 0f, 1f)
+        navigationOrbitActive = false
+        navigationOrbitBegan = false
+        resetPending()
+        invalidate()
     }
 
     private fun cancelGestures() {
@@ -375,14 +454,20 @@ private class GestureView(
         if (pairActive) {
             onViewGesture(Gesture.PAN, GesturePhase.CANCEL, 0f, 0f, 1f)
             onViewGesture(Gesture.ZOOM, GesturePhase.CANCEL, 0f, 0f, 1f)
+            onViewGesture(Gesture.ROLL, GesturePhase.CANCEL, 0f, 0f, 1f)
+        }
+        if (navigationOrbitBegan) {
+            onViewGesture(Gesture.ORBIT, GesturePhase.CANCEL, 0f, 0f, 1f)
         }
         toolActive = false
         pairActive = false
+        navigationOrbitActive = false
+        navigationOrbitBegan = false
         resetPending()
     }
 
     private fun resetPending() {
-        pendingDx = 0f; pendingDy = 0f; pendingFactor = 1f
+        pendingDx = 0f; pendingDy = 0f; pendingFactor = 1f; pendingRoll = 0f
     }
 
     private fun handleTap(e: MotionEvent) {
@@ -419,6 +504,7 @@ private class GestureView(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        if (navigationOrbitEnabled) drawNavigationOrbit(canvas)
         if (shapeDrawing) {
             if (shapeTool == ShapeTool.BOX) {
                 canvas.drawRect(
@@ -434,6 +520,18 @@ private class GestureView(
                 )
             }
         }
+        if (knifePoints.isNotEmpty()) {
+            val radius = 7f * resources.displayMetrics.density
+            knifePoints.forEach { (u, v) ->
+                canvas.drawCircle(u * width, v * height, radius, knifePaint)
+            }
+            // Polilínea entre puntos consecutivos.
+            for (index in 1 until knifePoints.size) {
+                val (u0, v0) = knifePoints[index - 1]
+                val (u1, v1) = knifePoints[index]
+                canvas.drawLine(u0 * width, v0 * height, u1 * width, v1 * height, knifePaint)
+            }
+        }
         val remaining = tapFeedbackUntil - android.os.SystemClock.uptimeMillis()
         if (remaining <= 0L || tapFeedbackX < 0f) return
         tapPaint.alpha = (255f * remaining / 220f).toInt().coerceIn(0, 255)
@@ -441,6 +539,24 @@ private class GestureView(
         val radius = (10f + 9f * progress) * resources.displayMetrics.density
         canvas.drawCircle(tapFeedbackX, tapFeedbackY, radius, tapPaint)
         postInvalidateOnAnimation()
+    }
+
+    private fun drawNavigationOrbit(canvas: Canvas) {
+        val circle = NavigationOrbitLayout.circle(width, height) ?: return
+        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.parseColor(if (navigationOrbitActive) "#6B4C8DFF" else "#384C8DFF")
+            style = Paint.Style.FILL
+        }
+        val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.parseColor("#B3B9D2FF")
+            style = Paint.Style.STROKE
+            strokeWidth = 2f * resources.displayMetrics.density
+        }
+        canvas.drawCircle(circle.x, circle.y, circle.radius, fill)
+        canvas.drawCircle(circle.x, circle.y, circle.radius, stroke)
+        val arm = circle.radius * .38f
+        canvas.drawLine(circle.x - arm, circle.y, circle.x + arm, circle.y, stroke)
+        canvas.drawLine(circle.x, circle.y - arm, circle.x, circle.y + arm, stroke)
     }
 
     private fun fireLongPress(x: Float, y: Float) {

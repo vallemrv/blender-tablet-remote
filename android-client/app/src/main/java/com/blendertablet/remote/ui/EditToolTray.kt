@@ -64,6 +64,11 @@ private fun specsFor(tool: EditTool): List<ParamSpec> = when (tool) {
         ParamSpec("cuts", "Cortes", 1.0, true, TransformMode.SCALE),
         ParamSpec("smoothness", "Suavidad", 0.05, false, TransformMode.SCALE),
     )
+    EditTool.BRIDGE_EDGE_LOOPS -> listOf(
+        ParamSpec("twist_offset", "Desfase", 1.0, true, TransformMode.SCALE),
+        ParamSpec("merge_factor", "Fusión", 0.05, false, TransformMode.SCALE),
+    )
+    EditTool.KNIFE -> emptyList()
 }
 
 private fun defaultValue(spec: ParamSpec): Double = if (spec.isInt) 1.0 else 0.0
@@ -92,6 +97,8 @@ fun EditToolTray(
     awaitingPick: Boolean = false,
 ) {
     if (!session.active && !awaitingPick) return
+    // El Knife tiene su propia bandeja (puntos, pop, cerrar, snap).
+    if (session.tool == EditTool.KNIFE) return
     FloatingPanel(modifier) {
         if (!session.active) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -124,6 +131,10 @@ fun EditToolTray(
             ) {
                 if (session.tool == EditTool.LOOP_CUT) {
                     LoopCutParams(session, onParameter)
+                } else if (session.tool == EditTool.BRIDGE_EDGE_LOOPS) {
+                    BridgeParams(session, onParameter)
+                } else if (session.tool == EditTool.EXTRUDE) {
+                    ExtrudeParams(session, onParameter)
                 } else {
                     for (spec in specsFor(session.tool)) {
                         ParamStepper(
@@ -167,6 +178,97 @@ private fun LoopCutParams(session: ToolSession, onParameter: (String, Any?) -> U
     }
     PillButton("Fijar", selected = session.flag("clamp", true)) {
         onParameter("clamp", !session.flag("clamp", true))
+    }
+}
+
+/**
+ * Parámetros de Extrude: distancia + bloqueo de eje (Libre/X/Y/Z) y orientación
+ * (Global/Local/Vista) cuando la variante es REGION. Las otras variantes no exponen
+ * eje: el backend lo rechaza y aquí se oculta.
+ */
+@Composable
+private fun ExtrudeParams(session: ToolSession, onParameter: (String, Any?) -> Unit) {
+    for (spec in specsFor(EditTool.EXTRUDE)) {
+        ParamStepper(
+            spec = spec,
+            value = session.double(spec.key) ?: defaultValue(spec),
+            onCommit = { onParameter(spec.key, it) },
+        )
+    }
+    val variant = (session.parameters["variant"] as? String) ?: "REGION"
+    if (variant != "REGION") return
+    val constraint = (session.parameters["constraint"] as? String) ?: "FREE"
+    PillButton("Libre", selected = constraint == "FREE") { onParameter("constraint", "FREE") }
+    for (axis in listOf("X", "Y", "Z")) {
+        PillButton(axis, selected = constraint == axis) { onParameter("constraint", axis) }
+    }
+    if (constraint != "FREE") {
+        val orientation = (session.parameters["orientation"] as? String) ?: "GLOBAL"
+        for ((wire, label) in listOf("GLOBAL" to "Global", "LOCAL" to "Local", "VIEW" to "Vista")) {
+            PillButton(label, selected = orientation == wire) { onParameter("orientation", wire) }
+        }
+    }
+}
+
+/** Parámetros de Bridge Edge Loops: desfase, fusión y su toggle de fundir. */
+@Composable
+private fun BridgeParams(session: ToolSession, onParameter: (String, Any?) -> Unit) {    for (spec in specsFor(EditTool.BRIDGE_EDGE_LOOPS)) {
+        ParamStepper(
+            spec = spec,
+            value = session.double(spec.key) ?: defaultValue(spec),
+            onCommit = { onParameter(spec.key, it) },
+        )
+    }
+    PillButton("Fusionar", selected = session.flag("merge")) {
+        onParameter("merge", !session.flag("merge"))
+    }
+}
+
+/**
+ * Bandeja del Knife: contador de puntos, deshacer punto, cerrar, snap y las dos
+ * salidas. Confirmar solo se habilita con al menos dos puntos (un segmento).
+ */
+@Composable
+fun KnifeTray(
+    session: ToolSession,
+    onKnifePop: () -> Unit,
+    onKnifeClose: () -> Unit,
+    onKnifeSnap: (Boolean) -> Unit,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (!session.active || session.tool != EditTool.KNIFE) return
+    FloatingPanel(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "${session.tool.label.uppercase()} · ${session.points.size}",
+                color = Ink.Accent,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.width(10.dp))
+            Row(
+                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PillButton("Deshacer punto", enabled = session.points.isNotEmpty(), onClick = onKnifePop)
+                PillButton("Cerrar", selected = session.closed, onClick = onKnifeClose)
+                PillButton("Snap", selected = session.flag("snap", true)) {
+                    onKnifeSnap(!session.flag("snap", true))
+                }
+            }
+            Spacer(Modifier.width(10.dp))
+            RoundAction(Icons.Default.Close, "Descartar", Ink.Bad, onCancel)
+            Spacer(Modifier.width(4.dp))
+            // Confirmar solo actúa con un segmento válido (el backend lo exige).
+            RoundAction(
+                Icons.Default.Check, "Confirmar",
+                if (session.points.size >= 2) Ink.Ok else Ink.Faint,
+                onClick = { if (session.points.size >= 2) onConfirm() },
+            )
+        }
     }
 }
 

@@ -49,6 +49,9 @@ MENU_COMMANDS = [
     "mesh.loop_cut",
     "mesh.loop_probe",
     "tool.loop_pick",
+    "tool.knife_point",
+    "tool.knife_pop",
+    "tool.knife_close",
     "view.shading",
     "view.local",
     "selection.more",
@@ -170,6 +173,58 @@ def main() -> int:
     expected_caps = json.loads((fixtures / "capabilities.json").read_text())
     actual_caps = app.command("server.capabilities").get("result") or {}
     check("capabilities coincide con fixture", _contains(actual_caps, expected_caps), str(actual_caps.get("features")))
+    edit_catalog = ((actual_caps.get("features") or {}).get("edit_catalog") or {})
+    groups = edit_catalog.get("groups") or {}
+    check("catálogo Edit anuncia los tres submodos", set(groups) >= {"VERTEX", "EDGE", "FACE"}, str(groups))
+    required_edit_ids = {
+        "VERTEX": {"MAKE_EDGE_FACE", "KNIFE", "SEPARATE", "SPLIT", "EXTRUDE"},
+        "EDGE": {"BRIDGE_EDGE_LOOPS", "MAKE_EDGE_FACE", "KNIFE", "SEPARATE", "SPLIT", "EXTRUDE"},
+        "FACE": {"KNIFE", "SEPARATE", "SPLIT", "RECALCULATE_NORMALS_OUTSIDE",
+                 "RECALCULATE_NORMALS_INSIDE", "FLIP_NORMALS", "EXTRUDE"},
+    }
+    for selection_mode, expected_ids in required_edit_ids.items():
+        entries = {entry.get("id"): entry for entry in groups.get(selection_mode, [])}
+        check(f"catálogo Edit {selection_mode} congela acciones obligatorias",
+              expected_ids <= set(entries), str(entries))
+        for action_id in expected_ids:
+            entry = entries.get(action_id) or {}
+            check(f"{action_id} declara ejecución y requisitos",
+                  entry.get("execution") in {"DISCRETE", "SESSION"}
+                  and isinstance(entry.get("requirements"), dict), str(entry))
+    face_extrude = next((entry for entry in groups.get("FACE", []) if entry.get("id") == "EXTRUDE"), {})
+    face_variants = {item.get("id"): item.get("enabled") for item in face_extrude.get("variants", [])}
+    check("extrude Cara anuncia sus tres variantes", face_variants == {
+        "REGION": True, "ALONG_NORMALS": True, "INDIVIDUAL": True}, str(face_extrude))
+    vertex_extrude = next((entry for entry in groups.get("VERTEX", []) if entry.get("id") == "EXTRUDE"), {})
+    vertex_variants = {item.get("id"): item.get("enabled") for item in vertex_extrude.get("variants", [])}
+    check("extrude Vértice deshabilita variantes incompatibles", vertex_variants == {
+        "REGION": True, "ALONG_NORMALS": False, "INDIVIDUAL": False}, str(vertex_extrude))
+    extrude_params = {p.get("id"): p for p in face_extrude.get("parameters", [])}
+    check("extrude anuncia constraint con valores y applies_to",
+          extrude_params.get("constraint", {}).get("values") == ["FREE", "X", "Y", "Z"]
+          and extrude_params.get("constraint", {}).get("applies_to") == ["REGION"],
+          str(extrude_params.get("constraint")))
+    check("extrude anuncia orientation con valores y applies_to",
+          extrude_params.get("orientation", {}).get("values") == ["GLOBAL", "LOCAL", "VIEW"]
+          and extrude_params.get("orientation", {}).get("applies_to") == ["REGION"],
+          str(extrude_params.get("orientation")))
+    bridge = next((entry for entry in groups.get("EDGE", []) if entry.get("id") == "BRIDGE_EDGE_LOOPS"), {})
+    check("Bridge anuncia la sesión y parámetros contractuales",
+          bridge.get("enabled") is True and bridge.get("execution") == "SESSION"
+          and bridge.get("command") == "tool.begin"
+          and bridge.get("payload") == {"tool": "BRIDGE_EDGE_LOOPS"}
+          and [parameter.get("id") for parameter in bridge.get("parameters", [])]
+              == ["twist_offset", "merge", "merge_factor"], str(bridge))
+    knife = next((entry for entry in groups.get("FACE", []) if entry.get("id") == "KNIFE"), {})
+    check("Knife anuncia sesión habilitada sin requisito de selección",
+          knife.get("enabled") is True and knife.get("execution") == "SESSION"
+          and knife.get("command") == "tool.begin"
+          and knife.get("payload") == {"tool": "KNIFE"}
+          and [parameter.get("id") for parameter in knife.get("parameters", [])] == ["snap"],
+          str(knife))
+    knife_feature = ((actual_caps.get("features") or {}).get("edit_tools") or {}).get("knife") or {}
+    check("feature de Knife publica snap/close/pop", knife_feature == {
+        "snap": True, "close": True, "pop": True, "cut_through": False, "threshold": 0.045}, str(knife_feature))
     expected_stream = json.loads((fixtures / "hello.stream.json").read_text())
     check("hello.stream coincide con fixture",
           _contains(hello.get("stream") or {}, expected_stream), str(hello.get("stream")))

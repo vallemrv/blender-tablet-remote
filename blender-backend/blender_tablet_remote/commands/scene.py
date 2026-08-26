@@ -55,6 +55,6 @@ def capabilities(payload: dict) -> dict:
                       unit_system=bpy.context.scene.unit_settings.system),
         "blender": bpy.app.version_string,
         "commands": names(),
-        "gestures": ["orbit", "pan", "zoom", "move", "rotate", "scale"],
+        "gestures": ["orbit", "pan", "zoom", "roll", "move", "rotate", "scale"],
         "background": bpy.app.background,
     }

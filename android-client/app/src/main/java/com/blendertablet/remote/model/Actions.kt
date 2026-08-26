@@ -14,7 +14,7 @@ package com.blendertablet.remote.model
  * el invariante se verifica contra el código que dibuja el menú, no contra una lista
  * escrita a mano en paralelo.
  */
-enum class ActionSurface { TOP, TOP_DYNAMIC, TOP_TOOLS, RAIL, FOOTER, FOOTER_VIEWS, RADIAL, MODIFIER_PANEL }
+enum class ActionSurface { TOP, TOP_DYNAMIC, TOP_TOOLS, TOP_MODE, RAIL, FOOTER, FOOTER_VIEWS, FOOTER_EDIT, RADIAL, MODIFIER_PANEL }
 
 enum class ActionId {
     // Top: operaciones poco frecuentes o globales.
@@ -27,9 +27,11 @@ enum class ActionId {
     RECONNECT,
     DISCONNECT,
 
-    // Rail: elegir la herramienta activa y el submodo de selección.
+    // Barra de modo (junto al ojo): Object/Edit, fuera del rail.
     MODE_OBJECT,
     MODE_EDIT,
+
+    // Rail: elegir la herramienta activa y el submodo de selección.
     TOOL_SELECT,
     TOOL_MOVE,
     TOOL_ROTATE,
@@ -71,6 +73,14 @@ enum class ActionId {
     VIEW_LOCAL,
     SELECT_MORE,
     SELECT_LESS,
+
+    // Página Edit del footer. No son entradas del menú contextual: el catálogo
+    // remoto decide allí qué operaciones existen; estas fijan su única superficie.
+    EDIT_MAKE_EDGE_FACE,
+    EDIT_KNIFE,
+    EDIT_SEPARATE,
+    EDIT_SPLIT,
+    EDIT_NORMALS,
 
     // Radial (pulsación larga): acciones contextuales frecuentes, no duplicadas.
     ADD_OBJECT,
@@ -122,8 +132,6 @@ object SurfaceCatalog {
         ActionEntry(ActionId.DISCONNECT, ActionSurface.TOP, "Desconectar"),
 
         // Rail
-        ActionEntry(ActionId.MODE_OBJECT, ActionSurface.RAIL, "Object Mode"),
-        ActionEntry(ActionId.MODE_EDIT, ActionSurface.RAIL, "Edit Mode"),
         ActionEntry(ActionId.TOOL_SELECT, ActionSurface.RAIL, "Seleccionar"),
         ActionEntry(ActionId.TOOL_MOVE, ActionSurface.RAIL, "Mover"),
         ActionEntry(ActionId.TOOL_ROTATE, ActionSurface.RAIL, "Rotar"),
@@ -134,6 +142,11 @@ object SurfaceCatalog {
         ActionEntry(ActionId.TOOL_SUBDIVIDE, ActionSurface.RAIL, "Subdividir"),
         ActionEntry(ActionId.DUPLICATE, ActionSurface.RAIL, "Duplicar"),
         ActionEntry(ActionId.TOOL_LOOP_CUT, ActionSurface.RAIL, "Loop Cut"),
+
+        // Barra de modo: Object/Edit, junto al ojo. Salieron del rail para dejarlo
+        // dedicado a herramientas.
+        ActionEntry(ActionId.MODE_OBJECT, ActionSurface.TOP_MODE, "Object Mode"),
+        ActionEntry(ActionId.MODE_EDIT, ActionSurface.TOP_MODE, "Edit Mode"),
 
         // Barra superior de tools: junto al ojo (wireframe, Ctrl/Alt, undo/redo) y,
         // en Edit Mode, el submodo de selección. B/C viven en el long-click (RADIAL).
@@ -166,6 +179,12 @@ object SurfaceCatalog {
         ActionEntry(ActionId.VIEW_LOCAL, ActionSurface.FOOTER_VIEWS, "Aislar selección"),
         ActionEntry(ActionId.SELECT_MORE, ActionSurface.FOOTER_VIEWS, "Crecer selección"),
         ActionEntry(ActionId.SELECT_LESS, ActionSurface.FOOTER_VIEWS, "Decrecer selección"),
+
+        ActionEntry(ActionId.EDIT_MAKE_EDGE_FACE, ActionSurface.FOOTER_EDIT, "Crear arista/cara"),
+        ActionEntry(ActionId.EDIT_KNIFE, ActionSurface.FOOTER_EDIT, "Cuchillo"),
+        ActionEntry(ActionId.EDIT_SEPARATE, ActionSurface.FOOTER_EDIT, "Separar a objeto"),
+        ActionEntry(ActionId.EDIT_SPLIT, ActionSurface.FOOTER_EDIT, "Split"),
+        ActionEntry(ActionId.EDIT_NORMALS, ActionSurface.FOOTER_EDIT, "Normales"),
 
         // Radial
         ActionEntry(ActionId.ADD_OBJECT, ActionSurface.RADIAL, "Agregar"),

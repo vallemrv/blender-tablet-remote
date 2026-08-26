@@ -171,4 +171,15 @@ class SurfaceCatalogTest {
         assertEquals(ActionSurface.RADIAL, SurfaceCatalog.surfaceOf(ActionId.TOOL_BOX))
         assertEquals(ActionSurface.RADIAL, SurfaceCatalog.surfaceOf(ActionId.TOOL_CIRCLE))
     }
+
+    /** Object/Edit salieron del rail: viven en su propia barra de modo, junto al ojo. */
+    @Test
+    fun `object y edit viven en la barra de modo y no en el rail`() {
+        assertEquals(ActionSurface.TOP_MODE, SurfaceCatalog.surfaceOf(ActionId.MODE_OBJECT))
+        assertEquals(ActionSurface.TOP_MODE, SurfaceCatalog.surfaceOf(ActionId.MODE_EDIT))
+        // Y ninguna acción de modo queda colgando en el rail.
+        val rail = SurfaceCatalog.idsOf(ActionSurface.RAIL)
+        assertFalse(ActionId.MODE_OBJECT in rail)
+        assertFalse(ActionId.MODE_EDIT in rail)
+    }
 }

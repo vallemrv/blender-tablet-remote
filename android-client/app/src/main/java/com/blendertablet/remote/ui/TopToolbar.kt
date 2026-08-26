@@ -9,6 +9,8 @@ import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.Grid4x4
 import androidx.compose.material.icons.filled.LinearScale
 import androidx.compose.material.icons.filled.ScatterPlot
+import androidx.compose.material.icons.filled.Straighten
+import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.runtime.Composable
@@ -45,6 +47,10 @@ fun TopToolbar(
     val inEdit = blender.mode == BlenderMode.EDIT
 
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Modo (Object/Edit) en su propio panel, fuera del rail y sin mezclarse con
+        // el del ojo: es la barra de modo, la primera de la fila superior.
+        ModeBar(state, vm)
+
         FloatingPanel {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 if (blender.features.shading) {
@@ -86,6 +92,26 @@ fun TopToolbar(
                 description = if (chromeVisible) "Ocultar controles" else "Mostrar controles",
                 onClick = onToggleChrome,
             )
+        }
+    }
+}
+
+/** Barra de modo: Object/Edit, en su propio panel junto a las tools del top. */
+@Composable
+private fun ModeBar(state: AppUiState, vm: MainViewModel) {
+    val editable = state.blender.activeObject != null
+    val inEdit = state.blender.mode == BlenderMode.EDIT
+    FloatingPanel {
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            IconAction(
+                Icons.Default.ViewInAr, "Object Mode",
+                selected = !inEdit,
+            ) { vm.setMode(BlenderMode.OBJECT) }
+            IconAction(
+                Icons.Default.Straighten, "Edit Mode",
+                selected = inEdit,
+                enabled = editable,
+            ) { vm.setMode(BlenderMode.EDIT) }
         }
     }
 }

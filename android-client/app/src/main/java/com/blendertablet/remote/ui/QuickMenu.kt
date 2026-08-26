@@ -49,7 +49,10 @@ data class QuickAction(
     val enabled: Boolean = true,
     val tint: Color? = null,
     val children: List<QuickAction> = emptyList(),
+    /** Extrude: tap ejecuta la variante por defecto; long-click abre variantes. */
+    val opensChildrenOnClick: Boolean = true,
     val onClick: () -> Unit = {},
+    val onLongClick: (() -> Unit)? = null,
 ) {
     val isGroup: Boolean get() = children.isNotEmpty()
 }

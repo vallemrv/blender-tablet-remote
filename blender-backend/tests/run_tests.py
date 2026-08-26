@@ -538,6 +538,25 @@ def modal_scenario(client: WSClient) -> None:
     ok_reply("tool.cancel", client.command("tool.cancel"))
     topology_cancel = ok_reply("topología tras cancel", client.command("mesh.info"))
     check("cancel restaura topología", topology_cancel["verts"] == topology_before["verts"], str(topology_cancel))
+
+    for variant in ("ALONG_NORMALS", "INDIVIDUAL"):
+        ok_reply(f"seleccionar cara para extrude {variant}", client.command(
+            "selection.elements", {"faces": [0], "mode": "SET"}))
+        begun = ok_reply(f"tool.begin extrude {variant}", client.command("tool.begin", {
+            "tool": "EXTRUDE", "parameters": {"variant": variant, "offset": 0.2}}))
+        check(f"{variant} queda en sesión", begun.get("parameters", {}).get("variant") == variant, str(begun))
+        preview = ok_reply(f"preview extrude {variant}", client.command("mesh.info"))
+        check(f"{variant} añade geometría", preview["verts"] > topology_before["verts"], str(preview))
+        ok_reply(f"cancel extrude {variant}", client.command("tool.cancel"))
+        restored = ok_reply(f"restaura extrude {variant}", client.command("mesh.info"))
+        check(f"cancel {variant} restaura topología", restored["verts"] == topology_before["verts"], str(restored))
+
+    ok_reply("modo vértice para incompatibilidad de variante", client.command("selection.vertex"))
+    ok_reply("seleccionar vértice", client.command("selection.elements", {"verts": [0], "mode": "SET"}))
+    fail_reply("extrude individual no acepta vértices", client.command(
+        "mesh.extrude", {"variant": "INDIVIDUAL"}), "incompatible_selection")
+    ok_reply("restaurar modo cara para confirmar", client.command("selection.face"))
+    ok_reply("restaurar cara para confirmar", client.command("selection.elements", {"faces": [0], "mode": "SET"}))
     ok_reply("tool.begin para confirmar", client.command("tool.begin", {
         "tool": "EXTRUDE", "parameters": {"offset": 0.2}}))
     result = ok_reply("tool.confirm", client.command("tool.confirm"))
@@ -891,6 +910,212 @@ def modeling_scenario(client: WSClient) -> None:
     fail_reply("modo de shading invalido", client.command("view.shading", {"mode": "NOPE"}), "bad_payload")
 
 
+def edit_context_ops_scenario(client: WSClient) -> None:
+    """Operaciones discretas que alimentan el catálogo contextual de Edit."""
+    print("\n[19] Operaciones contextuales de Edit")
+    ok_reply("escena para F/P/Y/normales", client.command("file.new"))
+    ok_reply("Cube para operaciones contextuales", client.command("object.select", {"names": ["Cube"]}))
+    ok_reply("entrar Edit contextual", client.command("mode.edit"))
+
+    # F en vértices: buscamos una diagonal que no exista (el orden de vértices
+    # del startup file no es una parte estable del contrato de Blender).
+    ok_reply("modo vértice para F", client.command("selection.vertex"))
+    bm = bmesh.from_edit_mesh(bpy.context.view_layer.objects.active.data)
+    first, second = next((a, b) for pos, a in enumerate(bm.verts) for b in bm.verts[pos + 1:]
+                         if bm.edges.get((a, b)) is None)
+    ok_reply("dos vértices diagonales", client.command("selection.elements", {
+        "verts": [first.index, second.index], "mode": "SET"}))
+    made = ok_reply("make edge", client.command("mesh.make_edge_face"))
+    check("F crea una arista", made.get("created") == "EDGE", str(made))
+    fail_reply("F no duplica arista", client.command("mesh.make_edge_face"), "geometry_exists")
+
+    # F con 3+ vértices vuelve a crear una cara desde un contorno conocido.
+    ok_reply("modo cara para borrar", client.command("selection.face"))
+    bm = bmesh.from_edit_mesh(bpy.context.view_layer.objects.active.data)
+    face_vertices = [vert.index for vert in bm.faces[0].verts]
+    ok_reply("cara 0 para borrar", client.command("selection.elements", {"faces": [0], "mode": "SET"}))
+    ok_reply("borrar solo cara", client.command("mesh.delete", {"what": "ONLY_FACES"}))
+    ok_reply("modo vértice para crear cara", client.command("selection.vertex"))
+    ok_reply("contorno de vértices", client.command("selection.elements", {"verts": face_vertices, "mode": "SET"}))
+    face = ok_reply("make face", client.command("mesh.make_edge_face"))
+    check("F crea cara desde vértices", face.get("created") == "FACE", str(face))
+
+    # Un segundo contorno de una cara eliminada se rellena desde submodo arista.
+    ok_reply("modo cara para segundo borrar", client.command("selection.face"))
+    ok_reply("cara 0 para segundo borrar", client.command("selection.elements", {"faces": [0], "mode": "SET"}))
+    ok_reply("borrar segunda cara", client.command("mesh.delete", {"what": "ONLY_FACES"}))
+    ok_reply("modo arista para fill", client.command("selection.edge"))
+    bm = bmesh.from_edit_mesh(bpy.context.view_layer.objects.active.data)
+    boundary = [edge.index for edge in bm.edges if len(edge.link_faces) == 1]
+    ok_reply("contorno abierto", client.command("selection.elements", {"edges": boundary, "mode": "SET"}))
+    filled = ok_reply("fill contorno", client.command("mesh.make_edge_face"))
+    check("F rellena el borde", filled.get("created") == "FACE" and filled.get("count", 0) >= 1, str(filled))
+
+    # Normales: una cara seleccionada responde en ambos sentidos y el flip.
+    ok_reply("modo cara normales", client.command("selection.face"))
+    ok_reply("cara para normales", client.command("selection.elements", {"faces": [0], "mode": "SET"}))
+    outside = ok_reply("recalcular exterior", client.command("mesh.normals_recalculate"))
+    inside = ok_reply("recalcular interior", client.command("mesh.normals_recalculate", {"inside": True}))
+    flipped = ok_reply("voltear normales", client.command("mesh.normals_flip"))
+    check("normales anuncian el sentido", outside.get("inside") is False and inside.get("inside") is True and flipped.get("faces") == 1,
+          f"{outside} {inside} {flipped}")
+
+    # Y mantiene un único objeto; P crea uno nuevo con la selección de cara.
+    before_objects = set(bpy.data.objects.keys())
+    ok_reply("split de cara", client.command("mesh.split"))
+    check("Y no crea objeto", set(bpy.data.objects.keys()) == before_objects, str(set(bpy.data.objects.keys()) - before_objects))
+    separated = ok_reply("separate selection", client.command("mesh.separate"))
+    created = separated.get("created_objects", [])
+    check("P crea objeto", len(created) == 1 and created[0] in bpy.data.objects, str(separated))
+    ok_reply("volver a Object tras P", client.command("mode.object"))
+
+
+def bridge_edge_loops_scenario(client: WSClient) -> None:
+    print("\n[20] Bridge Edge Loops paramétrico")
+    ok_reply("escena para bridge", client.command("file.new"))
+    cube = bpy.data.objects.get("Cube")
+    bpy.data.objects.remove(cube, do_unlink=True)
+    data = bpy.data.meshes.new("BridgeRings")
+    build = bmesh.new()
+    lower = [build.verts.new(co) for co in ((-1, -1, 0), (1, -1, 0), (0, 1, 0))]
+    upper = [build.verts.new(co) for co in ((-1, -1, 2), (1, -1, 2), (0, 1, 2))]
+    for ring in (lower, upper):
+        for index in range(3):
+            build.edges.new((ring[index], ring[(index + 1) % 3]))
+    build.to_mesh(data)
+    build.free()
+    rings = bpy.data.objects.new("BridgeRings", data)
+    bpy.context.collection.objects.link(rings)
+    bpy.context.view_layer.objects.active = rings
+    rings.select_set(True)
+
+    ok_reply("entrar Edit bridge", client.command("mode.edit"))
+    ok_reply("modo edge bridge", client.command("selection.edge"))
+    before = ok_reply("topo antes bridge", client.command("mesh.info"))
+    ok_reply("dos loops para bridge", client.command("selection.elements", {
+        "edges": list(range(before["edges"])), "mode": "SET"}))
+    begun = ok_reply("begin bridge", client.command("tool.begin", {
+        "tool": "BRIDGE_EDGE_LOOPS", "parameters": {"twist_offset": 0, "merge": False, "merge_factor": 0.0}}))
+    check("sesión bridge activa", begun.get("active") and begun.get("tool") == "BRIDGE_EDGE_LOOPS", str(begun))
+    preview = ok_reply("topo preview bridge", client.command("mesh.info"))
+    check("bridge añade caras", preview["faces"] == before["faces"] + 3, f"{before} -> {preview}")
+    ok_reply("twist bridge", client.command("tool.parameter", {"parameters": {"twist_offset": 1}}))
+    ok_reply("cancel bridge", client.command("tool.cancel"))
+    restored = ok_reply("topo cancel bridge", client.command("mesh.info"))
+    check("cancel bridge restaura", restored["faces"] == before["faces"], f"{before} -> {restored}")
+
+    ok_reply("un loop invalido", client.command("selection.elements", {"edges": [0, 1, 2], "mode": "SET"}))
+    fail_reply("bridge exige dos loops", client.command("tool.begin", {"tool": "BRIDGE_EDGE_LOOPS"}), "empty_selection")
+    ok_reply("volver Object bridge", client.command("mode.object"))
+
+
+def knife_scenario(client: WSClient) -> None:
+    print("\n[21] Knife: motor geométrico y sesión")
+    from blender_tablet_remote.commands import knife as knife_commands
+
+    # Geometría: rejilla 3x3 construida con subdivide_edges y cortada en línea recta.
+    bm = bmesh.new()
+    corners = [bm.verts.new((x, y, 0)) for x, y in ((-5, -5), (5, -5), (5, 5), (-5, 5))]
+    bm.faces.new(corners)
+    grid = list(bm.faces)
+    bmesh.ops.subdivide_edges(bm, edges=list(grid[0].edges), cuts=2)
+    before_faces = len(bm.faces)
+    result = knife_commands.cut_polyline(bm, [[-5.0, 1.0, 0.0], [5.0, 1.0, 0.0]], False)
+    check("knife corta la rejilla", len(bm.faces) > before_faces and result["segments"] == 1,
+          f"{before_faces} -> {len(bm.faces)} {result}")
+    closed = knife_commands.cut_polyline(
+        bm, [[-4.0, -4.0, 0.0], [4.0, -4.0, 0.0], [4.0, 4.0, 0.0], [-4.0, 4.0, 0.0]], True)
+    check("knife cierra la polilínea", closed["segments"] == 4, str(closed))
+    bm.free()
+
+    # Sesión: begin sin puntos, confirm falla, cancel restaura.
+    ok_reply("escena knife", client.command("file.new"))
+    ok_reply("Cube knife", client.command("object.select", {"names": ["Cube"]}))
+    ok_reply("entrar Edit knife", client.command("mode.edit"))
+    begun = ok_reply("begin KNIFE", client.command("tool.begin", {"tool": "KNIFE"}))
+    check("sesión KNIFE activa", begun.get("active") and begun.get("tool") == "KNIFE", str(begun))
+    fail_reply("confirm sin puntos", client.command("tool.confirm"), "empty_selection")
+    pop = ok_reply("pop vacío no rompe", client.command("tool.knife_pop"))
+    check("pop sin puntos ok", pop.get("active"), str(pop))
+    ok_reply("cancel knife", client.command("tool.cancel"))
+    client.command("mode.object")
+
+    print("  Roll de cámara")
+    from mathutils import Quaternion, Vector
+
+    from blender_tablet_remote.camera import camera as tablet_camera
+
+    tablet_camera.rotation = Quaternion((1.0, 0.0, 0.0, 0.0))
+    tablet_camera.roll(math.pi / 2)
+    forward = tablet_camera.rotation @ Vector((0.0, 0.0, -1.0))
+    up = tablet_camera.rotation @ Vector((0.0, 1.0, 0.0))
+    check("roll conserva el eje de visión", (forward - Vector((0, 0, -1))).length < 1e-5, str(forward))
+    check("roll gira 90° sobre el eje", abs(up.y) < 1e-5 and abs(up.z) < 1e-5, str(up))
+
+
+def extrude_axis_scenario(client: WSClient) -> None:
+    print("\n[22] Extrude: restricción de eje")
+
+    def _select_top_face():
+        obj = bpy.context.view_layer.objects.active
+        bm = bmesh.from_edit_mesh(obj.data)
+        index = next(f.index for f in bm.faces if f.normal.z > 0.5)
+        ok_reply("seleccionar cara superior", client.command("selection.elements", {"faces": [index], "mode": "SET"}))
+
+    def _selected_verts():
+        obj = bpy.context.view_layer.objects.active
+        bm = bmesh.from_edit_mesh(obj.data)
+        return [tuple(round(c, 4) for c in v.co) for v in bm.verts if v.select]
+
+    ok_reply("escena extrude axis", client.command("file.new"))
+    ok_reply("Cube extrude axis", client.command("object.select", {"names": ["Cube"]}))
+    ok_reply("edit extrude axis", client.command("mode.edit"))
+    ok_reply("cara extrude axis", client.command("selection.face"))
+    _select_top_face()
+
+    begun = ok_reply("begin extrude X global", client.command("tool.begin", {
+        "tool": "EXTRUDE", "parameters": {"variant": "REGION", "constraint": "X", "orientation": "GLOBAL", "offset": 1.0}}))
+    check("sesión extrude activa", begun.get("active") and begun.get("tool") == "EXTRUDE", str(begun))
+    verts = _selected_verts()
+    check("eje X global mueve +1 en X", abs(max(v[0] for v in verts) - 2.0) < 1e-3, str(verts))
+    ok_reply("cambiar a Y", client.command("tool.parameter", {"parameters": {"constraint": "Y"}}))
+    verts = _selected_verts()
+    check("cambiar a Y recoloca sin acumular", abs(max(v[1] for v in verts) - 2.0) < 1e-3
+          and abs(max(v[0] for v in verts) - 1.0) < 1e-3, str(verts))
+    ok_reply("cancel extrude", client.command("tool.cancel"))
+
+    # Objeto rotado 90° en Z: GLOBAL X debe resolver a LOCAL Y.
+    ok_reply("rotar cubo 90", client.command("mode.object"))
+    ok_reply("rotar Z", client.command("transform.rotate", {"z": 90.0, "absolute": True}))
+    ok_reply("edit rotado", client.command("mode.edit"))
+    ok_reply("cara rotada", client.command("selection.face"))
+    _select_top_face()
+    begun = ok_reply("begin extrude X global rotado", client.command("tool.begin", {
+        "tool": "EXTRUDE", "parameters": {"variant": "REGION", "constraint": "X", "orientation": "GLOBAL", "offset": 1.0}}))
+    verts = _selected_verts()
+    # En un objeto rotado 90° en Z, el X mundial es el -Y local: la cara superior se
+    # desplaza en X mundial, que en las coordenadas locales del cubo es -Y.
+    check("X global respeta la rotación del objeto", abs(max(v[0] for v in verts) - 1.0) < 1e-3
+          and any(abs(v[1] + 2.0) < 1e-3 for v in verts), str(verts))
+    ok_reply("cancel extrude rotado", client.command("tool.cancel"))
+    ok_reply("volver rotación", client.command("mode.object"))
+    ok_reply("reset rot", client.command("transform.rotate", {"z": 0.0, "absolute": True}))
+
+    # Rechazos y errores.
+    ok_reply("edit rechazos", client.command("mode.edit"))
+    ok_reply("cara rechazos", client.command("selection.face"))
+    _select_top_face()
+    fail_reply("eje en ALONG_NORMALS", client.command("tool.begin", {
+        "tool": "EXTRUDE", "parameters": {"variant": "ALONG_NORMALS", "constraint": "X"}}), "incompatible_parameter")
+    fail_reply("eje inválido", client.command("tool.begin", {
+        "tool": "EXTRUDE", "parameters": {"constraint": "W"}}), "bad_payload")
+    fail_reply("orientación inválida", client.command("tool.begin", {
+        "tool": "EXTRUDE", "parameters": {"constraint": "X", "orientation": "NOPE"}}), "bad_payload")
+    fail_reply("direction y constraint", client.command("mesh.extrude", {
+        "direction": [0, 0, 1], "constraint": "X", "_no_undo": True}), "bad_payload")
+    ok_reply("volver object extrude axis", client.command("mode.object"))
+
+
 def auth_scenario() -> None:
     print("\n[16] Autenticación")
     bad = WSClient("127.0.0.1", PORT, token="")
@@ -1002,6 +1227,10 @@ def client_worker(done: threading.Event) -> None:
             modal_scenario(extra)
             file_scenario(extra)
             modeling_scenario(extra)
+            edit_context_ops_scenario(extra)
+            bridge_edge_loops_scenario(extra)
+            knife_scenario(extra)
+            extrude_axis_scenario(extra)
         finally:
             extra.close()
 

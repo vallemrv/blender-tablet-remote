@@ -40,6 +40,85 @@ def _select_geom(bm, geom) -> None:
     bm.select_flush(True)
 
 
+def _selected_faces_for_normals(bm) -> list:
+    """Caras afectadas por las acciones de normales.
+
+    Blender permite invocar Alt+N desde cualquiera de los tres submodos.  En
+    vértices/aristas la intención sigue siendo las caras incidentes, mientras
+    que en caras se respeta exactamente la selección.  Centralizarlo evita que
+    los dos comandos discrepen silenciosamente.
+    """
+    vert_mode, edge_mode, face_mode = _select_mode()
+    if face_mode:
+        return [face for face in bm.faces if face.select]
+    if edge_mode:
+        return list({face for edge in bm.edges if edge.select for face in edge.link_faces})
+    if vert_mode:
+        return list({face for vert in bm.verts if vert.select for face in vert.link_faces})
+    return []
+
+
+def _selected_geometry(bm) -> list:
+    """Devuelve geometría efectiva, incluso si el submodo no está actualizado."""
+    return [elem for seq in (bm.verts, bm.edges, bm.faces) for elem in seq if elem.select]
+
+
+def _edge_components(edges: list) -> list[list]:
+    """Componentes por conectividad restringida a ``edges``."""
+    remaining = set(edges)
+    components = []
+    while remaining:
+        todo = [remaining.pop()]
+        component = []
+        while todo:
+            edge = todo.pop()
+            component.append(edge)
+            for vert in edge.verts:
+                for other in vert.link_edges:
+                    if other in remaining:
+                        remaining.remove(other)
+                        todo.append(other)
+        components.append(component)
+    return components
+
+
+def _resolve_extrude_direction(payload: dict, obj) -> Vector | None:
+    """Vector unitario LOCAL para la restricción X/Y/Z, o None para FREE.
+
+    - LOCAL: ejes del objeto (en BMesh ya son locales).
+    - GLOBAL: eje mundial convertido a local con la 3×3 inversa de `matrix_world`
+      (normalizado, para no arrastrar magnitud de una escala no uniforme).
+    - VIEW: X = derecha de pantalla, Y = arriba, Z = profundidad de cámara, leídos de
+      la cámara de la tablet y convertidos a local. Nunca se toca `rv3d`.
+    """
+    constraint = str(payload.get("constraint", "FREE")).upper()
+    if constraint == "FREE":
+        return None
+    if constraint not in {"X", "Y", "Z"}:
+        raise BadPayload("'constraint' must be FREE, X, Y or Z")
+    orientation = str(payload.get("orientation", "GLOBAL")).upper()
+    if orientation not in {"GLOBAL", "LOCAL", "VIEW"}:
+        raise BadPayload("'orientation' must be GLOBAL, LOCAL or VIEW")
+
+    axis = {"X": Vector((1.0, 0.0, 0.0)), "Y": Vector((0.0, 1.0, 0.0)), "Z": Vector((0.0, 0.0, 1.0))}[constraint]
+    if orientation == "LOCAL":
+        return axis.copy()
+    if orientation == "GLOBAL":
+        return (obj.matrix_world.inverted().to_3x3() @ axis).normalized()
+
+    # VIEW
+    from ..camera import camera
+
+    found = find_view3d()
+    if found is None:
+        raise CommandError("VIEW orientation requires a viewport", code="no_viewport")
+    camera.sync_from_region(found[3])
+    world = camera.rotation @ {"X": Vector((1.0, 0.0, 0.0)),
+                               "Y": Vector((0.0, 1.0, 0.0)),
+                               "Z": Vector((0.0, 0.0, -1.0))}[constraint]
+    return (obj.matrix_world.inverted().to_3x3() @ world).normalized()
+
+
 @command("mesh.extrude", mutating=True)
 def extrude(payload: dict) -> dict:
     """Extruye la selección. `offset` desplaza a lo largo de la normal media.
@@ -47,10 +126,28 @@ def extrude(payload: dict) -> dict:
     Con offset 0 (por defecto) la geometría nueva queda encima de la original y
     queda seleccionada: la tablet puede arrastrarla después con transform.move,
     igual que el flujo E + mover de Blender.
+
+    `constraint` (FREE|X|Y|Z) + `orientation` (GLOBAL|LOCAL|VIEW) restringen el
+    desplazamiento de la variante REGION a un solo eje, igual que pulsar X/Y/Z tras
+    Extrude en Blender. Solo REGION lo admite; FREE conserva el comportamiento anterior.
     """
     obj, bm = _bm_and_obj()
     offset = get_float(payload, "offset", 0.0)
+    variant = str(payload.get("variant", "REGION")).upper()
+    if variant not in {"REGION", "ALONG_NORMALS", "INDIVIDUAL"}:
+        raise BadPayload("'variant' must be REGION, ALONG_NORMALS or INDIVIDUAL")
     vert_mode, edge_mode, face_mode = _select_mode()
+    if variant != "REGION" and not face_mode:
+        raise CommandError(f"{variant} requires face selection", code="incompatible_selection")
+    if variant == "ALONG_NORMALS" and _custom_direction(payload) is not None:
+        raise BadPayload("'direction' is incompatible with ALONG_NORMALS")
+
+    axis = _resolve_extrude_direction(payload, obj)
+    if axis is not None:
+        if variant != "REGION":
+            raise CommandError("'constraint' only applies to REGION", code="incompatible_parameter")
+        if _custom_direction(payload) is not None:
+            raise BadPayload("'direction' and 'constraint' are mutually exclusive")
 
     if face_mode:
         faces = [f for f in bm.faces if f.select]
@@ -61,9 +158,15 @@ def extrude(payload: dict) -> dict:
             normal += f.normal
         normal = normal.normalized() if normal.length > 0 else Vector((0.0, 0.0, 1.0))
 
-        ret = bmesh.ops.extrude_face_region(bm, geom=faces)
-        new_geom = ret["geom"]
-        bmesh.ops.delete(bm, geom=faces, context="FACES")
+        if variant == "INDIVIDUAL":
+            # ``extrude_discrete_faces`` crea una copia independiente de cada cara: no
+            # comparte paredes laterales ni vértices entre caras contiguas.
+            ret = bmesh.ops.extrude_discrete_faces(bm, faces=faces)
+            new_geom = list(ret.get("faces", []))
+        else:
+            ret = bmesh.ops.extrude_face_region(bm, geom=faces)
+            new_geom = ret["geom"]
+            bmesh.ops.delete(bm, geom=faces, context="FACES")
         kind = "faces"
     elif edge_mode:
         edges = [e for e in bm.edges if e.select]
@@ -82,16 +185,27 @@ def extrude(payload: dict) -> dict:
         new_geom = list(ret["verts"]) + list(ret["edges"])
         kind = "verts"
 
-    new_verts = [g for g in new_geom if isinstance(g, bmesh.types.BMVert)]
+    new_verts = list({vert for geom in new_geom for vert in (
+        [geom] if isinstance(geom, bmesh.types.BMVert) else
+        list(geom.verts) if isinstance(geom, (bmesh.types.BMEdge, bmesh.types.BMFace)) else []
+    )})
     if offset:
-        direction = _custom_direction(payload) or normal
-        bmesh.ops.translate(bm, verts=new_verts, vec=direction * offset)
+        direction = _custom_direction(payload)
+        if variant == "ALONG_NORMALS":
+            bm.normal_update()
+            for vert in new_verts:
+                vert.co += vert.normal * offset
+        else:
+            bmesh.ops.translate(bm, verts=new_verts, vec=(axis or direction or normal) * offset)
 
     _deselect_all(bm)
     _select_geom(bm, new_geom)
     flush_bmesh(obj, bm)
     _undo(payload, "Remote extrude")
-    return {"extruded": kind, "new_verts": len(new_verts), "offset": offset}
+    return {"extruded": kind, "new_verts": len(new_verts), "offset": offset,
+            "variant": variant,
+            "constraint": str(payload.get("constraint", "FREE")).upper(),
+            "orientation": str(payload.get("orientation", "GLOBAL")).upper()}
 
 
 @command("mesh.inset", mutating=True)
@@ -412,3 +526,218 @@ def _custom_direction(payload: dict) -> Vector | None:
         raise BadPayload("'direction' must be [x, y, z]")
     vec = Vector((float(direction[0]), float(direction[1]), float(direction[2])))
     return vec.normalized() if vec.length > 0 else None
+
+
+@command("mesh.make_edge_face", mutating=True)
+def make_edge_face(payload: dict) -> dict:
+    """Equivalente discreto de ``F`` para los submodos Vértice y Arista.
+
+    No depende del orden en que llegaron los índices desde la tablet: BMesh
+    decide el contorno contextual.  Antes comprobamos los casos que Blender
+    aceptaría como no-op para convertirlos en errores útiles y estables.
+    """
+    obj, bm = _bm_and_obj()
+    vert_mode, edge_mode, face_mode = _select_mode()
+    if face_mode:
+        raise CommandError("Make Edge/Face is unavailable in face select mode", code="incompatible_selection")
+
+    if vert_mode:
+        verts = [vert for vert in bm.verts if vert.select]
+        if len(verts) < 2:
+            raise CommandError("Select at least two vertices", code="insufficient_selection")
+        if len(verts) == 2:
+            if bm.edges.get((verts[0], verts[1])) is not None:
+                raise CommandError("The edge already exists", code="geometry_exists")
+            try:
+                edge = bm.edges.new((verts[0], verts[1]))
+            except ValueError as exc:
+                raise CommandError("Cannot create an edge from this selection", code="topology_incompatible") from exc
+            _deselect_all(bm)
+            _select_geom(bm, [edge])
+            flush_bmesh(obj, bm)
+            _undo(payload, "Remote make edge")
+            return {"created": "EDGE", "count": 1}
+
+        selected = set(verts)
+        if any(set(face.verts) == selected for face in bm.faces):
+            raise CommandError("The face already exists", code="geometry_exists")
+        try:
+            result = bmesh.ops.contextual_create(bm, geom=verts)
+        except (ValueError, RuntimeError) as exc:
+            raise CommandError("Selected vertices do not form a valid contour", code="topology_incompatible") from exc
+        created = result.get("faces", [])
+        if not created:
+            raise CommandError("Selected vertices do not form a valid contour", code="topology_incompatible")
+        _deselect_all(bm)
+        _select_geom(bm, created)
+        flush_bmesh(obj, bm)
+        _undo(payload, "Remote make face")
+        return {"created": "FACE", "count": len(created)}
+
+    if not edge_mode:
+        raise CommandError("Select vertices or edges", code="incompatible_selection")
+    edges = [edge for edge in bm.edges if edge.select]
+    if len(edges) < 3:
+        raise CommandError("Select a closed edge boundary", code="insufficient_selection")
+    vertices = {vert for edge in edges for vert in edge.verts}
+    # Un ciclo simple es el único caso que este primer contrato promete.  Es
+    # preferible rechazar un ocho/ramificación que adivinar una cara distinta.
+    if any(sum(1 for edge in vert.link_edges if edge in edges) != 2 for vert in vertices):
+        raise CommandError("Selected edges do not form one closed contour", code="open_contour")
+    pending = {edges[0]}
+    seen = set()
+    while pending:
+        edge = pending.pop()
+        if edge in seen:
+            continue
+        seen.add(edge)
+        pending.update(other for vert in edge.verts for other in vert.link_edges if other in edges and other not in seen)
+    if len(seen) != len(edges):
+        raise CommandError("Selected edges form multiple contours", code="topology_incompatible")
+    if any(set(face.edges) == set(edges) for face in bm.faces):
+        raise CommandError("The face already exists", code="geometry_exists")
+    try:
+        result = bmesh.ops.edgeloop_fill(bm, edges=edges)
+    except (ValueError, RuntimeError) as exc:
+        raise CommandError("Selected edges do not form a fillable contour", code="topology_incompatible") from exc
+    created = result.get("faces", [])
+    if not created:
+        raise CommandError("Selected edges do not form a fillable contour", code="topology_incompatible")
+    _deselect_all(bm)
+    _select_geom(bm, created)
+    flush_bmesh(obj, bm)
+    _undo(payload, "Remote fill")
+    return {"created": "FACE", "count": len(created)}
+
+
+@command("mesh.normals_recalculate", mutating=True)
+def normals_recalculate(payload: dict) -> dict:
+    """Recalcula normales hacia fuera (por defecto) o hacia dentro."""
+    obj, bm = _bm_and_obj()
+    faces = _selected_faces_for_normals(bm)
+    if not faces:
+        raise CommandError("Select geometry with faces", code="empty_selection")
+    inside = bool(payload.get("inside", False))
+    try:
+        bmesh.ops.recalc_face_normals(bm, faces=faces)
+        if inside:
+            bmesh.ops.reverse_faces(bm, faces=faces, flip_multires=False)
+    except (ValueError, RuntimeError) as exc:
+        raise CommandError("Cannot recalculate normals for this topology", code="topology_incompatible") from exc
+    flush_bmesh(obj, bm)
+    _undo(payload, "Remote recalculate normals inside" if inside else "Remote recalculate normals outside")
+    return {"inside": inside, "faces": len(faces)}
+
+
+@command("mesh.normals_flip", mutating=True)
+def normals_flip(payload: dict) -> dict:
+    """Voltea las normales de las caras que toca la selección actual."""
+    obj, bm = _bm_and_obj()
+    faces = _selected_faces_for_normals(bm)
+    if not faces:
+        raise CommandError("Select geometry with faces", code="empty_selection")
+    try:
+        bmesh.ops.reverse_faces(bm, faces=faces, flip_multires=False)
+    except (ValueError, RuntimeError) as exc:
+        raise CommandError("Cannot flip normals for this topology", code="topology_incompatible") from exc
+    flush_bmesh(obj, bm)
+    _undo(payload, "Remote flip normals")
+    return {"faces": len(faces)}
+
+
+@command("mesh.split", mutating=True)
+def split(payload: dict) -> dict:
+    """Equivalente de Y: desconecta la selección sin crear otro objeto.
+
+    La operación de Blender conoce las sutilezas de los tres submodos y de la
+    selección implícita de caras. Aquí un operador está justificado: no existe
+    una primitiva BMesh equivalente que conserve esa semántica contextual.
+    """
+    obj, bm = _bm_and_obj()
+    if not _selected_geometry(bm):
+        raise CommandError("Nothing selected to split", code="empty_selection")
+    try:
+        bpy.ops.mesh.split()
+    except RuntimeError as exc:
+        raise CommandError("Cannot split this selection", code="topology_incompatible") from exc
+    # El operador actualiza la malla de edición y crea su propio undo: no añadir
+    # otro undo_push aquí, para que Y siga siendo una sola acción reversible.
+    return {"object": obj.name, "created_objects": []}
+
+
+@command("mesh.separate", mutating=True)
+def separate(payload: dict) -> dict:
+    """Equivalente estricto de P > Selection; no implementa otros modos aún."""
+    obj, bm = _bm_and_obj()
+    if not _selected_geometry(bm):
+        raise CommandError("Nothing selected to separate", code="empty_selection")
+    before = set(bpy.data.objects.keys())
+    try:
+        bpy.ops.mesh.separate(type="SELECTED")
+    except RuntimeError as exc:
+        raise CommandError("Cannot separate this selection", code="topology_incompatible") from exc
+    created = sorted(set(bpy.data.objects.keys()) - before)
+    if not created:
+        raise CommandError("Selection did not create a separate object", code="topology_incompatible")
+    # Igual que split, mesh.separate ya crea el único paso de undo requerido.
+    return {"separated": "SELECTION", "created_objects": created}
+
+
+def bridge_edge_loops(payload: dict) -> dict:
+    """Une dos anillos de aristas seleccionados mediante ``bridge_loops``.
+
+    Esta función se usa exclusivamente desde la sesión paramétrica ``tool.*``:
+    su llamador restaura el BMesh original antes de cada preview y añade el undo
+    sólo al confirmar.  Por eso respeta ``_no_undo`` igual que el resto de
+    herramientas de ``mesh``.
+    """
+    obj, bm = _bm_and_obj()
+    _vert_mode, edge_mode, _face_mode = _select_mode()
+    if not edge_mode:
+        raise CommandError("Bridge Edge Loops requires edge select mode", code="incompatible_selection")
+    edges = [edge for edge in bm.edges if edge.select and not edge.hide]
+    if len(edges) < 6:
+        raise CommandError("Select two edge loops with at least three edges each", code="empty_selection")
+    components = _edge_components(edges)
+    if len(components) != 2:
+        raise CommandError("Select exactly two edge loops", code="ambiguous_loops")
+    if len(components[0]) != len(components[1]):
+        raise CommandError("Edge loops must have matching edge counts", code="topology_incompatible")
+    for loop in components:
+        vertices = {vert for edge in loop for vert in edge.verts}
+        if len(loop) < 3 or any(
+            sum(1 for edge in vert.link_edges if edge in loop) != 2 for vert in vertices
+        ):
+            raise CommandError("Selected edges must form closed loops", code="topology_incompatible")
+        # Un borde puede ser un wire ring (0 caras) o el borde de un agujero (1
+        # cara); una arista interior no identifica de forma no ambigua qué lado
+        # se debe puentear.
+        if any(len(edge.link_faces) > 1 for edge in loop):
+            raise CommandError("Selected loops must be boundary loops", code="topology_incompatible")
+
+    twist_offset = get_int(payload, "twist_offset", 0)
+    merge = bool(payload.get("merge", False))
+    merge_factor = get_float(payload, "merge_factor", 0.0)
+    if not 0.0 <= merge_factor <= 1.0:
+        raise BadPayload("'merge_factor' must be between 0 and 1")
+    try:
+        result = bmesh.ops.bridge_loops(
+            bm,
+            edges=edges,
+            use_pairs=False,
+            use_cyclic=True,
+            use_merge=merge,
+            merge_factor=merge_factor,
+            twist_offset=twist_offset,
+        )
+    except (ValueError, RuntimeError) as exc:
+        raise CommandError("Selected loops cannot be bridged", code="topology_incompatible") from exc
+    faces = result.get("faces", [])
+    if not faces:
+        raise CommandError("Selected loops cannot be bridged", code="topology_incompatible")
+    _deselect_all(bm)
+    _select_geom(bm, faces)
+    flush_bmesh(obj, bm)
+    _undo(payload, "Remote bridge edge loops")
+    return {"loops": [len(loop) for loop in components], "faces": len(faces),
+            "twist_offset": twist_offset, "merge": merge, "merge_factor": merge_factor}

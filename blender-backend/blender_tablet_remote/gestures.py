@@ -47,7 +47,7 @@ def _modal_active() -> bool:
     return session.active
 
 
-VIEW_GESTURES = {"orbit", "pan", "zoom"}
+VIEW_GESTURES = {"orbit", "pan", "zoom", "roll"}
 TRANSFORM_GESTURES = {"move", "rotate", "scale"}
 ALL_GESTURES = VIEW_GESTURES | TRANSFORM_GESTURES
 
@@ -169,6 +169,9 @@ class GestureManager:
             view_cmds.pan_delta(dx, dy)
         elif gesture == "zoom":
             view_cmds.zoom_factor(factor)
+        elif gesture == "roll":
+            # El ángulo de rueda viaja acumulado en `dx` (radianes).
+            view_cmds.roll_delta(dx)
         elif gesture in TRANSFORM_GESTURES and _modal_active():
             # La sesión manda: ella sabe de ejes, incrementos y valor acumulado, y
             # el modo lo eligió la barra, no el gesto que llegue.

@@ -282,21 +282,29 @@ Ctrl+Plus / Ctrl+Minus del numpad). Solo Edit Mode (`wrong_mode` fuera).
 
 | Comando | Payload |
 |---|---|
-| `mesh.extrude` | `offset` (def. 0.0), `direction` [x,y,z] opcional |
+| `mesh.extrude` | `offset` (def. 0.0), `direction` [x,y,z] opcional, `variant`: `REGION`\|`ALONG_NORMALS`\|`INDIVIDUAL` |
 | `mesh.inset` | `thickness` (def. 0.1), `depth`, `individual` (bool) |
 | `mesh.bevel` | `offset` (def. 0.1), `segments` (def. 1), `profile`, `affect`, `clamp` |
 | `mesh.subdivide` | `cuts` |
 | `mesh.loop_cut` | `edge` (opcional), `cuts` (def. 1), `smoothness`, `factor`, `falloff`, `even`, `flip`, `clamp` |
 | `mesh.loop_probe` | `u`, `v` — sondeo read-only para colocar un corte con el toque |
 | `mesh.delete` | `what`: `VERTS`\|`EDGES`\|`FACES`\|`ONLY_FACES` |
+| `mesh.make_edge_face` | —; crea arista/cara en Vértice o rellena un borde cerrado en Arista |
+| `mesh.separate` | —; separa la selección en un objeto nuevo |
+| `mesh.split` | —; separa la selección dentro de la misma malla |
+| `mesh.normals_recalculate` | `inside` (bool, def. false) |
+| `mesh.normals_flip` | — |
 | `mesh.info` | — |
 
 `mesh.extrude` con `offset: 0` (el valor por defecto) replica el flujo interactivo de
 Blender: extruye sin desplazar y **deja la geometría nueva seleccionada**, para que la
 tablet la arrastre después con un gesto `move`.
 
-El tipo de extrusión depende del modo de selección: caras → región de caras,
-aristas → solo aristas, vértices → vértices individuales.
+`variant` es `REGION` por defecto. En caras, `ALONG_NORMALS` desplaza cada vértice
+nuevo según su normal y `INDIVIDUAL` crea una copia desconectada por cada cara; ambas
+requieren el submodo Cara (`incompatible_selection` fuera de él). `direction` no se
+combina con `ALONG_NORMALS`. Aristas y vértices sólo admiten `REGION`, que conserva la
+semántica existente: aristas → solo aristas y vértices → vértices individuales.
 
 `mesh.loop_cut` replica el modal Ctrl+R con parámetros explícitos. `factor` es el
 deslizamiento: 0 deja el corte en la mitad del anillo, ±1 lo lleva a los extremos.
@@ -383,7 +391,7 @@ reconstruye matrices o coordenadas BMesh desde el snapshot inicial.
 
 ### Herramientas paramétricas de Edit Mode
 
-`tool.begin` (`tool`: `EXTRUDE|BEVEL|INSET|SUBDIVIDE|LOOP_CUT`, `parameters`),
+`tool.begin` (`tool`: `EXTRUDE|BEVEL|INSET|SUBDIVIDE|LOOP_CUT|BRIDGE_EDGE_LOOPS`, `parameters`),
 `tool.parameter`, `tool.nudge`, `tool.confirm`, `tool.cancel` y `tool.status` forman una
 sesión propietaria. Cada preview se reconstruye desde una copia BMesh inicial; cancelar
 restaura exactamente la topología y confirmar crea un único paso de undo.
@@ -402,6 +410,53 @@ paso. Responde con el estado de la sesión más `pick`. Requiere sesión activa
 La feature `edit_tools.loop_cut` anuncia `pick`, `probe`, `falloff`, `even`, `flip` y
 `clamp`; un cliente debe usar el flujo de colocación por toque solo si `pick` está
 anunciado.
+
+### Catálogo contextual de Edit
+
+`server.capabilities.features.edit_catalog` (versión 1) es el único catálogo para el
+menú contextual nuevo de Edit. Sus grupos `VERTEX`, `EDGE` y `FACE` se eligen desde el
+selector de submodo; el cliente no debe combinar los tres ni reconstruir una lista
+local de herramientas. Si la feature no existe o sus grupos están vacíos debe conservar
+la interfaz legacy.
+
+Cada entrada tiene esta forma:
+
+```json
+{
+  "id": "EXTRUDE", "label": "Extruir", "enabled": true,
+  "execution": "SESSION", "command": "tool.begin",
+  "requirements": {
+    "mode": "EDIT", "selection_modes": ["FACE"],
+    "selection": {"faces": {"min": 1}}
+  },
+  "variants": [{"id": "REGION", "label": "Región", "enabled": true}],
+  "parameters": [{"id": "offset", "label": "Desplazamiento", "type": "float", "default": 0.0}]
+}
+```
+
+`id` es la intención wire estable; `label` es texto presentado al usuario;
+`execution` es `DISCRETE` o `SESSION`. `command`, cuando existe, es el comando que la
+acción habilitada invoca y `payload` son sus campos fijos (por ejemplo `tool` para una
+sesión o `inside` para recalcular normales). Las acciones `SESSION` existentes se
+inician con `tool.begin`; los parámetros editables se mandan como `parameters`.
+`requirements.selection` declara mínimos de `verts`, `edges` o `faces`: permite
+ocultar o desactivar pronto, pero no sustituye la validación de topología del comando.
+Los parámetros son tipados (`int`, `float`, `bool` o `enum`) y pueden incluir
+`default`, `min`, `max`, `step` y `values`.
+
+El primer conjunto congelado incluye las operaciones ya disponibles (Loop/Ring,
+Extrude, Bevel, Inset, Subdivide, Loop Cut, Delete y Hide/Reveal), y los IDs nuevos
+`BRIDGE_EDGE_LOOPS`, `MAKE_EDGE_FACE`, `KNIFE`, `SEPARATE`, `SPLIT`,
+`RECALCULATE_NORMALS_OUTSIDE`, `RECALCULATE_NORMALS_INSIDE` y `FLIP_NORMALS`.
+`KNIFE` y `DISSOLVE` se anuncian deshabilitados hasta que exista
+su comando; una app no debe enviar un wire para una entrada con `enabled: false`.
+`BRIDGE_EDGE_LOOPS` es una sesión de Arista: requiere exactamente dos loops cerrados
+disjuntos de igual longitud. Sus parámetros son `twist_offset` (int, 0), `merge`
+(bool, false) y `merge_factor` (float, 0..1, 0). La preview se reconstruye desde el
+backup igual que las demás sesiones y el catálogo fija el mínimo rápido de seis aristas;
+el backend valida la topología completa.
+Extrude anuncia `REGION` en los tres grupos; `ALONG_NORMALS` e `INDIVIDUAL` sólo se
+habilitan en Cara. El cliente debe respetar `enabled` y no deducir compatibilidades.
 
 ### Modificadores
 

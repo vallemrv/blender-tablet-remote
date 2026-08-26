@@ -65,6 +65,9 @@ IMMEDIATE_FRAME_COMMANDS = {
     # esperar al siguiente hueco de fps.
     "tool.begin",
     "tool.loop_pick",
+    "tool.knife_point",
+    "tool.knife_pop",
+    "tool.knife_close",
 }
 
 

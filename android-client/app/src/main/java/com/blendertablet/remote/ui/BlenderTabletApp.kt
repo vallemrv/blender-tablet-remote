@@ -1,6 +1,7 @@
 package com.blendertablet.remote.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -35,7 +36,9 @@ import androidx.compose.material.icons.filled.Deselect
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Flip
 import androidx.compose.material.icons.filled.Grid4x4
+import androidx.compose.material.icons.filled.JoinFull
 import androidx.compose.material.icons.filled.LibraryAdd
+import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.LinearScale
 import androidx.compose.material.icons.filled.Mouse
@@ -48,7 +51,6 @@ import androidx.compose.material.icons.filled.RoundedCorner
 import androidx.compose.material.icons.filled.Rowing
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.ShowChart
-import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.TouchApp
@@ -91,6 +93,8 @@ import com.blendertablet.remote.model.BlenderMode
 import com.blendertablet.remote.model.ConnectionStatus
 import com.blendertablet.remote.model.Constraint
 import com.blendertablet.remote.model.EditTool
+import com.blendertablet.remote.model.EditFooterAction
+import com.blendertablet.remote.model.EditCatalogAction
 import com.blendertablet.remote.model.Gesture
 import com.blendertablet.remote.model.GesturePhase
 import com.blendertablet.remote.model.Orientation
@@ -104,6 +108,7 @@ import com.blendertablet.remote.model.SnapAction
 import com.blendertablet.remote.model.ToolSession
 import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.TransformSession
+import com.blendertablet.remote.model.bottomTrayVisible
 
 /**
  * Pantalla única: el viewport ocupa todo y los controles flotan encima.
@@ -211,6 +216,19 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     val session by vm.transformSession.collectAsStateWithLifecycle()
     val toolSession by vm.toolSession.collectAsStateWithLifecycle()
     val probe by vm.touchProbe.collectAsStateWithLifecycle()
+    val knifeScreenPoints by vm.knifeScreenPoints.collectAsStateWithLifecycle()
+
+    // Hay una bandeja horizontal inferior ocupando el borde de abajo: la de
+    // transformación, la de herramienta paramétrica o el aviso de Loop Cut esperando
+    // toque. Mientras exista, el teclado de vistas se eleva para no solaparse.
+    val trayPresent = bottomTrayVisible(
+        session.active, toolSession.active, state.activeTool, state.loopCutAwaitingTap,
+    )
+    val trayInset by animateDpAsState(
+        targetValue = if (trayPresent) Metrics.TrayInset else 0.dp,
+        animationSpec = tween(160),
+        label = "tray-inset",
+    )
 
     // Mientras hay sesión manda lo que dice el servidor, no lo que se eligió: puede
     // haber recortado el snap geométrico o la restricción por no valer en ese modo.
@@ -248,6 +266,9 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             h264Size = h264Size,
             input = viewportInput,
             shapeTool = state.shapeTool,
+            knifePoints = knifeScreenPoints,
+            navigationOrbitEnabled = (session.active || toolSession.active) &&
+                quickMenuAt == null && !modifiersOpen,
             onShape = vm::shapeSelect,
             onLongPress = { x, y, u, v ->
                 // El menú se abre ya, en el sitio donde está el dedo, y en paralelo
@@ -345,7 +366,10 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     onValue = vm::transformValue,
                     onConfirm = vm::transformConfirm,
                     onCancel = vm::transformCancel,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(Metrics.EdgeMargin),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(Metrics.EdgeMargin),
                 )
 
                 EditToolTray(
@@ -361,10 +385,25 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                         .padding(Metrics.EdgeMargin),
                 )
 
+                KnifeTray(
+                    session = toolSession,
+                    onKnifePop = vm::knifePop,
+                    onKnifeClose = vm::knifeClose,
+                    onKnifeSnap = vm::knifeSnap,
+                    onConfirm = vm::confirmTool,
+                    onCancel = vm::cancelTool,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(Metrics.EdgeMargin),
+                )
+
                 ViewFooter(
                     projection = state.blender.view.perspective,
                     activeAxisView = state.blender.view.axisView,
                     inEdit = state.blender.mode == BlenderMode.EDIT,
+                    selectionMode = state.blender.selectionMode,
+                    showEditShortcuts = state.blender.features.editCatalog.available,
                     localViewActive = state.localViewActive,
                     showLocal = state.blender.features.localView,
                     showGrow = state.blender.features.selectionGrow,
@@ -375,7 +414,11 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     onLocal = vm::toggleLocalView,
                     onMore = vm::selectMore,
                     onLess = vm::selectLess,
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(Metrics.EdgeMargin),
+                    onEditAction = vm::editFooterAction,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(Metrics.EdgeMargin)
+                        .padding(bottom = trayInset),
                 )
 
                 if (state.debugVisible) {
@@ -408,15 +451,24 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 quickMenuAt = null
                 vm.clearProbe()
             }
-            // Object Mode pinta el menú como lista flotante: el catálogo "Agregar"
-            // del vacío no cabe ni se lee en un anillo. Edit mantiene el radial,
-            // que ahí sigue siendo más rápido con pocas acciones frecuentes.
+            // Object Mode pinta el menú como lista flotante. En Edit, el catálogo
+            // capability-gated sustituye el radial y se filtra por el selector top.
             if (touchContext.mode == BlenderMode.OBJECT) {
                 ContextSheet(
                     open = true,
                     anchor = x to y,
                     actions = actions,
                     contextLabel = quickContextLabel(touchContext),
+                    onDismiss = dismiss,
+                )
+            } else if (state.blender.features.editCatalog.available) {
+                ContextSheet(
+                    open = true,
+                    anchor = x to y,
+                    actions = editCatalogActions(
+                        state.blender.features.editCatalog.actionsFor(state.blender.selectionMode), vm,
+                    ),
+                    contextLabel = editCatalogLabel(state.blender.selectionMode),
                     onDismiss = dismiss,
                 )
             } else {
@@ -477,6 +529,37 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     }
 }
 
+/** Convierte el contrato opaco en filas, sin repartir nombres wire por la UI. */
+private fun editCatalogActions(actions: List<EditCatalogAction>, vm: MainViewModel): List<QuickAction> =
+    actions.map { action ->
+        val variants = action.variants.filter { it.enabled }
+        if (variants.isEmpty()) {
+            QuickAction(action.label, Icons.Default.Build, enabled = action.enabled) {
+                vm.editCatalogAction(action)
+            }
+        } else {
+            // Tap conserva la primera variante contractual (REGION); el long-click
+            // abre el selector compacto. Las incompatibles no se dibujan activas.
+            val default = variants.first()
+            QuickAction(
+                action.label, Icons.Default.Build, enabled = action.enabled,
+                opensChildrenOnClick = false,
+                onClick = { vm.editCatalogAction(action, default.id) },
+                children = variants.map { variant ->
+                    QuickAction(variant.label, Icons.Default.Build, enabled = action.enabled) {
+                        vm.editCatalogAction(action, variant.id)
+                    }
+                },
+            )
+        }
+    }
+
+private fun editCatalogLabel(mode: SelectionMode): String = when (mode) {
+    SelectionMode.VERTEX -> "Vértice"
+    SelectionMode.EDGE -> "Arista"
+    SelectionMode.FACE -> "Cara"
+}
+
 /** Acción que descarta el archivo abierto y por tanto necesita confirmación. */
 private sealed class PendingDiscard(
     val title: String,
@@ -520,6 +603,8 @@ private fun ViewportLayer(
     h264Size: Pair<Int, Int>?,
     input: ViewportInput,
     shapeTool: ShapeTool,
+    knifePoints: List<Pair<Float, Float>>,
+    navigationOrbitEnabled: Boolean,
     onShape: (ShapeTool, Float, Float, Float, Float) -> Unit,
     onLongPress: (px: Float, py: Float, u: Float, v: Float) -> Unit,
 ) {
@@ -543,6 +628,8 @@ private fun ViewportLayer(
                     onDoubleTap = input.onDoubleTap,
                     onLongPress = onLongPress,
                     shapeTool = shapeTool,
+                    navigationOrbitEnabled = navigationOrbitEnabled,
+                    knifePoints = knifePoints,
                     onShape = onShape,
                 )
             }
@@ -559,6 +646,7 @@ private fun ViewportLayer(
                 onDoubleTap = input.onDoubleTap,
                 onLongPress = onLongPress,
                 shapeTool = shapeTool,
+                knifePoints = knifePoints,
                 onShape = onShape,
             )
             return@Box
@@ -590,6 +678,7 @@ private fun ViewportLayer(
                 onDoubleTap = input.onDoubleTap,
                 onLongPress = onLongPress,
                 shapeTool = shapeTool,
+                knifePoints = knifePoints,
                 onShape = onShape,
             )
         }
@@ -606,11 +695,12 @@ private fun EmptyViewport() {
 }
 
 /**
- * Contenido de la barra desplegable: la herramienta activa y el submodo de selección.
+ * Contenido de la barra desplegable: la herramienta activa y utilidades.
  *
  * El rail elige; el footer muestra las opciones. Mover/Rotar/Escalar abren la
- * transformación modal; Extruir/Bisel/Inset/Subdividir abren la herramienta
- * paramétrica; Vértice/Arista/Cara eligen el submodo con iconos propios.
+ * transformación modal; Extruir/Bisel/Inset/Subdividir/Loop Cut abren la herramienta
+ * paramétrica. El modo (Object/Edit) y el submodo de selección ya no están aquí:
+ * viven en la barra superior.
  */
 @Composable
 private fun RailContent(
@@ -624,20 +714,6 @@ private fun RailContent(
     val inEdit = state.blender.mode == BlenderMode.EDIT
 
     IconAction(Icons.Default.Close, "Ocultar herramientas", onClick = onClose)
-    RailDivider()
-    RailLabel("MODO")
-    IconAction(
-        Icons.Default.ViewInAr, "Object Mode",
-        selected = !inEdit,
-        onClick = { vm.setMode(BlenderMode.OBJECT) },
-    )
-    IconAction(
-        Icons.Default.Straighten, "Edit Mode",
-        selected = inEdit,
-        enabled = editable,
-        onClick = { vm.setMode(BlenderMode.EDIT) },
-    )
-
     RailDivider()
     RailLabel("HERRAMIENTA")
     IconAction(
@@ -664,7 +740,9 @@ private fun RailContent(
         onClick = { vm.transformBegin(TransformMode.SCALE) },
     )
 
-    if (inEdit) {
+    // El catálogo contextual toma propiedad de las operaciones topológicas. En un
+    // servidor antiguo no existe y el rail histórico sigue íntegro.
+    if (inEdit && !state.blender.features.editCatalog.available) {
         RailDivider()
         RailLabel("EDITAR")
         // Cada herramienta pide un tipo de elemento: Inset solo trabaja con caras y
@@ -679,6 +757,8 @@ private fun RailContent(
                 EditTool.INSET -> counts.selectionCounts.faces > 0
                 EditTool.SUBDIVIDE -> counts.selectionCounts.edges > 0
                 EditTool.LOOP_CUT -> true // sin arista queda armada y el próximo tap la elige
+                EditTool.BRIDGE_EDGE_LOOPS -> counts.selectionCounts.edges >= 6
+                EditTool.KNIFE -> true // no exige selección previa
             }
             IconAction(
                 icon = editToolIcon(tool),
@@ -704,6 +784,8 @@ private fun editToolIcon(tool: EditTool) = when (tool) {
     EditTool.INSET -> Icons.Default.CropFree
     EditTool.SUBDIVIDE -> Icons.Default.Grid4x4
     EditTool.LOOP_CUT -> Icons.Default.LinearScale
+    EditTool.BRIDGE_EDGE_LOOPS -> Icons.Default.JoinFull
+    EditTool.KNIFE -> Icons.Default.ContentCut
 }
 
 /** Icono de cada familia del catálogo Add. */
@@ -785,9 +867,9 @@ private fun quickActions(
         ActionId.APPLY_TRANSFORMS -> QuickAction(
             label, Icons.Default.Transform,
             children = listOf(
-                QuickAction("Posición", Icons.Default.OpenWith) { vm.applyTransform(true, false, false) },
-                QuickAction("Rotación", Icons.AutoMirrored.Filled.RotateRight) { vm.applyTransform(false, true, false) },
-                QuickAction("Escala", Icons.Default.AspectRatio) { vm.applyTransform(false, false, true) },
+                QuickAction("Posición", Icons.Default.OpenWith, onClick = { vm.applyTransform(true, false, false) }),
+                QuickAction("Rotación", Icons.AutoMirrored.Filled.RotateRight, onClick = { vm.applyTransform(false, true, false) }),
+                QuickAction("Escala", Icons.Default.AspectRatio, onClick = { vm.applyTransform(false, false, true) }),
             ),
         )
         ActionId.SET_ORIGIN -> QuickAction(

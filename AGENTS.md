@@ -1,20 +1,57 @@
 # Blender Tablet Remote — guía para agentes
 
 Este archivo es la fuente de verdad sobre arquitectura, estado realizado y reglas de
-trabajo. No hay ningún plan activo ni planes en el repo: cada ciclo cerrado borra su
-`PLAN_BACKEND.md`/`PLAN_FRONTEND.md`. El último ciclo cerró el **explorador de archivos**:
-desde el menú Archivo ya no hay que teclear rutas del PC — "Abrir…" y "Guardar como…"
-abren un diálogo que navega el disco remoto (`file.locations` con accesos DEFAULT/HOME/
-ROOT y volúmenes montados, `file.browse` carpeta a carpeta con breadcrumbs opacos,
-`file.default_folder` persistente, y `file.save_as` con `folder`+`name`). En el backend
-se resuelven aliases (`@default`/`@home`/`@root`) y rutas relativas, y los `.blend` y
-directorios se exponen como tokens opacos; en Android el parseo vive en `StateParser`
-(`fileBrowse`/`fileLocations`) con fixtures y tests JVM. Queda pendiente, sin plan
-asociado, el smoke manual en tablet real (dedo y Lenovo Pen) de H.264, de las mejoras
-de rendimiento, del menú contextual, de la barra de tools y del propio explorador — no
-se ha podido validar en hardware físico todavía. Si arranca trabajo nuevo, créese un
-`PLAN_BACKEND.md`/`PLAN_FRONTEND.md` con el mismo formato de propiedad por directorio y
-bórrese al cerrarlo: no dejar planes completados en el repo.
+trabajo. Los planes históricos y el ciclo parcial `000` fueron retirados el 2026-08-26
+por autorización expresa del usuario después de consolidar aquí lo implementado. Esta
+versión se da por finalizada y no hay ningún plan activo. El próximo ciclo de mejoras o
+reparaciones, alimentado por el feedback de uso en tablet, empezará de nuevo en `000`
+con archivos separados por propietario.
+
+El último
+ciclo cerrado entregó el **menú Edit contextual** alimentado por `edit.catalog`:
+Vértice/Arista/Cara según el selector, con Bridge Edge Loops, F, P, Y, Normales y
+variantes de Extrude, más la página "Atajos" del footer y el círculo de navegación
+durante sesiones. El núcleo de KNIFE se entregó como sesión táctil de polilínea
+(puntos por toque, overlay, bandeja con deshacer/cerrar/snap). DISSOLVE queda reservado
+(`enabled: false`).
+Antes cerró la reorganización de superficies:
+Object/Edit salen del rail a una barra de modo horizontal propia junto al ojo
+(`TOP_MODE`), la bandeja de transformación Mover/Rotar/Escalar adopta la misma
+composición horizontal que `EditToolTray` (rótulo, propiedades desplazables y
+descartar/confirmar fijos) y el teclado de vistas se eleva cuando una bandeja inferior
+ocupa su zona. Antes cerró el **explorador de archivos**: desde el menú Archivo ya no
+hay que teclear rutas del PC — "Abrir…" y "Guardar como…" abren un diálogo que navega
+el disco remoto (`file.locations` con accesos DEFAULT/HOME/ROOT y volúmenes montados,
+`file.browse` carpeta a carpeta con breadcrumbs opacos, `file.default_folder`
+persistente, y `file.save_as` con `folder`+`name`). En el backend se resuelven aliases
+(`@default`/`@home`/`@root`) y rutas relativas, y los `.blend` y directorios se exponen
+como tokens opacos; en Android el parseo vive en `StateParser`
+(`fileBrowse`/`fileLocations`) con fixtures y tests JVM. Las pruebas en tablet real con
+dedo y Lenovo Pen ya están en curso: el conjunto funciona bien y de ese uso saldrán los
+nuevos ciclos de mejoras y reparaciones. Si arranca trabajo nuevo, créese el plan
+propietario correspondiente con la numeración reiniciada en `000`.
+
+## Gestión y numeración de planes
+
+- Un plan solo está ejecutado cuando se cumplen todos sus criterios de cierre; no basta
+  con que el núcleo sea usable ni con llamar “no bloqueante” a lo que el propio plan
+  exige.
+- Antes de borrar planes, contrastar cada fase con `AGENTS.md`, código y pruebas. No
+  fiarse del encabezado antiguo del documento si contradice ese estado.
+- Si todos los planes existentes están realmente ejecutados, el agente principal puede
+  borrarlos a petición del usuario. El historial funcional que siga siendo relevante se
+  consolida antes en este archivo.
+- Después de vaciar todos los planes, la siguiente serie vuelve a empezar en `000`, con
+  archivos separados por propietario, por ejemplo `000_PLAN_BACKEND_<TEMA>.md` y
+  `000_PLAN_FRONTEND_<TEMA>.md`. Dentro de una misma serie ambos comparten número.
+- Si queda un solo criterio pendiente, no se reinicia la numeración y no se borran en
+  bloque los planes. Se termina, se elimina explícitamente del alcance con autorización
+  del usuario, o se traslada a un nuevo plan dejando trazabilidad.
+- Cierre autorizado del 2026-08-26: se borraron todos los planes, incluido el `000`
+  parcial, y esta versión se declaró finalizada. El bloqueo X/Y/Z de Extrude
+  (FREE|X|Y|Z con GLOBAL|LOCAL|VIEW, solo REGION) y el roll de cámara sí quedaron
+  entregados. La toolbar contractual por familias, Inset INDIVIDUAL y Bisect quedaron
+  fuera de esta versión; solo volverán al alcance si el feedback futuro los prioriza.
 
 ## Objetivo del producto
 
@@ -90,11 +127,23 @@ README.md                           entrada para humanos
   re-ubica una sesión LOOP_CUT activa (restaura la copia original antes de sondear: los
   índices de `edge` son de la malla original, no del preview). Feature
   `edit_tools.loop_cut` con `pick/probe/falloff/even/flip/clamp`.
+- Catálogo contextual de Edit (`edit.catalog`, feature `edit_catalog`): acciones
+  agrupadas por VERTEX/EDGE/FACE con id estable, etiqueta, requisitos, tipo de ejecución
+  (DISCRETE/SESSION), variantes y parámetros tipados. Implementadas este ciclo:
+  `mesh.make_edge_face` (F, crea arista/cara o rellena vía `contextual_create`),
+  `mesh.bridge_loops` + sesión `BRIDGE_EDGE_LOOPS` (`twist_offset`/`merge`/`merge_factor`
+  sobre `bmesh.ops.bridge_loops`), `mesh.split` (Y), `mesh.separate` (P, `bpy.ops.mesh.
+  separate`), `mesh.normals_recalculate`/`mesh.normals_flip`, y variantes de
+  `mesh.extrude` (`REGION`/`ALONG_NORMALS`/`INDIVIDUAL`). KNIFE es una sesión táctil
+  (`tool.knife_point/pop/close`, motor geométrico en `commands/knife.py` sin
+  `knife_tool` ni `bisect_plane`); DISSOLVE queda reservado (`enabled: false`).
 - Snap incremental, rejilla, cursor y candidatos Vertex/Edge/Face bloqueables. En la
   sesión modal, `INCREMENT` cuadra el delta a múltiplos relativos del punto de partida y
   `GRID` clava la posición resultante a la rejilla mundial absoluta (un objeto que nace
   fuera de rejilla aterriza en ella); ROTATE/SCALE tratan GRID como INCREMENT.
-- Cámara independiente, vistas estándar, Persp/Ortho y encuadre.
+- Cámara independiente, vistas estándar, Persp/Ortho y encuadre. `camera.roll` (giro de
+  rueda sobre el eje de visión) y `view.roll`/gesto `roll`, con la escena acompañando al
+  dedo (`view.roll_delta` invierte el ángulo de rueda a rotación de cámara).
 - `view.shading` (WIREFRAME/SOLID/TOGGLE; el wireframe activa xray y el pick cicla hacia
   detrás), `view.local` (aísla la selección ocultando el resto, el `/` de Blender) y
   `selection.more`/`selection.less` (crecer/decrecer adyacencias en Edit). `selection.box`
@@ -151,7 +200,10 @@ README.md                           entrada para humanos
   `scene.changed`; el vídeo y `transform.session` ya son el feedback en vivo.
   `requestState()` además deduplica peticiones en vuelo (`stateRequestInFlight`).
 - Object/Edit, selección táctil, dedo/stylus/eraser, presión, inclinación y botón pen.
-- Navegación: un dedo según herramienta; dos dedos pan+zoom; tap, doble tap y long-click.
+- Navegación: un dedo según herramienta; dos dedos pan+zoom y **roll** (giro de rueda
+  sobre el eje de visión local, `Gesture.ROLL` + `camera.roll`/`view.roll`); tap, doble
+  tap y long-click. El ángulo de la rueda se envía en radianes y la escena acompaña al
+  dedo (rueda horaria -> escena horaria).
 - Feedback táctil local de tap (círculo + haptic) en `InputSurface` mientras se espera
   la respuesta remota del picking.
 - Transformación modal con restricciones, orientación (desplegable de tipos de snap
@@ -168,9 +220,27 @@ README.md                           entrada para humanos
   toggles Uniforme/Invertir/Fijar (`ToolSession.parameters` pasó a `Map<String, Any?>`
   para conservar bools y string). Con `loopCutPick` no anunciado se conserva el flujo
   legacy (seleccionar arista y esperar el snapshot).
+- Menú Edit contextual gobernado por el catálogo (`EditCatalog` en `StateParser`): el
+  long-click en Edit abre Vértice, Arista o Cara según `selectionMode`, con las acciones
+  anunciadas, sus variantes (Extrude) y su ejecución (DISCRETE → `editCatalogCommand`;
+  SESSION → `tool.begin`). Bridge Edge Loops se reconcilia como sesión (`EditTool.
+  BRIDGE_EDGE_LOOPS`, bandeja con desfase/fusión/toggle "Fusionar") y KNIFE/DISSOLVE
+  quedan ocultos por el catálogo. El rail histórico de herramientas solo aparece si el
+  servidor no anuncia el catálogo.
+- Página "Atajos" de `ViewFooter` (solo Edit): F, P, Y y Normales (Exterior/Interior/
+  Voltear), además de la página de Vistas existente.
+- Círculo de navegación derecho (`NavigationOrbitLayout`): visible solo con sesión activa;
+  un `DOWN` dentro captura ORBIT sin alimentar la tool, y fuera conserva el nudge.
+- Knife táctil: sesión `tool.knife_point/pop/close` con puntos por toque, overlay de la
+  polilínea sobre el vídeo (reconciliado contra `tool.status`) y bandeja `KnifeTray`
+  (contador, Deshacer punto, Cerrar, Snap, Descartar/Confirmar). El tap enruta a
+  `tool.knife_point` cuando la sesión KNIFE está activa; `ToolSession` expone `points`
+  y `closed`.
 - `ui/ModifierPanel.kt`: inspector schema-driven desde `modifier.add_options` (add,
   parámetros tipados, viewport/render, reorder, apply, remove; Boolean con picker de
-  objeto MESH excluyendo el activo).
+  objeto MESH excluyendo el activo). La lista de objetos para el operando viene de
+  `scene.list_objects`, que `openModifiers()` pide al abrir el inspector: el snapshot
+  de 10 Hz no la lleva para no engordarlo.
 - Menú `Ocultos` dinámico en `MenuBar.kt` (top, tras Objeto): una fila por objeto
   oculto, revela individual o "Mostrar todos", desaparece el anchor si la lista queda
   vacía.
@@ -207,12 +277,20 @@ README.md                           entrada para humanos
   entrada, con subniveles por categoría). `ADD_OBJECT` pasó de `TOP` a `RADIAL` en
   `SurfaceCatalog`, con test que fija que solo aparece en el vacío de Object Mode.
   Verificado: 76 tests JVM en verde y `assembleDebug` correcto.
+- Barra de modo (`TOP_MODE`, junto a las tools del top): Object/Edit en un panel propio.
+  Salieron del rail, que queda dedicado a herramientas y utilidades. `SurfaceCatalogTest`
+  fija que `MODE_OBJECT`/`MODE_EDIT` viven una sola vez y solo en `TOP_MODE`.
 - Barra superior de tools (`ui/TopToolbar.kt`) junto al ojo: wireframe (`view.shading`
   TOGGLE, pintado desde `state.blender.view.shading`), modificadores Mayús/Ctrl/Alt (fijan
   `selection.pick`/box/circle a TOGGLE/ADD/REMOVE) y undo/redo, movidos desde el rail. En
   Edit Mode, a la derecha de la misma barra, los submodos vértice/arista/cara para cambiar de
   selección sin abrir el rail. Cada botón se oculta si el backend no anuncia su
   capability (`view.shading`).
+- `TransformBar` horizontal: la bandeja de Mover/Rotar/Escalar adopta la composición de
+  `EditToolTray` — rótulo del modo a la izquierda, propiedades (valores, restricción,
+  orientación, snap, paso, valor exacto, candidato) en una fila desplazable y
+  Descartar/Confirmar fijos a la derecha. La herramienta la elige el rail; la bandeja
+  solo lleva su sesión.
 - Selección por caja B y círculo C en el long-click (`RADIAL`): arman el arrastre por
   forma (`ShapeTool` + overlay en `InputSurface`) y envían `selection.box`/`circle`.
   Salieron de la barra superior por decisión del usuario. En el anillo Edit sustituyen a
@@ -222,7 +300,9 @@ README.md                           entrada para humanos
 - Teclado de vistas (`ViewFooter.kt`): 9 gira 180° (ya no duplica al 7), 5 enseña el
   estado real de la proyección (resaltado solo en ORTHO), `/` aísla la selección
   (`view.local`) y `+`/`−` crecen/decrecen la selección (`selection.more`/`less`,
-  activos solo en Edit). El encuadre salió del teclado (queda como doble toque).
+  activos solo en Edit). El encuadre salió del teclado (queda como doble toque). Se
+  eleva (`Metrics.TrayInset`, con transición) cuando una bandeja horizontal inferior
+  ocupa su zona; la señal es la función pura `bottomTrayVisible`.
 - `SelectionOp`/`ShapeTool` en `AppUiState`; el parser lee `shading` (top-level) y las
   capabilities `view.shading`/`local_view`/`selection.grow`/`shapes`. `updateState`
   conserva vista/shading/gizmo en los snapshots sin vista (pick/box/circle/more/less),
@@ -233,9 +313,10 @@ README.md                           entrada para humanos
 Cada acción ejecutable vive en una sola superficie visible:
 
 - Top: archivo, estructura global, objeto (sin Add), modifiers y objetos ocultos.
+- Barra de modo (`TOP_MODE`, junto al ojo): Object/Edit, en su propio panel.
 - Barra superior de tools (`TOP_TOOLS`, junto al ojo): wireframe, Mayús/Ctrl/Alt, undo/redo
   y, en Edit, el submodo de selección.
-- Rail: modo y herramienta activa.
+- Rail: herramienta activa y utilidades (duplicar, diagnóstico); el modo ya no está aquí.
 - Footer/bandeja: parámetros de la herramienta activa.
 - Footer de vistas (`FOOTER_VIEWS`): navegación, proyección, aislar y crecer/decrecer.
 - Long-click: acciones frecuentes sobre el contexto señalado, la selección por forma
@@ -319,14 +400,14 @@ tests deben detectar renombres y divergencias.
 
 ### Agente backend
 
-Puede editar exclusivamente `blender-backend/**` (y `PLAN_BACKEND.md`, si existe un
-ciclo abierto). Posee protocolo, fixtures, implementación Python, CLI y tests backend.
+Puede editar exclusivamente `blender-backend/**` (y el archivo numerado
+`*_PLAN_BACKEND_*.md` del ciclo abierto). Posee protocolo, fixtures, implementación Python, CLI y tests backend.
 No edita `android-client/**`.
 
 ### Agente frontend
 
-Puede editar exclusivamente `android-client/**` (y `PLAN_FRONTEND.md`, si existe un
-ciclo abierto). Trabaja contra fixtures congelados. No edita backend, protocolo ni
+Puede editar exclusivamente `android-client/**` (y el archivo numerado
+`*_PLAN_FRONTEND_*.md` del ciclo abierto). Trabaja contra fixtures congelados. No edita backend, protocolo ni
 fixtures.
 
 ### Archivos compartidos
@@ -376,8 +457,8 @@ tablet real: ahora va fluido. Si vuelve a aparecer, comprobar en este orden:
    cuesta ms, no segundos: no es la explicación de un retardo grande.
 
 Aparte, el sentido de giro de `camera.orbit` se invirtió varias veces por medirlo desde
-vistas equivocadas; re-medido y verificado con un test de regresión independiente de la
-vista. Ver Trampas.
+vistas equivocadas; re-medido con el vector FORWARD y corregido pasando el yaw al eje
+vertical local de la cámara. Ver Trampas.
 
 Lección de método: los tres se diagnosticaron **midiendo contra el servidor vivo** con
 `tools/wsclient.py` y consumiendo `/stream.h264` y `/stats.json`, sin tocar la instalación
@@ -387,6 +468,15 @@ cambio que se tocó, que fue el error inicial de esta sesión.
 ## Trampas conocidas
 
 - El objeto activo puede no estar seleccionado.
+- En Kotlin las propiedades se inicializan en orden textual. No lanzar desde `init` un
+  `collect` de `StateFlow` que use una propiedad declarada más abajo: con
+  `Dispatchers.Main.immediate`, el flow puede emitir durante el constructor y acceder
+  al campo antes de inicializarlo, cerrando la app incluso sin Wi-Fi. Ocurrió con
+  `_knifeScreenPoints`; todo estado usado por `init` debe declararse antes del bloque.
+- Un `assembleDebug` y los tests JVM no detectan necesariamente un crash de construcción
+  de `MainViewModel` si ninguna prueba instancia el ViewModel Android real. Ante cierre
+  inmediato, probar primero sin Wi-Fi: si también falla, auditar inicialización y
+  composición local antes de culpar al handshake o al backend.
 - Un timeout de `WSClient.recv()` deja ese stream de lectura inutilizable; abrir otro
   cliente si se necesita seguir. En Python 3.14 además un timeout envenena el
   `makefile` del socket ("cannot read from timed out object"), así que `drain_events`
@@ -449,17 +539,19 @@ cambio que se tocó, que fue el error inicial de esta sesión.
   de la ventana del PC, que no se mueve cuando la cámara que orbita es la de la tablet.
   Sin diagnosticar a fondo.
 - El sentido de giro de `camera.orbit` NO se puede medir sobre un punto proyectado
-  desde una vista de eje: es un turntable sobre el Z GLOBAL, y su sentido EN PANTALLA
-  depende de la vista (desde FRONT/BACK se invierte respecto a la vista por defecto,
-  porque el "derecha" de pantalla cambia de lado; desde la cenital el desplazamiento
-  lateral es cero). Se invirtió el signo DOS veces por medirlo desde esas vistas. El
-  signo actual (`-dx`, `-dy`) es el que hace que la escena acompañe al dedo en la vista
-  por defecto, y se comprueba de forma INDEPENDIENTE de la vista midiendo la rotación
-  RELATIVA de la cámara: `dx>0` debe girarla sobre el Z global en sentido horario (eje Z
-  negativo) y `dy>0` sobre el eje derecha de la cámara. Hay test de regresión en
-  `run_gui_tests.py` (`[13] Signo del giro de cámara`). Android manda `dx>0` a la derecha
-  y `dy>0` hacia abajo, sin invertir nada (`InputSurface.handleSingle`); el signo se
-  decide entero en el backend.
+  desde una vista de eje: depende de la vista y ya causó inversiones erróneas. Se mide
+  con el vector FORWARD de la cámara o la rotación RELATIVA. El yaw es sobre el eje
+  vertical LOCAL (`rotation @ (0,1,0)`, el "arriba" de pantalla), con signo `-dx`
+  (dedo a la derecha => escena a la derecha, consistente en DEFAULT/FRONT/BACK/RIGHT/
+  LEFT/TOP/BOTTOM); el pitch sigue sobre el eje derecho local con `-dy`. Antes era
+  yaw sobre el Z GLOBAL, que se invertía al mirar desde abajo o desde atrás (y no
+  movía nada en la cenital). Hay tests de regresión en `run_gui_tests.py`
+  (`[13] Signo del giro de cámara` y `[14] Giro horizontal consistente desde BACK y
+  BOTTOM`). Android manda `dx>0` a la derecha y `dy>0` hacia abajo, sin invertir nada
+  (`InputSurface.handleSingle`); el signo se decide entero en el backend. El `+dx`
+  inicial conservaba la orientación al invertir la cámara, pero las pruebas en tablet
+  real demostraron que el sentido era siempre el contrario; por eso se corrigió a
+  `-dx` sin cambiar el eje local.
 - `view.gizmo` y su modelo Android no tienen consumidor visual actual, pero siguen en
   protocolo y tests: son compatibilidad deliberada, no código muerto.
 - `Modifiers.kt` Android contiene `clickableNoRipple`; no tiene relación con modifiers
@@ -468,12 +560,26 @@ cambio que se tocó, que fue el error inicial de esta sesión.
 
 ## Objetivos activos
 
-Ninguno. Los ciclos recientes están completos en código y tests: 434 tests headless +
-73/74 GUI (el fallo restante es el de POST_PIXEL, preexistente y sin diagnosticar) +
-199/200 contrato (el fallo restante es ambiental, `hello.stream.running` en Blender
-`--background` sin GPU) en backend, 84 tests JVM + `assembleDebug` en Android. Pendiente
-sin plan asociado: smoke manual en tablet real con dedo y Lenovo Pen para validar H.264,
-las mejoras de rendimiento, el menú contextual, la nueva barra de tools, el Loop Cut
-interactivo y el explorador de archivos en condiciones reales. Cualquier objetivo nuevo
-se documenta en un `PLAN_BACKEND.md`/`PLAN_FRONTEND.md` creado para ese ciclo y se borra
-al cerrarlo.
+Ninguno. Esta versión se declaró finalizada el 2026-08-26 y sus planes se retiraron por
+decisión expresa del usuario. El siguiente trabajo partirá del feedback de uso real en
+tablet y abrirá una serie nueva desde `000`; no se arrastran automáticamente los
+objetivos descartados del ciclo parcial anterior.
+El ciclo backend de la órbita invertida cerró: `camera.orbit` ahora hace el yaw sobre el
+eje vertical LOCAL de la cámara (no el Z global), de modo que el arrastre horizontal
+acompaña al dedo también desde debajo o desde atrás; ver las trampas conocidas.
+
+El menú Edit ya es un menú contextual alimentado por el catálogo backend (`edit.catalog`,
+feature `edit_catalog`) y gobernado por el selector superior: abre Vértice, Arista o Cara
+según el submodo activo, nunca las tres categorías a la vez. Entregado en este ciclo:
+Bridge Edge Loops (sesión paramétrica), F (crear arista/cara o rellenar), P (separar a
+objeto), Y (split), recalcular/voltear normales y variantes de Extrude (Región / a lo
+largo de normales / Individual). En el footer de vistas, la página "Atajos" (solo Edit)
+ofrece F, P, Y y Normales. El círculo de navegación derecho aparece durante una sesión
+activa para orbitar sin alimentar la tool. El núcleo de KNIFE está entregado como sesión
+táctil de polilínea (puntos por toque, overlay, bandeja con deshacer/cerrar/snap).
+DISSOLVE queda reservado (`enabled: false`). Bisect, hover anticipado y eraser no forman
+parte de la versión cerrada. El bloqueo X/Y/Z de Extrude sí está implementado.
+
+Los resultados de pruebas de cierre se registran en el commit de la versión, no como
+conteos congelados en esta guía. El smoke y cualquier incidencia observada en tablet
+real serán la entrada del siguiente ciclo.

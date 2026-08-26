@@ -3,16 +3,17 @@ package com.blendertablet.remote.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -94,21 +95,30 @@ fun TransformBar(
 ) {
     if (!session.active) return
     FloatingPanel(modifier) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Readout(session)
-            SnapCandidateHint(session)
-            Spacer(Modifier.height(6.dp))
-            // Restricción: libre, eje o plano. En ROTATE solo ejes simples.
-            ConstraintPicker(
-                mode = session.mode,
-                selected = constraint,
-                onSelect = onConstraint,
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Rótulo a la izquierda, como EditToolTray: el modo ya lo eligió el rail.
+            Text(
+                session.mode.label.uppercase(),
+                color = Ink.Accent,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.width(10.dp))
             Row(
+                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                Readout(session)
+                SnapCandidateHint(session)
+                Divider()
+                // Restricción: libre, eje o plano. En ROTATE solo ejes simples.
+                ConstraintPicker(
+                    mode = session.mode,
+                    selected = constraint,
+                    onSelect = onConstraint,
+                )
+                Divider()
                 OrientationPicker(availableOrientations, orientation, onOrientation)
                 Divider()
                 SnapPicker(session.mode, snapType, onSnapType)
@@ -117,20 +127,16 @@ fun TransformBar(
                 if (snapType == SnapType.INCREMENT || snapType == SnapType.GRID) {
                     StepPicker(session.mode, stepIndex, onStep)
                 }
-            }
-            Spacer(Modifier.height(4.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
+                Divider()
                 ValueModePicker(valueMode, onValueMode)
                 ValueInput(session, onValue)
-                Divider()
-                // Confirmar y descartar, grandes y separados del resto: son las
-                // dos únicas salidas y no deben confundirse entre sí.
-                RoundAction(Icons.Default.Close, "Descartar", Ink.Bad, onCancel)
-                RoundAction(Icons.Default.Check, "Confirmar", Ink.Ok, onConfirm)
             }
+            Spacer(Modifier.width(10.dp))
+            // Confirmar y descartar, fijos a la derecha: son las dos únicas salidas
+            // y no deben confundirse entre sí ni desplazarse con el scroll.
+            RoundAction(Icons.Default.Close, "Descartar", Ink.Bad, onCancel)
+            Spacer(Modifier.width(4.dp))
+            RoundAction(Icons.Default.Check, "Confirmar", Ink.Ok, onConfirm)
         }
     }
 }

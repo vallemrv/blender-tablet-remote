@@ -23,6 +23,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.blendertablet.remote.model.Projection
+import com.blendertablet.remote.model.EditFooterAction
+import com.blendertablet.remote.model.SelectionMode
 
 /**
  * Teclado de vistas inspirado en el numpad de Blender, en una cuadrícula 4×3.
@@ -37,6 +39,8 @@ fun ViewFooter(
     projection: Projection,
     activeAxisView: String?,
     inEdit: Boolean,
+    selectionMode: SelectionMode,
+    showEditShortcuts: Boolean,
     localViewActive: Boolean,
     showLocal: Boolean,
     showGrow: Boolean,
@@ -47,9 +51,12 @@ fun ViewFooter(
     onLocal: () -> Unit,
     onMore: () -> Unit,
     onLess: () -> Unit,
+    onEditAction: (EditFooterAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var editPage by remember { mutableStateOf(false) }
+    var normalsPage by remember { mutableStateOf(false) }
 
     fun opposite(primary: String, reverse: String) {
         onAxis(if (activeAxisView == primary) reverse else primary)
@@ -63,6 +70,15 @@ fun ViewFooter(
                 exit = fadeOut(tween(100)) + shrinkVertically(tween(120)),
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    if (inEdit && showEditShortcuts) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                            NumKey("V", "Página de vistas", selected = !editPage) { editPage = false }
+                            NumKey("E", "Atajos de Edit", selected = editPage) { editPage = true }
+                        }
+                    }
+                    if (editPage && inEdit && showEditShortcuts) {
+                        EditKeys(selectionMode, normalsPage, { normalsPage = it }, onEditAction)
+                    } else {
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         NumKey("7", "Superior / inferior", activeAxisView in setOf("TOP", "BOTTOM")) { opposite("TOP", "BOTTOM") }
                         NumKey("8", "Orbitar arriba") { onOrbit(0f, -0.06f) }
@@ -88,6 +104,7 @@ fun ViewFooter(
                         NumKey("/", "Aislar selección", selected = localViewActive, enabled = showLocal, onClick = onLocal)
                     }
                     Spacer(Modifier.height(2.dp))
+                    }
                 }
             }
 
@@ -104,6 +121,36 @@ fun ViewFooter(
                     Modifier.size(16.dp), tint = Ink.Faint,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun EditKeys(
+    selectionMode: SelectionMode,
+    normalsPage: Boolean,
+    setNormalsPage: (Boolean) -> Unit,
+    onAction: (EditFooterAction) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        if (normalsPage) {
+            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                NumKey("←", "Volver a atajos") { setNormalsPage(false) }
+                NumKey("Ext", "Recalcular exterior") { onAction(EditFooterAction.NORMALS_OUTSIDE) }
+                NumKey("Int", "Recalcular interior") { onAction(EditFooterAction.NORMALS_INSIDE) }
+                NumKey("Vol", "Voltear normales") { onAction(EditFooterAction.NORMALS_FLIP) }
+            }
+            return
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            NumKey("F", if (selectionMode == SelectionMode.EDGE) "Rellenar" else "Crear arista/cara",
+                enabled = selectionMode != SelectionMode.FACE) { onAction(EditFooterAction.MAKE_EDGE_FACE) }
+            NumKey("K", "Cuchillo") { onAction(EditFooterAction.KNIFE) }
+            NumKey("P", "Separar a objeto") { onAction(EditFooterAction.SEPARATE) }
+            NumKey("Y", "Split") { onAction(EditFooterAction.SPLIT) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            NumKey("N", "Normales", enabled = selectionMode == SelectionMode.FACE) { setNormalsPage(true) }
         }
     }
 }

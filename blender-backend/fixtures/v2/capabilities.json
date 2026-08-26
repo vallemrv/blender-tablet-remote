@@ -1,16 +1,1307 @@
 {
-  "protocol_version": "2.0",
-  "features": {
-    "context": {"version": 1, "events": ["context.changed"], "selection_counts": true},
-    "transform_modal": {"version": 3, "modes": ["OBJECT", "EDIT"], "tools": ["MOVE", "ROTATE", "SCALE"], "owned_sessions": true, "manual_confirm": true, "geometric_snap": true, "locked_candidate": true},
-    "selection": {"version": 3, "operations": ["SET", "ADD", "REMOVE", "TOGGLE"], "pick": true, "touch_threshold": true, "grow": true, "shapes": ["BOX", "CIRCLE"], "topology": ["LOOP", "RING"]},
-    "view": {"version": 3, "axis_views": ["FRONT", "BACK", "LEFT", "RIGHT", "TOP", "BOTTOM"], "projections": ["PERSP", "ORTHO"], "independent_camera": true, "shading": ["WIREFRAME", "SOLID"], "local_view": true},
-    "stream": {"version": 2, "preferred": "H264", "transports": ["H264", "MJPEG"], "framing": "btr-h264-v1", "capture_default": "OFFSCREEN"},
-    "modifiers": {"version": 1, "types": ["SUBSURF", "ARRAY", "BEVEL", "SOLIDIFY", "BOOLEAN"], "commands": ["modifier.add_options", "modifier.add", "modifier.remove", "modifier.move", "modifier.set", "modifier.toggle", "modifier.apply"]},
-    "visibility": {"version": 1, "object_hide": true, "hide_set": true},
-    "transform_apply": {"version": 1, "components": ["location", "rotation", "scale"]},
-    "edit_tools": {"version": 1, "tools": ["EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT"], "loop_cut": {"pick": true, "probe": true, "falloff": ["SMOOTH", "SPHERE", "ROOT", "SHARP", "LINEAR", "INVERSE_SQUARE"], "even": true, "flip": true, "clamp": true}},
-    "files": {"version": 1, "browse": true, "default_folder": true, "relative_paths": true}
+ "protocol_version": "2.0",
+ "features": {
+  "context": {
+   "version": 1,
+   "events": [
+    "context.changed"
+   ],
+   "selection_counts": true
   },
-  "units": {"distance": "BLENDER_UNIT", "rotation": "DEGREE", "scale": "FACTOR", "screen": "NORMALIZED_TOP_LEFT"}
+  "transform_modal": {
+   "version": 3,
+   "modes": [
+    "OBJECT",
+    "EDIT"
+   ],
+   "tools": [
+    "MOVE",
+    "ROTATE",
+    "SCALE"
+   ],
+   "constraints": [
+    "FREE",
+    "X",
+    "Y",
+    "Z",
+    "XY",
+    "XZ",
+    "YZ",
+    "NORMAL",
+    "VIEW"
+   ],
+   "orientations": [
+    "GLOBAL",
+    "LOCAL",
+    "NORMAL",
+    "VIEW"
+   ],
+   "owned_sessions": true,
+   "manual_confirm": true,
+   "geometric_snap": true,
+   "locked_candidate": true
+  },
+  "selection": {
+   "version": 3,
+   "operations": [
+    "SET",
+    "ADD",
+    "REMOVE",
+    "TOGGLE"
+   ],
+   "pick": true,
+   "touch_threshold": true,
+   "grow": true,
+   "shapes": [
+    "BOX",
+    "CIRCLE"
+   ],
+   "topology": [
+    "LOOP",
+    "RING"
+   ]
+  },
+  "view": {
+   "version": 3,
+   "axis_views": [
+    "FRONT",
+    "BACK",
+    "LEFT",
+    "RIGHT",
+    "TOP",
+    "BOTTOM"
+   ],
+   "projections": [
+    "PERSP",
+    "ORTHO"
+   ],
+   "independent_camera": true,
+   "shading": [
+    "WIREFRAME",
+    "SOLID"
+   ],
+   "local_view": true
+  },
+  "stream": {
+   "version": 2,
+   "preferred": "H264",
+   "transports": [
+    "H264",
+    "MJPEG"
+   ],
+   "framing": "btr-h264-v1",
+   "capture_default": "OFFSCREEN"
+  },
+  "modifiers": {
+   "version": 1,
+   "types": [
+    "SUBSURF",
+    "ARRAY",
+    "BEVEL",
+    "SOLIDIFY",
+    "BOOLEAN"
+   ],
+   "commands": [
+    "modifier.add_options",
+    "modifier.add",
+    "modifier.remove",
+    "modifier.move",
+    "modifier.set",
+    "modifier.toggle",
+    "modifier.apply"
+   ]
+  },
+  "visibility": {
+   "version": 1,
+   "object_hide": true,
+   "hide_set": true
+  },
+  "transform_apply": {
+   "version": 1,
+   "components": [
+    "location",
+    "rotation",
+    "scale"
+   ]
+  },
+  "edit_tools": {
+   "version": 2,
+   "tools": [
+    "EXTRUDE",
+    "BEVEL",
+    "INSET",
+    "SUBDIVIDE",
+    "LOOP_CUT",
+    "BRIDGE_EDGE_LOOPS",
+    "KNIFE"
+   ],
+   "loop_cut": {
+    "pick": true,
+    "probe": true,
+    "falloff": [
+     "SMOOTH",
+     "SPHERE",
+     "ROOT",
+     "SHARP",
+     "LINEAR",
+     "INVERSE_SQUARE"
+    ],
+    "even": true,
+    "flip": true,
+    "clamp": true
+   },
+   "knife": {
+    "snap": true,
+    "close": true,
+    "pop": true,
+    "cut_through": false,
+    "threshold": 0.045
+   }
+  },
+  "edit_catalog": {
+   "version": 1,
+   "groups": {
+    "VERTEX": [
+     {
+      "id": "MAKE_EDGE_FACE",
+      "label": "Crear arista/cara",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "VERTEX"
+       ],
+       "selection": {
+        "verts": {
+         "min": 2
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "mesh.make_edge_face"
+     },
+     {
+      "id": "EXTRUDE",
+      "label": "Extruir",
+      "enabled": true,
+      "execution": "SESSION",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "VERTEX"
+       ],
+       "selection": {
+        "verts": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [
+       {
+        "id": "REGION",
+        "label": "Región",
+        "enabled": true
+       },
+       {
+        "id": "ALONG_NORMALS",
+        "label": "A lo largo de normales",
+        "enabled": false
+       },
+       {
+        "id": "INDIVIDUAL",
+        "label": "Individual",
+        "enabled": false
+       }
+      ],
+      "parameters": [
+       {
+        "id": "offset",
+        "label": "Desplazamiento",
+        "type": "float",
+        "default": 0.0
+       },
+       {
+        "id": "constraint",
+        "label": "Eje",
+        "type": "enum",
+        "default": "FREE",
+        "values": [
+         "FREE",
+         "X",
+         "Y",
+         "Z"
+        ],
+        "applies_to": [
+         "REGION"
+        ]
+       },
+       {
+        "id": "orientation",
+        "label": "Orientación",
+        "type": "enum",
+        "default": "GLOBAL",
+        "values": [
+         "GLOBAL",
+         "LOCAL",
+         "VIEW"
+        ],
+        "applies_to": [
+         "REGION"
+        ]
+       }
+      ],
+      "command": "tool.begin",
+      "payload": {
+       "tool": "EXTRUDE"
+      }
+     },
+     {
+      "id": "BEVEL",
+      "label": "Biselar",
+      "enabled": true,
+      "execution": "SESSION",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "VERTEX"
+       ],
+       "selection": {
+        "verts": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [
+       {
+        "id": "offset",
+        "label": "Ancho",
+        "type": "float",
+        "default": 0.1,
+        "min": 0.0
+       },
+       {
+        "id": "segments",
+        "label": "Segmentos",
+        "type": "int",
+        "default": 1,
+        "min": 1
+       }
+      ],
+      "command": "tool.begin",
+      "payload": {
+       "tool": "BEVEL"
+      }
+     },
+     {
+      "id": "SUBDIVIDE",
+      "label": "Subdividir",
+      "enabled": true,
+      "execution": "SESSION",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "VERTEX"
+       ],
+       "selection": {
+        "verts": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [
+       {
+        "id": "cuts",
+        "label": "Cortes",
+        "type": "int",
+        "default": 1,
+        "min": 1
+       }
+      ],
+      "command": "tool.begin",
+      "payload": {
+       "tool": "SUBDIVIDE"
+      }
+     },
+     {
+      "id": "KNIFE",
+      "label": "Cuchillo",
+      "enabled": true,
+      "execution": "SESSION",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "VERTEX"
+       ],
+       "selection": {}
+      },
+      "variants": [],
+      "parameters": [
+       {
+        "id": "snap",
+        "label": "Snap",
+        "type": "bool",
+        "default": true
+       }
+      ],
+      "command": "tool.begin",
+      "payload": {
+       "tool": "KNIFE"
+      }
+     },
+     {
+      "id": "SEPARATE",
+      "label": "Separar a objeto",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "VERTEX"
+       ],
+       "selection": {
+        "verts": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "mesh.separate"
+     },
+     {
+      "id": "SPLIT",
+      "label": "Split",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "VERTEX"
+       ],
+       "selection": {
+        "verts": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "mesh.split"
+     },
+     {
+      "id": "DELETE",
+      "label": "Eliminar",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "VERTEX"
+       ],
+       "selection": {
+        "verts": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "mesh.delete",
+      "payload": {
+       "what": "VERTS"
+      }
+     },
+     {
+      "id": "HIDE",
+      "label": "Ocultar",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "VERTEX"
+       ],
+       "selection": {
+        "verts": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "selection.hide"
+     },
+     {
+      "id": "REVEAL",
+      "label": "Mostrar oculto",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "VERTEX"
+       ],
+       "selection": {}
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "selection.reveal"
+     }
+    ],
+    "EDGE": [
+     {
+      "id": "SELECT_LOOP",
+      "label": "Seleccionar loop",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "EDGE"
+       ],
+       "selection": {
+        "edges": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "selection.loop"
+     },
+     {
+      "id": "SELECT_RING",
+      "label": "Seleccionar anillo",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "EDGE"
+       ],
+       "selection": {
+        "edges": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "selection.ring"
+     },
+     {
+      "id": "BRIDGE_EDGE_LOOPS",
+      "label": "Puente entre loops",
+      "enabled": true,
+      "execution": "SESSION",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "EDGE"
+       ],
+       "selection": {
+        "edges": {
+         "min": 6
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [
+       {
+        "id": "twist_offset",
+        "label": "Desfase",
+        "type": "int",
+        "default": 0
+       },
+       {
+        "id": "merge",
+        "label": "Fusionar",
+        "type": "bool",
+        "default": false
+       },
+       {
+        "id": "merge_factor",
+        "label": "Factor de fusión",
+        "type": "float",
+        "default": 0.0,
+        "min": 0.0,
+        "max": 1.0
+       }
+      ],
+      "command": "tool.begin",
+      "payload": {
+       "tool": "BRIDGE_EDGE_LOOPS"
+      }
+     },
+     {
+      "id": "MAKE_EDGE_FACE",
+      "label": "Rellenar",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "EDGE"
+       ],
+       "selection": {
+        "edges": {
+         "min": 3
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "mesh.make_edge_face"
+     },
+     {
+      "id": "EXTRUDE",
+      "label": "Extruir",
+      "enabled": true,
+      "execution": "SESSION",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "EDGE"
+       ],
+       "selection": {
+        "edges": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [
+       {
+        "id": "REGION",
+        "label": "Región",
+        "enabled": true
+       },
+       {
+        "id": "ALONG_NORMALS",
+        "label": "A lo largo de normales",
+        "enabled": false
+       },
+       {
+        "id": "INDIVIDUAL",
+        "label": "Individual",
+        "enabled": false
+       }
+      ],
+      "parameters": [
+       {
+        "id": "offset",
+        "label": "Desplazamiento",
+        "type": "float",
+        "default": 0.0
+       },
+       {
+        "id": "constraint",
+        "label": "Eje",
+        "type": "enum",
+        "default": "FREE",
+        "values": [
+         "FREE",
+         "X",
+         "Y",
+         "Z"
+        ],
+        "applies_to": [
+         "REGION"
+        ]
+       },
+       {
+        "id": "orientation",
+        "label": "Orientación",
+        "type": "enum",
+        "default": "GLOBAL",
+        "values": [
+         "GLOBAL",
+         "LOCAL",
+         "VIEW"
+        ],
+        "applies_to": [
+         "REGION"
+        ]
+       }
+      ],
+      "command": "tool.begin",
+      "payload": {
+       "tool": "EXTRUDE"
+      }
+     },
+     {
+      "id": "BEVEL",
+      "label": "Biselar",
+      "enabled": true,
+      "execution": "SESSION",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "EDGE"
+       ],
+       "selection": {
+        "edges": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [
+       {
+        "id": "offset",
+        "label": "Ancho",
+        "type": "float",
+        "default": 0.1,
+        "min": 0.0
+       },
+       {
+        "id": "segments",
+        "label": "Segmentos",
+        "type": "int",
+        "default": 1,
+        "min": 1
+       }
+      ],
+      "command": "tool.begin",
+      "payload": {
+       "tool": "BEVEL"
+      }
+     },
+     {
+      "id": "SUBDIVIDE",
+      "label": "Subdividir",
+      "enabled": true,
+      "execution": "SESSION",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "EDGE"
+       ],
+       "selection": {
+        "edges": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [
+       {
+        "id": "cuts",
+        "label": "Cortes",
+        "type": "int",
+        "default": 1,
+        "min": 1
+       }
+      ],
+      "command": "tool.begin",
+      "payload": {
+       "tool": "SUBDIVIDE"
+      }
+     },
+     {
+      "id": "LOOP_CUT",
+      "label": "Corte de loop",
+      "enabled": true,
+      "execution": "SESSION",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "EDGE"
+       ],
+       "selection": {
+        "edges": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [
+       {
+        "id": "cuts",
+        "label": "Cortes",
+        "type": "int",
+        "default": 1,
+        "min": 1
+       },
+       {
+        "id": "smoothness",
+        "label": "Suavidad",
+        "type": "float",
+        "default": 0.0
+       },
+       {
+        "id": "factor",
+        "label": "Posición",
+        "type": "float",
+        "default": 0.0,
+        "min": -1.0,
+        "max": 1.0
+       }
+      ],
+      "command": "tool.begin",
+      "payload": {
+       "tool": "LOOP_CUT"
+      }
+     },
+     {
+      "id": "KNIFE",
+      "label": "Cuchillo",
+      "enabled": true,
+      "execution": "SESSION",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "EDGE"
+       ],
+       "selection": {}
+      },
+      "variants": [],
+      "parameters": [
+       {
+        "id": "snap",
+        "label": "Snap",
+        "type": "bool",
+        "default": true
+       }
+      ],
+      "command": "tool.begin",
+      "payload": {
+       "tool": "KNIFE"
+      }
+     },
+     {
+      "id": "SEPARATE",
+      "label": "Separar a objeto",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "EDGE"
+       ],
+       "selection": {
+        "edges": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "mesh.separate"
+     },
+     {
+      "id": "SPLIT",
+      "label": "Split",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "EDGE"
+       ],
+       "selection": {
+        "edges": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "mesh.split"
+     },
+     {
+      "id": "DISSOLVE",
+      "label": "Disolver",
+      "enabled": false,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "EDGE"
+       ],
+       "selection": {
+        "edges": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": []
+     },
+     {
+      "id": "DELETE",
+      "label": "Eliminar",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "EDGE"
+       ],
+       "selection": {
+        "edges": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "mesh.delete",
+      "payload": {
+       "what": "EDGES"
+      }
+     },
+     {
+      "id": "HIDE",
+      "label": "Ocultar",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "EDGE"
+       ],
+       "selection": {
+        "edges": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "selection.hide"
+     },
+     {
+      "id": "REVEAL",
+      "label": "Mostrar oculto",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "EDGE"
+       ],
+       "selection": {}
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "selection.reveal"
+     }
+    ],
+    "FACE": [
+     {
+      "id": "EXTRUDE",
+      "label": "Extruir",
+      "enabled": true,
+      "execution": "SESSION",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "FACE"
+       ],
+       "selection": {
+        "faces": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [
+       {
+        "id": "REGION",
+        "label": "Región",
+        "enabled": true
+       },
+       {
+        "id": "ALONG_NORMALS",
+        "label": "A lo largo de normales",
+        "enabled": true
+       },
+       {
+        "id": "INDIVIDUAL",
+        "label": "Individual",
+        "enabled": true
+       }
+      ],
+      "parameters": [
+       {
+        "id": "offset",
+        "label": "Desplazamiento",
+        "type": "float",
+        "default": 0.0
+       },
+       {
+        "id": "constraint",
+        "label": "Eje",
+        "type": "enum",
+        "default": "FREE",
+        "values": [
+         "FREE",
+         "X",
+         "Y",
+         "Z"
+        ],
+        "applies_to": [
+         "REGION"
+        ]
+       },
+       {
+        "id": "orientation",
+        "label": "Orientación",
+        "type": "enum",
+        "default": "GLOBAL",
+        "values": [
+         "GLOBAL",
+         "LOCAL",
+         "VIEW"
+        ],
+        "applies_to": [
+         "REGION"
+        ]
+       }
+      ],
+      "command": "tool.begin",
+      "payload": {
+       "tool": "EXTRUDE"
+      }
+     },
+     {
+      "id": "INSET",
+      "label": "Inset",
+      "enabled": true,
+      "execution": "SESSION",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "FACE"
+       ],
+       "selection": {
+        "faces": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [
+       {
+        "id": "thickness",
+        "label": "Grosor",
+        "type": "float",
+        "default": 0.1
+       },
+       {
+        "id": "depth",
+        "label": "Profundidad",
+        "type": "float",
+        "default": 0.0
+       },
+       {
+        "id": "individual",
+        "label": "Individual",
+        "type": "bool",
+        "default": false
+       }
+      ],
+      "command": "tool.begin",
+      "payload": {
+       "tool": "INSET"
+      }
+     },
+     {
+      "id": "BEVEL",
+      "label": "Biselar",
+      "enabled": true,
+      "execution": "SESSION",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "FACE"
+       ],
+       "selection": {
+        "faces": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [
+       {
+        "id": "offset",
+        "label": "Ancho",
+        "type": "float",
+        "default": 0.1,
+        "min": 0.0
+       },
+       {
+        "id": "segments",
+        "label": "Segmentos",
+        "type": "int",
+        "default": 1,
+        "min": 1
+       }
+      ],
+      "command": "tool.begin",
+      "payload": {
+       "tool": "BEVEL"
+      }
+     },
+     {
+      "id": "SUBDIVIDE",
+      "label": "Subdividir",
+      "enabled": true,
+      "execution": "SESSION",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "FACE"
+       ],
+       "selection": {
+        "faces": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [
+       {
+        "id": "cuts",
+        "label": "Cortes",
+        "type": "int",
+        "default": 1,
+        "min": 1
+       }
+      ],
+      "command": "tool.begin",
+      "payload": {
+       "tool": "SUBDIVIDE"
+      }
+     },
+     {
+      "id": "KNIFE",
+      "label": "Cuchillo",
+      "enabled": true,
+      "execution": "SESSION",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "FACE"
+       ],
+       "selection": {}
+      },
+      "variants": [],
+      "parameters": [
+       {
+        "id": "snap",
+        "label": "Snap",
+        "type": "bool",
+        "default": true
+       }
+      ],
+      "command": "tool.begin",
+      "payload": {
+       "tool": "KNIFE"
+      }
+     },
+     {
+      "id": "SEPARATE",
+      "label": "Separar a objeto",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "FACE"
+       ],
+       "selection": {
+        "faces": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "mesh.separate"
+     },
+     {
+      "id": "SPLIT",
+      "label": "Split",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "FACE"
+       ],
+       "selection": {
+        "faces": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "mesh.split"
+     },
+     {
+      "id": "RECALCULATE_NORMALS_OUTSIDE",
+      "label": "Recalcular exterior",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "FACE"
+       ],
+       "selection": {
+        "faces": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "mesh.normals_recalculate",
+      "payload": {
+       "inside": false
+      }
+     },
+     {
+      "id": "RECALCULATE_NORMALS_INSIDE",
+      "label": "Recalcular interior",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "FACE"
+       ],
+       "selection": {
+        "faces": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "mesh.normals_recalculate",
+      "payload": {
+       "inside": true
+      }
+     },
+     {
+      "id": "FLIP_NORMALS",
+      "label": "Voltear normales",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "FACE"
+       ],
+       "selection": {
+        "faces": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "mesh.normals_flip"
+     },
+     {
+      "id": "DISSOLVE",
+      "label": "Disolver",
+      "enabled": false,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "FACE"
+       ],
+       "selection": {
+        "faces": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": []
+     },
+     {
+      "id": "DELETE",
+      "label": "Eliminar",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "FACE"
+       ],
+       "selection": {
+        "faces": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "mesh.delete",
+      "payload": {
+       "what": "FACES"
+      }
+     },
+     {
+      "id": "HIDE",
+      "label": "Ocultar",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "FACE"
+       ],
+       "selection": {
+        "faces": {
+         "min": 1
+        }
+       }
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "selection.hide"
+     },
+     {
+      "id": "REVEAL",
+      "label": "Mostrar oculto",
+      "enabled": true,
+      "execution": "DISCRETE",
+      "requirements": {
+       "mode": "EDIT",
+       "selection_modes": [
+        "FACE"
+       ],
+       "selection": {}
+      },
+      "variants": [],
+      "parameters": [],
+      "command": "selection.reveal"
+     }
+    ]
+   }
+  },
+  "files": {
+   "version": 1,
+   "browse": true,
+   "default_folder": true,
+   "relative_paths": true
+  }
+ },
+ "units": {
+  "distance": "BLENDER_UNIT",
+  "rotation": "DEGREE",
+  "scale": "FACTOR",
+  "screen": "NORMALIZED_TOP_LEFT"
+ }
 }

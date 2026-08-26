@@ -52,6 +52,17 @@ def zoom_factor(factor: float) -> None:
     camera.zoom(factor)
 
 
+def roll_delta(angle: float) -> None:
+    """Gira la cámara sobre su eje de visión (roll), en radianes.
+
+    ``angle`` es el giro de la rueda de dos dedos en pantalla (positivo = horario). Se
+    invierte para que la escena acompañe al dedo: rueda horaria -> cámara antihoraria
+    -> escena horaria.
+    """
+    _region_view()
+    camera.roll(-angle)
+
+
 def _view_state() -> dict:
     _region_view()
     return camera.as_dict()
@@ -60,6 +71,12 @@ def _view_state() -> dict:
 @command("view.orbit")
 def orbit(payload: dict) -> dict:
     orbit_delta(get_float(payload, "dx", 0.0), get_float(payload, "dy", 0.0))
+    return _view_state()
+
+
+@command("view.roll")
+def roll(payload: dict) -> dict:
+    roll_delta(get_float(payload, "angle", 0.0))
     return _view_state()
 
 

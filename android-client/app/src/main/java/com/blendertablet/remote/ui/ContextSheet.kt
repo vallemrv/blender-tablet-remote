@@ -1,6 +1,7 @@
 package com.blendertablet.remote.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -128,14 +129,23 @@ fun ContextSheet(
                         BackRow(title) { path = path.dropLast(1) }
                     }
                     for (action in level) {
-                        SheetRow(action) {
-                            // Entrar en un grupo no cierra el menú; ejecutar sí.
-                            if (action.isGroup) path = path + action
-                            else {
-                                action.onClick()
-                                onDismiss()
-                            }
-                        }
+                        SheetRow(
+                            action,
+                            onClick = {
+                                // Normalmente un grupo entra. Extrude conserva tap
+                                // en Región y reserva las variantes al long-click.
+                                if (action.isGroup && action.opensChildrenOnClick) path = path + action
+                                else {
+                                    action.onClick()
+                                    onDismiss()
+                                }
+                            },
+                            onLongClick = if (action.isGroup && !action.opensChildrenOnClick) {
+                                { path = path + action }
+                            } else {
+                                action.onLongClick
+                            },
+                        )
                     }
                 }
             }
@@ -145,13 +155,13 @@ fun ContextSheet(
 
 /** Fila del menú: icono, etiqueta y galón si abre subnivel. Objetivo táctil generoso. */
 @Composable
-private fun SheetRow(action: QuickAction, onActivate: () -> Unit) {
+private fun SheetRow(action: QuickAction, onClick: () -> Unit, onLongClick: (() -> Unit)?) {
     Row(
         Modifier
             .fillMaxWidth()
             .heightIn(min = 44.dp)
             .clip(RoundedCornerShape(10.dp))
-            .then(if (action.enabled) Modifier.clickableNoRipple(onActivate) else Modifier)
+            .then(if (action.enabled) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick) else Modifier)
             .padding(horizontal = 10.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -37,4 +37,11 @@ object Metrics {
     val Radius = 14.dp
     val PanelPadding = 8.dp
     val EdgeMargin = 10.dp
+
+    /**
+     * Hueco que reserva una bandeja horizontal inferior (una línea de controles
+     * ~44 dp + el padding del panel). Con una bandeja presente, el teclado de
+     * vistas se eleva esta altura para no quedar tapado ni taparla.
+     */
+    val TrayInset = 64.dp
 }

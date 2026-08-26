@@ -234,6 +234,11 @@ def scenario(client: WSClient) -> None:
 
     cmd(client, "selection.vertex")
     time.sleep(0.2)
+    # Alejar antes del toque: con el encuadre ajustado, la orientación de cámara
+    # (que depende de los gestos previos) puede dejar el vértice más cercano a más
+    # de 0.25 del centro. Reducir el cubo en pantalla lo devuelve al umbral.
+    cmd(client, "view.zoom", {"factor": 0.5})
+    time.sleep(0.3)
     picked = cmd(client, "selection.pick", {"u": 0.5, "v": 0.5, "threshold": 0.25})
     check("en Edit Mode el toque selecciona geometria", picked.get("hit") is not False, str(picked))
     boxed = cmd(client, "selection.box", {
@@ -546,19 +551,19 @@ def scenario(client: WSClient) -> None:
     cmd(client, "transform.cancel")
 
     print("\n[13] Signo del giro de cámara", flush=True)
-    # Se mide la rotación RELATIVA de la cámara, independiente de la vista (el
-    # sentido en pantalla de un turntable se invierte al mirar desde el otro lado,
-    # por eso no se mide sobre un punto proyectado). `dx>0` debe girar la cámara
-    # alrededor del Z global en sentido horario (eje Z negativo) y `dy>0` sobre el
-    # eje derecha. Guarda contra el signo que se invirtió dos veces por medirlo
-    # desde una vista de eje o la cenital.
+    # El yaw es sobre el eje vertical LOCAL de la cámara (no el Z global): así el
+    # arrastre horizontal conserva su sentido visual aunque la cámara quede boca
+    # abajo. `dx>0` debe girar la cámara alrededor de su eje "up" con ángulo negativo,
+    # y `dy>0` alrededor del eje "right" (pitch sin cambios). Se comprueba la rotación
+    # RELATIVA, no un punto proyectado, que ya causó inversiones erróneas.
     before_rot = tablet_camera.rotation.copy()
+    up_before = before_rot @ Vector((0.0, 1.0, 0.0))
     drag(client, "orbit", dx=0.1)
     time.sleep(0.3)
     rel = (tablet_camera.rotation @ before_rot.inverted()).normalized()
-    check("dedo a la derecha gira la cámara sobre Z negativo",
-          rel.axis[2] < -0.9 and abs(rel.angle) > 0.1,
-          f"axis={[round(c, 3) for c in rel.axis]} angle={rel.angle:.3f}")
+    check("dedo a la derecha gira sobre el eje vertical local",
+          rel.axis.dot(up_before) < -0.9 and rel.angle > 0.1,
+          f"up={[round(c, 3) for c in up_before]} axis={[round(c, 3) for c in rel.axis]} angle={rel.angle:.3f}")
 
     before_rot = tablet_camera.rotation.copy()
     drag(client, "orbit", dy=0.1)
@@ -568,6 +573,78 @@ def scenario(client: WSClient) -> None:
     check("dedo abajo gira la cámara sobre el eje derecha",
           rel.angle > 0.1 and rel.axis.dot(right) < -0.9,
           f"right={[round(c, 3) for c in right]} axis={[round(c, 3) for c in rel.axis]} angle={rel.angle:.3f}")
+
+    print("\n[14] Giro horizontal consistente desde BACK y BOTTOM", flush=True)
+    # La escena debe acompañar al dedo sea cual sea el lado desde el que se mire.
+    # Se mide con el vector FORWARD de la cámara: tras un arrastre hacia la derecha,
+    # el forward debe inclinarse hacia el lado DERECHO de la pantalla con la semántica
+    # observada en el dispositivo real. Cubre BACK y BOTTOM, las dos
+    # orientaciones donde el yaw sobre Z global fallaba.
+    for axis in ("BACK", "BOTTOM"):
+        cmd(client, "view.axis", {"axis": axis})
+        time.sleep(0.3)
+        before = tablet_camera.rotation.copy()
+        right_before = before @ Vector((1.0, 0.0, 0.0))
+        forward_before = before @ Vector((0.0, 0.0, -1.0))
+        drag(client, "orbit", dx=0.1)
+        time.sleep(0.3)
+        after = tablet_camera.rotation.copy()
+        forward_after = after @ Vector((0.0, 0.0, -1.0))
+        shift = (forward_after - forward_before).dot(right_before)
+        check(f"desde {axis}, dedo a la derecha mueve la escena a la derecha",
+              shift > 1e-4,
+              f"shift={shift:.4f} axis={[round(c, 3) for c in before.axis]}")
+
+    print("\n[15] Knife: colocar puntos desde la cámara", flush=True)
+    cmd(client, "object.select", {"name": cube})
+    cmd(client, "mode.edit")
+    cmd(client, "selection.face")
+    cmd(client, "view.axis", {"axis": "FRONT"})
+    cmd(client, "view.frame_all")
+    time.sleep(0.3)
+    before = cmd(client, "mesh.info")
+    begun = cmd(client, "tool.begin", {"tool": "KNIFE"})
+    check("sesión knife", begun.get("active") is True and begun.get("tool") == "KNIFE", str(begun))
+    first = cmd(client, "tool.knife_point", {"u": 0.5, "v": 0.35})
+    check("primer punto acierta", first.get("hit") is True, str(first))
+    one = cmd(client, "mesh.info")
+    check("un punto no corta", one["verts"] == before["verts"], f"{before} -> {one}")
+    second = cmd(client, "tool.knife_point", {"u": 0.5, "v": 0.65})
+    check("segundo punto acierta", second.get("hit") is True, str(second))
+    cut = cmd(client, "mesh.info")
+    check("dos puntos cortan la cara", cut["verts"] > before["verts"], f"{before} -> {cut}")
+    miss = cmd(client, "tool.knife_point", {"u": 0.01, "v": 0.01})
+    check("punto en el vacío no altera", miss.get("hit") is False, str(miss))
+    cmd(client, "tool.knife_pop")
+    popped = cmd(client, "mesh.info")
+    check("pop retira el último corte", popped["verts"] == before["verts"], f"{before} -> {popped}")
+    cmd(client, "tool.cancel")
+    restored = cmd(client, "mesh.info")
+    check("cancel restaura la topología", restored["verts"] == before["verts"], str(restored))
+    cmd(client, "mode.object")
+
+    print("\n[16] Roll de cámara (rueda de dos dedos)", flush=True)
+    cmd(client, "object.select", {"name": cube})
+    cmd(client, "view.axis", {"axis": "FRONT"})
+    cmd(client, "view.frame_all")
+    time.sleep(0.3)
+    roll_before = tablet_camera.rotation.copy()
+    roll_forward = roll_before @ Vector((0.0, 0.0, -1.0))
+    rv3d_roll = find_view3d()[3]
+    matrix_roll = bpy.data.objects[cube].matrix_world
+    top_center = tablet_camera.project(matrix_roll @ Vector((0.0, 0.0, 1.0)), rv3d_roll)
+    cmd(client, "view.roll", {"angle": 0.4})
+    time.sleep(0.3)
+    roll_after = tablet_camera.rotation.copy()
+    rel = (roll_after @ roll_before.inverted()).normalized()
+    check("roll gira sobre el eje de visión",
+          abs(rel.axis.dot(roll_forward)) > 0.9 and rel.angle > 0.1,
+          f"forward={[round(c, 3) for c in roll_forward]} axis={[round(c, 3) for c in rel.axis]} angle={rel.angle:.3f}")
+    top_after = tablet_camera.project(matrix_roll @ Vector((0.0, 0.0, 1.0)), rv3d_roll)
+    check("rueda horaria mueve la parte superior a la derecha",
+          top_center is not None and top_after is not None and top_after[0] > top_center[0],
+          f"{top_center} -> {top_after}")
+    cmd(client, "view.axis", {"axis": "FRONT"})
 
 
 def run() -> None:

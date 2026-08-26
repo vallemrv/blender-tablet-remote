@@ -100,8 +100,54 @@ object StateParser {
             f.optJSONObject("edit_tools")?.optJSONObject("loop_cut")
                 ?.optBoolean("pick", false) == true,
             f.optJSONObject("files")?.optBoolean("browse", false) == true,
+            editCatalog(f.optJSONObject("edit_catalog")),
         )
     }
+
+    /**
+     * Lee el catálogo sin asumir que el servidor conoce exactamente esta versión.
+     * Grupos, acciones, variantes y parámetros desconocidos se ignoran en vez de
+     * impedir que la tablet use el resto del servidor.
+     */
+    fun editCatalog(json: JSONObject?): EditCatalog {
+        val groups = json?.optJSONObject("groups") ?: return EditCatalog()
+        val parsed = SelectionMode.entries.associateWith { mode ->
+            val actions = groups.optJSONArray(mode.name) ?: return@associateWith emptyList()
+            (0 until actions.length()).mapNotNull { actions.optJSONObject(it) }.mapNotNull { action ->
+                val id = action.optString("id")
+                if (id.isBlank()) return@mapNotNull null
+                EditCatalogAction(
+                    id = id,
+                    label = action.optString("label").ifBlank { id },
+                    enabled = action.optBoolean("enabled", true),
+                    execution = action.optString("execution", "DISCRETE"),
+                    command = action.optString("command").takeIf(String::isNotBlank),
+                    payload = jsonMap(action.optJSONObject("payload")),
+                    requirements = jsonMap(action.optJSONObject("requirements")),
+                    variants = editVariants(action.optJSONArray("variants")),
+                    parameters = editParameters(action.optJSONArray("parameters")),
+                )
+            }
+        }.filterValues { it.isNotEmpty() }
+        return EditCatalog(parsed)
+    }
+
+    private fun editVariants(array: JSONArray?): List<EditCatalogVariant> =
+        if (array == null) emptyList() else (0 until array.length()).mapNotNull { array.optJSONObject(it) }
+            .mapNotNull { item -> item.optString("id").takeIf(String::isNotBlank)?.let { id ->
+                EditCatalogVariant(id, item.optString("label").ifBlank { id }, item.optBoolean("enabled", true))
+            } }
+
+    private fun editParameters(array: JSONArray?): List<EditCatalogParameter> =
+        if (array == null) emptyList() else (0 until array.length()).mapNotNull { array.optJSONObject(it) }
+            .mapNotNull { item -> item.optString("id").takeIf(String::isNotBlank)?.let { id ->
+                EditCatalogParameter(
+                    id, item.optString("label").ifBlank { id }, item.optString("type"),
+                    if (item.has("default") && !item.isNull("default")) item.get("default") else null,
+                    strings(item.optJSONArray("values")),
+                    strings(item.optJSONArray("applies_to")),
+                )
+            } }
 
     private fun defaultValue(p: JSONObject): ModifierDefault {
         if (!p.has("default") || p.isNull("default")) return ModifierDefault.Null
@@ -189,7 +235,16 @@ object StateParser {
                 else -> null
             }
         }
-        return ToolSession(active = true, tool = tool, parameters = values)
+        val pointsArray = json.optJSONArray("points")
+        val points = if (pointsArray == null) emptyList() else (0 until pointsArray.length()).mapNotNull { index ->
+            pointsArray.optJSONArray(index)?.let { point ->
+                List(3) { i -> point.optDouble(i, 0.0) }
+            }
+        }
+        return ToolSession(
+            active = true, tool = tool, parameters = values,
+            points = points, closed = json.optBoolean("closed"),
+        )
     }
 
     /** `mesh.loop_probe`: dónde caería el corte si se confirma el toque. */

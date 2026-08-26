@@ -7,7 +7,9 @@ package com.blendertablet.remote.model
 enum class ConnectionStatus { DISCONNECTED, CONNECTING, RECONNECTING, CONNECTED }
 enum class BlenderMode { OBJECT, EDIT }
 enum class SelectionMode { VERTEX, EDGE, FACE }
-enum class ActiveTool { SELECT, MOVE, ROTATE, SCALE, EXTRUDE, BEVEL, INSET, SUBDIVIDE, LOOP_CUT }
+/** Atajos de la página Edit; su adaptador wire vive en MainViewModel. */
+enum class EditFooterAction { MAKE_EDGE_FACE, KNIFE, SEPARATE, SPLIT, NORMALS, NORMALS_OUTSIDE, NORMALS_INSIDE, NORMALS_FLIP }
+enum class ActiveTool { SELECT, MOVE, ROTATE, SCALE, EXTRUDE, BEVEL, INSET, SUBDIVIDE, LOOP_CUT, BRIDGE_EDGE_LOOPS, KNIFE }
 
 /**
  * Operación de selección que aplican el tap, la caja y el círculo. Mayús/Ctrl/Alt
@@ -47,10 +49,47 @@ data class ServerFeatures(
     /** Colocación del loop cut tocando la malla (`edit_tools.loop_cut.pick`). */
     val loopCutPick: Boolean = false,
     val fileBrowse: Boolean = false,
+    /** Catálogo contextual de Edit; vacío conserva por completo la interfaz legacy. */
+    val editCatalog: EditCatalog = EditCatalog(),
+)
+
+/** Contrato extensible del menú Edit. Las claves wire se mantienen opacas a la UI. */
+data class EditCatalog(
+    val groups: Map<SelectionMode, List<EditCatalogAction>> = emptyMap(),
+) {
+    val available: Boolean get() = groups.values.any { it.isNotEmpty() }
+    fun actionsFor(mode: SelectionMode) = groups[mode].orEmpty()
+}
+
+data class EditCatalogAction(
+    val id: String,
+    val label: String,
+    val enabled: Boolean = true,
+    val execution: String = "DISCRETE",
+    /** Comando publicado por el backend; ausente significa que no es ejecutable. */
+    val command: String? = null,
+    /** Payload fijo publicado por el backend; no se reconstruye en Android. */
+    val payload: Map<String, Any?> = emptyMap(),
+    /** Requisitos opacos para filtrar/diagnosticar sin asumir campos futuros. */
+    val requirements: Map<String, Any?> = emptyMap(),
+    val variants: List<EditCatalogVariant> = emptyList(),
+    val parameters: List<EditCatalogParameter> = emptyList(),
+)
+
+data class EditCatalogVariant(val id: String, val label: String, val enabled: Boolean = true)
+data class EditCatalogParameter(
+    val id: String,
+    val label: String,
+    val type: String,
+    val default: Any? = null,
+    /** Valores del enum, si `type` es enum. */
+    val values: List<String> = emptyList(),
+    /** Variantes a las que se aplica; vacío = todas. */
+    val appliesTo: List<String> = emptyList(),
 )
 
 /** Gestos continuos del protocolo. El nombre en minúsculas es el que viaja por el cable. */
-enum class Gesture { ORBIT, PAN, ZOOM, MOVE, ROTATE, SCALE }
+enum class Gesture { ORBIT, PAN, ZOOM, ROLL, MOVE, ROTATE, SCALE }
 
 /**
  * Fases de un gesto. El servidor agrupa los UPDATE y cierra un único paso de undo
@@ -357,3 +396,18 @@ data class AppUiState(
     /** Loop Cut armado esperando el toque que coloca el corte. */
     val loopCutAwaitingTap: Boolean = false,
 )
+
+/**
+ * ¿Hay una bandeja horizontal inferior ocupando el borde de abajo?
+ *
+ * Es la señal que eleva el teclado de vistas: transformación modal activa, herramienta
+ * paramétrica activa o Loop Cut esperando el toque que coloca el corte. Extraído a una
+ * función pura para poder probar el layout sin montar la interfaz.
+ */
+fun bottomTrayVisible(
+    sessionActive: Boolean,
+    toolSessionActive: Boolean,
+    activeTool: ActiveTool,
+    loopCutAwaitingTap: Boolean,
+): Boolean = sessionActive || toolSessionActive ||
+    (activeTool == ActiveTool.LOOP_CUT && !toolSessionActive && loopCutAwaitingTap)

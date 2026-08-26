@@ -118,20 +118,24 @@ class RemoteCamera:
     # ------------------------------------------------------------- navegación
 
     def orbit(self, dx: float, dy: float, sensitivity: float) -> None:
-        """Órbita tipo turntable: yaw sobre Z global, pitch sobre el eje derecha.
+        """Órbita: yaw sobre el eje vertical de pantalla, pitch sobre el derecho.
 
-        El signo es el que hace que, en la vista por defecto (la que el usuario ve al
-        conectar), la escena acompañe al dedo: `dx` positivo (dedo a la derecha) mueve
-        la escena hacia la derecha, `dy` positivo (dedo abajo) hacia abajo.
+        El yaw ya no es sobre el Z GLOBAL: al mirar desde debajo o desde atrás, el Z
+        global deja de ser el "arriba" de la pantalla y el arrastre horizontal se
+        invertía (y en la cenital no movía nada). Girar alrededor del eje vertical
+        LOCAL (la "up" de la cámara) hace que el contenido acompañe al dedo
+        independientemente del lado desde el que se mire.
 
-        OJO al medir esto: es un turntable alrededor del Z GLOBAL, así que el sentido
-        EN PANTALLA depende de la vista (desde FRONT/BACK se invierte respecto a la
-        vista por defecto, porque el "derecha" de pantalla cambia de lado). El signo
-        se decide y se comprueba SIEMPRE en la vista por defecto, nunca en una vista
-        de eje ni en la cenital. Se invirtió dos veces por medir desde esas vistas.
+        El signo se fijó finalmente con la percepción en tablet real: `dx` positivo
+        (dedo a la derecha) necesita yaw negativo sobre el eje local para que el
+        contenido acompañe al dedo. El pitch conserva el signo anterior sobre el eje
+        derecho local.
+
+        Ver tests: run_gui_tests.py [13] (signo del giro) y [14] (BACK/BOTTOM).
         """
-        yaw = Quaternion(Vector((0.0, 0.0, 1.0)), -dx * sensitivity)
         right = self.rotation @ Vector((1.0, 0.0, 0.0))
+        up = self.rotation @ Vector((0.0, 1.0, 0.0))
+        yaw = Quaternion(up, -dx * sensitivity)
         pitch = Quaternion(right, -dy * sensitivity)
         self.rotation = (yaw @ pitch @ self.rotation).normalized()
         self.axis_view = None
@@ -162,6 +166,20 @@ class RemoteCamera:
 
     def zoom(self, factor: float) -> None:
         self.distance = max(MIN_DISTANCE, min(MAX_DISTANCE, self.distance / factor))
+        self._invalidate()
+
+    def roll(self, angle: float) -> None:
+        """Gira la cámara sobre su eje de visión (roll), en radianes.
+
+        `angle` positivo rueda la cámara en el sentido del reloj visto desde detrás de
+        ella, de modo que la escena gira en sentido contrario: con un gesto de rueda
+        de dos dedos en el sentido horario (ángulo positivo) la escena acompaña al
+        dedo girando también en el sentido horario.
+        """
+        forward = self.rotation @ Vector((0.0, 0.0, -1.0))
+        roll_q = Quaternion(forward, angle)
+        self.rotation = (roll_q @ self.rotation).normalized()
+        self.axis_view = None
         self._invalidate()
 
     def look_at(self, center, radius: float, fov: float = 0.85) -> None:

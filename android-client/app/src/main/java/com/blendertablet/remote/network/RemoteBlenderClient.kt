@@ -257,4 +257,12 @@ interface RemoteBlenderClient {
 
     /** Re-ubica el corte de una sesión LOOP_CUT activa tocando la malla. */
     fun toolLoopPick(u: Double, v: Double)
+
+    /** Knife: añade un punto a la polilínea. */
+    fun toolKnifePoint(u: Double, v: Double)
+    fun toolKnifePop()
+    fun toolKnifeClose()
+
+    /** Ejecuta exclusivamente un comando publicado por el catálogo Edit. */
+    fun editCatalogCommand(command: String, payload: Map<String, Any?> = emptyMap())
 }

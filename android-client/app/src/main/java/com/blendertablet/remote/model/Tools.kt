@@ -12,7 +12,9 @@ enum class EditTool(val wire: String, val label: String, val requirement: String
     BEVEL("BEVEL", "Bisel", "necesita selección"),
     INSET("INSET", "Inset", "necesita caras"),
     SUBDIVIDE("SUBDIVIDE", "Subdividir", "necesita aristas"),
-    LOOP_CUT("LOOP_CUT", "Loop Cut", "necesita una arista");
+    LOOP_CUT("LOOP_CUT", "Loop Cut", "necesita una arista"),
+    BRIDGE_EDGE_LOOPS("BRIDGE_EDGE_LOOPS", "Bridge Edge Loops", "necesita dos loops de aristas"),
+    KNIFE("KNIFE", "Cuchillo", "necesita una malla");
 
     companion object {
         fun fromWire(value: String?): EditTool? = entries.firstOrNull { it.wire == value }
@@ -51,6 +53,10 @@ data class ToolSession(
     val active: Boolean = false,
     val tool: EditTool = EditTool.EXTRUDE,
     val parameters: Map<String, Any?> = emptyMap(),
+    /** Knife: puntos confirmados por el servidor, en coordenadas locales. */
+    val points: List<List<Double>> = emptyList(),
+    /** Knife: la polilínea está cerrada. */
+    val closed: Boolean = false,
 ) {
     val primaryKey: String
         get() = when (tool) {
@@ -58,6 +64,8 @@ data class ToolSession(
             EditTool.INSET -> "thickness"
             EditTool.SUBDIVIDE -> "cuts"
             EditTool.LOOP_CUT -> "factor"
+            EditTool.BRIDGE_EDGE_LOOPS -> "twist_offset"
+            EditTool.KNIFE -> ""
         }
 
     fun double(key: String): Double? = (parameters[key] as? Number)?.toDouble()

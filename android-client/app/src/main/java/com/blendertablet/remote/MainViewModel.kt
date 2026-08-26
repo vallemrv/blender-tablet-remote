@@ -15,6 +15,8 @@ import com.blendertablet.remote.model.AppUiState
 import com.blendertablet.remote.model.BlenderMode
 import com.blendertablet.remote.model.Constraint
 import com.blendertablet.remote.model.EditTool
+import com.blendertablet.remote.model.EditFooterAction
+import com.blendertablet.remote.model.EditCatalogAction
 import com.blendertablet.remote.model.Gesture
 import com.blendertablet.remote.model.GesturePhase
 import com.blendertablet.remote.model.InputDebug
@@ -62,6 +64,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val h264Stream = H264ViewportStream(viewModelScope) { fallbackToMjpeg() }
     val h264Size = h264Stream.size
     private var loopCutArmed = false
+    // Debe inicializarse antes de `init`: StateFlow emite su valor actual en cuanto
+    // empieza el collect y Main.immediate puede ejecutar esa emisión durante el
+    // propio constructor del ViewModel.
+    private val _knifeScreenPoints = MutableStateFlow<List<Pair<Float, Float>>>(emptyList())
+    val knifeScreenPoints: StateFlow<List<Pair<Float, Float>>> = _knifeScreenPoints.asStateFlow()
     private val connectivity =
         application.getSystemService(ConnectivityManager::class.java)
 
@@ -134,6 +141,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         // El puerto del vídeo lo anuncia el servidor en el "hello": el usuario solo
         // configura el de control y el vídeo se engancha solo (§63).
+        viewModelScope.launch {
+            client.toolSession.collect { session ->
+                // Reconciliar el overlay del Knife contra el servidor: si un toque
+                // falló (miss) o se quitó un punto, el contador no crece y se recorta
+                // la lista optimista.
+                val count = if (session.tool == EditTool.KNIFE) session.points.size else 0
+                if (session.tool != EditTool.KNIFE) {
+                    if (_knifeScreenPoints.value.isNotEmpty()) _knifeScreenPoints.value = emptyList()
+                } else if (_knifeScreenPoints.value.size > count) {
+                    _knifeScreenPoints.value = _knifeScreenPoints.value.take(count)
+                }
+            }
+        }
         viewModelScope.launch {
             client.streamEndpoint.collect { endpoint ->
                 currentStreamEndpoint = endpoint
@@ -250,6 +270,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * es la forma corta de decir a dónde va.
      */
     fun pick(u: Float, v: Float, stylus: Boolean = false) {
+        // Knife activo: el toque coloca un punto de la polilínea.
+        val knife = client.toolSession.value
+        if (knife.active && knife.tool == EditTool.KNIFE) {
+            knifeTap(u, v)
+            return
+        }
         // Loop Cut activo: el toque COLOCA el corte (primer toque) o lo re-ubica
         // (sesión ya abierta). Es el hover+click del Ctrl+R, con el dedo.
         if (local.value.activeTool == ActiveTool.LOOP_CUT) {
@@ -437,6 +463,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         client.toolParameter(mapOf(key to value))
 
     fun nudgeTool(delta: Double) = client.toolNudge(delta)
+
+    /**
+     * Único punto de enlace de los atajos Edit. B3--B8 aún no fijan sus comandos
+     * wire: mantenerlo deliberadamente sin envío evita que la UI invente protocolos.
+     */
+    fun editFooterAction(action: EditFooterAction) {
+        val id = when (action) {
+            EditFooterAction.MAKE_EDGE_FACE -> "MAKE_EDGE_FACE"
+            EditFooterAction.KNIFE -> "KNIFE"
+            EditFooterAction.SEPARATE -> "SEPARATE"
+            EditFooterAction.SPLIT -> "SPLIT"
+            EditFooterAction.NORMALS -> return
+            EditFooterAction.NORMALS_OUTSIDE -> "RECALCULATE_NORMALS_OUTSIDE"
+            EditFooterAction.NORMALS_INSIDE -> "RECALCULATE_NORMALS_INSIDE"
+            EditFooterAction.NORMALS_FLIP -> "FLIP_NORMALS"
+        }
+        client.state.value.features.editCatalog.actionsFor(client.state.value.selectionMode)
+            .firstOrNull { it.id == id }?.let(::editCatalogAction)
+    }
+
+    /** Igual que [editFooterAction], concentra el futuro adaptador del catálogo. */
+    fun editCatalogAction(action: EditCatalogAction, variant: String? = null) {
+        if (!action.enabled || action.command == null) return
+        // Las sesiones existentes usan exactamente tool.begin {tool, parameters}.
+        val tool = EditTool.fromWire(action.id)
+        if (action.execution == "SESSION" && action.command == "tool.begin" && tool != null) {
+            if (client.transformSession.value.active) client.transformCancel()
+            local.update { it.copy(activeTool = ActiveTool.valueOf(tool.name), loopCutAwaitingTap = false) }
+            val params = action.parameters.associate { it.id to it.default }.toMutableMap()
+            if (variant != null) params["variant"] = variant
+            client.toolBegin(tool, params)
+            return
+        }
+        client.editCatalogCommand(action.command, action.payload)
+    }
     fun confirmTool() {
         loopCutArmed = false
         local.update { it.copy(loopCutAwaitingTap = false) }
@@ -449,12 +510,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         client.toolCancel()
     }
 
+    /** Knife: quitar el último punto y cerrar la polilínea. */
+    fun knifePop() = client.toolKnifePop()
+    fun knifeClose() = client.toolKnifeClose()
+
+    /** Knife: un toque añade un punto (optimista; se recorta si el servidor lo rechaza). */
+    fun knifeTap(u: Float, v: Float) {
+        _knifeScreenPoints.value = _knifeScreenPoints.value + (u to v)
+        client.toolKnifePoint(u.toDouble(), v.toDouble())
+    }
+
+    /** Knife: conmuta el snap a vértice/arista. */
+    fun knifeSnap(enabled: Boolean) {
+        if (client.toolSession.value.active) client.toolParameter(mapOf("snap" to enabled))
+    }
+
     private fun toolDefaultParameters(tool: EditTool): Map<String, Double> = when (tool) {
         EditTool.EXTRUDE -> mapOf("offset" to 0.0)
         EditTool.BEVEL -> mapOf("offset" to 0.02, "segments" to 1.0)
         EditTool.INSET -> mapOf("thickness" to 0.1, "depth" to 0.0)
         EditTool.SUBDIVIDE -> mapOf("cuts" to 1.0)
         EditTool.LOOP_CUT -> mapOf("cuts" to 1.0, "smoothness" to 0.0, "factor" to 0.0)
+        EditTool.BRIDGE_EDGE_LOOPS -> mapOf("twist_offset" to 0.0, "merge_factor" to 0.0)
+        EditTool.KNIFE -> mapOf("snap" to 1.0)
     }
 
     /** Al abrir el menú Archivo: refresca nombre, "sin guardar" y recientes. */

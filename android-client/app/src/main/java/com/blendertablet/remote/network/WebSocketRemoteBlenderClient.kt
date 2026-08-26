@@ -102,7 +102,7 @@ class WebSocketRemoteBlenderClient(
         /** Comandos cuya respuesta ES el estado de la sesión de herramienta. */
         val TOOL_COMMANDS = setOf(
             "tool.begin", "tool.parameter", "tool.nudge", "tool.status",
-            "tool.loop_pick",
+            "tool.loop_pick", "tool.knife_point", "tool.knife_pop", "tool.knife_close",
         )
     }
 
@@ -224,6 +224,10 @@ class WebSocketRemoteBlenderClient(
 
     private fun command(name: String, payload: JSONObject = JSONObject()) {
         sendCommand(name, payload)
+    }
+
+    override fun editCatalogCommand(command: String, payload: Map<String, Any?>) {
+        command(command, JSONObject(payload))
     }
 
     private fun sendCommand(name: String, payload: JSONObject = JSONObject()): Boolean {
@@ -513,6 +517,13 @@ class WebSocketRemoteBlenderClient(
 
     override fun toolLoopPick(u: Double, v: Double) =
         command("tool.loop_pick", JSONObject().put("u", u).put("v", v))
+
+    override fun toolKnifePoint(u: Double, v: Double) =
+        command("tool.knife_point", JSONObject().put("u", u).put("v", v))
+
+    override fun toolKnifePop() = command("tool.knife_pop")
+
+    override fun toolKnifeClose() = command("tool.knife_close")
 
     private fun axesArray(axes: Set<Axis>) = JSONArray().apply {
         // Se mandan siempre en orden X, Y, Z: en ROTATE el servidor usa el primero,
