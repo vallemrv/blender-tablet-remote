@@ -116,12 +116,21 @@ def duplicate(payload: dict) -> dict:
 #
 # El valor es (categoría, callable, kwargs): los metaballs, vacíos y luces comparten
 # operador y se distinguen por `type`, así que no basta con guardar la función.
+#
+# Se construye una vez y se cachea: 36 entradas por cada object.add/add_options era
+# asignación gratuita en el camino de creación de primitivas.
+_ADD_CATALOG: dict[str, tuple[str, object, dict]] | None = None
+
+
 def _add_catalog() -> dict[str, tuple[str, object, dict]]:
+    global _ADD_CATALOG
+    if _ADD_CATALOG is not None:
+        return _ADD_CATALOG
     mesh = bpy.ops.mesh
     obj = bpy.ops.object
     curve = bpy.ops.curve
     surface = bpy.ops.surface
-    return {
+    _ADD_CATALOG = {
         # Malla
         "PLANE": ("MESH", mesh.primitive_plane_add, {}),
         "CUBE": ("MESH", mesh.primitive_cube_add, {}),
@@ -167,6 +176,7 @@ def _add_catalog() -> dict[str, tuple[str, object, dict]]:
         "LIGHT_AREA": ("LIGHT", obj.light_add, {"type": "AREA"}),
         "CAMERA": ("CAMERA", obj.camera_add, {}),
     }
+    return _ADD_CATALOG
 
 
 @command("object.add_options")
@@ -266,6 +276,11 @@ def hide(payload: dict) -> dict:
     for obj in targets:
         _hide_set(obj, True)
         hidden.append(obj.name)
+    if hidden:
+        # Lo ocultado a mano durante un aislamiento no se revela al desaislar.
+        from .view import forget_local_hidden
+
+        forget_local_hidden(hidden)
     active = view_layer.objects.active
     if active is not None and active.hide_get():
         view_layer.objects.active = next((obj for obj in view_layer.objects if obj.select_get() and not obj.hide_get()), None)

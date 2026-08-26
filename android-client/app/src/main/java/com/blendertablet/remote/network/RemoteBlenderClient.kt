@@ -12,10 +12,13 @@ import com.blendertablet.remote.model.AddObject
 import com.blendertablet.remote.model.Orientation
 import com.blendertablet.remote.model.Projection
 import com.blendertablet.remote.model.RecentFile
+import com.blendertablet.remote.model.RemoteFiles
 import com.blendertablet.remote.model.SelectionMode
+import com.blendertablet.remote.model.SelectionOp
 import com.blendertablet.remote.model.SnapAction
 import com.blendertablet.remote.model.SnapType
 import com.blendertablet.remote.model.ToolSession
+import com.blendertablet.remote.model.LoopProbe
 import com.blendertablet.remote.model.TouchProbe
 import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.TransformSession
@@ -24,7 +27,12 @@ import kotlinx.coroutines.flow.StateFlow
 import com.blendertablet.remote.model.ModifierDefault
 
 /** Dónde está el vídeo del viewport. Lo anuncia el servidor, no se configura a mano. */
-data class StreamEndpoint(val host: String, val port: Int, val token: String)
+data class StreamEndpoint(
+    val host: String, val port: Int, val token: String,
+    val format: String, val path: String, val framing: String? = null,
+    val alternatives: List<StreamAlternative> = emptyList(),
+)
+data class StreamAlternative(val format: String, val path: String)
 
 interface RemoteBlenderClient {
     val connection: StateFlow<ConnectionStatus>
@@ -39,6 +47,7 @@ interface RemoteBlenderClient {
 
     /** Recientes de Blender. Se piden bajo demanda, al abrir el menú Archivo. */
     val recentFiles: StateFlow<List<RecentFile>>
+    val remoteFiles: StateFlow<RemoteFiles>
 
     /** La transformación modal en curso, según el servidor. */
     val transformSession: StateFlow<TransformSession>
@@ -64,6 +73,9 @@ interface RemoteBlenderClient {
     /** Corta y deja de reintentar. Solo lo pide el usuario. */
     fun disconnect()
 
+    /** Borra el último error mostrado (el toast se auto-descarta a los ~5 s). */
+    fun clearError()
+
     /**
      * Reintenta ya, sin esperar al backoff. Lo llaman los eventos que hacen probable
      * que ahora sí funcione: volver a primer plano o recuperar la red.
@@ -74,9 +86,10 @@ interface RemoteBlenderClient {
 
     /**
      * Selección por toque: [u] y [v] normalizados 0..1 con origen arriba-izquierda.
-     * El servidor lanza un rayo desde la cámara del viewport.
+     * El servidor lanza un rayo desde la cámara del viewport. [mode] aplica el
+     * modificador Ctrl/Alt (ADD/REMOVE) o sustituye (SET).
      */
-    fun pick(u: Double, v: Double, threshold: Double = 0.035)
+    fun pick(u: Double, v: Double, threshold: Double = 0.035, mode: SelectionOp = SelectionOp.SET)
 
     /**
      * Pregunta qué hay en [u], [v] **sin seleccionarlo**: es lo que necesita el menú
@@ -148,6 +161,22 @@ interface RemoteBlenderClient {
     /** Cambia la proyección de la cámara remota. */
     fun viewPerspective(projection: Projection)
 
+    /** Wireframe/sólido del viewport capturado. */
+    fun viewShading(mode: String = "TOGGLE")
+
+    /** Aísla la selección ocultando el resto (el `/` de Blender). */
+    fun viewLocal(enabled: Boolean? = null)
+
+    /** Crecer/disminuir la selección en Edit Mode (Ctrl+Plus / Ctrl+Minus). */
+    fun selectMore()
+    fun selectLess()
+
+    /** Selección por caja: (u0,v0)-(u1,v1) normalizados, más [mode]. */
+    fun boxSelect(u0: Double, v0: Double, u1: Double, v1: Double, mode: SelectionOp)
+
+    /** Selección por círculo: centro (u,v) y [radius] normalizados, más [mode]. */
+    fun circleSelect(u: Double, v: Double, radius: Double, mode: SelectionOp)
+
     /** Coloca el objeto activo en coordenadas absolutas (panel numérico). */
     fun setLocation(x: Double, y: Double, z: Double)
 
@@ -169,7 +198,12 @@ interface RemoteBlenderClient {
     /** Falla con código `no_path` si el archivo no se ha guardado nunca. */
     fun fileSave()
     fun fileSaveAs(path: String)
+    /** Forma segura para paths opacos: el backend une y valida carpeta y nombre. */
+    fun fileSaveAs(folder: String, name: String)
     fun requestRecentFiles()
+    fun fileLocations()
+    fun fileBrowse(path: String? = null)
+    fun fileDefaultFolder(path: String)
 
     /**
      * Transformación modal: se abre, se ajusta cuantas veces haga falta y **solo
@@ -200,9 +234,24 @@ interface RemoteBlenderClient {
     fun transformCancel()
 
     /** Herramientas paramétricas de Edit Mode (preview → confirmar/cancelar). */
-    fun toolBegin(tool: EditTool, parameters: Map<String, Double>)
-    fun toolParameter(parameters: Map<String, Double>)
+    fun toolBegin(tool: EditTool, parameters: Map<String, Any?>)
+    fun toolParameter(parameters: Map<String, Any?>)
     fun toolNudge(delta: Double)
     fun toolConfirm()
     fun toolCancel()
+
+    /**
+     * Coloca el próximo loop cut donde caiga el toque (u,v): la respuesta llega en
+     * [loopProbe] y trae la arista y el factor listos para `toolBegin`.
+     */
+    fun meshLoopProbe(u: Double, v: Double)
+
+    /** Resultado del último [meshLoopProbe]; null = sin sondear. */
+    val loopProbe: StateFlow<LoopProbe?>
+
+    /** Olvida el último sondeo de loop cut. */
+    fun clearLoopProbe()
+
+    /** Re-ubica el corte de una sesión LOOP_CUT activa tocando la malla. */
+    fun toolLoopPick(u: Double, v: Double)
 }

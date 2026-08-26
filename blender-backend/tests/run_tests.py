@@ -12,6 +12,7 @@ Salida: resumen de PASS/FAIL y código de salida 1 si algo falla.
 
 from __future__ import annotations
 
+import math
 import os
 import shutil
 import sys
@@ -58,12 +59,119 @@ def fail_reply(name: str, reply: dict, expect_code: str = "") -> None:
 
 
 def scenario(client: WSClient) -> None:
+    print("\n[0] Transporte H.264 preferido y MJPEG fallback")
+    import socket
+
+    from blender_tablet_remote.streaming.mjpeg import CLIENT_SEND_BUFFER, _tune_client_socket
+
+    class FakeSocket:
+        def __init__(self):
+            self.options = {}
+
+        def setsockopt(self, level, option, value):
+            self.options[(level, option)] = value
+
+    mjpeg_socket = FakeSocket()
+    _tune_client_socket(mjpeg_socket)
+    check(
+        "MJPEG limita la cola TCP de salida",
+        mjpeg_socket.options.get((socket.SOL_SOCKET, socket.SO_SNDBUF)) == CLIENT_SEND_BUFFER
+        and CLIENT_SEND_BUFFER <= 32 * 1024,
+        str(mjpeg_socket.options),
+    )
+    check(
+        "MJPEG desactiva Nagle",
+        mjpeg_socket.options.get((socket.IPPROTO_TCP, socket.TCP_NODELAY)) == 1,
+        str(mjpeg_socket.options),
+    )
+    from blender_tablet_remote.streaming.frames import FrameBuffer
+    from blender_tablet_remote.streaming.mjpeg import StreamServer
+    demand_server = StreamServer(FrameBuffer(), lambda: {}, FrameBuffer())
+    demand_server.clients_delta(+1, "h264")
+    check("solo H.264 se codifica para cliente H.264",
+          demand_server.formats_wanted() == {"h264"}, str(demand_server.formats_wanted()))
+    demand_server.clients_delta(+1, "mjpeg")
+    check("MJPEG arranca solo al conectar fallback",
+          demand_server.formats_wanted() == {"h264", "mjpeg"}, str(demand_server.formats_wanted()))
+    demand_server.clients_delta(-1, "h264")
+    check("H.264 se apaga al quedar solo fallback",
+          demand_server.formats_wanted() == {"mjpeg"}, str(demand_server.formats_wanted()))
+
+    # El timestamp del multipart debe incluir la espera/coste del codificador. Si
+    # se sellara al publicar, una cola ffmpeg de varios segundos parecería latencia
+    # cero tanto en /stats como en Android y el diagnóstico sería engañoso.
+    import io
+    import time
+    from blender_tablet_remote.streaming.encoder import JpegEncoder
+    measured_frames = FrameBuffer()
+    measured_encoder = JpegEncoder(measured_frames)
+    captured_at = time.time() - 0.025
+    measured_encoder._capture_stamps.put(captured_at)
+    jpeg = b"synthetic-jpeg"
+    fake_stdout = io.BytesIO(
+        b"--ffmpeg\r\nContent-Type: image/jpeg\r\nContent-Length: "
+        + str(len(jpeg)).encode() + b"\r\n\r\n" + jpeg
+    )
+    measured_encoder._read_loop(type("FakeProc", (), {"stdout": fake_stdout})())
+    published, seq, stamp = measured_frames.latest()
+    check("timestamp MJPEG nace en captura", seq == 1 and published == jpeg and stamp == captured_at,
+          f"seq={seq}, stamp={stamp}, captured={captured_at}")
+    check("métrica incluye captura -> ffmpeg", measured_encoder.stats["last_encode_ms"] >= 20.0,
+          str(measured_encoder.stats))
+
+    from blender_tablet_remote.streaming.h264 import (
+        FLAG_CONFIG, FLAG_KEYFRAME, HEADER_SIZE, flags_for, pack_header, split_access_units,
+    )
+    import struct
+    au1 = b"\x00\x00\x00\x01\x09\x10\x00\x00\x00\x01\x67x\x00\x00\x01\x68y\x00\x00\x01\x65z"
+    au2 = b"\x00\x00\x00\x01\x09\x10\x00\x00\x01\x41q"
+    units, tail = split_access_units(au1 + au2)
+    check("H.264 separa access units por AUD", units == [au1] and tail == au2,
+          f"units={len(units)} tail={len(tail)}")
+    flags = flags_for(au1)
+    check("H.264 detecta config + keyframe", flags == FLAG_CONFIG | FLAG_KEYFRAME, str(flags))
+    header = pack_header(7, 123.456, len(au1), 1280, 754, flags)
+    unpacked = struct.unpack(">4sBBHIQIII", header)
+    check("framing btr-h264-v1 es estable", len(header) == HEADER_SIZE and
+          unpacked == (b"BTRH", 1, flags, 32, 7, 123456000, len(au1), 1280, 754), str(unpacked))
+    from blender_tablet_remote.streaming.encoder import H264Encoder
+    encoded_frames = FrameBuffer()
+    h264_encoder = H264Encoder(encoded_frames)
+    started = h264_encoder.ensure(64, 64, 24, 70)
+    for _ in range(2):
+        h264_encoder.submit(bytes(64 * 64 * 4))
+        time.sleep(0.03)
+    deadline = time.time() + 2.0
+    while encoded_frames.latest()[1] == 0 and time.time() < deadline:
+        time.sleep(0.02)
+    encoded, encoded_seq, _ = encoded_frames.latest()
+    h264_encoder.stop()
+    check("ffmpeg/libx264 produce Annex B en vivo", started and encoded_seq > 0 and
+          flags_for(encoded) == FLAG_CONFIG | FLAG_KEYFRAME,
+          f"started={started} seq={encoded_seq} bytes={len(encoded)} flags={flags_for(encoded)}")
+    jpeg_live_frames = FrameBuffer()
+    jpeg_live = JpegEncoder(jpeg_live_frames)
+    jpeg_started = jpeg_live.ensure(64, 64, 24, 70)
+    for _ in range(3):
+        jpeg_live.submit(bytes(64 * 64 * 4))
+        time.sleep(0.03)
+    deadline = time.time() + 2.0
+    while jpeg_live_frames.latest()[1] == 0 and time.time() < deadline:
+        time.sleep(0.02)
+    jpeg_data, jpeg_seq, _ = jpeg_live_frames.latest()
+    jpeg_live.stop()
+    check("ffmpeg/MJPEG fallback arranca en vivo", jpeg_started and jpeg_seq > 0 and
+          jpeg_data.startswith(b"\xff\xd8"),
+          f"started={jpeg_started} seq={jpeg_seq} bytes={len(jpeg_data)}")
+
     print("\n[1] Handshake, auth y capacidades")
     caps = ok_reply("server.capabilities", client.command("server.capabilities"))
     check("hay comandos registrados", len(caps.get("commands", [])) > 20, str(caps.get("commands")))
     check("modo background detectado", caps.get("background") is True)
     check("protocolo v2", caps.get("protocol_version") == "2.0", str(caps.get("protocol_version")))
     check("features estructuradas", isinstance(caps.get("features", {}).get("transform_modal"), dict))
+    check("H.264 es preferido con MJPEG fallback",
+          caps.get("features", {}).get("stream", {}).get("transports") == ["H264", "MJPEG"])
     check("enums canónicos", caps.get("enums", {}).get("constraint") == ["FREE", "X", "Y", "Z", "XY", "XZ", "YZ", "NORMAL", "VIEW"])
     check("unidades explícitas", caps.get("units", {}).get("rotation") == "DEGREE")
 
@@ -160,6 +268,14 @@ def scenario(client: WSClient) -> None:
     check("esfera añadida", any(o.type == "MESH" and "Sphere" in o.name for o in bpy.data.objects))
 
     print("\n[9] Gestos con coalescing")
+    from blender_tablet_remote.gestures import _Accumulator
+    accumulated = _Accumulator()
+    for _ in range(200):
+        accumulated.add(0.001, -0.0005, 1.001)
+    dx, dy, factor = accumulated.take()
+    check("el coalescing conserva todo el desplazamiento", abs(dx - 0.2) < 1e-9 and abs(dy + 0.1) < 1e-9,
+          f"dx={dx}, dy={dy}")
+    check("el coalescing conserva todo el factor", abs(factor - 1.001 ** 200) < 1e-9, str(factor))
     ok_reply("object.select Cube", client.command("object.select", {"names": ["Cube"]}))
     cube.location = (0, 0, 0)
     before = bridge.status()["gestures_run"]
@@ -352,6 +468,30 @@ def modal_scenario(client: WSClient) -> None:
     check("cuadra a 5 grados", abs(result["angle"] - 45.0) < 1e-6, str(result["angle"]))
     ok_reply("cancelar rotación", client.command("transform.cancel"))
 
+    # El snap cuantiza EN VIVO sobre el valor acumulado: varios arrastres pequeños
+    # seguidos dentro de la misma sesión dan varios saltos, no uno por gesto.
+    # ROTATE no necesita viewport para el nudge, así que esto corre en background.
+    # `status()` devuelve el ángulo en grados; el step viaja en radianes.
+    step_degrees = 5.0
+    ok_reply("rotar acumulativa", client.command("transform.begin", {
+        "mode": "ROTATE", "axes": ["Z"], "snap": True, "snap_type": "INCREMENT",
+        "step": math.radians(step_degrees),
+    }))
+    seen_angles = []
+    for _ in range(8):
+        # Cada nudge suma dx*pi (≈18°): cruza varios pasos y debe cuantizarse sobre
+        # el valor acumulado, no reiniciarse en cada nudge.
+        nudged = ok_reply("nudge", client.command("transform.nudge", {"dx": 0.1, "dy": 0.0}))
+        seen_angles.append(nudged["angle"])
+    distinct = len({round(a, 6) for a in seen_angles})
+    check("el snap acumula entre gestos: más de un salto", distinct >= 3,
+          f"{distinct} ángulos distintos: {seen_angles}")
+    final_angle = seen_angles[-1]
+    check("el ángulo final sigue en múltiplos del paso",
+          abs(final_angle / step_degrees - round(final_angle / step_degrees)) < 1e-6,
+          str(final_angle))
+    ok_reply("cancelar acumulativa", client.command("transform.cancel"))
+
     ok_reply("escalar", client.command("transform.begin", {"mode": "SCALE", "axes": ["X"]}))
     ok_reply("factor 2", client.command("transform.value", {"values": [2.0, 2.0, 2.0]}))
     check("escala solo en X", abs(cube.scale.x - 2.0) < 1e-5 and abs(cube.scale.y - 1.0) < 1e-5, str(cube.scale))
@@ -423,9 +563,39 @@ def file_scenario(client: WSClient) -> None:
     fail_reply("limit inválido", client.command("file.recent", {"limit": "muchos"}), "bad_payload")
 
     folder = tempfile.mkdtemp(prefix="blender-remote-test-")
+    nested = os.path.join(folder, "Proyectos")
+    os.mkdir(nested)
+    with open(os.path.join(folder, "ignorado.txt"), "w", encoding="utf-8") as handle:
+        handle.write("no se muestra")
+    locations = ok_reply("file.locations", client.command("file.locations"))
+    original_default = locations["default_folder"]
+    check("lugares incluyen default/home/root",
+          {"DEFAULT", "HOME", "ROOT"}.issubset({item["id"] for item in locations["locations"]}), str(locations))
+    configured = ok_reply("configurar carpeta", client.command("file.default_folder", {"path": folder}))
+    check("carpeta predeterminada canónica", configured.get("default_folder") == os.path.realpath(folder), str(configured))
+    listing = ok_reply("explorar alias default", client.command("file.browse", {"path": "@default"}))
+    check("browse solo muestra directorios y blend",
+          [item["name"] for item in listing["entries"]] == ["Proyectos"], str(listing["entries"]))
+    check("browse trae breadcrumbs del host",
+          listing.get("breadcrumbs") and listing["breadcrumbs"][-1] == {"name": os.path.basename(folder), "path": os.path.realpath(folder)},
+          str(listing.get("breadcrumbs")))
+    fail_reply("browse de fichero", client.command("file.browse", {"path": "ignorado.txt"}), "not_directory")
+    fail_reply("default inexistente", client.command("file.default_folder", {"path": "no-existe"}), "not_found")
     target = os.path.join(folder, "prueba")  # sin extensión: la debe añadir el servidor
 
-    info = ok_reply("file.save_as", client.command("file.save_as", {"path": target}))
+    legacy = ok_reply("file.save_as path compatible", client.command("file.save_as", {"path": "legacy"}))
+    check("path legado relativo sigue operativo", legacy.get("path") == os.path.join(folder, "legacy.blend"), str(legacy))
+    fail_reply("save_as exige folder y name juntos", client.command("file.save_as", {"name": "prueba"}), "bad_payload")
+    fail_reply("save_as no mezcla formatos", client.command("file.save_as", {
+        "path": "otro", "folder": folder, "name": "prueba"}), "bad_payload")
+    for unsafe_name in ("", ".", "..", "sub/prueba", "sub\\prueba", "nul\x00name"):
+        fail_reply(f"nombre inseguro {unsafe_name!r}", client.command("file.save_as", {
+            "folder": folder, "name": unsafe_name}), "bad_payload")
+    fail_reply("folder debe ser directorio", client.command("file.save_as", {
+        "folder": os.path.join(folder, "ignorado.txt"), "name": "prueba"}), "not_directory")
+
+    info = ok_reply("file.save_as folder+name", client.command("file.save_as", {
+        "folder": listing["path"], "name": "prueba"}))
     check("guardó con extensión .blend", info.get("path", "").endswith("prueba.blend"), str(info))
     check("el archivo existe en disco", os.path.isfile(target + ".blend"), info.get("path", ""))
     check("ya consta como guardado", info.get("saved") is True, str(info))
@@ -437,6 +607,7 @@ def file_scenario(client: WSClient) -> None:
 
     info = ok_reply("file.open", client.command("file.open", {"path": target + ".blend"}))
     check("reabrió el archivo guardado", info.get("name") == "prueba.blend", str(info))
+    fail_reply("open rechaza extensión ajena", client.command("file.open", {"path": os.path.join(folder, "ignorado.txt")}), "not_blend")
 
     # El servidor tiene que seguir en pie después de cargar otro .blend: el timer del
     # puente es persistent, pero es justo lo que se rompería sin darse cuenta.
@@ -444,6 +615,7 @@ def file_scenario(client: WSClient) -> None:
     state_after = ok_reply("scene.get_state tras abrir", client.command("scene.get_state"))
     check("hay estado tras la carga", "mode" in state_after, str(state_after))
 
+    ok_reply("restaurar carpeta predeterminada", client.command("file.default_folder", {"path": original_default}))
     shutil.rmtree(folder, ignore_errors=True)
 
 
@@ -577,7 +749,146 @@ def modeling_scenario(client: WSClient) -> None:
     check("fase confirmada", confirmed.get("phase") == "CONFIRMED", str(confirmed))
     ok_reply("deseleccionar", client.command("selection.all", {"value": False}))
     fail_reply("sin arista", client.command("tool.begin", {"tool": "LOOP_CUT"}), "empty_selection")
+
+    print("  LOOP_CUT: opciones del modal (falloff/even/flip/clamp)")
+    fail_reply("falloff inválido", client.command("tool.begin", {
+        "tool": "LOOP_CUT", "edge": 0, "parameters": {"falloff": "NOPE"}}), "bad_payload")
+    fail_reply("factor 1.5 con clamp", client.command("tool.begin", {
+        "tool": "LOOP_CUT", "edge": 0, "parameters": {"factor": 1.5}}), "bad_payload")
+    ok_reply("factor 1.5 sin clamp", client.command("tool.begin", {
+        "tool": "LOOP_CUT", "edge": 0, "parameters": {"factor": 1.5, "clamp": False}}))
+    ok_reply("cancel factor largo", client.command("tool.cancel"))
+
+    def _preview_cut_verts():
+        """Coordenadas de los vértices que añadió el preview, por tramo posicional."""
+        data = bpy.context.view_layer.objects.active.data
+        bm_now = bmesh.from_edit_mesh(data)
+        return sorted(tuple(round(c, 5) for c in v.co) for v in bm_now.verts if v.select)
+
+    ok_reply("semilla flip", client.command("selection.elements", {"edges": [0], "mode": "SET"}))
+    ok_reply("flip con 0.6", client.command("tool.begin", {
+        "tool": "LOOP_CUT", "parameters": {"factor": 0.6, "flip": True}}))
+    flipped = _preview_cut_verts()
+    ok_reply("cancel flip", client.command("tool.cancel"))
+    ok_reply("semilla espejo", client.command("selection.elements", {"edges": [0], "mode": "SET"}))
+    ok_reply("factor -0.6", client.command("tool.begin", {
+        "tool": "LOOP_CUT", "parameters": {"factor": -0.6}}))
+    mirrored = _preview_cut_verts()
+    ok_reply("cancel espejo", client.command("tool.cancel"))
+    check("flip espeja el factor", flipped == mirrored, f"{flipped[:2]} vs {mirrored[:2]}")
+
+    # even: tira de dos quads con columnas de altura 1/2/1. Con factor 0.5 el
+    # reparto proporcional sube cada arista a su 75%; con even, la columna doble
+    # avanza la misma distancia absoluta que las simples (t=2/3 → z=1.3333).
+    wedge_mesh = bpy.data.meshes.new("Wed")
+    bmw = bmesh.new()
+    wv = [bmw.verts.new(co) for co in
+          ((0, 0, 0), (0, 0, 1), (1, 0, 0), (1, 0, 2), (2, 0, 0), (2, 0, 1))]
+    bmw.faces.new((wv[0], wv[1], wv[3], wv[2]))
+    bmw.faces.new((wv[2], wv[3], wv[5], wv[4]))
+    bmw.to_mesh(wedge_mesh)
+    bmw.free()
+    wedge = bpy.data.objects.new("Wed", wedge_mesh)
+    bpy.context.collection.objects.link(wedge)
+    bpy.context.view_layer.objects.active = wedge
+    wedge.select_set(True)
+    # Los operadores no se pueden lanzar desde el hilo del cliente: el cambio de
+    # modo va por el propio servidor, que sí corre en el hilo principal.
+    ok_reply("entrar en Edit para el wedge", client.command("mode.edit"))
+    # El índice de la arista no es estable tras to_mesh: la semilla se localiza
+    # por geometría (la columna de altura 1 en x=0).
+    bmw_edit = bmesh.from_edit_mesh(wedge.data)
+    column = next(e for e in bmw_edit.edges
+                  if sorted(tuple(round(c, 4) for c in v.co) for v in e.verts) == [(0.0, 0.0, 0.0), (0.0, 0.0, 1.0)])
+    seed = column.index
+    base_count = ok_reply("topo del wedge", client.command("mesh.info"))["verts"]
+
+    def _wedge_cut_heights():
+        bm_live = bmesh.from_edit_mesh(wedge.data)
+        return sorted(round(v.co.z, 4) for v in bm_live.verts[base_count:base_count + 3])
+
+    begun = ok_reply("begin even", client.command("tool.begin", {
+        "tool": "LOOP_CUT", "edge": seed, "parameters": {"factor": 0.5, "even": True}}))
+    check("even viaja en la sesión", begun.get("parameters", {}).get("even") is True, str(begun))
+    zs = _wedge_cut_heights()
+    check("even coloca por longitud real", len(zs) == 3 and abs(zs[2] - 1.3333) < 1e-3, str(zs))
+    ok_reply("cancel even", client.command("tool.cancel"))
+    ok_reply("begin proporcional", client.command("tool.begin", {
+        "tool": "LOOP_CUT", "edge": seed, "parameters": {"factor": 0.5}}))
+    zs = _wedge_cut_heights()
+    check("proporcional cae en el 75% de cada arista", len(zs) == 3 and abs(zs[2] - 1.5) < 1e-3, str(zs))
+    ok_reply("cancel proporcional", client.command("tool.cancel"))
+    ok_reply("wedge a Object", client.command("mode.object"))
+    bpy.data.objects.remove(wedge, do_unlink=True)
+    bpy.context.view_layer.objects.active = bpy.data.objects.get("Cube")
     client.command("mode.object")
+
+    print("  selection.more / selection.less")
+    ok_reply("escena para more/less", client.command("file.new"))
+    ok_reply("Cube more", client.command("object.select", {"names": ["Cube"]}))
+    fail_reply("more en Object", client.command("selection.more"), "wrong_mode")
+    fail_reply("less en Object", client.command("selection.less"), "wrong_mode")
+    ok_reply("entrar en Edit", client.command("mode.edit"))
+    ok_reply("modo cara", client.command("selection.face"))
+    ok_reply("una sola cara", client.command("selection.elements", {"faces": [0], "mode": "SET"}))
+    grown = ok_reply("more caras", client.command("selection.more"))
+    check("more añadió adyacentes", len(grown["faces"]) > 1, str(grown))
+    grown_count = len(grown["faces"])
+    shrunk = ok_reply("less caras", client.command("selection.less"))
+    check("less retiró fronterizas", len(shrunk["faces"]) < grown_count, str(shrunk))
+    ok_reply("modo vertice", client.command("selection.vertex"))
+    ok_reply("un solo vertice", client.command("selection.elements", {"verts": [0], "mode": "SET"}))
+    grown_v = ok_reply("more verts", client.command("selection.more"))
+    check("more verts creció", len(grown_v["verts"]) > 1, str(grown_v))
+    shrunk_v = ok_reply("less verts", client.command("selection.less"))
+    check("less verts menguó", len(shrunk_v["verts"]) < len(grown_v["verts"]), str(shrunk_v))
+    ok_reply("modo arista", client.command("selection.edge"))
+    ok_reply("una sola arista", client.command("selection.elements", {"edges": [0], "mode": "SET"}))
+    grown_e = ok_reply("more edges", client.command("selection.more"))
+    check("more edges creció", len(grown_e["edges"]) > 1, str(grown_e))
+    shrunk_e = ok_reply("less edges", client.command("selection.less"))
+    check("less edges menguó", len(shrunk_e["edges"]) < len(grown_e["edges"]), str(shrunk_e))
+    client.command("mode.object")
+
+    print("  view.local")
+    ok_reply("esfera detras", client.command("object.add", {"primitive": "SPHERE"}))
+    sphere_name = client.command("scene.get_state")["result"]["active_object"]
+    ok_reply("limpiar seleccion", client.command("object.select_all", {"value": False}))
+    ok_reply("solo el cubo", client.command("object.select", {"names": ["Cube"]}))
+    ok_reply("pre-ocultar esfera", client.command("object.hide", {"objects": [sphere_name]}))
+    # select=False a propósito: el reveal por defecto selecciona, y una esfera
+    # seleccionada no cuenta como "resto" a la hora de aislar.
+    ok_reply("revelar esfera sin seleccionar", client.command("object.reveal", {"objects": [sphere_name], "select": False}))
+    local_on = ok_reply("aislar", client.command("view.local"))
+    check("local activo", local_on.get("local") is True, str(local_on))
+    check("la esfera quedo oculta", client.command("scene.get_object", {"name": sphere_name})["result"]["visible"] is False)
+    check("el cubo sigue visible", client.command("scene.get_object", {"name": "Cube"})["result"]["visible"] is True)
+    ok_reply("ocultar la esfera de verdad", client.command("object.hide", {"objects": [sphere_name]}))
+    local_off = ok_reply("desaislar", client.command("view.local", {"enabled": False}))
+    check("local inactivo", local_off.get("local") is False, str(local_off))
+    check("la esfera NO se revela al desaislar (se oculto aparte)",
+          client.command("scene.get_object", {"name": sphere_name})["result"]["visible"] is False)
+    check("el cubo sigue visible tras desaislar",
+          client.command("scene.get_object", {"name": "Cube"})["result"]["visible"] is True)
+    ok_reply("revelar todo", client.command("object.reveal"))
+    ok_reply("aislar otra vez", client.command("view.local"))
+    ok_reply("nuevo archivo con aislando", client.command("file.new"))
+    state_after = ok_reply("estado tras new", client.command("scene.get_state"))
+    check("new resetea el aislamiento sin ocultar nada",
+          not state_after.get("hidden_objects"), str(state_after.get("hidden_objects")))
+
+    print("  view.shading en background")
+    # En background puede haber layout definido en el .blend (y el comando funciona
+    # igualmente) o no haberlo: ambos caminos son correctos, la traza no.
+    shading_reply = client.command("view.shading", {"mode": "WIREFRAME"})
+    if shading_reply.get("ok"):
+        state_shading = ok_reply("estado shading", client.command("scene.get_state"))
+        check("el shading aplicado viaja en el estado",
+              state_shading.get("shading") == "WIREFRAME", str(state_shading.get("shading")))
+    else:
+        check("shading sin viewport responde no_viewport",
+              shading_reply.get("code") == "no_viewport", str(shading_reply))
+    fail_reply("modo de shading invalido", client.command("view.shading", {"mode": "NOPE"}), "bad_payload")
 
 
 def auth_scenario() -> None:

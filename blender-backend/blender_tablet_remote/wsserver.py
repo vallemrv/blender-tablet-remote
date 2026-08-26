@@ -478,8 +478,24 @@ def _encode_frame(opcode: int, payload: bytes) -> bytes:
 
 
 def _unmask(payload: bytes, key: bytes) -> bytes:
-    mask = key * (len(payload) // 4 + 1)
-    return bytes(a ^ b for a, b in zip(payload, mask))
+    n = len(payload)
+    if n == 0:
+        return b""
+    if n < 512:
+        mask = key * (n // 4 + 1)
+        return bytes(a ^ b for a, b in zip(payload, mask))
+    # XOR por bloques de 8 bytes: el bucle byte a byte de Python era O(n) interpretado
+    # y con payloads grandes (selecciones con miles de índices) ahogaba al lector.
+    out = bytearray(payload)
+    view = memoryview(out)
+    mask64 = int.from_bytes(key * 2, "big")
+    full = n & ~7
+    for off in range(0, full, 8):
+        chunk = int.from_bytes(payload[off:off + 8], "big") ^ mask64
+        view[off:off + 8] = chunk.to_bytes(8, "big")
+    for i in range(full, n):
+        out[i] ^= key[i & 3]
+    return bytes(out)
 
 
 def _token_from_query(query: str) -> str | None:

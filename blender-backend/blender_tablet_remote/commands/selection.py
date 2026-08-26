@@ -169,6 +169,14 @@ def pick(payload: dict) -> dict:
     if active is not None and active.mode == "EDIT":
         return _with_state(_pick_element(active, location, face_index, mode, payload))
 
+    # En wireframe+xray, picar sobre lo ya seleccionado con ADD/TOGGLE pasa al
+    # objeto que está detrás (el Alt+click de Blender): se ve el armazón entero
+    # y poder elegir solo el frente sería frustrante.
+    from .view import is_xray_wireframe
+
+    if is_xray_wireframe() and mode in ("ADD", "TOGGLE") and obj.select_get():
+        origin, location, obj = _cycle_behind(depsgraph, origin, direction, location, obj)
+
     if mode == "SET":
         for o in bpy.context.view_layer.objects:
             o.select_set(False)
@@ -177,8 +185,36 @@ def pick(payload: dict) -> dict:
     return _with_state({"hit": True, "object": obj.name, "location": list(location)})
 
 
+def _cycle_behind(depsgraph, origin, direction, location, obj):
+    """Siguiente impacto del rayo más allá del objeto ya seleccionado.
+
+    `ray_cast` no acepta una distancia mínima, así que se avanza el origen justo
+    pasado el impacto anterior y se repite. Tope de 16: en una pila de objetos
+    superpuestos más profunda que eso, tocar el fondo a ciegas no es selección.
+    """
+    from mathutils import Vector
+
+    for _ in range(16):
+        travelled = (location - origin).length
+        epsilon = max(1e-5, travelled * 1e-4)
+        origin = origin + direction * (travelled + epsilon)
+        hit, location, _normal, _face_index, candidate, _matrix = bpy.context.scene.ray_cast(
+            depsgraph, origin, direction
+        )
+        if not hit or candidate is None:
+            break
+        if not candidate.select_get():
+            return origin, Vector(location), candidate
+    return origin, Vector(location), obj
+
+
 def _pick_element(obj, world_location, face_index: int, mode: str, payload: dict | None = None) -> dict:
-    """Selecciona solo geometría visible de la cara impactada y dentro del umbral."""
+    """Selecciona geometría visible de la cara impactada y dentro del umbral.
+
+    Con wireframe+xray los vértices/aristas de detrás son tan picables como los
+    del frente: los candidatos salen de la malla entera, no solo de la cara del
+    raycast (que siempre es la frontal). Sin xray se mantiene la oclusión real.
+    """
     payload = payload or {}
     bm = edit_bmesh(obj)
     found = find_view3d()
@@ -187,6 +223,14 @@ def _pick_element(obj, world_location, face_index: int, mode: str, payload: dict
     touch = Vector((get_float(payload, "u", 0.5), get_float(payload, "v", 0.5)))
     threshold = _touch_threshold(payload)
     sel_mode = bpy.context.scene.tool_settings.mesh_select_mode
+
+    from .view import is_xray_wireframe
+
+    if is_xray_wireframe() and (sel_mode[0] or sel_mode[1]):
+        through = _pick_through(obj, bm, rv3d, touch, threshold, mode, sel_mode)
+        if through is not None:
+            return through
+        return {"hit": False, "reason": "outside_threshold"}
 
     bm.faces.ensure_lookup_table()
     visible_face = bm.faces[face_index] if 0 <= face_index < len(bm.faces) else None
@@ -230,6 +274,63 @@ def _pick_element(obj, world_location, face_index: int, mode: str, payload: dict
             "distance": distance}
 
 
+def _pick_through(obj, bm, rv3d, touch: Vector, threshold: float, mode: str, sel_mode) -> dict | None:
+    """Pick en wireframe+xray: candidatos de toda la malla, ciclando con ADD/TOGGLE.
+
+    Se ve (y se quiere tocar) el armazón entero, no solo la cara frontal del rayo:
+    vértices y aristas se puntúan por distancia en pantalla al toque y, con
+    ADD/TOGGLE sobre elementos ya seleccionados, se avanza al no seleccionado más
+    cercano — el equivalente táctil del Alt+click de Blender, igual que
+    `_cycle_behind` en Object Mode.
+    """
+    matrix = obj.matrix_world
+    scored: list[tuple[float, object]] = []
+    if sel_mode[0]:
+        kind = "vert"
+        for vert in bm.verts:
+            if vert.hide:
+                continue
+            projected = camera.project(matrix @ vert.co, rv3d)
+            if projected is None:
+                continue
+            distance = (Vector(projected) - touch).length
+            if distance <= threshold:
+                scored.append((distance, vert))
+    else:
+        kind = "edge"
+        for edge in bm.edges:
+            if edge.hide:
+                continue
+            points = [camera.project(matrix @ vert.co, rv3d) for vert in edge.verts]
+            if None in points:
+                continue
+            distance = _point_segment_distance(touch, Vector(points[0]), Vector(points[1]))
+            if distance <= threshold:
+                scored.append((distance, edge))
+
+    if not scored:
+        return None
+
+    if mode == "SET":
+        for collection in (bm.verts, bm.edges, bm.faces):
+            for elem in collection:
+                elem.select = False
+
+    ordered = sorted(scored, key=lambda item: item[0])
+    distance, target = ordered[0]
+    if mode in ("ADD", "TOGGLE"):
+        for candidate_distance, candidate in ordered:
+            if not candidate.select:
+                distance, target = candidate_distance, candidate
+                break
+
+    _apply_op(target, mode)
+    bm.select_flush(target.select)
+    flush_bmesh(obj, bm, destructive=False)
+    return {"hit": True, "object": obj.name, "element": kind, "index": target.index,
+            "distance": distance}
+
+
 def _point_segment_distance(point: Vector, start: Vector, end: Vector) -> float:
     segment = end - start
     length_squared = segment.length_squared
@@ -255,7 +356,15 @@ def _projected_center(obj, elem, rv3d):
 
 
 def _shape_select(payload: dict, contains) -> dict:
-    obj = active_object()
+    # En Object Mode no hace falta objeto activo (puede no haberlo tras un
+    # delete); en Edit sí, y edit_bmesh lo exige.
+    active = bpy.context.view_layer.objects.active
+    if active is not None and active.mode == "EDIT":
+        return _edit_shape_select(active, payload, contains)
+    return _object_shape_select(payload, contains)
+
+
+def _edit_shape_select(obj, payload: dict, contains) -> dict:
     bm = edit_bmesh(obj)
     found = find_view3d()
     if found is None:
@@ -279,6 +388,38 @@ def _shape_select(payload: dict, contains) -> dict:
     bm.select_flush_mode()
     flush_bmesh(obj, bm, destructive=False)
     return dict(sel_info({}), affected=affected)
+
+
+def _object_shape_select(payload: dict, contains) -> dict:
+    """Caja/círculo en Object Mode: cae el objeto cuyo centro proyectado queda dentro.
+
+    El centro es `matrix_world.translation`: barato y suficiente para "englobar
+    eso de ahí"; reproyectar el bound_box entero no cambia qué se selecciona en
+    la práctica y sí multiplica el coste por objeto.
+    """
+    found = find_view3d()
+    if found is None:
+        raise CommandError("No 3D viewport available", code="no_viewport")
+    rv3d = found[3]
+    camera.sync_from_region(rv3d)
+    mode = _selection_op(payload)
+    view_layer = bpy.context.view_layer
+    if mode == "SET":
+        for o in view_layer.objects:
+            o.select_set(False)
+    affected = 0
+    for o in view_layer.objects:
+        if o.hide_get():
+            continue
+        projected = camera.project(o.matrix_world.translation, rv3d)
+        if projected is not None and contains(projected[0], projected[1]):
+            o.select_set(False if mode == "REMOVE" else (not o.select_get() if mode == "TOGGLE" else True))
+            affected += 1
+    return dict(
+        state.snapshot(include_view=False),
+        affected=affected,
+        selected_objects=[o.name for o in view_layer.objects if o.select_get()],
+    )
 
 
 @command("selection.box", mutating=True)
@@ -408,6 +549,82 @@ def reveal(payload: dict) -> dict:
             if elem.hide:
                 elem.hide_set(False)
                 elem.select = select
+    bm.select_flush_mode()
+    flush_bmesh(obj, bm, destructive=False)
+    return sel_info({})
+
+
+@command("selection.more", mutating=True)
+def more(payload: dict) -> dict:
+    """Ctrl+Numpad+ : extiende la selección a lo adyacente según el submodo."""
+    return _grow_shrink(grow=True)
+
+
+@command("selection.less", mutating=True)
+def less(payload: dict) -> dict:
+    """Ctrl+Numpad- : retira lo que toca algo no seleccionado."""
+    return _grow_shrink(grow=False)
+
+
+def _grow_shrink(grow: bool) -> dict:
+    obj = active_object()
+    if obj is None or obj.mode != "EDIT":
+        raise CommandError("Not in Edit Mode", code="wrong_mode")
+    bm = edit_bmesh(obj)
+    flags = tuple(bpy.context.scene.tool_settings.mesh_select_mode)
+
+    # Las adyacencias se miran SIEMPRE entre elementos del mismo nivel, y contra
+    # una instantánea de la selección de partida: marcar durante el propio bucle
+    # encadena vecinos recién seleccionados y un solo `more` se come la malla.
+    if flags == MODE_FLAGS["VERTEX"]:
+        selected = {v.index for v in bm.verts if v.select and not v.hide}
+        if grow:
+            for vert in bm.verts:
+                if vert.hide or vert.select:
+                    continue
+                if any(edge.other_vert(vert).index in selected
+                       for edge in vert.link_edges if not edge.hide):
+                    vert.select = True
+        else:
+            for vert in bm.verts:
+                if vert.hide or not vert.select:
+                    continue
+                if any(not edge.hide and edge.other_vert(vert).index not in selected
+                       for edge in vert.link_edges):
+                    vert.select = False
+    elif flags == MODE_FLAGS["EDGE"]:
+        selected = {e.index for e in bm.edges if e.select and not e.hide}
+        if grow:
+            for edge in bm.edges:
+                if edge.hide or edge.select:
+                    continue
+                if any(neighbor.index in selected
+                       for vert in edge.verts for neighbor in vert.link_edges):
+                    edge.select = True
+        else:
+            for edge in bm.edges:
+                if edge.hide or not edge.select:
+                    continue
+                if any(neighbor.index not in selected
+                       for vert in edge.verts for neighbor in vert.link_edges if not neighbor.hide):
+                    edge.select = False
+    else:
+        selected = {f.index for f in bm.faces if f.select and not f.hide}
+        if grow:
+            for face in bm.faces:
+                if face.hide or face.select:
+                    continue
+                if any(neighbor.index in selected
+                       for edge in face.edges for neighbor in edge.link_faces):
+                    face.select = True
+        else:
+            for face in bm.faces:
+                if face.hide or not face.select:
+                    continue
+                if any(neighbor.index not in selected
+                       for edge in face.edges for neighbor in edge.link_faces):
+                    face.select = False
+
     bm.select_flush_mode()
     flush_bmesh(obj, bm, destructive=False)
     return sel_info({})

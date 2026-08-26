@@ -2,9 +2,11 @@ package com.blendertablet.remote.network
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.util.Log
 import java.io.IOException
 import java.net.Proxy
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -35,6 +37,10 @@ data class StreamStats(
      */
     val lagMs: Long = 0,
     val kbPerFrame: Int = 0,
+    /** Tiempo local de BitmapFactory para el último frame publicado. */
+    val decodeMs: Long = 0,
+    /** Frames leídos que se omitieron porque ya había llegado uno más nuevo. */
+    val staleFrames: Long = 0,
     val error: String? = null,
 )
 
@@ -60,12 +66,15 @@ class ViewportStream(
 
     private var job: Job? = null
     private var minDelta = Long.MAX_VALUE
+    private val latestReadSeq = AtomicLong(0)
 
-    fun start(host: String, port: Int, token: String) {
+    fun start(host: String, port: Int, token: String, path: String = "/stream.mjpg") {
         stop()
         minDelta = Long.MAX_VALUE
+        latestReadSeq.set(0)
+        staleFrames = 0
         val url = buildString {
-            append("http://").append(host).append(':').append(port).append("/stream.mjpg")
+            append("http://").append(host).append(':').append(port).append(path)
             if (token.isNotBlank()) append("?token=").append(token)
         }
         job = scope.launch(Dispatchers.IO) { runWithRetry(url) }
@@ -105,13 +114,42 @@ class ViewportStream(
                 // parte más reciente: si BitmapFactory tarda, no reproducimos luego
                 // una película atrasada de todo lo que ocurrió durante el gesto.
                 val newest = Channel<Part>(Channel.CONFLATED)
+                val pool = BitmapPool()
                 val decoder = launch(Dispatchers.Default) {
                     var framesInWindow = 0
                     var windowStart = System.currentTimeMillis()
+                    var lastPublishedNs = 0L
                     for (part in newest) {
-                        val bitmap = BitmapFactory.decodeByteArray(part.body, 0, part.body.size)
+                        val decodeStarted = System.nanoTime()
+                        val bitmap = pool.decode(part.body)
                             ?: continue
+                        val decodeMs = (System.nanoTime() - decodeStarted) / 1_000_000
+                        // CONFLATED elimina lo que aún estaba esperando, pero no puede
+                        // cancelar BitmapFactory. Si durante el decode llegó otro frame,
+                        // publicar este produciría un salto visible hacia vídeo antiguo.
+                        val nowNs = System.nanoTime()
+                        val stale = part.seq < latestReadSeq.get()
+                        // Si el decoder nunca alcanza al productor, no debemos
+                        // quedarnos sin imagen indefinidamente: se admite como
+                        // máximo una publicación obsoleta cada 250 ms.
+                        if (stale && nowNs - lastPublishedNs < MAX_UI_SILENCE_NS) {
+                            pool.recycle(bitmap)
+                            staleFrames++
+                            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                                Log.d(TAG, "drop stale frame=${part.seq} latest=${latestReadSeq.get()} decode=${decodeMs}ms")
+                            }
+                            continue
+                        }
+                        val previous = _frame.value?.bitmap
                         _frame.value = ViewportFrame(bitmap, part.seq)
+                        // El bitmap sustituido vuelve al pool con dos frames de
+                        // margen: Compose puede seguir dibujándolo un instante, y
+                        // reutilizarlo antes produciría un frame rasgado.
+                        pool.retire(previous)
+                        lastPublishedNs = nowNs
+                        if (Log.isLoggable(TAG, Log.VERBOSE)) {
+                            Log.v(TAG, "publish frame=${part.seq} decode=${decodeMs}ms readToUi=${(System.nanoTime() - part.receivedAtNs) / 1_000_000}ms")
+                        }
 
                         framesInWindow++
                         val now = System.currentTimeMillis()
@@ -124,15 +162,19 @@ class ViewportStream(
                                 fps = framesInWindow * 1000f / elapsed,
                                 lagMs = (delta - minDelta).coerceAtLeast(0),
                                 kbPerFrame = part.body.size / 1024,
+                                decodeMs = decodeMs,
+                                staleFrames = staleFrames,
                             )
                             framesInWindow = 0
                             windowStart = now
                         }
                     }
+                    pool.close()
                 }
                 try {
                     while (currentCoroutineContext().isActive) {
                         val part = readPart(source) ?: break
+                        latestReadSeq.set(part.seq)
                         newest.trySend(part)
                     }
                 } finally {
@@ -143,7 +185,77 @@ class ViewportStream(
         }
     }
 
-    internal class Part(val body: ByteArray, val seq: Long, val stampMs: Long)
+    internal class Part(
+        val body: ByteArray,
+        val seq: Long,
+        val stampMs: Long,
+        val receivedAtNs: Long = System.nanoTime(),
+    )
+
+    private var staleFrames = 0L
+
+    /**
+     * Reúso de bitmaps del decoder. Sin esto, cada frame reservaba un bitmap nuevo
+     * ARGB_8888 (~8 MB a 1080p) y a 30 fps eran ~250 MB/s de asignación nativa que
+     * mantenían al GC nativo en marcha permanente: era la causa principal de los
+     * frames perdidos del viewport.
+     *
+     * - RGB_565: el JPEG de viewport no tiene alfa y ya viene suavizado en origen;
+     *   a mitad de bytes el banding es imperceptible.
+     * - inBitmap con pool: los frames descartados por ser stale vuelven
+     *   directamente; los publicados se retiran con dos frames de margen porque
+     *   Compose puede seguir dibujándolos un instante. Nunca se hace recycle() de
+     *   un bitmap publicado: reutilizarlo solo implica que el decoder escriba en él.
+     */
+    private class BitmapPool {
+        private val free = ArrayDeque<Bitmap>(3)
+        private val retired = ArrayDeque<Bitmap>(2)
+
+        fun decode(body: ByteArray): Bitmap? {
+            val reuse = free.removeFirstOrNull()
+            val options = BitmapFactory.Options().apply {
+                inPreferredConfig = Bitmap.Config.RGB_565
+                inMutable = true
+                if (reuse != null) inBitmap = reuse
+            }
+            val bitmap = try {
+                BitmapFactory.decodeByteArray(body, 0, body.size, options)
+            } catch (_: IllegalArgumentException) {
+                // El tamaño del stream cambió (stream.configure): el pool entero
+                // queda desfasado; se suelta y se reserva uno nuevo.
+                free.clear()
+                retired.clear()
+                BitmapFactory.decodeByteArray(body, 0, body.size, options.also { it.inBitmap = null })
+            }
+            if (bitmap == null && reuse != null && !reuse.isRecycled) free.addLast(reuse)
+            return if (bitmap != null && !bitmap.isRecycled) bitmap else null
+        }
+
+        /** Un frame decodificado que no se va a publicar: reutilizable ya mismo. */
+        fun recycle(bitmap: Bitmap) {
+            if (free.size < 3 && !bitmap.isRecycled) free.addLast(bitmap)
+        }
+
+        /** El bitmap que deja de estar en pantalla: se reutiliza con margen de seguridad. */
+        fun retire(bitmap: Bitmap?) {
+            if (bitmap == null || bitmap.isRecycled) return
+            retired.addLast(bitmap)
+            if (retired.size > 2) {
+                val oldest = retired.removeFirst()
+                if (free.size < 3) free.addLast(oldest)
+            }
+        }
+
+        fun close() {
+            free.clear()
+            retired.clear()
+        }
+    }
+
+    private companion object {
+        const val TAG = "BTR-Viewport"
+        const val MAX_UI_SILENCE_NS = 250_000_000L
+    }
 
     /**
      * Lee una parte del multipart. Devuelve null al final del stream.

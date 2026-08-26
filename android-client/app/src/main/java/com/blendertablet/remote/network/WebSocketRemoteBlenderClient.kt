@@ -1,5 +1,6 @@
 package com.blendertablet.remote.network
 
+import android.util.Log
 import com.blendertablet.remote.model.Axis
 import com.blendertablet.remote.model.BlenderMode
 import com.blendertablet.remote.model.BlenderState
@@ -12,19 +13,24 @@ import com.blendertablet.remote.model.AddObject
 import com.blendertablet.remote.model.Orientation
 import com.blendertablet.remote.model.Projection
 import com.blendertablet.remote.model.RecentFile
+import com.blendertablet.remote.model.RemoteFiles
 import com.blendertablet.remote.model.SelectionMode
+import com.blendertablet.remote.model.SelectionOp
+import com.blendertablet.remote.model.Shading
 import com.blendertablet.remote.model.SnapAction
 import com.blendertablet.remote.model.SnapType
 import com.blendertablet.remote.model.ToolSession
+import com.blendertablet.remote.model.LoopProbe
 import com.blendertablet.remote.model.TouchProbe
 import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.TransformSession
 import com.blendertablet.remote.model.ValueMode
 import java.net.Proxy
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -60,6 +66,7 @@ class WebSocketRemoteBlenderClient(
     private val _retryAttempt = MutableStateFlow(0)
     private val _file = MutableStateFlow(FileInfo())
     private val _recentFiles = MutableStateFlow<List<RecentFile>>(emptyList())
+    private val _remoteFiles = MutableStateFlow(RemoteFiles())
     private val _transformSession = MutableStateFlow(TransformSession())
     private val _toolSession = MutableStateFlow(ToolSession())
     private val _touchProbe = MutableStateFlow<TouchProbe?>(null)
@@ -70,6 +77,7 @@ class WebSocketRemoteBlenderClient(
     override val retryAttempt: StateFlow<Int> = _retryAttempt.asStateFlow()
     override val file: StateFlow<FileInfo> = _file.asStateFlow()
     override val recentFiles: StateFlow<List<RecentFile>> = _recentFiles.asStateFlow()
+    override val remoteFiles: StateFlow<RemoteFiles> = _remoteFiles.asStateFlow()
     override val transformSession: StateFlow<TransformSession> = _transformSession.asStateFlow()
     override val toolSession: StateFlow<ToolSession> = _toolSession.asStateFlow()
     override val touchProbe: StateFlow<TouchProbe?> = _touchProbe.asStateFlow()
@@ -79,6 +87,7 @@ class WebSocketRemoteBlenderClient(
     private data class Target(val host: String, val port: Int, val token: String)
 
     private companion object {
+        const val LATENCY_TAG = "BTR-Control"
         /**
          * Comandos cuya respuesta ES el estado de la sesión modal. No incluye
          * `transform.move/rotate/scale`, que son transformaciones sueltas y sí deben
@@ -93,6 +102,7 @@ class WebSocketRemoteBlenderClient(
         /** Comandos cuya respuesta ES el estado de la sesión de herramienta. */
         val TOOL_COMMANDS = setOf(
             "tool.begin", "tool.parameter", "tool.nudge", "tool.status",
+            "tool.loop_pick",
         )
     }
 
@@ -102,6 +112,16 @@ class WebSocketRemoteBlenderClient(
     private var attempt = 0
     private val generation = AtomicInteger(0)
     private val pending = ConcurrentHashMap<String, String>()
+    private val sentAtNs = ConcurrentHashMap<String, Long>()
+    private val stateRequestInFlight = AtomicBoolean(false)
+
+    // Identificadores de comando: un contador basta (un SecureRandom por envío era
+    // caro y no aporta nada: los ids solo tienen que ser únicos por conexión).
+    private val commandId = AtomicLong(0)
+
+    // ¿Hay un selection.pick esperando respuesta? Equivalente al antiguo
+    // pending.containsValue("selection.pick") sin recorrer la tabla entera.
+    private val pickInFlight = AtomicBoolean(false)
     @Volatile private var lastStateRefreshAt = 0L
 
     /** Arrastre acumulado que todavía no se ha mandado como `tool.nudge`. */
@@ -110,12 +130,23 @@ class WebSocketRemoteBlenderClient(
 
     private val token: String get() = target?.token.orEmpty()
 
+    /**
+     * Fragmento JSON del token, precodificado: los gestos van a 30 Hz desde el hilo
+     * de UI y construir ahí un JSONObject entero costaba más que el propio mensaje.
+     */
+    @Volatile private var tokenJson = ""
+    private fun rebuildTokenJson() {
+        val value = token
+        tokenJson = if (value.isBlank()) "" else ",\"token\":${JSONObject.quote(value)}"
+    }
+
     override fun connect(host: String, port: Int, token: String) {
         val next = Target(host, port, token)
         target = next
         attempt = 0
         _retryAttempt.value = 0
         _errors.value = null
+        rebuildTokenJson()
         open(next)
     }
 
@@ -127,15 +158,25 @@ class WebSocketRemoteBlenderClient(
         socket?.close(1000, "Client disconnect")
         socket = null
         pending.clear()
+        sentAtNs.clear()
+        stateRequestInFlight.set(false)
+        pickInFlight.set(false)
+        rebuildTokenJson()
         attempt = 0
         _retryAttempt.value = 0
         _streamEndpoint.value = null
         _transformSession.value = TransformSession()
         _toolSession.value = ToolSession()
         _touchProbe.value = null
+        _loopProbe.value = null
+        _remoteFiles.value = RemoteFiles()
         pendingNudge = 0.0
         nudgeInFlight = false
         _connection.value = ConnectionStatus.DISCONNECTED
+    }
+
+    override fun clearError() {
+        _errors.value = null
     }
 
     override fun retryNow() {
@@ -158,6 +199,9 @@ class WebSocketRemoteBlenderClient(
         // su handshake de cierre retrasaría el intento nuevo hasta el timeout.
         socket?.cancel()
         pending.clear()
+        sentAtNs.clear()
+        stateRequestInFlight.set(false)
+        pickInFlight.set(false)
         _connection.value =
             if (attempt == 0) ConnectionStatus.CONNECTING else ConnectionStatus.RECONNECTING
         val request = Request.Builder().url("ws://${destination.host}:${destination.port}").build()
@@ -179,14 +223,33 @@ class WebSocketRemoteBlenderClient(
     }
 
     private fun command(name: String, payload: JSONObject = JSONObject()) {
-        val id = UUID.randomUUID().toString()
+        sendCommand(name, payload)
+    }
+
+    private fun sendCommand(name: String, payload: JSONObject = JSONObject()): Boolean {
+        val id = "c${commandId.incrementAndGet()}"
         val message = JSONObject()
             .put("type", "command")
             .put("id", id)
             .put("command", name)
             .put("payload", payload)
         if (token.isNotBlank()) message.put("token", token)
-        if (socket?.send(message.toString()) == true) pending[id] = name else reportOffline()
+        // Registrar antes de enviar evita una carrera con sockets/fakes muy rápidos:
+        // la respuesta nunca puede adelantarse a su entrada en `pending`.
+        pending[id] = name
+        sentAtNs[id] = System.nanoTime()
+        return if (socket?.send(message.toString()) == true) {
+            if (name == "selection.pick") pickInFlight.set(true)
+            if (name == "selection.pick" || name.startsWith("transform.")) {
+                Log.d(LATENCY_TAG, "send command=$name id=$id")
+            }
+            true
+        } else {
+            pending.remove(id)
+            sentAtNs.remove(id)
+            reportOffline()
+            false
+        }
     }
 
     /**
@@ -201,6 +264,10 @@ class WebSocketRemoteBlenderClient(
     /**
      * Los gestos no llevan id ni esperan respuesta: el servidor agrupa los UPDATE y
      * responder a cada uno saturaría el canal de vuelta durante un arrastre.
+     *
+     * El mensaje se construye a mano, en el hilo que llama (a 30 Hz, durante el
+     * arrastre): un JSONObject por gesto era asignación y serialización regaladas en
+     * el momento peor. El token ya viene precodificado en [tokenJson].
      */
     override fun gesture(
         gesture: Gesture,
@@ -210,23 +277,30 @@ class WebSocketRemoteBlenderClient(
         factor: Double,
         axis: Axis?,
     ) {
-        val message = JSONObject()
-            .put("type", "gesture")
-            .put("gesture", gesture.name.lowercase())
-            .put("phase", phase.name.lowercase())
-            .put("dx", dx)
-            .put("dy", dy)
-            .put("factor", factor)
-        axis?.let { message.put("axis", it.name) }
-        if (token.isNotBlank()) message.put("token", token)
-        if (socket?.send(message.toString()) != true) reportOffline()
+        val message = buildString(160) {
+            append("{\"type\":\"gesture\",\"gesture\":\"").append(gesture.name.lowercase())
+                .append("\",\"phase\":\"").append(phase.name.lowercase())
+                .append("\",\"dx\":").append(dx)
+                .append(",\"dy\":").append(dy)
+                .append(",\"factor\":").append(factor)
+            if (axis != null) append(",\"axis\":\"").append(axis.name).append('"')
+            append(tokenJson)
+            append('}')
+        }
+        if (socket?.send(message) != true) reportOffline()
     }
 
-    override fun requestState() = command("scene.get_state")
+    override fun requestState() {
+        // Un evento scene.changed puede llegar mientras la consulta anterior sigue
+        // en vuelo. Una sola fotografía reciente basta; apilarlas roba tiempo de
+        // hilo principal a picking, transformaciones y captura.
+        if (!stateRequestInFlight.compareAndSet(false, true)) return
+        if (!sendCommand("scene.get_state")) stateRequestInFlight.set(false)
+    }
     override fun select(name: String?) = command("object.select", JSONObject().apply { name?.let { put("name", it) } })
-    override fun pick(u: Double, v: Double, threshold: Double) = command(
+    override fun pick(u: Double, v: Double, threshold: Double, mode: SelectionOp) = command(
         "selection.pick",
-        JSONObject().put("u", u).put("v", v).put("threshold", threshold),
+        JSONObject().put("u", u).put("v", v).put("threshold", threshold).put("mode", mode.name),
     )
     override fun delete() = command("object.delete")
     override fun duplicate() = command("object.duplicate")
@@ -282,6 +356,26 @@ class WebSocketRemoteBlenderClient(
     override fun viewPerspective(projection: Projection) =
         command("view.perspective", JSONObject().put("mode", projection.name))
 
+    override fun viewShading(mode: String) = command("view.shading", JSONObject().put("mode", mode))
+
+    override fun viewLocal(enabled: Boolean?) = command(
+        "view.local",
+        JSONObject().apply { enabled?.let { put("enabled", it) } },
+    )
+
+    override fun selectMore() = command("selection.more")
+    override fun selectLess() = command("selection.less")
+
+    override fun boxSelect(u0: Double, v0: Double, u1: Double, v1: Double, mode: SelectionOp) = command(
+        "selection.box",
+        JSONObject().put("u0", u0).put("v0", v0).put("u1", u1).put("v1", v1).put("mode", mode.name),
+    )
+
+    override fun circleSelect(u: Double, v: Double, radius: Double, mode: SelectionOp) = command(
+        "selection.circle",
+        JSONObject().put("u", u).put("v", v).put("radius", radius).put("mode", mode.name),
+    )
+
     override fun addPrimitive(primitive: AddObject) =
         command("object.add", JSONObject().put("primitive", primitive.name))
 
@@ -292,7 +386,21 @@ class WebSocketRemoteBlenderClient(
     override fun fileOpen(path: String) = command("file.open", JSONObject().put("path", path))
     override fun fileSave() = command("file.save")
     override fun fileSaveAs(path: String) = command("file.save_as", JSONObject().put("path", path))
+    override fun fileSaveAs(folder: String, name: String) = command(
+        "file.save_as",
+        JSONObject().put("folder", folder).put("name", name),
+    )
     override fun requestRecentFiles() = command("file.recent", JSONObject().put("limit", 12))
+    override fun fileLocations() {
+        _remoteFiles.value = _remoteFiles.value.copy(loading = true)
+        command("file.locations")
+    }
+    override fun fileBrowse(path: String?) {
+        _remoteFiles.value = _remoteFiles.value.copy(loading = true)
+        command("file.browse", JSONObject().apply { path?.let { put("path", it) } })
+    }
+    override fun fileDefaultFolder(path: String) =
+        command("file.default_folder", JSONObject().put("path", path))
 
     override fun transformBegin(
         mode: TransformMode,
@@ -342,7 +450,7 @@ class WebSocketRemoteBlenderClient(
     override fun transformConfirm() = command("transform.confirm")
     override fun transformCancel() = command("transform.cancel")
 
-    override fun toolBegin(tool: EditTool, parameters: Map<String, Double>) =
+    override fun toolBegin(tool: EditTool, parameters: Map<String, Any?>) =
         command(
             "tool.begin",
             JSONObject()
@@ -350,7 +458,7 @@ class WebSocketRemoteBlenderClient(
                 .put("parameters", JSONObject(parameters)),
         )
 
-    override fun toolParameter(parameters: Map<String, Double>) =
+    override fun toolParameter(parameters: Map<String, Any?>) =
         command("tool.parameter", JSONObject().put("parameters", JSONObject(parameters)))
 
     /**
@@ -391,6 +499,19 @@ class WebSocketRemoteBlenderClient(
 
     override fun toolConfirm() = command("tool.confirm")
     override fun toolCancel() = command("tool.cancel")
+
+    private val _loopProbe = MutableStateFlow<LoopProbe?>(null)
+    override val loopProbe: StateFlow<LoopProbe?> = _loopProbe.asStateFlow()
+
+    override fun meshLoopProbe(u: Double, v: Double) =
+        command("mesh.loop_probe", JSONObject().put("u", u).put("v", v))
+
+    override fun clearLoopProbe() {
+        _loopProbe.value = null
+    }
+
+    override fun toolLoopPick(u: Double, v: Double) =
+        command("tool.loop_pick", JSONObject().put("u", u).put("v", v))
 
     private fun axesArray(axes: Set<Axis>) = JSONArray().apply {
         // Se mandan siempre en orden X, Y, Z: en ROTATE el servidor usa el primero,
@@ -458,6 +579,12 @@ class WebSocketRemoteBlenderClient(
             "response" -> {
                 val id = message.optString("id")
                 val command = pending.remove(id)
+                val sent = sentAtNs.remove(id)
+                if (command == "selection.pick") pickInFlight.set(false)
+                if (sent != null && (command == "selection.pick" || command?.startsWith("transform.") == true)) {
+                    Log.d(LATENCY_TAG, "response command=$command ok=${message.optBoolean("ok", false)} rtt=${(System.nanoTime() - sent) / 1_000_000}ms")
+                }
+                if (command == "scene.get_state") stateRequestInFlight.set(false)
                 // El servidor devuelve el estado en "result" (ver docs/protocol.md).
                 val result = message.optJSONObject("result")
                 // El hueco queda libre incluso si el nudge falló: si no, un error
@@ -467,8 +594,9 @@ class WebSocketRemoteBlenderClient(
                     !message.optBoolean("ok", false) -> {
                         // Un sondeo fallido no es un error que enseñar: significa que
                         // bajo el dedo no había nada, y el menú radial ya sabe qué
-                        // ofrecer en ese caso.
+                        // ofrecer en ese caso. Lo mismo el sondeo de loop cut.
                         if (command == "snap.query") _touchProbe.value = TouchProbe(hit = false)
+                        else if (command == "mesh.loop_probe") _loopProbe.value = LoopProbe(hit = false)
                         else _errors.value = message.optString("error", "Error remoto")
                     }
                     command == "scene.get_state" -> result?.let(::updateState)
@@ -488,9 +616,24 @@ class WebSocketRemoteBlenderClient(
                             activeObject = visibility.optString("active_object").takeIf { it.isNotBlank() && it != "null" })
                     }
                     // selection.pick ya incluye el snapshot: evita esperar el evento
-                    // semántico y hacer un segundo viaje scene.get_state.
-                    command == "selection.pick" -> result?.let(::updateState)
+                    // semántico y hacer un segundo viaje scene.get_state. Lo mismo
+                    // box/circle/more/less, que vuelven con el estado completo.
+                    command == "selection.pick" ||
+                        command == "selection.box" || command == "selection.circle" ||
+                        command == "selection.more" || command == "selection.less" -> result?.let(::updateState)
+                    // El toggle de wireframe responde con el shading nuevo: pintarlo ya,
+                    // sin esperar al scene.get_state de seguimiento.
+                    command == "view.shading" -> result?.let { r ->
+                        val shading = if (r.optString("shading") == "WIREFRAME") Shading.WIREFRAME else Shading.SOLID
+                        _state.value = _state.value.copy(view = _state.value.view.copy(shading = shading))
+                    }
                     command == "file.recent" -> updateRecentFiles(result)
+                    command == "file.locations" -> updateFileLocations(result)
+                    command == "file.browse" -> updateFileBrowser(result)
+                    command == "file.default_folder" -> {
+                        updateFileLocations(result)
+                        fileBrowse(result?.optString("default_folder")?.takeIf { it.isNotBlank() })
+                    }
                     // Los modales devuelven el estado de la sesión; confirmar y
                     // cancelar la cierran y sí necesitan refrescar la escena.
                     command in MODAL_COMMANDS -> _transformSession.value = StateParser.session(result)
@@ -506,6 +649,9 @@ class WebSocketRemoteBlenderClient(
                         objectName = result?.optString("object")?.takeIf { it.isNotBlank() && it != "null" },
                         elementId = result?.optString("id")?.takeIf { it.isNotBlank() },
                     )
+                    // Sondeo de loop cut: igual de silencioso si no hay nada bajo
+                    // el dedo — la bandeja sigue mostrando el hint de "toca la malla".
+                    command == "mesh.loop_probe" -> _loopProbe.value = StateParser.loopProbe(result)
                     command == "transform.confirm" || command == "transform.cancel" -> {
                         _transformSession.value = TransformSession()
                         requestState()
@@ -543,7 +689,18 @@ class WebSocketRemoteBlenderClient(
                     }
                     // scene.changed al conectar ya trae el estado completo: nos ahorra el viaje.
                     payload?.has("mode") == true -> updateState(payload)
-                    else -> requestState()
+                    else -> {
+                        // Durante un modal el vídeo y transform.session son el
+                        // feedback en vivo. Pedir además snapshots completos por
+                        // cada scene.changed compite con el gesto en la cola de
+                        // Blender. selection.pick ya devuelve su propio snapshot.
+                        if (shouldRequestSceneSnapshot(
+                                transformActive = _transformSession.value.active,
+                                toolActive = _toolSession.value.active,
+                                selectionPending = pickInFlight.get(),
+                            )
+                        ) requestState()
+                    }
                 }
             }
             "hello" -> {
@@ -554,7 +711,17 @@ class WebSocketRemoteBlenderClient(
                 val stream = message.optJSONObject("stream")
                 val destination = target
                 _streamEndpoint.value = if (destination != null && stream?.optBoolean("running") == true) {
-                    StreamEndpoint(destination.host, stream.optInt("port"), token)
+                    val alternatives = stream.optJSONArray("alternatives")
+                    StreamEndpoint(
+                        destination.host, stream.optInt("port"), token,
+                        stream.optString("format"), stream.optString("path"),
+                        stream.optString("framing").ifBlank { null },
+                        (0 until (alternatives?.length() ?: 0)).mapNotNull { index ->
+                            alternatives?.optJSONObject(index)?.let {
+                                StreamAlternative(it.optString("format"), it.optString("path"))
+                            }
+                        },
+                    )
                 } else {
                     null
                 }
@@ -585,11 +752,38 @@ class WebSocketRemoteBlenderClient(
         }
     }
 
+    private fun updateFileLocations(json: JSONObject?) {
+        val parsed = StateParser.fileLocations(json)
+        _remoteFiles.value = _remoteFiles.value.copy(
+            defaultFolder = parsed.defaultFolder,
+            locations = parsed.locations,
+            loading = false,
+        )
+    }
+
+    private fun updateFileBrowser(json: JSONObject?) {
+        val parsed = StateParser.fileBrowse(json)
+        _remoteFiles.value = _remoteFiles.value.copy(
+            path = parsed.path,
+            parent = parsed.parent,
+            defaultFolder = parsed.defaultFolder,
+            breadcrumbs = parsed.breadcrumbs,
+            entries = parsed.entries,
+            loading = false,
+        )
+    }
+
     private fun updateState(json: JSONObject) {
         val old = _state.value
-        _state.value = StateParser.state(json).copy(
+        val parsed = StateParser.state(json)
+        // Los snapshots de selección (pick/box/circle/more/less) se piden con
+        // include_view=False: no traen ni vista ni shading. Conservar lo que ya
+        // sabíamos en vez de rebobinar la proyección y el wireframe.
+        _state.value = parsed.copy(
             features = old.features,
             modifierOptions = old.modifierOptions,
+            view = if (json.has("view") || json.has("shading")) parsed.view else old.view,
+            gizmo = if (json.has("gizmo")) parsed.gizmo else old.gizmo,
         )
     }
 }

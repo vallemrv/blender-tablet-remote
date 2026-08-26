@@ -49,7 +49,7 @@ object StateParser {
             gizmo = gizmo(json.optJSONObject("gizmo")),
             transform = json.optJSONObject("active")?.let(::transform),
             context = context(json),
-            view = view(json.optJSONObject("view")),
+            view = view(json.optJSONObject("view"), json.optString("shading")),
             activeObjectType = json.optJSONObject("active")?.optString("type")?.takeIf(String::isNotBlank),
             objects = objects(json.optJSONArray("objects")),
             hiddenObjects = hiddenObjects(json.optJSONArray("hidden_objects")),
@@ -88,8 +88,19 @@ object StateParser {
 
     fun features(json: JSONObject?): ServerFeatures {
         val f = json?.optJSONObject("features") ?: return ServerFeatures()
-        return ServerFeatures(f.has("modifiers"), f.has("visibility"), f.has("transform_apply"),
-            f.optJSONObject("context") != null)
+        val view = f.optJSONObject("view")
+        val selection = f.optJSONObject("selection")
+        return ServerFeatures(
+            f.has("modifiers"), f.has("visibility"), f.has("transform_apply"),
+            f.optJSONObject("context") != null,
+            view?.has("shading") == true,
+            view?.optBoolean("local_view", false) == true,
+            selection?.optBoolean("grow", false) == true,
+            selection?.has("shapes") == true,
+            f.optJSONObject("edit_tools")?.optJSONObject("loop_cut")
+                ?.optBoolean("pick", false) == true,
+            f.optJSONObject("files")?.optBoolean("browse", false) == true,
+        )
     }
 
     private fun defaultValue(p: JSONObject): ModifierDefault {
@@ -163,16 +174,84 @@ object StateParser {
         if (json == null || !json.optBoolean("active")) return ToolSession()
         val tool = EditTool.fromWire(json.optString("tool")) ?: return ToolSession()
         val params = json.optJSONObject("parameters") ?: JSONObject()
-        val values = mutableMapOf<String, Double>()
-        for (key in params.keys()) values[key] = params.optDouble(key, 0.0)
+        // Los valores llegan tipados (números, bools del modal, falloff string) y
+        // se conservan así: la bandeja de Loop Cut los lee con la forma original.
+        // org.json entrega Integer/Long/Double (boxed), por eso `is Number`.
+        val values = mutableMapOf<String, Any?>()
+        for (key in params.keys()) {
+            values[key] = when (val raw = params.get(key)) {
+                is Boolean -> raw
+                is Number -> raw.toDouble()
+                is String -> raw
+                else -> null
+            }
+        }
         return ToolSession(active = true, tool = tool, parameters = values)
     }
 
-    fun view(json: JSONObject?): ViewState {
-        if (json == null) return ViewState()
+    /** `mesh.loop_probe`: dónde caería el corte si se confirma el toque. */
+    fun loopProbe(json: JSONObject?): LoopProbe {
+        if (json == null) return LoopProbe()
+        return LoopProbe(
+            hit = json.optBoolean("hit"),
+            edge = json.optInt("edge", -1),
+            factor = json.optDouble("factor", 0.0),
+            ring = json.optInt("ring", 0),
+        )
+    }
+
+    /** `file.browse`: listado del explorador del disco del PC. Paths opacos. */
+    fun fileBrowse(json: JSONObject?): RemoteFiles {
+        if (json == null) return RemoteFiles()
+        return RemoteFiles(
+            path = json.optString("path"),
+            parent = json.optString("parent").takeIf { it.isNotBlank() && it != "null" },
+            defaultFolder = json.optString("default_folder"),
+            breadcrumbs = breadcrumbs(json.optJSONArray("breadcrumbs")),
+            entries = fileEntries(json.optJSONArray("entries")),
+        )
+    }
+
+    /** `file.locations`: lugares navegables + carpeta por defecto. */
+    fun fileLocations(json: JSONObject?): RemoteFiles {
+        if (json == null) return RemoteFiles()
+        return RemoteFiles(
+            defaultFolder = json.optString("default_folder"),
+            locations = locations(json.optJSONArray("locations")),
+        )
+    }
+
+    /** Un tipo de entrada que la app no reconoce se descarta: el servidor puede ser más nuevo. */
+    fun fileEntries(array: JSONArray?): List<RemoteFileEntry> =
+        if (array == null) emptyList() else (0 until array.length()).mapNotNull { index ->
+            array.optJSONObject(index)?.let { item ->
+                val type = runCatching { RemoteFileType.valueOf(item.optString("type")) }.getOrNull()
+                    ?: return@let null
+                RemoteFileEntry(item.optString("name"), item.optString("path"), type)
+            }
+        }
+
+    private fun locations(array: JSONArray?): List<RemoteLocation> =
+        if (array == null) emptyList() else (0 until array.length()).mapNotNull { index ->
+            array.optJSONObject(index)?.let {
+                RemoteLocation(it.optString("id"), it.optString("label"), it.optString("path"))
+            }
+        }
+
+    private fun breadcrumbs(array: JSONArray?): List<RemoteBreadcrumb> =
+        if (array == null) emptyList() else (0 until array.length()).mapNotNull { index ->
+            array.optJSONObject(index)?.let {
+                RemoteBreadcrumb(it.optString("name"), it.optString("path"))
+            }
+        }
+
+    fun view(json: JSONObject?, shadingWire: String? = null): ViewState {
+        val shading = enum(shadingWire, Shading.SOLID)
+        if (json == null) return ViewState(shading = shading)
         return ViewState(
             perspective = enum(json.optString("perspective"), Projection.PERSP),
             axisView = json.optString("axis_view").takeIf { it.isNotBlank() && it != "null" },
+            shading = shading,
         )
     }
 

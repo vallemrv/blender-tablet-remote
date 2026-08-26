@@ -126,6 +126,33 @@ def parameter(payload):
     return tool_session.status()
 
 
+@command("tool.loop_pick", mutating=True)
+def loop_pick(payload):
+    """Re-ubica el corte de una sesión LOOP_CUT tocando la malla.
+
+    Los índices de `edge` son de la malla ORIGINAL (la copia que restaura cada
+    preview), no del preview en pantalla: sondear contra el preview daría índices
+    que ya no existen al reconstruir. Así que restore → sondeo → parámetros →
+    preview, todo en un paso atómico.
+    """
+    tool_session.require(payload.get("_client_id"))
+    if tool_session.tool != "LOOP_CUT":
+        raise CommandError("loop_pick requires a LOOP_CUT session", code="wrong_tool")
+    from ..bpy_utils import find_view3d
+
+    if find_view3d() is None:
+        raise CommandError("No 3D viewport available", code="no_viewport")
+    tool_session.restore()
+    probe = mesh_commands.loop_probe(dict(payload))
+    if not probe.get("hit"):
+        # Sin arista bajo el dedo la sesión queda como estaba.
+        tool_session.preview()
+        return dict(tool_session.status(), pick=probe)
+    tool_session.params.update({"edge": probe["edge"], "factor": probe["factor"]})
+    tool_session.preview()
+    return dict(tool_session.status(), pick=probe)
+
+
 @command("tool.nudge", mutating=True)
 def nudge(payload):
     tool_session.require(payload.get("_client_id"))
@@ -138,7 +165,10 @@ def nudge(payload):
     current = tool_session.params.get(primary, 0 if primary != "cuts" else 1)
     nxt = max(1, round(current + delta)) if primary == "cuts" else current + delta
     if primary == "factor":
-        nxt = max(-0.999, min(0.999, nxt))
+        # Sin clamp el corte puede salirse del borde (extrapolación), así que el
+        # arrastre llega más lejos; con clamp se queda en el borde.
+        limit = 1.999 if not tool_session.params.get("clamp", True) else 0.999
+        nxt = max(-limit, min(limit, nxt))
     tool_session.params[primary] = nxt
     tool_session.preview()
     return tool_session.status()

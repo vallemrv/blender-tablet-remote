@@ -30,8 +30,11 @@ inicio; `ABSOLUTE` expresa el valor objetivo en la referencia indicada.
   "stream": {
     "running": true,
     "port": 8766,
-    "path": "/stream.mjpg",
-    "format": "mjpeg",
+    "path": "/stream.h264",
+    "format": "h264",
+    "framing": "btr-h264-v1",
+    "codec": "avc1.42C01F",
+    "alternatives": [{"format": "mjpeg", "path": "/stream.mjpg"}],
     "resolution": [1280, 754]
   }
 }
@@ -40,6 +43,9 @@ inicio; `ABSOLUTE` expresa el valor objetivo en la referencia indicada.
 El bloque `stream` dice dónde está el vídeo del viewport (§10): el cliente lo saca de
 aquí en vez de preguntárselo al usuario. Si `running` es `false` no hay vídeo y la UI
 debe seguir siendo utilizable sin él.
+
+`format` y `path` son la ruta preferida. Si no puede decodificarla, el cliente recorre
+`alternatives` en orden. `/stream.mjpg` se conserva para clientes v2 antiguos.
 
 3. Si `auth_required` es `true` y `authenticated` es `false`, el cliente debe autenticarse
    antes de nada (ver §2).
@@ -226,13 +232,32 @@ confundir con `selection.hide` / `selection.reveal`, que ocultan geometría en E
 | `selection.pick` | `u`, `v` (0..1), `threshold`, `mode`: `SET`\|`ADD`\|`REMOVE`\|`TOGGLE` |
 | `selection.box` | `u0`, `v0`, `u1`, `v1`, `mode` |
 | `selection.circle` | `u`, `v`, `radius`, `mode` |
+| `selection.more` / `selection.less` | — en Edit Mode |
 | `selection.loop` / `.ring` | `edge` (opcional; usa la seleccionada), `mode` |
 
 `selection.pick` es **el comando del tap**: lanza un rayo desde la cámara del viewport.
-En Object Mode selecciona el objeto tocado; en Edit Mode solo considera elementos de
-la cara visible impactada y exige que vértices/aristas estén dentro del umbral táctil
-normalizado (`threshold`, 0.035 por defecto). Devuelve
+En Object Mode selecciona el objeto tocado; en Edit Mode, con oclusión real (SOLID),
+solo considera elementos de la cara visible impactada y exige que vértices/aristas
+estén dentro del umbral táctil normalizado (`threshold`, 0.035 por defecto). Devuelve
 `{"hit": false}` si el rayo no da con nada (y deselecciona si `mode` es `SET`).
+
+Con shading `WIREFRAME` el pick ve a través en ambos modos. En Object Mode **cicla hacia
+detrás**: si el primer objeto impactado ya está seleccionado, se avanza el origen del
+rayo más allá del impacto y se repite (hasta 16 impactos), eligiendo el primero no
+seleccionado. En Edit Mode los candidatos son todos los vértices/aristas no ocultos de
+la malla (no solo los de la cara frontal): el tap elige el más cercano al toque en
+pantalla, y con `ADD`/`TOGGLE` cicla al no seleccionado más cercano — el equivalente
+táctil del Alt+click de Blender. El submodo FACE mantiene la cara impactada por el rayo.
+Esta selección a través es la razón por la que wireframe activa xray siempre.
+
+`selection.box` y `selection.circle` funcionan en ambos modos: en Edit seleccionan
+elementos del submodo activo cuyo centro proyectado cae dentro de la forma; en
+Object Mode seleccionan los objetos visibles cuyo centro (`matrix_world` de la
+translation) cae dentro.
+
+`selection.more` extiende la selección a los elementos adyacentes y `selection.less`
+retira los que tocan algo no seleccionado, según el submodo activo (equivalente a
+Ctrl+Plus / Ctrl+Minus del numpad). Solo Edit Mode (`wrong_mode` fuera).
 
 ### Transformaciones
 
@@ -261,7 +286,8 @@ normalizado (`threshold`, 0.035 por defecto). Devuelve
 | `mesh.inset` | `thickness` (def. 0.1), `depth`, `individual` (bool) |
 | `mesh.bevel` | `offset` (def. 0.1), `segments` (def. 1), `profile`, `affect`, `clamp` |
 | `mesh.subdivide` | `cuts` |
-| `mesh.loop_cut` | `edge` (opcional), `cuts` (def. 1), `smoothness`, `factor` (−1..1) |
+| `mesh.loop_cut` | `edge` (opcional), `cuts` (def. 1), `smoothness`, `factor`, `falloff`, `even`, `flip`, `clamp` |
+| `mesh.loop_probe` | `u`, `v` — sondeo read-only para colocar un corte con el toque |
 | `mesh.delete` | `what`: `VERTS`\|`EDGES`\|`FACES`\|`ONLY_FACES` |
 | `mesh.info` | — |
 
@@ -271,6 +297,23 @@ tablet la arrastre después con un gesto `move`.
 
 El tipo de extrusión depende del modo de selección: caras → región de caras,
 aristas → solo aristas, vértices → vértices individuales.
+
+`mesh.loop_cut` replica el modal Ctrl+R con parámetros explícitos. `factor` es el
+deslizamiento: 0 deja el corte en la mitad del anillo, ±1 lo lleva a los extremos.
+Con `clamp: false` (def. true) admite hasta ±2 y extrapola más allá del borde,
+siguiendo su línea. `falloff` es la forma del perfil
+(`SMOOTH|SPHERE|ROOT|SHARP|LINEAR|INVERSE_SQUARE`, def. `SMOOTH`), `even` interpreta
+el deslizamiento en longitud real (el corte recorre la misma distancia absoluta en
+cada arista del anillo, aunque midan distinto), y `flip` lo espeja (`t → 1−t`).
+Valores fuera de rango responden `bad_payload`.
+
+`mesh.loop_probe` no toca nada: lanza el rayo del toque, toma la arista más cercana
+de la cara impactada (distancia en pantalla, sin umbral: cualquier toque sobre la
+malla elige algo) y proyecta el punto sobre ella. Devuelve
+`{hit, object, edge, factor, ring}`, donde `factor` (−1..1) coloca el corte del
+medio exactamente donde cayó el dedo (válido para cualquier número de cortes: el
+corte central siempre parte de la mitad). Sin impacto, `{hit: false}`. Requiere
+viewport (`no_viewport` en background) y Edit Mode (`wrong_mode`).
 
 ### Historial
 
@@ -286,7 +329,24 @@ aristas → solo aristas, vértices → vértices individuales.
 | `view.frame_selected` / `view.frame_all` | — |
 | `view.axis` | `axis`: `FRONT`\|`BACK`\|`LEFT`\|`RIGHT`\|`TOP`\|`BOTTOM` |
 | `view.perspective` | `mode`: `PERSP`\|`ORTHO`\|`TOGGLE` |
+| `view.shading` | `mode`: `WIREFRAME`\|`SOLID`\|`TOGGLE` |
+| `view.local` | `enabled` (bool; por defecto toggle) |
 | `view.get` / `view.set` | `location`, `rotation` (quaternion wxyz), `distance` |
+
+`view.shading` cambia el shading del viewport que se captura (el espacio VIEW_3D real).
+`WIREFRAME` activa siempre `show_xray_wireframe`, para que se vea y se pueda picar a
+través. El paquete es inseparable también al togglear: `TOGGLE` solo considera
+"wireframe" el estado con xray puesto — un WIREFRAME sin xray (Shift+Z en el PC, un
+`.blend` guardado así) se re-arma como WIREFRAME+xray en vez de bajar a SOLID. El
+estado actual viaja en `scene.get_state` como `shading` (top-level): `"WIREFRAME"` o
+`"SOLID"` (`"SOLID"` si no hay viewport, p. ej. en background).
+Requiere viewport (`no_viewport` en background).
+
+`view.local` aísla la selección: oculta todo objeto visible no seleccionado y recuerda
+exactamente qué ocultó para restaurarlo al desactivar (el `/` de Blender). Es un
+toggle si no llega `enabled`. Devuelve `{"local": bool, "hidden": [nombres]}`. Cargar
+o crear un archivo desactiva el aislamiento (los objetos ocultados antes del aislamiento
+siguen ocultos: nunca se tocan).
 
 ### Transformación modal
 
@@ -305,6 +365,16 @@ transformación todavía viva.
 | `transform.value` | `values`: [x,y,z], o `angle` en GRADOS si el modo es ROTATE |
 | `transform.confirm` | — cierra con un único paso de undo |
 | `transform.cancel` | — restaura las matrices originales |
+
+Snap incremental y rejilla en la sesión modal:
+
+- `INCREMENT`: el delta se cuadra a múltiplos de `step` desde el punto de
+  partida. Mover el dedo cruza cada múltiplo en vivo; no hace falta levantar y
+  volver a arrastrar para dar otro salto.
+- `GRID`: la posición resultante se clava a la rejilla mundial de paso `step`
+  (se redondea `posición original + delta` a múltiplos de `step` en coordenadas
+  de mundo). Un objeto que nazca fuera de rejilla aterriza en ella. En ROTATE y
+  SCALE se comporta como INCREMENT.
 | `transform.status` | — |
 
 Cada sesión incluye UUID `session_id`, `owner` y `phase`. Solo su conexión propietaria
@@ -320,7 +390,18 @@ restaura exactamente la topología y confirmar crea un único paso de undo.
 
 `LOOP_CUT` corta el anillo de la arista semilla (`edge` o la seleccionada). Sin semilla
 responde `empty_selection`. El parámetro primario de `tool.nudge` es `factor`
-(deslizamiento). No es `mesh.subdivide` (eso corta la selección) ni `selection.loop`.
+(deslizamiento; ±0.999, o ±1.999 si la sesión lleva `clamp: false`). No es
+`mesh.subdivide` (eso corta la selección) ni `selection.loop`.
+
+`tool.loop_pick` (`u`, `v`) re-ubica el corte de una sesión `LOOP_CUT` activa: restaura
+la copia original, sondea con la semántica de `mesh.loop_probe` (los índices de `edge`
+son de la malla original, no del preview) y actualiza `edge` y `factor` en un solo
+paso. Responde con el estado de la sesión más `pick`. Requiere sesión activa
+(`no_session`) y que sea `LOOP_CUT` (`wrong_tool`).
+
+La feature `edit_tools.loop_cut` anuncia `pick`, `probe`, `falloff`, `even`, `flip` y
+`clamp`; un cliente debe usar el flujo de colocación por toque solo si `pick` está
+anunciado.
 
 ### Modificadores
 
@@ -455,8 +536,11 @@ exigen Object Mode y responden `wrong_mode` en Edit.
 | `file.new` | `empty` (bool): escena vacía en vez del archivo de inicio |
 | `file.open` | `path` |
 | `file.save` | — falla con `no_path` si nunca se ha guardado |
-| `file.save_as` | `path` (se le añade `.blend` si falta) |
+| `file.save_as` | `folder`, `name`; por compatibilidad también `path` completo |
 | `file.recent` | `limit` (1..50, def. 12) |
+| `file.locations` | — |
+| `file.browse` | `path` (opcional; por defecto la carpeta configurada) |
+| `file.default_folder` | `path` |
 
 `file.info` y las operaciones que terminan bien devuelven
 `{name, path, saved, dirty}`. `saved: false` significa "nunca se ha guardado", así que
@@ -465,6 +549,38 @@ el cliente debe pedir nombre y usar `file.save_as` en vez de `file.save`.
 `file.recent` devuelve `{files: [{name, path, folder, exists}]}` leyendo el
 `recent-files.txt` de Blender. `exists: false` marca un reciente que se movió o borró:
 se manda igual para poder enseñarlo en gris en vez de fallar al abrirlo.
+
+`file.locations` devuelve `{default_folder, locations: [{id, label, path}]}`. Siempre
+incluye `DEFAULT`, `HOME` y `ROOT`, y añade los volúmenes montados que el sistema pueda
+enumerar sin error. Los paths son canónicos y los lugares duplicados se eliminan.
+
+`file.browse` devuelve
+`{path, parent, breadcrumbs: [{name, path}], default_folder, entries: [{name, path, type}]}`.
+Los breadcrumbs los construye el servidor: Android trata cada `path` como token opaco
+y no intenta separar rutas POSIX o Windows. `type` es
+`DIRECTORY` o `BLEND`; no se exponen otros ficheros. Las carpetas se ordenan antes que
+los `.blend`, ambas sin distinguir mayúsculas. No se sigue una búsqueda recursiva: el
+cliente navega una carpeta por petición, evitando bloquear el hilo principal en árboles
+o unidades de red grandes.
+
+En `file.browse`, `file.open`, `file.save_as` y `file.default_folder`, una ruta relativa
+se resuelve contra la carpeta predeterminada. También se aceptan los aliases
+`@default`, `@home` y `@root`, solos o seguidos de `/...`; el backend los traduce y
+siempre responde con rutas absolutas. La carpeta predeterminada se guarda en la
+configuración propia del add-on y sobrevive a reinicios de Blender. Si aún no se ha
+configurado usa el directorio del `.blend` abierto y, si no existe, el home del usuario.
+
+Para guardar desde el explorador, el cliente debe enviar
+`file.save_as {folder: <path opaco devuelto por el backend>, name: "escena"}`. El
+backend une ambos componentes y añade `.blend` si falta; Android no concatena rutas.
+`name` debe ser un basename no vacío: `.`, `..`, NUL y separadores `/` o `\\` responden
+`bad_payload`. Enviar simultáneamente `path` y `folder`/`name` también es inválido. El
+payload histórico `{path}` sigue admitido para clientes anteriores.
+
+Errores de archivo estables: `not_found`, `not_directory`, `not_blend`,
+`access_denied`, `io_error` y `bad_payload`. `file.open` solo admite ficheros `.blend`; guardar añade
+la extensión como antes. El explorador no es un sandbox: un usuario autenticado puede
+navegar y guardar en cualquier carpeta a la que el proceso de Blender tenga acceso.
 
 Cargar un `.blend` **no corta la sesión**: el timer del puente está registrado con
 `persistent=True` y la captura de vídeo resuelve el viewport en cada fotograma en vez
@@ -578,19 +694,46 @@ que asigna en vez de sumar. `rotate` espera **radianes**.
 
 ---
 
-## 11. Vídeo del viewport (MJPEG)
+## 11. Vídeo del viewport (H.264 preferido, MJPEG fallback)
 
 Canal aparte del WebSocket, en su propio puerto (8766 por defecto). Va separado a
 propósito: un fotograma perdido no debe retrasar un comando, ni al revés.
 
 | Ruta | Qué devuelve |
 |---|---|
+| `/stream.h264` | access units H.264 Annex B en framing binario `btr-h264-v1` |
 | `/stream.mjpg` | `multipart/x-mixed-replace; boundary=btrframe`, el flujo continuo |
 | `/frame.jpg` | un único fotograma, para depurar con `curl` |
 | `/stats.json` | métricas de captura y codificación |
 | `/` | página de prueba: abre esto en el navegador del PC para verificar el vídeo sin la tablet |
 
 Si hay token, va en la query: `http://10.0.0.8:8766/stream.mjpg?token=SECRETO`.
+
+### Framing H.264 `btr-h264-v1`
+
+La respuesta es `application/x-btr-h264`, sin muxer. Cada registro contiene una
+access unit completa (AUD hasta antes del AUD siguiente), lista para encolarla en
+Android `MediaCodec`. Todos los enteros son big-endian:
+
+| Offset | Tamaño | Campo |
+|---:|---:|---|
+| 0 | 4 | magic ASCII `BTRH` |
+| 4 | 1 | versión (`1`) |
+| 5 | 1 | flags: bit 0 `CONFIG`, bit 1 `KEYFRAME` |
+| 6 | 2 | tamaño de cabecera (`32`) |
+| 8 | 4 | secuencia unsigned |
+| 12 | 8 | timestamp de captura, microsegundos Unix |
+| 20 | 4 | bytes de payload |
+| 24 | 4 | anchura |
+| 28 | 4 | altura |
+| 32 | N | access unit H.264 Annex B (start codes incluidos) |
+
+El encoder usa baseline, cero B-frames/lookahead, AUD y un GOP corto de 4–6 frames,
+repitiendo SPS/PPS en cada IDR. `CONFIG` indica que el payload contiene SPS/PPS;
+`KEYFRAME`, un IDR. Si el emisor descarta AUs por backpressure, no entrega más deltas
+y espera al siguiente registro `CONFIG|KEYFRAME` (como máximo un GOP).
+Tras conectar, el servidor espera el próximo keyframe: nunca empieza por un delta
+indecodificable. Ante backpressure salta al access unit más reciente; no acumula cola.
 
 Cada parte del multipart lleva dos cabeceras propias además de `Content-Length`:
 
@@ -623,5 +766,5 @@ de retraso. Medido en `streaming/encoder.py`.
 Referencia con la implementación actual, a 1280×754: **19 fps, 27 KB/frame, 4,1 Mbit/s**,
 con Blender a 53 Hz.
 
-MJPEG es el prototipo, no el destino: no hay compresión entre fotogramas. El siguiente
-paso es H.264 (hay NVENC disponible) reutilizando la misma tubería de captura.
+MJPEG permanece como fallback. H.264/libx264 es la ruta preferida por su menor ancho
+de banda y configuración de latencia interactiva.

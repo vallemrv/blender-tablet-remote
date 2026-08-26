@@ -155,10 +155,24 @@ class WSClient:
             try:
                 msg = self.recv(timeout=max(0.01, deadline - time.monotonic()))
             except (socket.timeout, TimeoutError):
+                # Un reader de socket queda envenenado tras cualquier timeout
+                # (Python 3.14: "cannot read from timed out object"): se rehace
+                # antes de seguir, que el socket en sí sigue sano.
+                self._rebuild_reader()
                 break
             if msg.get("type") == "event":
                 events.append(msg)
         return events
+
+    def _rebuild_reader(self) -> None:
+        if self.sock is None:
+            return
+        if self.rfile is not None:
+            try:
+                self.rfile.close()
+            except OSError:
+                pass
+        self.rfile = self.sock.makefile("rb")
 
     # --------------------------------------------------------------- frames
 

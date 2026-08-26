@@ -17,9 +17,13 @@ data class SelectionCounts(
 /** Proyección de la cámara remota. El servidor puede alternar PERSP/ORTHO. */
 enum class Projection { PERSP, ORTHO }
 
+/** Shading del viewport capturado. La tablet solo alterna entre estos dos. */
+enum class Shading { WIREFRAME, SOLID }
+
 data class ViewState(
     val perspective: Projection = Projection.PERSP,
     val axisView: String? = null,
+    val shading: Shading = Shading.SOLID,
 )
 
 data class SceneContext(

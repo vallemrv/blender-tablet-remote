@@ -12,11 +12,11 @@ import traceback
 
 import bpy
 
-from . import commands, log, state
+from . import commands, log, screen, state
 from .camera import camera as _camera
 from .errors import AuthError, CommandError, UnknownCommand
 from .gestures import GestureManager
-from .streaming import FrameBuffer, StreamServer, ViewportCapture
+from .streaming import FrameBuffer, StreamServer, ViewportCapture, h264_available
 from .wsserver import WSClient, WSServer
 
 # Cola de entrada: (cliente, mensaje). Escriben los threads, lee el hilo principal.
@@ -26,8 +26,10 @@ _server: WSServer | None = None
 _watcher = state.StateWatcher()
 _gestures = GestureManager()
 _frames = FrameBuffer()
-_capture = ViewportCapture(_frames, has_viewers=lambda: _stream.wanted())
-_stream = StreamServer(_frames, lambda: _capture.stats())
+_h264_frames = FrameBuffer()
+_capture = ViewportCapture(_frames, _h264_frames, has_viewers=lambda: _stream.wanted(),
+                           wanted_formats=lambda: _stream.formats_wanted())
+_stream = StreamServer(_frames, lambda: _capture.stats(), _h264_frames)
 _token: str = ""
 _timer_registered = False
 _last_event_poll = 0.0
@@ -39,6 +41,31 @@ EVENT_POLL_INTERVAL = 0.1  # 10 Hz para detectar cambios de estado
 TICK_ACTIVE = 1.0 / 60.0
 TICK_IDLE = 0.25
 MAX_MESSAGES_PER_TICK = 256
+
+# Estos comandos representan una acción discreta cuya confirmación visual no debe
+# esperar al siguiente intervalo del stream. Las actualizaciones continuas quedan
+# fuera deliberadamente: forzar una captura por cada transform.nudge/value anularía
+# el límite de FPS y monopolizaría el hilo principal con renders.
+IMMEDIATE_FRAME_COMMANDS = {
+    "selection.pick",
+    "selection.elements",
+    "selection.all",
+    "selection.box",
+    "selection.circle",
+    "selection.loop",
+    "selection.ring",
+    "selection.invert",
+    "selection.hide",
+    "selection.reveal",
+    "object.select",
+    "transform.begin",
+    "transform.confirm",
+    "transform.cancel",
+    # Colocar el corte con el toque es una acción discreta: su preview no debe
+    # esperar al siguiente hueco de fps.
+    "tool.begin",
+    "tool.loop_pick",
+}
 
 
 # --------------------------------------------------------------------- ciclo
@@ -104,6 +131,9 @@ def _start_stream(host: str, cfg: dict) -> None:
 def stop() -> None:
     global _server
     _unregister_timer()
+    # Antes que nada: el pump ya no va a correr, y es quien suelta la inhibición.
+    # Dejarla puesta significaría dejar la pantalla del usuario sin ahorro de energía.
+    screen.keep_awake(False)
     if _stream.is_running():
         _stream.stop()
     # shutdown() libera recursos GPU y solo es seguro en el hilo principal, que es
@@ -143,6 +173,8 @@ def reset_session() -> None:
     _watcher.reset()
     _gestures.reset()
     _camera.reset()
+    from .commands.view import reset_local_view
+    reset_local_view()
 
 
 def status() -> dict:
@@ -183,13 +215,17 @@ def configure_stream(
 
 def stream_info() -> dict:
     """Lo que Android necesita para abrir el vídeo. Se manda en el 'hello'."""
+    h264 = h264_available()
     info = {
         "running": _stream.is_running(),
         "port": _stream.port,
-        "path": "/stream.mjpg",
-        "format": "mjpeg",
+        "path": "/stream.h264" if h264 else "/stream.mjpg",
+        "format": "h264" if h264 else "mjpeg",
         "clients": _stream.clients,
     }
+    if h264:
+        info.update({"framing": "btr-h264-v1", "codec": "avc1.42C01F",
+                     "alternatives": [{"format": "mjpeg", "path": "/stream.mjpg"}]})
     info.update(_capture.stats())
     return info
 
@@ -260,12 +296,16 @@ def _pump() -> float | None:
         return None  # desregistra el timer
 
     processed = 0
+    ran_command = False
     while processed < MAX_MESSAGES_PER_TICK:
         try:
             client, msg = _inbox.get_nowait()
         except queue.Empty:
             break
         processed += 1
+        if (str(msg.get("type", "")).lower() == "command"
+                and msg.get("command") in IMMEDIATE_FRAME_COMMANDS):
+            ran_command = True
         try:
             _handle(client, msg)
         except Exception:  # noqa: BLE001 - el pump nunca debe morir
@@ -278,7 +318,11 @@ def _pump() -> float | None:
         _stats["errors"] += 1
         log.error("gesture flush failed:\n%s", traceback.format_exc())
 
-    # Después de aplicar gestos y comandos, para que el frame refleje ya el cambio.
+    # Tras aplicar gestos y comandos, para que el frame refleje ya el cambio. Un
+    # comando discreto de selección/sesión fuerza un frame inmediato; los arrastres
+    # continuos siguen el ritmo de fps para no saturar el hilo principal.
+    if ran_command:
+        _capture.request_frame()
     _capture.tick()
 
     now = time.monotonic()
@@ -289,6 +333,11 @@ def _pump() -> float | None:
     # Un cliente de vídeo sin sesión WebSocket (el navegador de pruebas) también
     # cuenta: si no, el ritmo cae a TICK_IDLE y el stream baja a 4 fps.
     busy = _server.clients() or _stream.clients
+    # Con la pantalla del PC apagada, Blender se bloquea al redibujar y este timer deja
+    # de correr: el mismo `busy` decide si hay que impedir que se apague (ver screen.py).
+    # En background no hay ventana que se bloquee, así que no hay por qué tocar la
+    # pantalla de nadie: importa sobre todo para no manosearla durante los tests.
+    screen.keep_awake(bool(busy) and not bpy.app.background)
     return TICK_ACTIVE if busy else TICK_IDLE
 
 

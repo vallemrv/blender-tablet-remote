@@ -159,6 +159,138 @@ def get_view(payload: dict) -> dict:
     return _view_state()
 
 
+# ------------------------------------------------------------------- shading
+
+VALID_SHADING = {"WIREFRAME", "SOLID"}
+
+
+def _shading_space():
+    """(area, space) del primer VIEW_3D, o None. El shading vive en el espacio."""
+    from ..bpy_utils import find_view3d
+
+    found = find_view3d()
+    if found is None:
+        return None
+    _window, area, _region, _rv3d = found
+    return area, area.spaces.active
+
+
+def shading_state() -> str:
+    """Shading actual del viewport capturado, normalizado a WIREFRAME/SOLID.
+
+    MATERIAL y RENDERED se reportan como SOLID: la tablet solo alterna entre esos
+    dos, y no hay botón que se pueda pintar "a medias".
+    """
+    found = _shading_space()
+    if found is None:
+        return "SOLID"
+    return "WIREFRAME" if found[1].shading.type == "WIREFRAME" else "SOLID"
+
+
+def is_xray_wireframe() -> bool:
+    """El picking puede ciclar hacia detrás: wireframe con xray activado."""
+    found = _shading_space()
+    if found is None:
+        return False
+    shading = found[1].shading
+    return shading.type == "WIREFRAME" and bool(shading.show_xray_wireframe)
+
+
+@command("view.shading")
+def shading(payload: dict) -> dict:
+    """Wireframe/sólido del viewport capturado. Wireframe y xray van siempre juntos.
+
+    El offscreen dibuja con el shading del espacio que se le pasa, así que cambiar
+    `space.shading` cambia el vídeo sin tocar la cámara. El xray del wireframe
+    hace que se vea (y se pueda picar) a través: ver `selection.pick`.
+
+    El paquete es inseparable también en TOGGLE: un WIREFRAME sin xray (dejado por
+    Shift+Z en el PC o por un .blend guardado) no cuenta como "wireframe", así que
+    el toggle lo re-arma completo en vez de bajar a SOLID.
+    """
+    found = _shading_space()
+    mode = str(payload.get("mode", "TOGGLE")).upper()
+    if mode == "TOGGLE":
+        if found is None:
+            raise CommandError("No 3D viewport available", code="no_viewport")
+        mode = "SOLID" if is_xray_wireframe() else "WIREFRAME"
+    if mode not in VALID_SHADING:
+        raise BadPayload("'mode' must be WIREFRAME, SOLID or TOGGLE")
+    if found is None:
+        raise CommandError("No 3D viewport available", code="no_viewport")
+    _area, space = found
+
+    space.shading.type = mode
+    if mode == "WIREFRAME":
+        # Alpha 1.0 muestra también las aristas traseras: todo el armazón visible.
+        space.shading.show_xray_wireframe = True
+        space.shading.xray_alpha_wireframe = 1.0
+    return {"shading": shading_state()}
+
+
+# ---------------------------------------------------------------- aislamiento
+
+# Objetos ocultados por `view.local`. Solo estos se restauran al salir: lo que ya
+# estaba oculto antes de aislar no se toca, y el aislamiento nunca lo revela.
+_local_hidden: list[str] = []
+
+
+@command("view.local", mutating=True)
+def local(payload: dict) -> dict:
+    """Aísla la selección ocultando el resto (el `/` de Blender).
+
+    La cámara de la tablet dibuja el view_layer entero, así que el local view
+    nativo de Blender (que opera sobre el rv3d del PC) no nos sirve: el equivalente
+    fiable es ocultar los no seleccionados y recordar exactamente qué se ocultó.
+    """
+    global _local_hidden
+    from .. import state
+
+    enabled = payload.get("enabled")
+    if enabled is None:
+        enabled = not _local_hidden
+    enabled = bool(enabled)
+
+    if enabled and not _local_hidden:
+        view_layer = bpy.context.view_layer
+        selected = {o.name for o in view_layer.objects if o.select_get()}
+        newly = [o for o in view_layer.objects if o.name not in selected and not o.hide_get()]
+        for obj in newly:
+            obj.hide_set(True)
+        _local_hidden = [o.name for o in newly]
+    elif not enabled and _local_hidden:
+        for name in _local_hidden:
+            obj = bpy.data.objects.get(name)
+            if obj is not None:
+                try:
+                    if obj.hide_get():
+                        obj.hide_set(False)
+                except RuntimeError:
+                    pass  # objeto en otra escena/archivo: no se puede restaurar
+        _local_hidden = []
+
+    return dict(state.snapshot(include_view=False), local=bool(_local_hidden),
+                hidden=list(_local_hidden))
+
+
+def reset_local_view() -> None:
+    """Tras cargar otro .blend los nombres guardados apuntan a otra cosa."""
+    global _local_hidden
+    _local_hidden = []
+
+
+def forget_local_hidden(names) -> None:
+    """`object.hide` explícito: ese objeto ya no es cosa del aislamiento.
+
+    Ocultar algo a mano mientras se aísla es una decisión del usuario que debe
+    sobrevivir a la salida del local view, igual que en Blender.
+    """
+    global _local_hidden
+    if _local_hidden:
+        hidden_set = {str(name) for name in names}
+        _local_hidden = [name for name in _local_hidden if name not in hidden_set]
+
+
 @command("view.set")
 def set_view(payload: dict) -> dict:
     """Restaura una vista completa (la que devuelve view.get)."""

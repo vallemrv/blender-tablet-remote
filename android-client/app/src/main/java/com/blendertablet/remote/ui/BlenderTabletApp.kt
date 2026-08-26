@@ -18,7 +18,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Adjust
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Close
@@ -26,7 +28,6 @@ import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.CropFree
-import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Deselect
@@ -34,16 +35,20 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Flip
 import androidx.compose.material.icons.filled.Grid4x4
 import androidx.compose.material.icons.filled.LibraryAdd
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.LinearScale
 import androidx.compose.material.icons.filled.Mouse
 import androidx.compose.material.icons.filled.OpenWith
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.RotateRight
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.RoundedCorner
 import androidx.compose.material.icons.filled.Rowing
-import androidx.compose.material.icons.filled.ScatterPlot
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.Straighten
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Tune
@@ -53,6 +58,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Transform
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Waves
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -73,20 +79,26 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 import com.blendertablet.remote.MainViewModel
 import com.blendertablet.remote.model.ActionId
 import com.blendertablet.remote.model.ActiveTool
+import com.blendertablet.remote.model.AddCategory
+import com.blendertablet.remote.model.AddObject
 import com.blendertablet.remote.model.AppUiState
 import com.blendertablet.remote.model.BlenderMode
 import com.blendertablet.remote.model.ConnectionStatus
 import com.blendertablet.remote.model.Constraint
 import com.blendertablet.remote.model.EditTool
+import com.blendertablet.remote.model.Gesture
 import com.blendertablet.remote.model.GesturePhase
 import com.blendertablet.remote.model.Orientation
 import com.blendertablet.remote.model.RadialMenu
 import com.blendertablet.remote.model.SurfaceCatalog
 import com.blendertablet.remote.model.TouchContext
 import com.blendertablet.remote.model.SelectionMode
+import com.blendertablet.remote.model.SelectionOp
+import com.blendertablet.remote.model.ShapeTool
 import com.blendertablet.remote.model.SnapAction
 import com.blendertablet.remote.model.ToolSession
 import com.blendertablet.remote.model.TransformMode
@@ -138,12 +150,14 @@ fun BlenderTabletApp(viewModel: MainViewModel) {
 private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openConnection: () -> Unit) {
     val frame by vm.viewportFrame.collectAsStateWithLifecycle()
     val stats by vm.streamStats.collectAsStateWithLifecycle()
+    val h264Active by vm.h264Active.collectAsStateWithLifecycle()
+    val h264Size by vm.h264Size.collectAsStateWithLifecycle()
+    val remoteFiles by vm.remoteFiles.collectAsStateWithLifecycle()
 
-    var navigating by remember { mutableStateOf(false) }
     var railOpen by remember { mutableStateOf(false) }
     var quickMenuAt by remember { mutableStateOf<Pair<Float, Float>?>(null) }
     var chromeVisible by remember { mutableStateOf(true) }
-    var saveAsOpen by remember { mutableStateOf(false) }
+    var fileBrowserMode by remember { mutableStateOf<FileBrowserMode?>(null) }
     // Guarda a QUIÉN se renombra: el sondeo se borra al cerrar el anillo.
     var renameTarget by remember { mutableStateOf<String?>(null) }
     // Acción pendiente de confirmar porque descarta cambios sin guardar.
@@ -151,6 +165,14 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     var modifiersOpen by remember { mutableStateOf(false) }
     LaunchedEffect(state.blender.activeObject, state.blender.mode, state.blender.features.modifiers) {
         if (!state.blender.features.modifiers || state.blender.mode != BlenderMode.OBJECT || state.blender.activeObjectType != "MESH") modifiersOpen = false
+    }
+
+    // El toast de error se auto-descarta: un aviso que no caduca es ruido permanente.
+    LaunchedEffect(state.error) {
+        if (state.error != null) {
+            delay(5000)
+            vm.clearError()
+        }
     }
 
     /** Nuevo y Abrir se tragan lo no guardado: se confirma solo si hay algo que perder. */
@@ -161,10 +183,16 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     val menuActions = MenuActions(
         onFileMenuOpened = vm::refreshFileMenu,
         onNew = { guardDiscard(PendingDiscard.New(vm::fileNew)) },
+        onBrowseOpen = {
+            fileBrowserMode = FileBrowserMode.OPEN
+            vm.openFileBrowser()
+        },
         onOpen = { path -> guardDiscard(PendingDiscard.Open(path) { vm.fileOpen(path) }) },
         onSave = vm::fileSave,
-        onSaveAs = { saveAsOpen = true },
-        onAdd = vm::addPrimitive,
+        onSaveAs = {
+            fileBrowserMode = FileBrowserMode.SAVE
+            vm.openFileBrowser()
+        },
         onSnap = vm::snap,
         onConnectionSettings = openConnection,
         onReconnect = vm::onForeground,
@@ -193,12 +221,33 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
         else listOf(Orientation.GLOBAL, Orientation.LOCAL, Orientation.VIEW)
     }
 
+    // Callbacks del viewport en un solo objeto recordado: sin esto, ViewportLayer
+    // recibía `state` y `vm` enteros y se invalidaba con cada cambio de estado (o sea,
+    // con cada toque y cada snapshot) aunque solo dibuje el último frame.
+    val viewportInput = remember(vm) {
+        ViewportInput(
+            onDebug = vm::updateInput,
+            onToolGesture = vm::toolGesture,
+            onViewGestureLive = { g, phase, dx, dy, factor ->
+                vm.viewGesture(g, phase, dx, dy, factor)
+                if (phase != GesturePhase.BEGIN && phase != GesturePhase.UPDATE) vm.requestState()
+            },
+            onViewGesturePlain = vm::viewGesture,
+            onTap = vm::pick,
+            onDoubleTap = vm::frameSelected,
+            onSurfaceAvailable = vm::attachVideoSurface,
+            onSurfaceDestroyed = vm::detachVideoSurface,
+        )
+    }
+
     Box(Modifier.fillMaxSize().background(Ink.Background)) {
         ViewportLayer(
-            state = state,
-            vm = vm,
             frame = frame?.bitmap,
-            onNavigatingChange = { navigating = it },
+            h264Active = h264Active,
+            h264Size = h264Size,
+            input = viewportInput,
+            shapeTool = state.shapeTool,
+            onShape = vm::shapeSelect,
             onLongPress = { x, y, u, v ->
                 // El menú se abre ya, en el sitio donde está el dedo, y en paralelo
                 // se pregunta qué hay debajo: esperar a la respuesta para dibujarlo
@@ -207,6 +256,31 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 vm.probeTouch(u, v)
             },
         )
+
+        // Con B/C armada el dedo dibuja la forma en vez de orbitar: el chip enseña
+        // que la herramienta está activa y ofrece la vuelta a la selección normal.
+        // Vive fuera del chrome porque con los controles ocultos sería la única
+        // pista de por qué el toque ya no selecciona.
+        AnimatedVisibility(
+            visible = state.shapeTool != ShapeTool.NONE,
+            enter = fadeIn(tween(140)),
+            exit = fadeOut(tween(120)),
+        ) {
+            FloatingPanel(Modifier.align(Alignment.TopCenter).padding(top = Metrics.EdgeMargin)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (state.shapeTool == ShapeTool.BOX) "Selección por caja"
+                        else "Selección por círculo",
+                        color = Ink.Muted,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 6.dp, end = 2.dp),
+                    )
+                    IconAction(Icons.Default.Close, "Volver a la selección normal") {
+                        vm.toggleShapeTool(state.shapeTool)
+                    }
+                }
+            }
+        }
 
         AnimatedVisibility(
             visible = chromeVisible,
@@ -278,35 +352,44 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     onParameter = vm::setToolParameter,
                     onConfirm = vm::confirmTool,
                     onCancel = vm::cancelTool,
+                    awaitingPick = state.activeTool == ActiveTool.LOOP_CUT &&
+                        !toolSession.active && state.loopCutAwaitingTap,
                     modifier = Modifier.align(Alignment.BottomCenter).padding(Metrics.EdgeMargin),
                 )
 
                 ViewFooter(
                     projection = state.blender.view.perspective,
                     activeAxisView = state.blender.view.axisView,
+                    inEdit = state.blender.mode == BlenderMode.EDIT,
+                    localViewActive = state.localViewActive,
+                    showLocal = state.blender.features.localView,
+                    showGrow = state.blender.features.selectionGrow,
                     onAxis = vm::viewAxis,
                     onOrbit = vm::viewOrbitStep,
-                    onZoom = vm::viewZoomStep,
+                    onRotate180 = { vm.viewOrbitStep(1f, 0f) },
                     onProjection = vm::viewPerspective,
-                    onFrameSelected = vm::frameSelected,
-                    onFrameAll = vm::viewFrameAll,
+                    onLocal = vm::toggleLocalView,
+                    onMore = vm::selectMore,
+                    onLess = vm::selectLess,
                     modifier = Modifier.align(Alignment.BottomEnd).padding(Metrics.EdgeMargin),
                 )
 
                 if (state.debugVisible) {
-                    DebugOverlay(state, Modifier.align(Alignment.TopStart).padding(start = Metrics.EdgeMargin, top = 56.dp))
+                    DebugOverlay(vm, state.blender.mode, Modifier.align(Alignment.TopStart).padding(start = Metrics.EdgeMargin, top = 56.dp))
                 }
             }
         }
 
-        // Ocultar del todo la interfaz: modo "solo viewport" (§70).
-        FloatingPanel(Modifier.align(Alignment.TopEnd).padding(Metrics.EdgeMargin)) {
-            IconAction(
-                icon = if (chromeVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                description = if (chromeVisible) "Ocultar controles" else "Mostrar controles",
-                onClick = { chromeVisible = !chromeVisible },
-            )
-        }
+        // Barra de tools junto al ojo (wireframe, B/C, Ctrl/Alt, undo/redo) y, en
+        // Edit Mode, los submodos de selección a su derecha. El ojo sigue al final
+        // para ocultar del todo la interfaz (§70).
+        TopToolbar(
+            state = state,
+            vm = vm,
+            chromeVisible = chromeVisible,
+            onToggleChrome = { chromeVisible = !chromeVisible },
+            modifier = Modifier.align(Alignment.TopEnd).padding(Metrics.EdgeMargin),
+        )
 
         state.error?.let { message ->
             ErrorToast(message, Modifier.align(Alignment.TopCenter).padding(top = 64.dp))
@@ -314,31 +397,50 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
 
         quickMenuAt?.let { (x, y) ->
             val touchContext = vm.touchContext(probe)
-            QuickMenu(
-                open = true,
-                center = x to y,
-                actions = quickActions(touchContext, vm) {
-                    renameTarget = touchContext.objectName ?: state.blender.activeObject
-                },
-                contextLabel = quickContextLabel(touchContext),
-                onDismiss = {
-                    quickMenuAt = null
-                    vm.clearProbe()
-                },
-            )
+            val actions = quickActions(touchContext, vm) {
+                renameTarget = touchContext.objectName ?: state.blender.activeObject
+            }
+            val dismiss = {
+                quickMenuAt = null
+                vm.clearProbe()
+            }
+            // Object Mode pinta el menú como lista flotante: el catálogo "Agregar"
+            // del vacío no cabe ni se lee en un anillo. Edit mantiene el radial,
+            // que ahí sigue siendo más rápido con pocas acciones frecuentes.
+            if (touchContext.mode == BlenderMode.OBJECT) {
+                ContextSheet(
+                    open = true,
+                    anchor = x to y,
+                    actions = actions,
+                    contextLabel = quickContextLabel(touchContext),
+                    onDismiss = dismiss,
+                )
+            } else {
+                QuickMenu(
+                    open = true,
+                    center = x to y,
+                    actions = actions,
+                    contextLabel = quickContextLabel(touchContext),
+                    onDismiss = dismiss,
+                )
+            }
         }
 
-        if (saveAsOpen) {
-            SaveAsDialog(
-                // La tablet no conoce el disco del PC: se propone la carpeta del
-                // archivo abierto y, si no hay, la del último reciente.
-                initialFolder = state.file.path.substringBeforeLast('/', "")
-                    .ifBlank { state.recentFiles.firstOrNull()?.folder.orEmpty() },
+        fileBrowserMode?.let { mode ->
+            FileBrowserDialog(
+                mode = mode,
+                files = remoteFiles,
                 initialName = state.file.name.takeIf { state.file.saved } ?: "sin-titulo.blend",
-                onDismiss = { saveAsOpen = false },
-                onSave = {
-                    saveAsOpen = false
-                    vm.fileSaveAs(it)
+                onBrowse = vm::browseFiles,
+                onSetDefault = vm::setDefaultFolder,
+                onDismiss = { fileBrowserMode = null },
+                onOpen = { path ->
+                    fileBrowserMode = null
+                    guardDiscard(PendingDiscard.Open(path) { vm.fileOpen(path) })
+                },
+                onSave = { folder, name ->
+                    fileBrowserMode = null
+                    vm.fileSaveAs(folder, name)
                 },
             )
         }
@@ -383,29 +485,77 @@ private sealed class PendingDiscard(
 }
 
 /**
+ * Callbacks que la capa del viewport necesita, agrupados para poder pasarlos en un
+ * único `remember`: así Compose puede saltarse la recomposición cuando nada cambie.
+ */
+class ViewportInput(
+    val onDebug: (com.blendertablet.remote.model.InputDebug) -> Unit,
+    val onToolGesture: (GesturePhase, Float, Float) -> Unit,
+    /** Con vídeo activo: al soltar el gesto se refresca el estado. */
+    val onViewGestureLive: (Gesture, GesturePhase, Float, Float, Float) -> Unit,
+    /** Sin vídeo: solo navega, no hay nada que refrescar aún. */
+    val onViewGesturePlain: (Gesture, GesturePhase, Float, Float, Float) -> Unit,
+    val onTap: (Float, Float, Boolean) -> Unit,
+    val onDoubleTap: () -> Unit,
+    val onSurfaceAvailable: (android.view.Surface) -> Unit,
+    val onSurfaceDestroyed: () -> Unit,
+)
+
+/**
  * El vídeo y la capa táctil. Ya no dibuja manipulador: los ejes viven en la barra de
  * transformación, donde son botones grandes con cifras en vez de flechas finas que
  * tapaban el objeto.
+ *
+ * Solo depende del frame y de callbacks estables: ni del estado general ni del
+ * ViewModel, que la invalidaban a 60-120 Hz durante el toque.
  */
 @Composable
 private fun ViewportLayer(
-    state: AppUiState,
-    vm: MainViewModel,
     frame: android.graphics.Bitmap?,
-    onNavigatingChange: (Boolean) -> Unit,
+    h264Active: Boolean,
+    h264Size: Pair<Int, Int>?,
+    input: ViewportInput,
+    shapeTool: ShapeTool,
+    onShape: (ShapeTool, Float, Float, Float, Float) -> Unit,
     onLongPress: (px: Float, py: Float, u: Float, v: Float) -> Unit,
 ) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        if (h264Active) {
+            val videoModifier = if (h264Size != null) {
+                Modifier.aspectRatio(h264Size.first.toFloat() / h264Size.second.toFloat()).fillMaxSize()
+            } else Modifier.fillMaxSize()
+            Box(videoModifier) {
+                VideoSurface(
+                    modifier = Modifier.fillMaxSize(),
+                    onSurfaceAvailable = input.onSurfaceAvailable,
+                    onSurfaceDestroyed = input.onSurfaceDestroyed,
+                )
+                InputSurface(
+                    modifier = Modifier.fillMaxSize(),
+                    onDebug = input.onDebug,
+                    onToolGesture = input.onToolGesture,
+                    onViewGesture = input.onViewGestureLive,
+                    onTap = input.onTap,
+                    onDoubleTap = input.onDoubleTap,
+                    onLongPress = onLongPress,
+                    shapeTool = shapeTool,
+                    onShape = onShape,
+                )
+            }
+            return@Box
+        }
         if (frame == null) {
             EmptyViewport()
             InputSurface(
                 modifier = Modifier.fillMaxSize(),
-                onDebug = vm::updateInput,
-                onToolGesture = vm::toolGesture,
-                onViewGesture = { g, phase, dx, dy, factor -> vm.viewGesture(g, phase, dx, dy, factor) },
-                onTap = vm::pick,
-                onDoubleTap = vm::frameSelected,
+                onDebug = input.onDebug,
+                onToolGesture = input.onToolGesture,
+                onViewGesture = input.onViewGesturePlain,
+                onTap = input.onTap,
+                onDoubleTap = input.onDoubleTap,
                 onLongPress = onLongPress,
+                shapeTool = shapeTool,
+                onShape = onShape,
             )
             return@Box
         }
@@ -417,8 +567,10 @@ private fun ViewportLayer(
                 .aspectRatio(frame.width.toFloat() / frame.height.toFloat())
                 .fillMaxSize(),
         ) {
+            // El wrapper es barato pero no gratis: una vez por frame nuevo basta.
+            val imageBitmap = remember(frame) { frame.asImageBitmap() }
             Image(
-                bitmap = frame.asImageBitmap(),
+                bitmap = imageBitmap,
                 contentDescription = "Viewport de Blender",
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Fit,
@@ -427,17 +579,14 @@ private fun ViewportLayer(
             )
             InputSurface(
                 modifier = Modifier.fillMaxSize(),
-                onDebug = vm::updateInput,
-                onToolGesture = vm::toolGesture,
-                onViewGesture = { g, phase, dx, dy, factor ->
-                    val moving = phase == GesturePhase.BEGIN || phase == GesturePhase.UPDATE
-                    onNavigatingChange(moving)
-                    vm.viewGesture(g, phase, dx, dy, factor)
-                    if (!moving) vm.requestState()
-                },
-                onTap = vm::pick,
-                onDoubleTap = vm::frameSelected,
+                onDebug = input.onDebug,
+                onToolGesture = input.onToolGesture,
+                onViewGesture = input.onViewGestureLive,
+                onTap = input.onTap,
+                onDoubleTap = input.onDoubleTap,
                 onLongPress = onLongPress,
+                shapeTool = shapeTool,
+                onShape = onShape,
             )
         }
     }
@@ -530,36 +679,15 @@ private fun RailContent(
             IconAction(
                 icon = editToolIcon(tool),
                 description = if (ready) tool.label else "${tool.label} · ${tool.requirement}",
-                selected = toolSession.active && toolSession.tool == tool,
+                selected = toolSession.active && toolSession.tool == tool ||
+                    (tool == EditTool.LOOP_CUT && state.activeTool == ActiveTool.LOOP_CUT && !toolSession.active),
                 enabled = ready || toolSession.active,
                 onClick = { vm.beginEditTool(tool) },
             )
         }
-
-        RailDivider()
-        // El conteo de selección del submodo activo orienta sin abrir un panel.
-        val count = state.blender.context.countFor(state.blender.selectionMode)
-        RailLabel("SEL${if (count > 0) " · $count" else ""}")
-        IconAction(
-            Icons.Default.ScatterPlot, "Vértices",
-            selected = state.blender.selectionMode == SelectionMode.VERTEX,
-            onClick = { vm.setSelectionMode(SelectionMode.VERTEX) },
-        )
-        IconAction(
-            Icons.Default.LinearScale, "Aristas",
-            selected = state.blender.selectionMode == SelectionMode.EDGE,
-            onClick = { vm.setSelectionMode(SelectionMode.EDGE) },
-        )
-        IconAction(
-            Icons.Default.CropSquare, "Caras",
-            selected = state.blender.selectionMode == SelectionMode.FACE,
-            onClick = { vm.setSelectionMode(SelectionMode.FACE) },
-        )
     }
 
     RailDivider()
-    IconAction(Icons.AutoMirrored.Filled.Undo, "Deshacer", onClick = vm::undo)
-    IconAction(Icons.AutoMirrored.Filled.Redo, "Rehacer", onClick = vm::redo)
     IconAction(Icons.Default.ContentCopy, "Duplicar", enabled = editable, onClick = vm::duplicate)
 
     RailDivider()
@@ -574,6 +702,18 @@ private fun editToolIcon(tool: EditTool) = when (tool) {
     EditTool.LOOP_CUT -> Icons.Default.LinearScale
 }
 
+/** Icono de cada familia del catálogo Add. */
+private fun addCategoryIcon(category: AddCategory) = when (category) {
+    AddCategory.MESH -> Icons.Default.ViewInAr
+    AddCategory.CURVE -> Icons.AutoMirrored.Filled.ShowChart
+    AddCategory.SURFACE -> Icons.Default.Waves
+    AddCategory.METABALL -> Icons.Default.BlurOn
+    AddCategory.TEXT -> Icons.Default.TextFields
+    AddCategory.EMPTY -> Icons.Default.CropFree
+    AddCategory.LIGHT -> Icons.Default.Lightbulb
+    AddCategory.CAMERA -> Icons.Default.PhotoCamera
+}
+
 /** Qué borra `mesh.delete` según el submodo de selección. */
 private fun deleteWhat(mode: SelectionMode): String = when (mode) {
     SelectionMode.VERTEX -> "VERTS"
@@ -582,7 +722,7 @@ private fun deleteWhat(mode: SelectionMode): String = when (mode) {
 }
 
 /**
- * Menú radial de la pulsación larga.
+ * Menú de la pulsación larga: lista flotante en Object Mode, anillo en Edit.
  *
  * Qué acciones salen lo decide [RadialMenu.actionsFor] a partir de lo que hay bajo el
  * dedo; aquí solo se les pone icono y se les conecta el comando. Esa separación es lo
@@ -596,8 +736,33 @@ private fun quickActions(
 ): List<QuickAction> = RadialMenu.actionsFor(context).map { id ->
     val label = SurfaceCatalog.labelOf(id)
     when (id) {
+        // El catálogo Add completo, antes en el menú Objeto del top: en el vacío del
+        // long-click está donde se le necesita, y el panel flotante lo ordena por
+        // categorías con salida por la X de la cabecera.
+        ActionId.ADD_OBJECT -> QuickAction(
+            label, Icons.Default.Add, tint = Ink.Accent,
+            children = AddCategory.entries.map { category ->
+                val items = AddObject.of(category)
+                // Texto y Cámara son categorías de un solo elemento: un subnivel con
+                // una entrada sería un clic de más para nada.
+                if (items.size == 1) {
+                    QuickAction(items.first().label, addCategoryIcon(category)) { vm.addPrimitive(items.first()) }
+                } else {
+                    QuickAction(
+                        category.label, addCategoryIcon(category),
+                        children = items.map { item ->
+                            QuickAction(item.label, addCategoryIcon(category)) { vm.addPrimitive(item) }
+                        },
+                    )
+                }
+            },
+        )
         ActionId.SELECT_ALL -> QuickAction(label, Icons.Default.SelectAll) { vm.selectAll() }
         ActionId.DESELECT_ALL -> QuickAction(label, Icons.Default.Deselect) { vm.deselectAll() }
+        // Caja y Círculo arman el arrastre por forma y cierran el menú: el siguiente
+        // arrastre de un dedo dibuja la forma en vez de orbitar.
+        ActionId.TOOL_BOX -> QuickAction(label, Icons.Default.SelectAll) { vm.toggleShapeTool(ShapeTool.BOX) }
+        ActionId.TOOL_CIRCLE -> QuickAction(label, Icons.Default.BlurOn) { vm.toggleShapeTool(ShapeTool.CIRCLE) }
         ActionId.SELECT_INVERT -> QuickAction(label, Icons.Default.Flip) { vm.invertSelection() }
         ActionId.SELECT_UNDER -> QuickAction(label, Icons.Default.TouchApp) {
             context.objectName?.let { vm.selectObject(it, add = false) }
@@ -660,14 +825,16 @@ private fun ErrorToast(message: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun DebugOverlay(state: AppUiState, modifier: Modifier = Modifier) {
+private fun DebugOverlay(vm: MainViewModel, mode: BlenderMode, modifier: Modifier = Modifier) {
+    // Recolecta el flujo de entrada aquí, no en Workspace: a 60-120 Hz solo debe
+    // recomponerse este panel, y únicamente cuando el diagnóstico está abierto.
+    val input by vm.inputDebug.collectAsStateWithLifecycle()
     FloatingPanel(modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            val input = state.input
             Text("dedos ${input.pointerCount}  ·  ${input.tool}", color = Ink.Muted, fontSize = 11.sp)
             Text("presión ${"%.2f".format(input.pressure)}", color = Ink.Faint, fontSize = 11.sp)
             Text("x ${input.x.toInt()}  y ${input.y.toInt()}", color = Ink.Faint, fontSize = 11.sp)
-            Text("modo ${state.blender.mode}", color = Ink.Faint, fontSize = 11.sp)
+            Text("modo $mode", color = Ink.Faint, fontSize = 11.sp)
         }
     }
 }

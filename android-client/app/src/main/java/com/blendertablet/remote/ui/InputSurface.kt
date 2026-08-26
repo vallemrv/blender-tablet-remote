@@ -4,12 +4,15 @@ import android.content.Context
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
+import android.graphics.Canvas
+import android.graphics.Paint
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.blendertablet.remote.model.Gesture
 import com.blendertablet.remote.model.GesturePhase
 import com.blendertablet.remote.model.InputDebug
+import com.blendertablet.remote.model.ShapeTool
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.pow
@@ -40,6 +43,10 @@ fun InputSurface(
     onDoubleTap: () -> Unit,
     /** Pulsación larga: abre el menú rápido en píxeles de esta vista. */
     onLongPress: (px: Float, py: Float, u: Float, v: Float) -> Unit = { _, _, _, _ -> },
+    /** Herramienta de forma armada (B/C); NONE = gesto normal de un dedo. */
+    shapeTool: ShapeTool = ShapeTool.NONE,
+    /** Forma terminada: esquinas (box) o centro+borde (circle) normalizados. */
+    onShape: (ShapeTool, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> },
 ) {
     AndroidView(
         modifier = modifier,
@@ -47,6 +54,8 @@ fun InputSurface(
         update = { view ->
             view.updateCallbacks(onDebug, onToolGesture, onViewGesture, onTap, onDoubleTap)
             view.onLongPress = onLongPress
+            view.shapeTool = shapeTool
+            view.onShape = onShape
         },
     )
 }
@@ -72,6 +81,19 @@ private class GestureView(
     private var onTap: (Float, Float, Boolean) -> Unit,
     private var onDoubleTap: () -> Unit,
 ) : View(context) {
+    private val tapPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.WHITE
+        style = Paint.Style.STROKE
+        strokeWidth = 2f * resources.displayMetrics.density
+    }
+    private val shapePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.parseColor("#4C8DFF")
+        style = Paint.Style.STROKE
+        strokeWidth = 2f * resources.displayMetrics.density
+    }
+    private var tapFeedbackX = -1f
+    private var tapFeedbackY = -1f
+    private var tapFeedbackUntil = 0L
     private var lastX = 0f
     private var lastY = 0f
     private var lastSpan = 0f
@@ -99,6 +121,15 @@ private class GestureView(
     private val longPressRunnable = Runnable {
         fireLongPress(startX, startY)
     }
+
+    /** Herramienta de forma (B/C). Con una armada, el dedo dibuja en vez de orbitar. */
+    var shapeTool: ShapeTool = ShapeTool.NONE
+    var onShape: (ShapeTool, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> }
+    private var shapeDrawing = false
+    private var shapeStartX = 0f
+    private var shapeStartY = 0f
+    private var shapeCurrentX = 0f
+    private var shapeCurrentY = 0f
 
     // Acumuladores: lo que se ha movido el dedo desde el último envío.
     private var pendingDx = 0f
@@ -137,6 +168,17 @@ private class GestureView(
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 parent?.requestDisallowInterceptTouchEvent(true)
+                // Con B/C armada, un dedo dibuja la forma: no orbita, no selecciona
+                // y no abre el menú. El tap simple no hace nada (se resuelve al soltar).
+                if (shapeTool != ShapeTool.NONE) {
+                    shapeDrawing = true
+                    shapeStartX = event.x; shapeStartY = event.y
+                    shapeCurrentX = event.x; shapeCurrentY = event.y
+                    moved = false
+                    longPressFired = false
+                    invalidate()
+                    return true
+                }
                 lastX = event.x; lastY = event.y
                 startX = event.x; startY = event.y
                 downToolType = event.getToolType(0)
@@ -156,7 +198,11 @@ private class GestureView(
 
             MotionEvent.ACTION_POINTER_DOWN -> if (event.pointerCount >= 2) {
                 removeCallbacks(longPressRunnable)
-                // Un segundo dedo significa navegar: se suelta la herramienta.
+                // Un segundo dedo significa navegar: se suelta la herramienta y la forma.
+                if (shapeDrawing) {
+                    shapeDrawing = false
+                    invalidate()
+                }
                 endToolGesture()
                 // La sesión de navegación NO se cierra: solo se reancla. Cerrarla
                 // cortaría el gesto en seco al apoyar un dedo de más.
@@ -166,7 +212,11 @@ private class GestureView(
             // Tres o mas dedos se tratan como dos: Android intercepta el gesto de
             // tres dedos para la captura de pantalla y nunca llega completo.
             MotionEvent.ACTION_MOVE ->
-                if (event.pointerCount >= 2) handlePair(event) else handleSingle(event)
+                if (event.pointerCount >= 2) handlePair(event)
+                else if (shapeDrawing) {
+                    shapeCurrentX = event.x; shapeCurrentY = event.y
+                    invalidate()
+                } else handleSingle(event)
 
             MotionEvent.ACTION_POINTER_UP -> {
                 // Si baja de dos dedos se acaba la navegación; si aún quedan dos o
@@ -177,6 +227,12 @@ private class GestureView(
 
             MotionEvent.ACTION_UP -> {
                 removeCallbacks(longPressRunnable)
+                if (shapeDrawing) {
+                    shapeDrawing = false
+                    finishShape()
+                    parent?.requestDisallowInterceptTouchEvent(false)
+                    return true
+                }
                 endToolGesture()
                 endViewGesture()
                 if (!moved && !longPressFired) handleTap(event)
@@ -185,6 +241,8 @@ private class GestureView(
 
             MotionEvent.ACTION_CANCEL -> {
                 removeCallbacks(longPressRunnable)
+                shapeDrawing = false
+                invalidate()
                 cancelGestures()
                 parent?.requestDisallowInterceptTouchEvent(false)
             }
@@ -334,11 +392,55 @@ private class GestureView(
             lastTapAt = 0L
         } else {
             lastTapAt = now
+            // Confirma localmente que el toque sí se registró. No representa el
+            // resultado remoto: solo elimina la incertidumbre durante el viaje de
+            // picking y el siguiente frame MJPEG.
+            tapFeedbackX = startX
+            tapFeedbackY = startY
+            tapFeedbackUntil = android.os.SystemClock.uptimeMillis() + 220L
+            performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+            invalidate()
             // u/v normalizados con origen arriba-izquierda: la conversión al eje Y de
             // Blender la hace el servidor.
             // El pequeño deslizamiento al levantar el pen no cambia el objetivo.
             onTap(nx(startX), ny(startY), isStylus(downToolType))
         }
+    }
+
+    /**
+     * Cierra la forma dibujada y la entrega. Un recorrido por debajo del umbral de
+     * deslizamiento es un tap simple con la herramienta armada: no hace nada.
+     */
+    private fun finishShape() {
+        invalidate()
+        if (hypot(shapeCurrentX - shapeStartX, shapeCurrentY - shapeStartY) <= systemTouchSlop) return
+        onShape(shapeTool, nx(shapeStartX), ny(shapeStartY), nx(shapeCurrentX), ny(shapeCurrentY))
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        if (shapeDrawing) {
+            if (shapeTool == ShapeTool.BOX) {
+                canvas.drawRect(
+                    minOf(shapeStartX, shapeCurrentX), minOf(shapeStartY, shapeCurrentY),
+                    maxOf(shapeStartX, shapeCurrentX), maxOf(shapeStartY, shapeCurrentY),
+                    shapePaint,
+                )
+            } else if (shapeTool == ShapeTool.CIRCLE) {
+                canvas.drawCircle(
+                    shapeStartX, shapeStartY,
+                    hypot(shapeCurrentX - shapeStartX, shapeCurrentY - shapeStartY),
+                    shapePaint,
+                )
+            }
+        }
+        val remaining = tapFeedbackUntil - android.os.SystemClock.uptimeMillis()
+        if (remaining <= 0L || tapFeedbackX < 0f) return
+        tapPaint.alpha = (255f * remaining / 220f).toInt().coerceIn(0, 255)
+        val progress = 1f - remaining / 220f
+        val radius = (10f + 9f * progress) * resources.displayMetrics.density
+        canvas.drawCircle(tapFeedbackX, tapFeedbackY, radius, tapPaint)
+        postInvalidateOnAnimation()
     }
 
     private fun fireLongPress(x: Float, y: Float) {

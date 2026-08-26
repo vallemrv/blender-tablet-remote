@@ -23,9 +23,13 @@ def info(msg: str, *args) -> None:
 
 
 def debug(msg: str, *args) -> None:
-    """Para eventos de alta frecuencia (gestos). Silenciado salvo verbose."""
+    """Para eventos de alta frecuencia (gestos, frames). Silenciado salvo verbose.
+
+    Sin flush: a decenas de mensajes por segundo, forzar la syscall por línea
+    costaba más que el propio log; stdout termina volcándose solo.
+    """
     if _level >= 2:
-        print(PREFIX, msg % args if args else msg, flush=True)
+        print(PREFIX, msg % args if args else msg)
 
 
 def warn(msg: str, *args) -> None:

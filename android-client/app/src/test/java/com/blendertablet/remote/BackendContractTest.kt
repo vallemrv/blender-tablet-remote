@@ -8,6 +8,9 @@ import com.blendertablet.remote.model.SelectionMode
 import com.blendertablet.remote.model.SnapType
 import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.ValueMode
+import com.blendertablet.remote.model.EditTool
+import com.blendertablet.remote.model.LoopFalloff
+import com.blendertablet.remote.model.RemoteFileType
 import com.blendertablet.remote.network.StateParser
 import java.io.File
 import org.json.JSONObject
@@ -167,5 +170,56 @@ class BackendContractTest {
         assertTrue(features.modifiers)
         assertTrue(features.visibility)
         assertTrue(features.transformApply)
+        assertTrue(features.loopCutPick)
+        assertTrue(features.fileBrowse)
+    }
+
+    @Test fun `la sesion de loop cut conserva tipos de los parametros`() {
+        val session = StateParser.toolSession(fixture("tool.session.json"))
+
+        assertTrue(session.active)
+        assertEquals(EditTool.LOOP_CUT, session.tool)
+        // Números, bools del modal y el perfil llegan con su tipo original.
+        assertEquals(3.0, session.double("edge")!!, 1e-9)
+        assertEquals(0.35, session.double("factor")!!, 1e-9)
+        assertEquals(2.0, session.double("cuts")!!, 1e-9)
+        assertEquals(true, session.flag("even"))
+        assertEquals(false, session.flag("flip"))
+        assertEquals(true, session.flag("clamp", true))
+        assertEquals(LoopFalloff.SPHERE, session.falloff())
+    }
+
+    @Test fun `el sondeo de loop cut devuelve arista y factor`() {
+        val probe = StateParser.loopProbe(fixture("mesh.loop_probe.json"))
+        assertTrue(probe.hit)
+        assertEquals(3, probe.edge)
+        assertEquals(0.42, probe.factor, 1e-9)
+        assertEquals(4, probe.ring)
+    }
+
+    @Test fun `el explorador de archivos devuelve listado opaco`() {
+        val browse = StateParser.fileBrowse(fixture("file.browse.json"))
+        assertEquals("/home/valle/proyectos", browse.path)
+        assertEquals("/home/valle", browse.parent)
+        assertEquals(4, browse.breadcrumbs.size)
+        assertEquals(2, browse.entries.size)
+        assertEquals(RemoteFileType.DIRECTORY, browse.entries[0].type)
+        assertEquals(RemoteFileType.BLEND, browse.entries[1].type)
+    }
+
+    @Test fun `los lugares de archivo traen alias estables`() {
+        val locations = StateParser.fileLocations(fixture("file.locations.json"))
+        assertEquals("/home/valle/proyectos", locations.defaultFolder)
+        assertEquals(listOf("DEFAULT", "HOME", "ROOT"), locations.locations.map { it.id })
+    }
+
+    @Test fun `un tipo de entrada desconocido se descarta`() {
+        val json = JSONObject(
+            """{"entries": [{"name": "a", "path": "/a", "type": "BLEND"},
+                            {"name": "b", "path": "/b", "type": "FUTURO"}]}""",
+        )
+        val entries = StateParser.fileEntries(json.optJSONArray("entries"))
+        assertEquals(1, entries.size)
+        assertEquals("a", entries.single().name)
     }
 }

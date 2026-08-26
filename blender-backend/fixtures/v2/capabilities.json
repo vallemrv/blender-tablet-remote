@@ -3,12 +3,14 @@
   "features": {
     "context": {"version": 1, "events": ["context.changed"], "selection_counts": true},
     "transform_modal": {"version": 3, "modes": ["OBJECT", "EDIT"], "tools": ["MOVE", "ROTATE", "SCALE"], "owned_sessions": true, "manual_confirm": true, "geometric_snap": true, "locked_candidate": true},
-    "selection": {"version": 2, "operations": ["SET", "ADD", "REMOVE", "TOGGLE"], "pick": true, "touch_threshold": true, "shapes": ["BOX", "CIRCLE"], "topology": ["LOOP", "RING"]},
-    "view": {"version": 2, "axis_views": ["FRONT", "BACK", "LEFT", "RIGHT", "TOP", "BOTTOM"], "projections": ["PERSP", "ORTHO"], "independent_camera": true},
-    "stream": {"transport": "MJPEG", "capture_default": "OFFSCREEN"},
+    "selection": {"version": 3, "operations": ["SET", "ADD", "REMOVE", "TOGGLE"], "pick": true, "touch_threshold": true, "grow": true, "shapes": ["BOX", "CIRCLE"], "topology": ["LOOP", "RING"]},
+    "view": {"version": 3, "axis_views": ["FRONT", "BACK", "LEFT", "RIGHT", "TOP", "BOTTOM"], "projections": ["PERSP", "ORTHO"], "independent_camera": true, "shading": ["WIREFRAME", "SOLID"], "local_view": true},
+    "stream": {"version": 2, "preferred": "H264", "transports": ["H264", "MJPEG"], "framing": "btr-h264-v1", "capture_default": "OFFSCREEN"},
     "modifiers": {"version": 1, "types": ["SUBSURF", "ARRAY", "BEVEL", "SOLIDIFY", "BOOLEAN"], "commands": ["modifier.add_options", "modifier.add", "modifier.remove", "modifier.move", "modifier.set", "modifier.toggle", "modifier.apply"]},
     "visibility": {"version": 1, "object_hide": true, "hide_set": true},
-    "transform_apply": {"version": 1, "components": ["location", "rotation", "scale"]}
+    "transform_apply": {"version": 1, "components": ["location", "rotation", "scale"]},
+    "edit_tools": {"version": 1, "tools": ["EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT"], "loop_cut": {"pick": true, "probe": true, "falloff": ["SMOOTH", "SPHERE", "ROOT", "SHARP", "LINEAR", "INVERSE_SQUARE"], "even": true, "flip": true, "clamp": true}},
+    "files": {"version": 1, "browse": true, "default_folder": true, "relative_paths": true}
   },
   "units": {"distance": "BLENDER_UNIT", "rotation": "DEGREE", "scale": "FACTOR", "screen": "NORMALIZED_TOP_LEFT"}
 }

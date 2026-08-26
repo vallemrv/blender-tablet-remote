@@ -21,6 +21,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .. import log
 from .frames import FrameBuffer
+from .h264 import CONTENT_TYPE, FLAG_CONFIG, FLAG_KEYFRAME, flags_for, pack_header
 
 BOUNDARY = "btrframe"
 # Si en 2 s no hay frame nuevo (Blender parado, nadie mueve nada) reenviamos el
@@ -30,6 +31,18 @@ IDLE_RESEND = 2.0
 FRAME_INTEREST = 3.0
 # Arrancar ffmpeg desde cero y capturar el primer fotograma no es instantáneo.
 FIRST_FRAME_WAIT = 5.0
+# Linux eleva automáticamente SO_SNDBUF a varios MiB al conectar. Para vídeo esto
+# es contraproducente: el kernel puede guardar segundos de JPEG ya obsoletos aunque
+# FrameBuffer conserve correctamente uno solo. Un buffer pequeño hace que el thread
+# HTTP se bloquee pronto; cuando vuelve a poder escribir, wait_newer() salta al frame
+# más reciente. El kernel suele duplicar este valor internamente (64 KiB efectivos).
+CLIENT_SEND_BUFFER = 32 * 1024
+
+
+def _tune_client_socket(client) -> None:
+    """Mantiene baja la latencia del socket aun si el SO_SNDBUF global es enorme."""
+    client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    client.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, CLIENT_SEND_BUFFER)
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -54,6 +67,8 @@ class _Handler(BaseHTTPRequestHandler):
         route = parsed.path.rstrip("/") or "/"
         if route == "/stream.mjpg":
             self._serve_stream()
+        elif route == "/stream.h264":
+            self._serve_h264()
         elif route == "/frame.jpg":
             self._serve_single()
         elif route == "/stats.json":
@@ -104,7 +119,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
 
         log.info("mjpeg client connected: %s", self.address_string())
-        self._server.clients_delta(+1)
+        self._server.clients_delta(+1, "mjpeg")
         seq = 0
         try:
             while not self._server.stopping:
@@ -124,20 +139,69 @@ class _Handler(BaseHTTPRequestHandler):
                     f"X-Timestamp: {stamp:.3f}\r\n"
                     f"X-Frame: {seq}\r\n\r\n"
                 ).encode()
-                self.wfile.write(head)
-                self.wfile.write(data)
-                self.wfile.write(b"\r\n")
+                # Una única escritura + flush por frame: tres writes separados
+                # triplicaban las syscalls en el camino caliente del stream.
+                self.wfile.write(head + data + b"\r\n")
                 self.wfile.flush()
         except (OSError, ValueError):
             pass  # el cliente cerró; es lo normal al salir de la app
         finally:
-            self._server.clients_delta(-1)
+            self._server.clients_delta(-1, "mjpeg")
             log.info("mjpeg client gone: %s", self.address_string())
+
+    def _serve_h264(self) -> None:
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", CONTENT_TYPE)
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Connection", "close")
+            self.end_headers()
+        except OSError:
+            return
+        log.info("h264 client connected: %s", self.address_string())
+        self._server.clients_delta(+1, "h264")
+        # Cola propia, no latest-wins: H.264 no puede perder access units sueltos.
+        # Con el buffer de un hueco se perdía el 61 % de los AUs y el vídeo llegaba a
+        # 7,6/s con 19 producidos. El porqué está en frames.py.
+        stream = self._server.h264_frames.subscribe()
+        waiting_keyframe = True
+        try:
+            while not self._server.stopping:
+                item, gap = stream.pop(timeout=IDLE_RESEND)
+                if item is None:
+                    continue
+                data, seq, stamp = item
+                # Solo si la cola desbordó de verdad (cliente atascado) hay que
+                # renunciar al GOP: las referencias P ya no son fiables.
+                if gap:
+                    waiting_keyframe = True
+                flags = flags_for(data)
+                if waiting_keyframe and (flags & (FLAG_KEYFRAME | FLAG_CONFIG)) != (FLAG_KEYFRAME | FLAG_CONFIG):
+                    continue
+                waiting_keyframe = False
+                width, height = self._server.resolution_provider()
+                self.wfile.write(pack_header(seq, stamp, len(data), width, height, flags))
+                self.wfile.write(data)
+                self.wfile.flush()
+        except (OSError, ValueError):
+            pass
+        finally:
+            self._server.h264_frames.unsubscribe(stream)
+            self._server.clients_delta(-1, "h264")
+            log.info("h264 client gone: %s", self.address_string())
 
 
 class _ThreadingServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
+
+    def get_request(self):
+        client, address = super().get_request()
+        # Configurar el socket aceptado, no solo el listener. En Linux un TCP recién
+        # conectado puede heredar ~2,5 MiB aun si el socket sin conectar mostraba un
+        # valor pequeño, suficiente para acumular varios segundos de MJPEG.
+        _tune_client_socket(client)
+        return client, address
 
     def handle_error(self, request, client_address):
         # Una desconexión brusca del cliente no es un error digno de traza.
@@ -145,9 +209,11 @@ class _ThreadingServer(ThreadingHTTPServer):
 
 
 class StreamServer:
-    def __init__(self, frames: FrameBuffer, stats_provider):
+    def __init__(self, frames: FrameBuffer, stats_provider, h264_frames: FrameBuffer | None = None):
         self.frames = frames
+        self.h264_frames = h264_frames or FrameBuffer()
         self.stats_provider = stats_provider
+        self.resolution_provider = lambda: tuple(self.stats_provider().get("resolution") or (0, 0))
         self.host = ""
         self.port = 0
         self.stopping = False
@@ -155,6 +221,7 @@ class StreamServer:
         self._httpd: _ThreadingServer | None = None
         self._thread: threading.Thread | None = None
         self._clients = 0
+        self._format_clients = {"h264": 0, "mjpeg": 0}
         self._clients_lock = threading.Lock()
         self._last_request = 0.0
 
@@ -172,11 +239,12 @@ class StreamServer:
         self.host, self.port = host, port
         self._thread = threading.Thread(target=httpd.serve_forever, name="btr-mjpeg", daemon=True)
         self._thread.start()
-        log.info("Viewport stream on http://%s:%d/stream.mjpg", host, port)
+        log.info("Viewport H.264 on http://%s:%d/stream.h264 (MJPEG fallback)", host, port)
 
     def stop(self) -> None:
         self.stopping = True
         self.frames.wake_all()
+        self.h264_frames.wake_all()
         if self._httpd is not None:
             self._httpd.shutdown()
             self._httpd.server_close()
@@ -186,6 +254,7 @@ class StreamServer:
             self._thread = None
         with self._clients_lock:
             self._clients = 0
+            self._format_clients = {"h264": 0, "mjpeg": 0}
         log.info("Viewport stream stopped")
 
     def is_running(self) -> bool:
@@ -194,9 +263,10 @@ class StreamServer:
     def authorize(self, token: str) -> bool:
         return not self._token or token == self._token
 
-    def clients_delta(self, delta: int) -> None:
+    def clients_delta(self, delta: int, format_name: str = "mjpeg") -> None:
         with self._clients_lock:
             self._clients = max(0, self._clients + delta)
+            self._format_clients[format_name] = max(0, self._format_clients.get(format_name, 0) + delta)
 
     @property
     def clients(self) -> int:
@@ -206,6 +276,13 @@ class StreamServer:
     def touch(self) -> None:
         """Alguien pidió un fotograma suelto: cuenta como interés durante un rato."""
         self._last_request = time.monotonic()
+
+    def formats_wanted(self) -> set[str]:
+        with self._clients_lock:
+            formats = {name for name, count in self._format_clients.items() if count > 0}
+        if (time.monotonic() - self._last_request) < FRAME_INTEREST:
+            formats.add("mjpeg")
+        return formats
 
     def wanted(self) -> bool:
         """¿Merece la pena capturar? Con nadie mirando, Blender no gasta GPU."""

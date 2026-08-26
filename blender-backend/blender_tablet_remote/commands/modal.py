@@ -74,6 +74,16 @@ class _Session:
         self.edit_coords: dict[int, Vector] = {}
         self.edit_topology = None
         self.selection_signature = None
+        # Recuento O(1) de la selección (Mesh.total_*_sel) para el camino rápido de
+        # require(): sin él, cada nudge recorría bm.verts entero y en una malla de
+        # 90 k vértices a 60 Hz eso eran millones de iteraciones por segundo.
+        self._edit_sel_counts = None
+        # matrix_world y su inversa congeladas al comenzar: en Edit Mode no pueden
+        # cambiar sin salir del modo, y require() ya invalida en ese caso.
+        self.edit_world = None
+        self.edit_world_inv = None
+        # Pivote en coordenadas locales de la malla (ya calculado en begin).
+        self.pivot_local = None
 
     # ------------------------------------------------------------------ ciclo
 
@@ -107,9 +117,14 @@ class _Session:
             self.edit_object = active
             self.edit_coords = {v.index: v.co.copy() for v in selected}
             self.edit_topology = (len(bm.verts), len(bm.edges), len(bm.faces))
-            self.selection_signature = tuple(sorted(self.edit_coords))
+            self.selection_signature = frozenset(self.edit_coords)
+            self._edit_sel_counts = (active.data.total_vert_sel, active.data.total_edge_sel,
+                                     active.data.total_face_sel)
+            self.edit_world = active.matrix_world.copy()
+            self.edit_world_inv = self.edit_world.inverted()
             local_center = sum(self.edit_coords.values(), Vector()) / len(self.edit_coords)
             self.pivot = active.matrix_world @ local_center
+            self.pivot_local = local_center
         else:
             self.originals = [(obj, obj.matrix_world.copy()) for obj in objs]
             self.selection_signature = tuple(sorted(o.name for o in objs))
@@ -171,9 +186,17 @@ class _Session:
             if obj.name not in bpy.data.objects or obj.mode != "EDIT":
                 self.invalidate("mode_or_object_changed")
             bm = bmesh.from_edit_mesh(obj.data)
-            signature = tuple(sorted(v.index for v in bm.verts if v.select and not v.hide))
-            if (len(bm.verts), len(bm.edges), len(bm.faces)) != self.edit_topology or signature != self.selection_signature:
+            topology = (len(bm.verts), len(bm.edges), len(bm.faces))
+            sel_counts = (obj.data.total_vert_sel, obj.data.total_edge_sel, obj.data.total_face_sel)
+            # Camino rápido O(1): si topología y conteos no se mueven, la selección
+            # es la misma que la última vez validada. Solo si algo cambia se paga el
+            # recorrido exacto para comparar la firma índice a índice.
+            if topology == self.edit_topology and sel_counts == self._edit_sel_counts:
+                return
+            signature = frozenset(v.index for v in bm.verts if v.select and not v.hide)
+            if topology != self.edit_topology or signature != self.selection_signature:
                 self.invalidate("selection_or_topology_changed")
+            self._edit_sel_counts = sel_counts
             return
         # Un objeto borrado a mitad de transformación deja una referencia muerta.
         self.originals = [(o, m) for o, m in self.originals if o.name in bpy.data.objects]
@@ -237,8 +260,21 @@ class _Session:
                 for name, index in AXIS_INDEX.items():
                     if name not in self.axes:
                         values[index] = 0.0
-            if self.snap and self.snap_type in {"INCREMENT", "GRID"} and self.step > 0:
-                values = Vector(round(v / self.step) * self.step for v in values)
+            if self.snap and self.step > 0:
+                if self.snap_type == "GRID":
+                    # Rejilla mundial absoluta: se redondea la posición destino
+                    # (pivote original + offset mundial) a múltiplos de step.
+                    # Así un objeto que nace fuera de rejilla aterriza en ella,
+                    # que es lo que espera todo el que pide "rejilla".
+                    offset = self.orientation_basis @ values
+                    pivot = self.pivot
+                    snapped = Vector(
+                        round((pivot[i] + offset[i]) / self.step) * self.step - pivot[i]
+                        for i in range(3)
+                    )
+                    values = self.orientation_basis.inverted() @ snapped
+                elif self.snap_type == "INCREMENT":
+                    values = Vector(round(v / self.step) * self.step for v in values)
         elif self.mode == "SCALE":
             if self.axes:
                 for name, index in AXIS_INDEX.items():
@@ -281,22 +317,34 @@ class _Session:
                 )
 
     def _apply_edit(self, values: Vector, angle: float) -> None:
+        """Aplica el delta sobre las coords originales, en local y sin matrices por vértice.
+
+        Antes esto invertía `matrix_world` y multiplicaba matrices 4×4 por cada
+        vértice en cada nudge. Ahora todo lo que no depende del vértice se calcula
+        una vez: MOVE se reduce a una suma por vértice, ROTATE/SCALE a una única
+        matriz 3×3 local (W⁻¹ · R · W) aplicada alrededor del pivote.
+        """
         obj = self.edit_object
         bm = bmesh.from_edit_mesh(obj.data)
         bm.verts.ensure_lookup_table()
-        inv = obj.matrix_world.inverted()
-        rotation = Matrix.Rotation(angle, 4, self.rotation_axis)
-        scale = Matrix.Diagonal(values).to_4x4()
-        for index, original_local in self.edit_coords.items():
-            world = obj.matrix_world @ original_local
-            if self.mode == "MOVE":
-                result = world + self.orientation_basis @ values
-            elif self.mode == "ROTATE":
-                result = self.pivot + rotation.to_3x3() @ (world - self.pivot)
+        world = self.edit_world
+        world_inv = self.edit_world_inv
+        verts = bm.verts
+
+        if self.mode == "MOVE":
+            # co' = W⁻¹·(W·co + delta_mundo) = co + W⁻¹·delta_mundo
+            delta_local = world_inv @ (self.orientation_basis @ values)
+            for index, original_local in self.edit_coords.items():
+                verts[index].co = original_local + delta_local
+        else:
+            if self.mode == "ROTATE":
+                linear = Matrix.Rotation(angle, 3, self.rotation_axis)
             else:
-                oriented_scale = self.orientation_basis @ scale.to_3x3() @ self.orientation_basis.inverted()
-                result = self.pivot + oriented_scale @ (world - self.pivot)
-            bm.verts[index].co = inv @ result
+                linear = self.orientation_basis @ Matrix.Diagonal(values) @ self.orientation_basis.inverted()
+            pivot_local = self.pivot_local
+            local_matrix = world_inv.to_3x3() @ linear @ world.to_3x3()
+            for index, original_local in self.edit_coords.items():
+                verts[index].co = pivot_local + local_matrix @ (original_local - pivot_local)
         bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
     def restore(self) -> None:
         if self.edit_object is not None and self.edit_object.name in bpy.data.objects and self.edit_object.mode == "EDIT":

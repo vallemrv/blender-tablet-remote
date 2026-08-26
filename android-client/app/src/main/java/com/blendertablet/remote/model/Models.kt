@@ -9,6 +9,16 @@ enum class BlenderMode { OBJECT, EDIT }
 enum class SelectionMode { VERTEX, EDGE, FACE }
 enum class ActiveTool { SELECT, MOVE, ROTATE, SCALE, EXTRUDE, BEVEL, INSET, SUBDIVIDE, LOOP_CUT }
 
+/**
+ * Operación de selección que aplican el tap, la caja y el círculo. Mayús/Ctrl/Alt
+ * de la barra superior la fijan: TOGGLE alterna, ADD añade y REMOVE quita; el
+ * nombre viaja tal cual al servidor (`mode` de `selection.*`).
+ */
+enum class SelectionOp { SET, ADD, REMOVE, TOGGLE }
+
+/** Herramienta de arrastre por forma armada desde la barra superior (B/C). */
+enum class ShapeTool { NONE, BOX, CIRCLE }
+
 data class HiddenObject(val name: String, val type: String)
 data class ObjectChoiceFilter(val type: String? = null, val excludeSelf: Boolean = false)
 sealed interface ModifierDefault {
@@ -32,6 +42,11 @@ data class ModifierState(
 data class ServerFeatures(
     val modifiers: Boolean = false, val visibility: Boolean = false,
     val transformApply: Boolean = false, val loopCut: Boolean = false,
+    val shading: Boolean = false, val localView: Boolean = false,
+    val selectionGrow: Boolean = false, val selectionShapes: Boolean = false,
+    /** Colocación del loop cut tocando la malla (`edit_tools.loop_cut.pick`). */
+    val loopCutPick: Boolean = false,
+    val fileBrowse: Boolean = false,
 )
 
 /** Gestos continuos del protocolo. El nombre en minúsculas es el que viaja por el cable. */
@@ -236,6 +251,33 @@ data class RecentFile(
     val exists: Boolean = true,
 )
 
+enum class RemoteFileType { DIRECTORY, BLEND }
+
+data class RemoteFileEntry(
+    val name: String,
+    val path: String,
+    val type: RemoteFileType,
+)
+
+data class RemoteLocation(
+    val id: String,
+    val label: String,
+    val path: String,
+)
+
+data class RemoteBreadcrumb(val name: String, val path: String)
+
+/** Estado del explorador del disco del PC. Los paths son opacos para Android. */
+data class RemoteFiles(
+    val path: String = "",
+    val parent: String? = null,
+    val defaultFolder: String = "",
+    val breadcrumbs: List<RemoteBreadcrumb> = emptyList(),
+    val entries: List<RemoteFileEntry> = emptyList(),
+    val locations: List<RemoteLocation> = emptyList(),
+    val loading: Boolean = false,
+)
+
 /** Punto en coordenadas del viewport remoto: 0..1, origen arriba-izquierda. */
 data class ViewportPoint(val u: Float, val v: Float)
 
@@ -296,7 +338,6 @@ data class AppUiState(
     val activeTool: ActiveTool = ActiveTool.SELECT,
     val controlsVisible: Boolean = true,
     val debugVisible: Boolean = false,
-    val input: InputDebug = InputDebug(),
     val error: String? = null,
     val file: FileInfo = FileInfo(),
     val recentFiles: List<RecentFile> = emptyList(),
@@ -307,4 +348,12 @@ data class AppUiState(
     val constraint: Constraint = Constraint.FREE,
     val orientation: Orientation = Orientation.GLOBAL,
     val valueMode: ValueMode = ValueMode.RELATIVE,
+    /** Modificador de selección (Ctrl/Alt) fijado en la barra superior. */
+    val selectionOp: SelectionOp = SelectionOp.SET,
+    /** Herramienta de forma (B/C) armada en la barra superior. */
+    val shapeTool: ShapeTool = ShapeTool.NONE,
+    /** `view.local` activo: aislar la selección (el `/` del footer de vistas). */
+    val localViewActive: Boolean = false,
+    /** Loop Cut armado esperando el toque que coloca el corte. */
+    val loopCutAwaitingTap: Boolean = false,
 )

@@ -38,7 +38,11 @@ data class TouchProbe(
  *
  * El menú responde a **qué hay bajo el dedo**, no solo al modo global: tocar un
  * objeto que no está seleccionado ofrece seleccionarlo, y tocar el vacío ofrece
- * operaciones de conjunto.
+ * añadir objetos y operaciones de conjunto.
+ *
+ * En Object Mode estas acciones se pintan como menú contextual flotante
+ * ([com.blendertablet.remote.ui.ContextSheet]) y en Edit como anillo radial;
+ * esta clase es la fuente única en ambos casos.
  *
  * Es una función pura a propósito: así [com.blendertablet.remote.model.SurfaceCatalog]
  * puede comprobarse contra ella y el test falla si alguien cuela aquí una acción cuyo
@@ -74,8 +78,13 @@ object RadialMenu {
                 add(ActionId.APPLY_TRANSFORMS)
                 add(ActionId.SET_ORIGIN)
             }
-            // En el vacío no hay nada sobre lo que operar: solo conjunto.
+            // En el vacío no hay nada sobre lo que operar: añadir y operaciones de
+            // conjunto. Agregar va primero porque es lo que más pide un tap al hueco;
+            // Caja y Círculo arman el arrastre por forma para seleccionar varios.
             else -> {
+                add(ActionId.ADD_OBJECT)
+                add(ActionId.TOOL_BOX)
+                add(ActionId.TOOL_CIRCLE)
                 add(ActionId.SELECT_ALL)
                 add(ActionId.DESELECT_ALL)
             }
@@ -85,8 +94,11 @@ object RadialMenu {
     }
 
     private fun editActions(context: TouchContext): List<ActionId> = buildList {
+        // Caja y Círculo arman el arrastre por forma: selección pura, va primero.
+        // SELECT_INVERT salió del anillo para no pasarse del tope de 8 en aristas.
+        add(ActionId.TOOL_BOX)
+        add(ActionId.TOOL_CIRCLE)
         add(ActionId.SELECT_ALL)
-        add(ActionId.SELECT_INVERT)
 
         // Loop y Ring necesitan una arista de partida: sin ella el servidor
         // responde `empty_selection`, así que no se ofrecen.

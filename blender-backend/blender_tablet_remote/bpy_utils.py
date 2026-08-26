@@ -11,7 +11,13 @@ from .errors import BadPayload, CommandError
 
 
 def find_view3d():
-    """Devuelve (window, area, region, rv3d) del primer VIEW_3D, o None en background."""
+    """Devuelve (window, area, region, rv3d) del primer VIEW_3D, o None en background.
+
+    Sin caché a propósito: tras cargar otro .blend los structs de area/region/space se
+    liberan y Blender reutiliza sus direcciones, así que validar por `as_pointer()`
+    da falsos positivos y devuelve una región caducada (probado en tests: "Region not
+    found in area or screen"). Es la trampa que documenta AGENTS.md.
+    """
     wm = bpy.context.window_manager
     for window in wm.windows:
         for area in window.screen.areas:

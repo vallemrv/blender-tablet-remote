@@ -47,6 +47,12 @@ MENU_COMMANDS = [
     "modifier.toggle",
     "modifier.apply",
     "mesh.loop_cut",
+    "mesh.loop_probe",
+    "tool.loop_pick",
+    "view.shading",
+    "view.local",
+    "selection.more",
+    "selection.less",
     "snap.cursor_to_world",
     "snap.cursor_to_selected",
     "snap.cursor_to_active",
@@ -62,6 +68,9 @@ MENU_COMMANDS = [
     "file.save",
     "file.save_as",
     "file.recent",
+    "file.locations",
+    "file.browse",
+    "file.default_folder",
     "transform.begin",
     "transform.axes",
     "transform.snap",
@@ -161,6 +170,9 @@ def main() -> int:
     expected_caps = json.loads((fixtures / "capabilities.json").read_text())
     actual_caps = app.command("server.capabilities").get("result") or {}
     check("capabilities coincide con fixture", _contains(actual_caps, expected_caps), str(actual_caps.get("features")))
+    expected_stream = json.loads((fixtures / "hello.stream.json").read_text())
+    check("hello.stream coincide con fixture",
+          _contains(hello.get("stream") or {}, expected_stream), str(hello.get("stream")))
     options_fixture = json.loads((fixtures / "modifier.add_options.json").read_text())
     check("modifier.add_options coincide con fixture",
           app.command("modifier.add_options").get("result") == options_fixture)
@@ -286,6 +298,20 @@ def main() -> int:
     if files:
         for key in ("name", "path", "folder", "exists"):
             check(f"cada reciente trae '{key}'", key in files[0], str(files[0]))
+
+    locations = (app.command("file.locations").get("result") or {})
+    check("file.locations trae carpeta por defecto", isinstance(locations.get("default_folder"), str), str(locations))
+    check("file.locations trae lugares navegables", isinstance(locations.get("locations"), list), str(locations))
+    listing = (app.command("file.browse", {"path": "@default"}).get("result") or {})
+    check("file.browse trae paths opacos y breadcrumbs", all(key in listing for key in
+          ("path", "parent", "breadcrumbs", "default_folder", "entries")), str(listing))
+    check("breadcrumbs tienen name/path", bool(listing.get("breadcrumbs")) and
+          all(set(crumb) >= {"name", "path"} for crumb in listing["breadcrumbs"]), str(listing.get("breadcrumbs")))
+    # Verifica los nombres wire folder/name sin escribir ningún fichero real.
+    invalid_save = app.command("file.save_as", {"folder": listing.get("path", "@default"),
+                                                 "name": "carpeta/escena"})
+    check("file.save_as acepta contrato folder/name y valida basename",
+          invalid_save.get("code") == "bad_payload", str(invalid_save))
 
     # La app decide entre Guardar y Guardar como con este código; si cambiara,
     # "Guardar" fallaría en silencio sobre un archivo sin ruta.
@@ -443,6 +469,27 @@ def main() -> int:
     begun = app.command("tool.begin", {"tool": "LOOP_CUT", "parameters": {"cuts": 1}})
     check("tool.begin LOOP_CUT", (begun.get("result") or {}).get("active") is True, str(begun))
     app.command("tool.cancel")
+    # Opciones del modal Ctrl+R: la tablet las manda como parámetros tipados.
+    begun = app.command("tool.begin", {"tool": "LOOP_CUT", "edge": 0, "parameters": {
+        "cuts": 2, "factor": 0.3, "falloff": "SPHERE", "even": True, "flip": False, "clamp": False}})
+    check("tool.begin LOOP_CUT con falloff/even/flip/clamp", (begun.get("result") or {}).get("active") is True, str(begun))
+    echoed = (begun.get("result") or {}).get("parameters") or {}
+    check("los parámetros viajan tal cual",
+          echoed.get("falloff") == "SPHERE" and echoed.get("even") is True and echoed.get("clamp") is False,
+          str(echoed))
+    nudged = app.command("tool.nudge", {"delta": 0.2})
+    factor = (nudged.get("result") or {}).get("parameters", {}).get("factor")
+    check("sin clamp el factor puede pasar de 1", isinstance(factor, (int, float)) and factor > 0.3, str(nudged))
+    app.command("tool.cancel")
+    bad = app.command("tool.begin", {"tool": "LOOP_CUT", "edge": 0, "parameters": {"falloff": "NOPE"}})
+    check("falloff inválido es bad_payload", bad.get("code") == "bad_payload", str(bad))
+    bad = app.command("tool.begin", {"tool": "LOOP_CUT", "edge": 0, "parameters": {"factor": 1.5}})
+    check("factor >1 con clamp es bad_payload", bad.get("code") == "bad_payload", str(bad))
+    no_pick = app.command("tool.loop_pick", {"u": 0.5, "v": 0.5})
+    check("tool.loop_pick sin sesión es no_session", no_pick.get("code") == "no_session", str(no_pick))
+    probe = app.command("mesh.loop_probe", {"u": 0.5, "v": 0.5})
+    check("mesh.loop_probe responde ok o no_viewport controlado",
+          probe.get("ok") or probe.get("code") == "no_viewport", str(probe))
     app.command("mode.object")
 
     reply = app.command("modifier.add", {"type": "SUBSURF", "name": "Tablet Subsurf"})
@@ -466,6 +513,44 @@ def main() -> int:
     check("llega selection.changed", "selection.changed" in kinds, str(kinds))
     payloads_ok = all("payload" in e for e in events)
     check("los eventos traen payload", payloads_ok, str(events[:1]))
+
+    print("\n[18] Selección por forma en Object Mode y grow/shrink en Edit")
+    # box/circle proyectan centros de objetos: en background no hay viewport, así
+    # que aquí solo se comprueba que el error es el controlado. La selección real
+    # la prueba la suite GUI.
+    box_reply = app.command("selection.box", {"u0": 0.0, "v0": 0.0, "u1": 1.0, "v1": 1.0, "mode": "ADD"})
+    check("selection.box responde ok o no_viewport controlado",
+          box_reply.get("ok") or box_reply.get("code") in ("no_viewport", "wrong_mode"), str(box_reply))
+    app.command("mode.edit")
+    app.command("selection.set_mode", {"selection_mode": "FACE"})
+    app.command("selection.all", {"value": False})
+    app.command("selection.elements", {"faces": [0]})
+    grown = app.command("selection.more")
+    check("selection.more responde ok", grown.get("ok"), str(grown))
+    faces_after_more = len((grown.get("result") or {}).get("faces", []))
+    check("more añadió caras adyacentes", faces_after_more > 1, str(grown.get("result")))
+    shrunk = app.command("selection.less")
+    faces_after_less = len((shrunk.get("result") or {}).get("faces", []))
+    check("less retiró caras fronterizas", faces_after_less < faces_after_more, str(shrunk.get("result")))
+    app.command("mode.object")
+    more_object = app.command("selection.more")
+    check("more fuera de Edit es wrong_mode", more_object.get("code") == "wrong_mode", str(more_object))
+
+    print("\n[19] Aislamiento (view.local) y shading anunciado")
+    caps = app.command("server.capabilities")
+    features = (caps.get("result") or {}).get("features", {})
+    check("capabilities anuncia view.shading", "shading" in features.get("view", {}), str(features.get("view")))
+    check("capabilities anuncia view.local_view", features.get("view", {}).get("local_view") is True)
+    check("capabilities anuncia selection.grow", features.get("selection", {}).get("grow") is True)
+    app.command("object.select", {"names": ["Cube"]})
+    local_on = app.command("view.local", {"enabled": True})
+    check("view.local activa", (local_on.get("result") or {}).get("local") is True, str(local_on))
+    hidden = (local_on.get("result") or {}).get("hidden", [])
+    check("ocultó algo distinto del cubo", all(name != "Cube" for name in hidden) and len(hidden) > 0, str(hidden))
+    local_off = app.command("view.local", {"enabled": False})
+    check("view.local restaura", (local_off.get("result") or {}).get("local") is False, str(local_off))
+    state_reply = app.command("scene.get_state").get("result", {})
+    check("el estado lleva shading", state_reply.get("shading") in ("WIREFRAME", "SOLID"), str(state_reply.get("shading")))
 
     ws.close()
 

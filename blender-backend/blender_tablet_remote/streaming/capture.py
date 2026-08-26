@@ -23,7 +23,7 @@ import gpu
 
 from .. import log
 from ..camera import camera
-from .encoder import JpegEncoder
+from .encoder import VideoEncoder
 from .frames import FrameBuffer
 
 # Tras varios fallos seguidos dejamos de intentarlo: si no hay GPU o no hay VIEW_3D,
@@ -49,11 +49,14 @@ def _find_view3d_space():
 
 
 class ViewportCapture:
-    def __init__(self, frames: FrameBuffer, has_viewers=None):
+    def __init__(self, frames: FrameBuffer, h264_frames: FrameBuffer | None = None,
+                 has_viewers=None, wanted_formats=None):
         self.frames = frames
-        self.encoder = JpegEncoder(frames)
+        self.h264_frames = h264_frames or FrameBuffer()
+        self.encoder = VideoEncoder(frames, self.h264_frames)
         # Sin nadie mirando no tiene sentido gastar GPU ni ffmpeg en cada tick.
         self.has_viewers = has_viewers or (lambda: True)
+        self.wanted_formats = wanted_formats or (lambda: {"h264", "mjpeg"})
         self.enabled = False
         self.fps = 24.0
         self.max_width = 1280
@@ -79,6 +82,9 @@ class ViewportCapture:
         self._measured_fps = 0.0
         self._fps_window_start = 0.0
         self._fps_window_count = 0
+        # Un comando discreto (tap, confirmar, cambiar modo) pide un frame inmediato
+        # para que el viewport lo refleje ya, sin esperar al siguiente hueco de fps.
+        self._force_capture = False
 
     # ------------------------------------------------------------------ ajuste
 
@@ -131,19 +137,30 @@ class ViewportCapture:
 
     # ------------------------------------------------------------------- ciclo
 
+    def request_frame(self) -> None:
+        """Pide capturar en el siguiente tick, saltándose el límite de fps una vez.
+
+        Los gestos y comandos continuos (arrastrar) no lo usan: a 60 Hz saturarían
+        el hilo principal de render. Solo se invoca tras comandos discretos.
+        """
+        self._force_capture = True
+
     def tick(self) -> None:
         """Captura un frame si toca. Nunca lanza: el pump no puede morir."""
         if not self.enabled or self._errors >= MAX_CONSECUTIVE_ERRORS:
+            self._force_capture = False
             return
         if not self.has_viewers():
             self._measured_fps = 0.0
             self._fps_window_start = 0.0
             self._fps_window_count = 0
+            self._force_capture = False
             return
 
         now = time.monotonic()
-        if now - self._last_capture < 1.0 / self.fps:
+        if now - self._last_capture < 1.0 / self.fps and not self._force_capture:
             return
+        self._force_capture = False
         self._last_capture = now
 
         if self.mode == "POST_PIXEL" and not self._fallback_active and not bpy.app.background:
@@ -189,11 +206,20 @@ class ViewportCapture:
         width = max(2, int(region.width * scale) & ~1)   # pares: los encoders lo agradecen
         height = max(2, int(region.height * scale) & ~1)
 
-        if not self.encoder.ensure(width, height, self.fps, self.quality):
+        if not self.encoder.ensure(width, height, self.fps, self.quality, self.wanted_formats()):
             self.enabled = False
             return False
 
         offscreen = self._ensure_offscreen(width, height)
+
+        # draw_view3d dibuja el depsgraph EVALUADO, y no lo evalúa él: se limita a
+        # usar el que haya. Los cambios que hacemos desde el timer (select_set,
+        # matrix_world, bmesh) marcan el depsgraph como sucio pero no lo actualizan,
+        # así que sin esta llamada el offscreen seguía pintando la escena anterior
+        # hasta que algo ajeno forzaba la evaluación: la navegación se veía perfecta
+        # (solo cambia la matriz de vista) mientras seleccionar o escalar tardaba
+        # segundos en aparecer. Si nada está sucio, esto no cuesta nada.
+        bpy.context.evaluated_depsgraph_get()
 
         # La vista es la de la tablet, no la de la ventana: ver camera.py. De la
         # región solo se hereda la proyección.
@@ -290,7 +316,7 @@ class ViewportCapture:
             if width < 2 or height < 2:
                 raise RuntimeError(f"invalid active viewport {viewport}")
 
-            if not self.encoder.ensure(width, height, self.fps, self.quality):
+            if not self.encoder.ensure(width, height, self.fps, self.quality, self.wanted_formats()):
                 raise RuntimeError("ffmpeg encoder unavailable")
 
             pixels = framebuffer.read_color(x, y, width, height, 4, 0, "UBYTE")

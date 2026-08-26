@@ -10,7 +10,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Icon
@@ -20,23 +19,34 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.blendertablet.remote.model.Projection
 
-/** Teclado de vistas inspirado en el numpad de Blender, en una cuadrícula 4×3. */
+/**
+ * Teclado de vistas inspirado en el numpad de Blender, en una cuadrícula 4×3.
+ *
+ * Las vistas (7/1/3) alternan entre la cara y su opuesta; 9 ya no duplica a 7, sino
+ * que gira la vista 180°. 5 enseña el estado real de la proyección (resaltado solo en
+ * ORTHO). El encuadre sale de aquí (lo hace el doble toque): en su sitio `/` aísla la
+ * selección, y `+`/`−` crecen/disminuyen la selección en Edit Mode.
+ */
 @Composable
 fun ViewFooter(
     projection: Projection,
     activeAxisView: String?,
+    inEdit: Boolean,
+    localViewActive: Boolean,
+    showLocal: Boolean,
+    showGrow: Boolean,
     onAxis: (String) -> Unit,
     onOrbit: (Float, Float) -> Unit,
-    onZoom: (Float) -> Unit,
+    onRotate180: () -> Unit,
     onProjection: (Projection) -> Unit,
-    onFrameSelected: () -> Unit,
-    onFrameAll: () -> Unit,
+    onLocal: () -> Unit,
+    onMore: () -> Unit,
+    onLess: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -56,22 +66,26 @@ fun ViewFooter(
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         NumKey("7", "Superior / inferior", activeAxisView in setOf("TOP", "BOTTOM")) { opposite("TOP", "BOTTOM") }
                         NumKey("8", "Orbitar arriba") { onOrbit(0f, -0.06f) }
-                        NumKey("9", "Vista inferior", activeAxisView == "BOTTOM") { onAxis("BOTTOM") }
-                        NumKey("+", "Acercar") { onZoom(1.18f) }
+                        NumKey("9", "Girar 180°") { onRotate180() }
+                        NumKey("+", "Crecer selección", enabled = inEdit && showGrow, onClick = onMore)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         NumKey("4", "Orbitar izquierda") { onOrbit(-0.06f, 0f) }
-                        NumKey("5", if (projection == Projection.PERSP) "Perspectiva" else "Ortográfica", selected = true) {
+                        NumKey(
+                            "5",
+                            if (projection == Projection.PERSP) "Perspectiva" else "Ortográfica",
+                            selected = projection == Projection.ORTHO,
+                        ) {
                             onProjection(if (projection == Projection.PERSP) Projection.ORTHO else Projection.PERSP)
                         }
                         NumKey("6", "Orbitar derecha") { onOrbit(0.06f, 0f) }
-                        NumKey("−", "Alejar") { onZoom(0.85f) }
+                        NumKey("−", "Decrecer selección", enabled = inEdit && showGrow, onClick = onLess)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         NumKey("1", "Frontal / trasera", activeAxisView in setOf("FRONT", "BACK")) { opposite("FRONT", "BACK") }
                         NumKey("2", "Orbitar abajo") { onOrbit(0f, 0.06f) }
                         NumKey("3", "Derecha / izquierda", activeAxisView in setOf("RIGHT", "LEFT")) { opposite("RIGHT", "LEFT") }
-                        NumKey(icon = Icons.Default.CenterFocusStrong, description = "Encuadrar selección", onClick = onFrameSelected)
+                        NumKey("/", "Aislar selección", selected = localViewActive, enabled = showLocal, onClick = onLocal)
                     }
                     Spacer(Modifier.height(2.dp))
                 }
@@ -99,27 +113,27 @@ private fun NumKey(
     label: String,
     description: String,
     selected: Boolean = false,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
+    val background = when {
+        !enabled -> Color.Transparent
+        selected -> Ink.Accent.copy(alpha = .24f)
+        else -> Color.White.copy(alpha = .05f)
+    }
+    val content = when {
+        !enabled -> Ink.Faint
+        selected -> Ink.Accent
+        else -> Ink.Muted
+    }
     Box(
         Modifier
             .size(38.dp)
             .clip(RoundedCornerShape(9.dp))
-            .background(if (selected) Ink.Accent.copy(alpha = .24f) else Color.White.copy(alpha = .05f))
-            .clickableNoRipple(onClick),
+            .background(background)
+            .then(if (enabled) Modifier.clickableNoRipple(onClick) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = if (selected) Ink.Accent else Ink.Muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-private fun NumKey(icon: ImageVector, description: String, onClick: () -> Unit) {
-    Box(
-        Modifier.size(38.dp).clip(RoundedCornerShape(9.dp))
-            .background(Color.White.copy(alpha = .05f)).clickableNoRipple(onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(icon, description, Modifier.size(18.dp), tint = Ink.Muted)
+        Text(label, color = content, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
     }
 }

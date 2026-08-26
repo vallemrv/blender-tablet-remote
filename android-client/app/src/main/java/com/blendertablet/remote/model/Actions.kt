@@ -14,7 +14,7 @@ package com.blendertablet.remote.model
  * el invariante se verifica contra el código que dibuja el menú, no contra una lista
  * escrita a mano en paralelo.
  */
-enum class ActionSurface { TOP, TOP_DYNAMIC, RAIL, FOOTER, FOOTER_VIEWS, RADIAL, MODIFIER_PANEL }
+enum class ActionSurface { TOP, TOP_DYNAMIC, TOP_TOOLS, RAIL, FOOTER, FOOTER_VIEWS, RADIAL, MODIFIER_PANEL }
 
 enum class ActionId {
     // Top: operaciones poco frecuentes o globales.
@@ -22,7 +22,6 @@ enum class ActionId {
     FILE_OPEN,
     FILE_SAVE,
     FILE_SAVE_AS,
-    ADD_OBJECT,
     CURSOR_SNAP,
     CONNECTION_SETTINGS,
     RECONNECT,
@@ -47,6 +46,9 @@ enum class ActionId {
     DUPLICATE,
     TOOL_LOOP_CUT,
 
+    // Barra superior de tools: junto al ojo.
+    VIEW_SHADING,
+
     // Footer: opciones de la herramienta activa.
     CONSTRAINT,
     ORIENTATION,
@@ -65,10 +67,15 @@ enum class ActionId {
     VIEW_TOP,
     VIEW_BOTTOM,
     VIEW_PROJECTION,
-    VIEW_FRAME_SELECTED,
     VIEW_FRAME_ALL,
+    VIEW_LOCAL,
+    SELECT_MORE,
+    SELECT_LESS,
 
     // Radial (pulsación larga): acciones contextuales frecuentes, no duplicadas.
+    ADD_OBJECT,
+    TOOL_BOX,
+    TOOL_CIRCLE,
     SELECT_ALL,
     DESELECT_ALL,
     SELECT_INVERT,
@@ -109,7 +116,6 @@ object SurfaceCatalog {
         ActionEntry(ActionId.FILE_OPEN, ActionSurface.TOP, "Abrir"),
         ActionEntry(ActionId.FILE_SAVE, ActionSurface.TOP, "Guardar"),
         ActionEntry(ActionId.FILE_SAVE_AS, ActionSurface.TOP, "Guardar como"),
-        ActionEntry(ActionId.ADD_OBJECT, ActionSurface.TOP, "Añadir"),
         ActionEntry(ActionId.CURSOR_SNAP, ActionSurface.TOP, "Cursor y selección"),
         ActionEntry(ActionId.CONNECTION_SETTINGS, ActionSurface.TOP, "Preferencias"),
         ActionEntry(ActionId.RECONNECT, ActionSurface.TOP, "Reconectar"),
@@ -126,13 +132,17 @@ object SurfaceCatalog {
         ActionEntry(ActionId.TOOL_BEVEL, ActionSurface.RAIL, "Bisel"),
         ActionEntry(ActionId.TOOL_INSET, ActionSurface.RAIL, "Inset"),
         ActionEntry(ActionId.TOOL_SUBDIVIDE, ActionSurface.RAIL, "Subdividir"),
-        ActionEntry(ActionId.SEL_VERTEX, ActionSurface.RAIL, "Vértice"),
-        ActionEntry(ActionId.SEL_EDGE, ActionSurface.RAIL, "Arista"),
-        ActionEntry(ActionId.SEL_FACE, ActionSurface.RAIL, "Cara"),
-        ActionEntry(ActionId.UNDO, ActionSurface.RAIL, "Deshacer"),
-        ActionEntry(ActionId.REDO, ActionSurface.RAIL, "Rehacer"),
         ActionEntry(ActionId.DUPLICATE, ActionSurface.RAIL, "Duplicar"),
         ActionEntry(ActionId.TOOL_LOOP_CUT, ActionSurface.RAIL, "Loop Cut"),
+
+        // Barra superior de tools: junto al ojo (wireframe, Ctrl/Alt, undo/redo) y,
+        // en Edit Mode, el submodo de selección. B/C viven en el long-click (RADIAL).
+        ActionEntry(ActionId.VIEW_SHADING, ActionSurface.TOP_TOOLS, "Wireframe"),
+        ActionEntry(ActionId.UNDO, ActionSurface.TOP_TOOLS, "Deshacer"),
+        ActionEntry(ActionId.REDO, ActionSurface.TOP_TOOLS, "Rehacer"),
+        ActionEntry(ActionId.SEL_VERTEX, ActionSurface.TOP_TOOLS, "Vértice"),
+        ActionEntry(ActionId.SEL_EDGE, ActionSurface.TOP_TOOLS, "Arista"),
+        ActionEntry(ActionId.SEL_FACE, ActionSurface.TOP_TOOLS, "Cara"),
 
         // Footer de herramienta
         ActionEntry(ActionId.CONSTRAINT, ActionSurface.FOOTER, "Restricción"),
@@ -152,10 +162,15 @@ object SurfaceCatalog {
         ActionEntry(ActionId.VIEW_TOP, ActionSurface.FOOTER_VIEWS, "Top"),
         ActionEntry(ActionId.VIEW_BOTTOM, ActionSurface.FOOTER_VIEWS, "Bottom"),
         ActionEntry(ActionId.VIEW_PROJECTION, ActionSurface.FOOTER_VIEWS, "Persp/Ortho"),
-        ActionEntry(ActionId.VIEW_FRAME_SELECTED, ActionSurface.FOOTER_VIEWS, "Encuadrar selección"),
         ActionEntry(ActionId.VIEW_FRAME_ALL, ActionSurface.FOOTER_VIEWS, "Encuadrar todo"),
+        ActionEntry(ActionId.VIEW_LOCAL, ActionSurface.FOOTER_VIEWS, "Aislar selección"),
+        ActionEntry(ActionId.SELECT_MORE, ActionSurface.FOOTER_VIEWS, "Crecer selección"),
+        ActionEntry(ActionId.SELECT_LESS, ActionSurface.FOOTER_VIEWS, "Decrecer selección"),
 
         // Radial
+        ActionEntry(ActionId.ADD_OBJECT, ActionSurface.RADIAL, "Agregar"),
+        ActionEntry(ActionId.TOOL_BOX, ActionSurface.RADIAL, "Caja"),
+        ActionEntry(ActionId.TOOL_CIRCLE, ActionSurface.RADIAL, "Círculo"),
         ActionEntry(ActionId.SELECT_ALL, ActionSurface.RADIAL, "Seleccionar todo"),
         ActionEntry(ActionId.DESELECT_ALL, ActionSurface.RADIAL, "Deseleccionar"),
         ActionEntry(ActionId.SELECT_INVERT, ActionSurface.RADIAL, "Invertir selección"),

@@ -1,0 +1,15 @@
+{
+  "path": "/home/valle/proyectos",
+  "parent": "/home/valle",
+  "breadcrumbs": [
+    {"name": "/", "path": "/"},
+    {"name": "home", "path": "/home"},
+    {"name": "valle", "path": "/home/valle"},
+    {"name": "proyectos", "path": "/home/valle/proyectos"}
+  ],
+  "default_folder": "/home/valle/proyectos",
+  "entries": [
+    {"name": "blender_remoto", "path": "/home/valle/proyectos/blender_remoto", "type": "DIRECTORY"},
+    {"name": "escena.blend", "path": "/home/valle/proyectos/escena.blend", "type": "BLEND"}
+  ]
+}

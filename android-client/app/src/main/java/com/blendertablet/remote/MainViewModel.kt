@@ -22,6 +22,8 @@ import com.blendertablet.remote.model.AddObject
 import com.blendertablet.remote.model.Orientation
 import com.blendertablet.remote.model.Projection
 import com.blendertablet.remote.model.SelectionMode
+import com.blendertablet.remote.model.SelectionOp
+import com.blendertablet.remote.model.ShapeTool
 import com.blendertablet.remote.model.SnapAction
 import com.blendertablet.remote.model.SnapType
 import com.blendertablet.remote.model.ToolSession
@@ -35,11 +37,16 @@ import com.blendertablet.remote.network.RemoteBlenderClient
 import com.blendertablet.remote.network.StreamStats
 import com.blendertablet.remote.network.ViewportFrame
 import com.blendertablet.remote.network.ViewportStream
+import com.blendertablet.remote.network.H264Framing
+import com.blendertablet.remote.network.H264ViewportStream
+import android.view.Surface
 import com.blendertablet.remote.network.WebSocketRemoteBlenderClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -49,6 +56,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val local = MutableStateFlow(AppUiState())
     private val preferences = ConnectionPreferences(application)
     private val stream = ViewportStream(viewModelScope)
+    private var currentStreamEndpoint: com.blendertablet.remote.network.StreamEndpoint? = null
+    private val _h264Active = MutableStateFlow(false)
+    val h264Active: StateFlow<Boolean> = _h264Active
+    private val h264Stream = H264ViewportStream(viewModelScope) { fallbackToMjpeg() }
+    val h264Size = h264Stream.size
     private var loopCutArmed = false
     private val connectivity =
         application.getSystemService(ConnectivityManager::class.java)
@@ -78,7 +90,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             file = file,
             recentFiles = recent,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppUiState())
+    }
+        // Dos emisiones con el mismo contenido no deben recomponer nada: el servidor
+        // manda scene.changed con generosidad y AppUiState compara por valor.
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppUiState())
 
     /**
      * Al recuperar la red hay que reintentar ya: el backoff puede estar en una
@@ -97,12 +113,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+        // Colocación por toque: el sondeo responde con la arista y el factor, y
+        // con ellos arranca la sesión donde cayó el dedo. Un sondeo fallido
+        // simplemente deja el hint vivo para el próximo toque.
+        viewModelScope.launch {
+            client.loopProbe.collect { probe ->
+                if (probe != null && probe.hit && probe.edge >= 0) {
+                    val awaiting = local.value.loopCutAwaitingTap
+                    if (awaiting && !client.toolSession.value.active) {
+                        local.update { it.copy(loopCutAwaitingTap = false) }
+                        client.clearLoopProbe()
+                        client.toolBegin(
+                            EditTool.LOOP_CUT,
+                            toolDefaultParameters(EditTool.LOOP_CUT) +
+                                mapOf("edge" to probe.edge.toDouble(), "factor" to probe.factor),
+                        )
+                    }
+                }
+            }
+        }
         // El puerto del vídeo lo anuncia el servidor en el "hello": el usuario solo
         // configura el de control y el vídeo se engancha solo (§63).
         viewModelScope.launch {
             client.streamEndpoint.collect { endpoint ->
-                if (endpoint == null) stream.stop()
-                else stream.start(endpoint.host, endpoint.port, endpoint.token)
+                currentStreamEndpoint = endpoint
+                if (endpoint == null) {
+                    h264Stream.stopTransport(); stream.stop(); _h264Active.value = false
+                } else if (endpoint.format == "h264" && endpoint.framing == H264Framing.NAME) {
+                    stream.stop(); _h264Active.value = true; h264Stream.start(endpoint)
+                } else {
+                    h264Stream.stopTransport(); _h264Active.value = false
+                    stream.start(endpoint.host, endpoint.port, endpoint.token, endpoint.path)
+                }
             }
         }
 
@@ -134,13 +176,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun onForeground() = client.retryNow()
 
     fun disconnect() {
+        h264Stream.stopTransport()
         stream.stop()
         client.disconnect()
+    }
+
+    /** El toast de error se auto-descarta: la UI lo limpia a los ~5 s. */
+    fun clearError() = client.clearError()
+
+    fun attachVideoSurface(surface: Surface) = h264Stream.attachSurface(surface)
+    fun detachVideoSurface() = h264Stream.detachSurface()
+
+    private fun fallbackToMjpeg() {
+        val endpoint = currentStreamEndpoint ?: return
+        val alternative = endpoint.alternatives.firstOrNull { it.format == "mjpeg" } ?: return
+        h264Stream.stopTransport()
+        _h264Active.value = false
+        stream.start(endpoint.host, endpoint.port, endpoint.token, alternative.path)
     }
     /** Volver a Seleccionar cierra cualquier sesión (transformación o herramienta). */
     fun selectTool() {
         closeSessions()
-        local.update { it.copy(activeTool = ActiveTool.SELECT) }
+        local.update { it.copy(activeTool = ActiveTool.SELECT, shapeTool = ShapeTool.NONE) }
     }
     /**
      * Cambiar de modo o de submodo invalida lo que hubiera abierto: una extrusión
@@ -150,21 +207,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun setMode(mode: BlenderMode) {
         closeSessions()
+        local.update { it.copy(shapeTool = ShapeTool.NONE) }
         client.setMode(mode)
     }
 
     fun setSelectionMode(mode: SelectionMode) {
         closeSessions()
+        local.update { it.copy(shapeTool = ShapeTool.NONE) }
         client.setSelectionMode(mode)
     }
 
     private fun closeSessions() {
         if (client.transformSession.value.active) client.transformCancel()
         if (client.toolSession.value.active) client.toolCancel()
+        loopCutArmed = false
+        local.update { it.copy(loopCutAwaitingTap = false) }
     }
     fun toggleControls() = local.update { it.copy(controlsVisible = !it.controlsVisible) }
     fun toggleDebug() = local.update { it.copy(debugVisible = !it.debugVisible) }
-    fun updateInput(input: InputDebug) = local.update { it.copy(input = input) }
+
+    /**
+     * Telemetría del toque, fuera de [AppUiState] a propósito: llega a la frecuencia
+     * del digitizador (60-120 Hz) y meterla en el estado general recompondría toda la
+     * interfaz por cada MotionEvent. Solo la lee el overlay de diagnóstico, y solo
+     * cuando está visible.
+     */
+    private val _inputDebug = MutableStateFlow(InputDebug())
+    val inputDebug: StateFlow<InputDebug> = _inputDebug.asStateFlow()
+
+    fun updateInput(input: InputDebug) {
+        _inputDebug.value = input
+    }
     fun undo() = client.undo()
     fun redo() = client.redo()
     fun delete() = client.delete()
@@ -177,6 +250,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * es la forma corta de decir a dónde va.
      */
     fun pick(u: Float, v: Float, stylus: Boolean = false) {
+        // Loop Cut activo: el toque COLOCA el corte (primer toque) o lo re-ubica
+        // (sesión ya abierta). Es el hover+click del Ctrl+R, con el dedo.
+        if (local.value.activeTool == ActiveTool.LOOP_CUT) {
+            val blender = uiState.value.blender
+            if (blender.mode == BlenderMode.EDIT) {
+                if (client.toolSession.value.active) {
+                    client.toolLoopPick(u.toDouble(), v.toDouble())
+                    return
+                }
+                if (local.value.loopCutAwaitingTap) {
+                    client.meshLoopProbe(u.toDouble(), v.toDouble())
+                    return
+                }
+            }
+        }
         val session = client.transformSession.value
         if (session.active && session.mode == TransformMode.MOVE && session.snapType.geometric) {
             client.transformSnapCandidate(u.toDouble(), v.toDouble(), session.snapType)
@@ -185,7 +273,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (session.active) return
         // El pen apunta con precisión: un radio menor evita saltar al elemento vecino.
         // El dedo conserva una diana más grande y cómoda.
-        client.pick(u.toDouble(), v.toDouble(), if (stylus) 0.018 else 0.045)
+        client.pick(u.toDouble(), v.toDouble(), if (stylus) 0.018 else 0.045, local.value.selectionOp)
     }
     fun requestState() = client.requestState()
     fun addPrimitive(primitive: AddObject) = client.addPrimitive(primitive)
@@ -205,6 +293,60 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun viewFrameAll() = client.viewFrameAll()
     fun viewPerspective(projection: Projection) = client.viewPerspective(projection)
+
+    /** Wireframe/sólido del viewport capturado (botón de la barra superior). */
+    fun toggleShading() = client.viewShading("TOGGLE")
+
+    /** Aísla la selección (el `/` del footer de vistas). Optimista: no hay push. */
+    fun toggleLocalView() {
+        val next = !local.value.localViewActive
+        local.update { it.copy(localViewActive = next) }
+        client.viewLocal(next)
+    }
+
+    fun selectMore() = client.selectMore()
+    fun selectLess() = client.selectLess()
+
+    /**
+     * Ctrl/Alt: fijan la operación de selección del siguiente tap/caja/círculo.
+     * Pulsar el mismo lo desarma; pulsar el otro cambia el modificador.
+     */
+    fun toggleSelectionOp(op: SelectionOp) {
+        local.update { it.copy(selectionOp = if (it.selectionOp == op) SelectionOp.SET else op) }
+    }
+
+    /** B/C: arma/desarma la herramienta de arrastre por forma. */
+    fun toggleShapeTool(tool: ShapeTool) {
+        local.update { it.copy(shapeTool = if (it.shapeTool == tool) ShapeTool.NONE else tool) }
+    }
+
+    /**
+     * La forma terminada de dibujar en el viewport. Box recibe las dos esquinas;
+     * Circle el centro y un punto del borde, del que sale el radio. La operación
+     * respeta el modificador Ctrl/Alt fijado.
+     */
+    /**
+     * La forma terminada de dibujar en el viewport. Box recibe las dos esquinas;
+     * Circle el centro y un punto del borde, del que sale el radio. La operación
+     * respeta el modificador Ctrl/Alt fijado.
+     *
+     * Es de UN SOLO USO: tras dibujar y seleccionar, la herramienta se desarma sola
+     * y el siguiente gesto vuelve a ser navegación/selección normal. Para otra caja
+     * hay que rearmarla desde el long-click (B/C).
+     */
+    fun shapeSelect(shape: ShapeTool, u0: Float, v0: Float, u1: Float, v1: Float) {
+        val op = local.value.selectionOp
+        when (shape) {
+            ShapeTool.BOX -> client.boxSelect(u0.toDouble(), v0.toDouble(), u1.toDouble(), v1.toDouble(), op)
+            ShapeTool.CIRCLE -> client.circleSelect(
+                u0.toDouble(), v0.toDouble(),
+                Math.hypot((u1 - u0).toDouble(), (v1 - v0).toDouble()),
+                op,
+            )
+            ShapeTool.NONE -> Unit
+        }
+        local.update { it.copy(shapeTool = ShapeTool.NONE) }
+    }
 
     /** Acciones contextuales de selección (Edit y Object). */
     fun selectAll() = client.selectAll(true)
@@ -271,19 +413,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Herramientas paramétricas de Edit Mode. */
     fun beginEditTool(tool: EditTool) {
         if (client.transformSession.value.active) client.transformCancel()
-        local.update { it.copy(activeTool = ActiveTool.valueOf(tool.name)) }
+        local.update { it.copy(activeTool = ActiveTool.valueOf(tool.name), loopCutAwaitingTap = false) }
         if (tool == EditTool.LOOP_CUT && client.state.value.context.selectionCounts.edges == 0) {
-            loopCutArmed = true
-            client.setSelectionMode(SelectionMode.EDGE)
+            if (client.state.value.features.loopCutPick) {
+                // Sin arista elegida, el PRÓXIMO TOQUE en la malla coloca el corte:
+                // el flujo Ctrl+R de la tablet. No hay que seleccionar nada antes.
+                local.update { it.copy(loopCutAwaitingTap = true) }
+            } else {
+                // Servidor sin colocación por toque: se mantiene el flujo histórico
+                // de seleccionar una arista y esperar el snapshot.
+                loopCutArmed = true
+                client.setSelectionMode(SelectionMode.EDGE)
+            }
         } else client.toolBegin(tool, toolDefaultParameters(tool))
     }
 
-    fun setToolParameter(key: String, value: Double) =
+    fun setToolParameter(key: String, value: Any?) =
         client.toolParameter(mapOf(key to value))
 
     fun nudgeTool(delta: Double) = client.toolNudge(delta)
-    fun confirmTool() = client.toolConfirm()
-    fun cancelTool() { loopCutArmed = false; client.toolCancel() }
+    fun confirmTool() {
+        loopCutArmed = false
+        local.update { it.copy(loopCutAwaitingTap = false) }
+        client.toolConfirm()
+    }
+
+    fun cancelTool() {
+        loopCutArmed = false
+        local.update { it.copy(loopCutAwaitingTap = false) }
+        client.toolCancel()
+    }
 
     private fun toolDefaultParameters(tool: EditTool): Map<String, Double> = when (tool) {
         EditTool.EXTRUDE -> mapOf("offset" to 0.0)
@@ -303,6 +462,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Herramienta paramétrica de Edit Mode en curso (Extrude/Bevel/Inset/Subdivide). */
     val toolSession: StateFlow<ToolSession> = client.toolSession
+    val remoteFiles = client.remoteFiles
+
+    fun openFileBrowser() {
+        client.fileLocations()
+        client.fileBrowse()
+    }
+
+    fun browseFiles(path: String) = client.fileBrowse(path)
+    fun setDefaultFolder(path: String) = client.fileDefaultFolder(path)
 
     /**
      * Abre una transformación modal. Se mantiene abierta aunque se levante el dedo:
@@ -311,6 +479,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun transformBegin(mode: TransformMode) {
         // Una transformación y una herramienta paramétrica no conviven: cerrar la otra.
         if (client.toolSession.value.active) client.toolCancel()
+        loopCutArmed = false
+        local.update { it.copy(loopCutAwaitingTap = false) }
         val step = stepsFor(mode)[localStepIndex(mode)].step
         val constraint = if (mode == TransformMode.ROTATE && local.value.constraint.axes.size > 1) {
             // Un giro es alrededor de UN eje: un plano elegido para mover no vale.
@@ -405,6 +575,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun fileOpen(path: String) = client.fileOpen(path)
     fun fileSave() = client.fileSave()
     fun fileSaveAs(path: String) = client.fileSaveAs(path)
+    fun fileSaveAs(folder: String, name: String) = client.fileSaveAs(folder, name)
 
     fun setLocation(x: Float, y: Float, z: Float) =
         client.setLocation(x.toDouble(), y.toDouble(), z.toDouble())
@@ -458,6 +629,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
+        h264Stream.close()
         runCatching { connectivity?.unregisterNetworkCallback(networkCallback) }
         stream.stop()
         client.disconnect()

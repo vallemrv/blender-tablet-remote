@@ -31,8 +31,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.blendertablet.remote.model.AddCategory
-import com.blendertablet.remote.model.AddObject
 import com.blendertablet.remote.model.AppUiState
 import com.blendertablet.remote.model.BlenderMode
 import com.blendertablet.remote.model.ConnectionStatus
@@ -81,10 +79,10 @@ fun MenuBar(
 data class MenuActions(
     val onFileMenuOpened: () -> Unit,
     val onNew: () -> Unit,
+    val onBrowseOpen: () -> Unit,
     val onOpen: (String) -> Unit,
     val onSave: () -> Unit,
     val onSaveAs: () -> Unit,
-    val onAdd: (AddObject) -> Unit,
     val onSnap: (SnapAction) -> Unit,
     val onConnectionSettings: () -> Unit,
     val onReconnect: () -> Unit,
@@ -124,6 +122,7 @@ object MenuSeparator : MenuNode
 
 private fun fileMenu(state: AppUiState, actions: MenuActions, close: () -> Unit): List<MenuNode> = listOf(
     MenuLeaf("Nuevo") { close(); actions.onNew() },
+    MenuLeaf("Abrir…", enabled = state.blender.features.fileBrowse) { close(); actions.onBrowseOpen() },
     MenuGroup(
         "Abrir reciente",
         if (state.recentFiles.isEmpty()) {
@@ -141,11 +140,11 @@ private fun fileMenu(state: AppUiState, actions: MenuActions, close: () -> Unit)
     MenuSeparator,
     // Una sola entrada "Guardar": sin ruta previa abre el diálogo de nombre por su
     // cuenta. Antes había dos entradas que hacían lo mismo en ese caso.
-    MenuLeaf("Guardar", hint = state.file.path.takeIf { state.file.saved }) {
+    MenuLeaf("Guardar", enabled = state.file.saved || state.blender.features.fileBrowse, hint = state.file.path.takeIf { state.file.saved }) {
         close()
         if (state.file.saved) actions.onSave() else actions.onSaveAs()
     },
-    MenuLeaf("Guardar como…") { close(); actions.onSaveAs() },
+    MenuLeaf("Guardar como…", enabled = state.blender.features.fileBrowse) { close(); actions.onSaveAs() },
 )
 
 // -------------------------------------------------------------------- Objeto
@@ -153,21 +152,10 @@ private fun fileMenu(state: AppUiState, actions: MenuActions, close: () -> Unit)
 private fun objectMenu(state: AppUiState, actions: MenuActions, close: () -> Unit): List<MenuNode> {
     val inEdit = state.blender.mode == BlenderMode.EDIT
 
-    val addTree = AddCategory.entries.map { category ->
-        val items = AddObject.of(category)
-        // Texto y Cámara son categorías de un solo elemento: un submenú con una
-        // entrada sería un clic de más para nada.
-        if (items.size == 1) {
-            MenuLeaf(category.label) { close(); actions.onAdd(items.first()) }
-        } else {
-            MenuGroup(
-                category.label,
-                items.map { item -> MenuLeaf(item.label) { close(); actions.onAdd(item) } },
-            )
-        }
-    }
-
-    val snapGroups = SnapGroup.entries.filter { it != SnapGroup.ORIGIN }.map { group ->
+    // Sin "Añadir" a propósito: el catálogo Add vive en el menú contextual del
+    // long-click (Object Mode, vacío), donde de verdad se usa. Aquí solo queda
+    // lo que opera sobre lo existente.
+    return SnapGroup.entries.filter { it != SnapGroup.ORIGIN }.map { group ->
         MenuGroup(
             group.label,
             SnapAction.of(group).map { snap ->
@@ -177,11 +165,6 @@ private fun objectMenu(state: AppUiState, actions: MenuActions, close: () -> Uni
                 }
             },
         )
-    }
-
-    return buildList {
-        add(MenuGroup("Añadir", addTree))
-        addAll(snapGroups)
     }
 }
 

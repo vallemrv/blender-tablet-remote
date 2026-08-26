@@ -15,8 +15,8 @@ entre fotogramas. Dentro de WireGuard en LAN da de sobra para validar la app.
 from __future__ import annotations
 
 from .capture import ViewportCapture
-from .encoder import JpegEncoder
+from .encoder import H264Encoder, JpegEncoder, VideoEncoder, h264_available
 from .frames import FrameBuffer
 from .mjpeg import StreamServer
 
-__all__ = ["ViewportCapture", "JpegEncoder", "FrameBuffer", "StreamServer"]
+__all__ = ["ViewportCapture", "JpegEncoder", "H264Encoder", "VideoEncoder", "h264_available", "FrameBuffer", "StreamServer"]

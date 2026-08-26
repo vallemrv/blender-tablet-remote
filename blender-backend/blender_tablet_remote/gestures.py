@@ -13,6 +13,8 @@ frecuencia real de trabajo dentro de Blender es la del timer, no la del dedo.
 
 from __future__ import annotations
 
+import bpy
+
 from mathutils import Vector
 
 from . import log
@@ -33,8 +35,6 @@ def _has_transform_target() -> bool:
 
     En Edit Mode manda la selección de malla, que ya comprueban los comandos.
     """
-    import bpy
-
     active = bpy.context.view_layer.objects.active
     if active is not None and active.mode == "EDIT":
         return True
@@ -50,12 +50,6 @@ def _modal_active() -> bool:
 VIEW_GESTURES = {"orbit", "pan", "zoom"}
 TRANSFORM_GESTURES = {"move", "rotate", "scale"}
 ALL_GESTURES = VIEW_GESTURES | TRANSFORM_GESTURES
-
-# Si Blender pierde ritmo, no reproducimos después todo el movimiento atrasado de
-# golpe. Dos centésimas de pantalla por tick mantienen el objeto bajo el dedo y,
-# sobre todo, impiden los saltos enormes de escala al recuperarse el viewport.
-MAX_TRANSFORM_DELTA_PER_TICK = 0.02
-
 
 class _Accumulator:
     __slots__ = ("dx", "dy", "factor", "dirty")
@@ -79,18 +73,6 @@ class _Accumulator:
         self.factor = 1.0
         self.dirty = False
         return values
-
-    def take_limited(self, limit: float) -> tuple[float, float, float]:
-        dx = max(-limit, min(limit, self.dx))
-        dy = max(-limit, min(limit, self.dy))
-        # El exceso se descarta deliberadamente: es movimiento realizado sin
-        # feedback visual, no intención fiable que debamos reproducir tarde.
-        factor = max(0.9, min(1.1, self.factor))
-        self.dx = self.dy = 0.0
-        self.factor = 1.0
-        self.dirty = False
-        return dx, dy, factor
-
 
 class GestureManager:
     """Una sesión de gesto por cliente y tipo. Todo corre en el hilo principal."""
@@ -167,10 +149,13 @@ class GestureManager:
         for (_client_id, gesture), acc in self._acc.items():
             if not acc.dirty:
                 continue
-            dx, dy, factor = (
-                acc.take_limited(MAX_TRANSFORM_DELTA_PER_TICK)
-                if gesture in TRANSFORM_GESTURES else acc.take()
-            )
+            # El coalescing ya evita reproducir una cola de previews antiguas: se
+            # aplica una sola vez el desplazamiento total recibido desde el tick
+            # anterior. Recortarlo y descartar el exceso hacía que, precisamente
+            # cuando la red agrupaba mensajes, el objeto recorriera mucha menos
+            # distancia que el dedo y la transformación pareciera extremadamente
+            # lenta.
+            dx, dy, factor = acc.take()
             key = (_client_id, gesture)
             try:
                 self._apply(gesture, dx, dy, factor, self._options.get(key, {}))

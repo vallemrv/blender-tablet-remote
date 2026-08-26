@@ -71,6 +71,12 @@ def view_of(client: WSClient) -> dict:
 
 
 def scenario(client: WSClient) -> None:
+    import bmesh
+    from mathutils import Vector
+
+    from blender_tablet_remote.bpy_utils import find_view3d
+    from blender_tablet_remote.camera import camera as tablet_camera
+
     print("\n[1] Escena de partida", flush=True)
     state = cmd(client, "scene.get_state", {"include_view": True})
     check("hay un objeto activo", state.get("active_object") is not None, str(state.get("active_object")))
@@ -281,6 +287,287 @@ def scenario(client: WSClient) -> None:
               f"{len(first)} vs {len(second)} bytes")
     except OSError as exc:
         check("el servidor de video responde", False, str(exc))
+
+    print("\n[10] El offscreen dibuja la escena al día", flush=True)
+    # El vídeo offscreen debe seguir una transformación viva, sin confirmar: es lo que
+    # se mira mientras se arrastra, y `transform.confirm` no sirve para comprobarlo
+    # porque su `undo_push` es un `bpy.ops` que arrastra evaluación y redibujo propios.
+    # Se prueban los dos modos porque Edit no dibuja la malla base sino el cage
+    # evaluado del objeto.
+    #
+    # El criterio es el peso del JPEG y no la igualdad de bytes: el objeto se manda
+    # lejísimos hasta salir del encuadre, y un fondo vacío comprime mucho mejor. Así
+    # el ruido temporal del render no puede dar el test por bueno.
+    #
+    # AVISO medido, no supuesto: este bloque NO es un guardián de la sincronización del
+    # depsgraph en `_grab_offscreen`. Se ejecutó a propósito con esa llamada desactivada
+    # y los tres checks siguen en verde, porque con la ventana de Blender visible es el
+    # propio redibujo de Blender el que evalúa el depsgraph a tiempo. Cubre el contrato
+    # visible ("el vídeo sigue la transformación"), no la causa interna.
+    bridge._capture.configure(enabled=True, fps=20, max_width=960, quality=70, mode="OFFSCREEN")
+    time.sleep(0.6)
+    check("la fuente activa es offscreen",
+          bridge.stream_info().get("capture_active") == "offscreen",
+          str(bridge.stream_info().get("capture_active")))
+
+    def frame_size() -> int:
+        return len(urllib.request.urlopen(url, timeout=5).read())
+
+    def send_far() -> int:
+        """Abre un MOVE y lo deja vivo: el objeto sale del encuadre sin confirmar."""
+        cmd(client, "transform.begin", {"mode": "MOVE"})
+        cmd(client, "transform.value", {"values": [0.0, 0.0, 80.0]})
+        time.sleep(0.5)
+        return frame_size()
+
+    try:
+        cmd(client, "object.select", {"name": cube})
+        time.sleep(0.4)
+        visible = frame_size()
+        gone = send_far()
+        check("Object Mode: el frame sigue la transformación sin confirmar",
+              gone < visible * 0.9, f"{visible} -> {gone} bytes")
+        cmd(client, "transform.cancel")
+        time.sleep(0.5)
+        check("Object Mode: cancelar devuelve el objeto al frame",
+              frame_size() > gone * 1.2, f"{gone} bytes con el objeto fuera")
+
+        cmd(client, "mode.edit")
+        cmd(client, "selection.all", {"value": True})
+        time.sleep(0.4)
+        visible = frame_size()
+        gone = send_far()
+        check("Edit Mode: el frame sigue la transformación sin confirmar",
+              gone < visible * 0.9, f"{visible} -> {gone} bytes")
+        cmd(client, "transform.cancel")
+        cmd(client, "mode.object")
+    except OSError as exc:
+        check("el servidor de video responde en offscreen", False, str(exc))
+
+    print("\n[11] Shading, pick a través y selección por caja", flush=True)
+    # Wireframe activa xray: el toggle se refleja en el estado.
+    wire = cmd(client, "view.shading", {"mode": "WIREFRAME"})
+    check("shading pasa a WIREFRAME", wire.get("shading") == "WIREFRAME", str(wire))
+    state = cmd(client, "scene.get_state")
+    check("el estado lleva el shading", state.get("shading") == "WIREFRAME", str(state.get("shading")))
+    solid = cmd(client, "view.shading", {"mode": "TOGGLE"})
+    check("toggle vuelve a SOLID", solid.get("shading") == "SOLID", str(solid))
+
+    # El PC deja un WIREFRAME sin xray (Shift+Z, un .blend guardado así): para la
+    # tablet eso no es wireframe a medias, y el toggle debe re-arma el paquete.
+    for window in bpy.context.window_manager.windows:
+        area = next((candidate for candidate in window.screen.areas if candidate.type == "VIEW_3D"), None)
+        if area is None:
+            continue
+        space = area.spaces.active
+        space.shading.type = "WIREFRAME"
+        space.shading.show_xray_wireframe = False
+        area.tag_redraw()
+        break
+    time.sleep(0.3)
+    repaired = cmd(client, "view.shading", {"mode": "TOGGLE"})
+    check("toggle re-arma wireframe+xray en vez de bajar a SOLID",
+          repaired.get("shading") == "WIREFRAME", str(repaired))
+    off = cmd(client, "view.shading", {"mode": "TOGGLE"})
+    check("con el paquete completo, toggle si baja a SOLID",
+          off.get("shading") == "SOLID", str(off))
+
+    cmd(client, "view.shading", {"mode": "WIREFRAME"})
+
+    # Dos cubos en la misma línea de vista, a profundidad distinta: en wireframe
+    # +xray, picar con ADD sobre el ya seleccionado debe dar el de detrás.
+    cmd(client, "view.axis", {"axis": "FRONT"})
+    cmd(client, "object.add", {"primitive": "CUBE", "x": 0.0, "y": -1.5, "z": 0.0})
+    behind = cmd(client, "scene.get_state").get("active_object")
+    cmd(client, "object.select_all", {"value": False})
+    cmd(client, "object.select", {"names": [behind]})
+    cmd(client, "view.frame_selected")
+    first_hit = cmd(client, "selection.pick", {"u": 0.5, "v": 0.5})
+    check("SET coge el frente", first_hit.get("object") == behind, str(first_hit))
+    add_hit = cmd(client, "selection.pick", {"u": 0.5, "v": 0.5, "mode": "ADD"})
+    check("ADD sobre el seleccionado pasa al de detrás",
+          add_hit.get("object") == cube, f"{add_hit.get('object')} != {cube}")
+    cmd(client, "object.select", {"names": [behind]})
+    cmd(client, "object.delete")
+
+    # Edit Mode + wireframe/xray: el vértice de detrás se ve y se tiene que poder
+    # picar. En PERSP+FRONT la esquina trasera proyecta dentro de la silueta de la
+    # cara frontal, desplazada `sep` de la esquina frontal: con un umbral justo
+    # bajo `sep` solo la trasera es candidata, y con uno holgado caben las dos.
+    cmd(client, "object.select", {"name": cube})
+    cmd(client, "mode.edit")
+    cmd(client, "selection.vertex")
+    cmd(client, "selection.all", {"value": False})
+    cmd(client, "view.axis", {"axis": "FRONT"})
+    cmd(client, "view.perspective", {"mode": "PERSP"})
+    cmd(client, "view.frame_all")
+    time.sleep(0.3)
+
+    import bmesh
+    from mathutils import Vector
+
+    from blender_tablet_remote.bpy_utils import find_view3d
+    from blender_tablet_remote.camera import camera as tablet_camera
+
+    rv3d = find_view3d()[3]
+    matrix = bpy.data.objects[cube].matrix_world
+    bm = bmesh.from_edit_mesh(bpy.data.objects[cube].data)
+    front = next(v for v in bm.verts if tuple(round(c, 4) for c in v.co) == (1.0, -1.0, 1.0))
+    back = next(v for v in bm.verts if tuple(round(c, 4) for c in v.co) == (1.0, 1.0, 1.0))
+    p_front = tablet_camera.project(matrix @ front.co, rv3d)
+    p_back = tablet_camera.project(matrix @ back.co, rv3d)
+    check("proyeccion de la esquina disponible", p_front is not None and p_back is not None,
+          f"{p_front} {p_back}")
+    sep = ((p_front[0] - p_back[0]) ** 2 + (p_front[1] - p_back[1]) ** 2) ** 0.5
+    check("perspectiva separa esquina frontal y trasera", 0.005 < sep < 0.3, f"sep={sep:.4f}")
+    tight = min(0.25, sep * 0.6)
+    wide = min(0.25, sep * 1.8)
+
+    cmd(client, "view.shading", {"mode": "SOLID"})
+    solid_hit = cmd(client, "selection.pick", {"u": p_back[0], "v": p_back[1], "threshold": tight})
+    check("SOLID no pica el vertice de detras",
+          solid_hit.get("index") != back.index, str(solid_hit))
+
+    cmd(client, "view.shading", {"mode": "WIREFRAME"})
+    through_hit = cmd(client, "selection.pick", {
+        "u": p_back[0], "v": p_back[1], "threshold": tight, "mode": "SET",
+    })
+    check("wireframe+xray pica el vertice de detras",
+          through_hit.get("index") == back.index, str(through_hit))
+
+    cycle_hit = cmd(client, "selection.pick", {
+        "u": p_back[0], "v": p_back[1], "threshold": wide, "mode": "ADD",
+    })
+    check("ADD cicla de la esquina trasera a la frontal",
+          cycle_hit.get("index") == front.index, str(cycle_hit))
+    info = cmd(client, "selection.info")
+    check("quedan seleccionadas las dos esquinas",
+          sorted(info.get("verts", [])) == sorted((front.index, back.index)), str(info))
+
+    cmd(client, "selection.all", {"value": False})
+    cmd(client, "mode.object")
+
+    # Caja en Object Mode: engloba la mitad de la pantalla y debe caer el cubo.
+    cmd(client, "object.select_all", {"value": False})
+    cmd(client, "view.frame_all")
+    boxed = cmd(client, "selection.box", {"u0": 0.2, "v0": 0.2, "u1": 0.8, "v1": 0.8, "mode": "ADD"})
+    check("la caja seleccionó algo", boxed.get("affected", 0) >= 1, str(boxed))
+    check("y volvió la selección", bool(boxed.get("selected_objects")), str(boxed))
+    cmd(client, "view.shading", {"mode": "SOLID"})
+
+    print("\n[11b] Loop Cut: colocar el corte con el toque", flush=True)
+    cmd(client, "object.select", {"names": [cube]})
+    cmd(client, "mode.edit")
+    cmd(client, "view.axis", {"axis": "FRONT"})
+    cmd(client, "view.perspective", {"mode": "ORTHO"})
+    cmd(client, "view.frame_all")
+    time.sleep(0.3)
+
+    # La arista vertical frontal del cubo, vista de frente: tocarla a 3/4 de
+    # altura debe devolver esa arista y el factor que coloca el corte ahí.
+    rv3d = find_view3d()[3]
+    matrix = bpy.data.objects[cube].matrix_world
+    bm = bmesh.from_edit_mesh(bpy.data.objects[cube].data)
+    top = next(v for v in bm.verts if tuple(round(c, 4) for c in v.co) == (1.0, -1.0, 1.0))
+    bottom = next(v for v in bm.verts if tuple(round(c, 4) for c in v.co) == (1.0, -1.0, -1.0))
+    ring_edge = next(e for e in bm.edges if {v.index for v in e.verts} == {top.index, bottom.index})
+    ring_edge_index = ring_edge.index
+    # La sesión de herramienta restaura la malla: los BMEdge capturados caducan.
+    ring_v0 = ring_edge.verts[0].co
+    p_top = tablet_camera.project(matrix @ top.co, rv3d)
+    p_bottom = tablet_camera.project(matrix @ bottom.co, rv3d)
+    p0 = tablet_camera.project(matrix @ ring_v0, rv3d)
+    p1 = tablet_camera.project(matrix @ ring_edge.verts[1].co, rv3d)
+    span = Vector(p1) - Vector(p0)
+    # Toque al 75% desde verts[0]: el factor esperado sale de esa orientación.
+    touch = (Vector(p0) + span * 0.75)
+    expected_factor = 2 * 0.75 - 1
+    probe = cmd(client, "mesh.loop_probe", {"u": touch.x, "v": touch.y})
+    check("el sondeo acierta la arista", probe.get("hit") is True and probe.get("edge") == ring_edge_index, str(probe))
+    check("y el factor coloca el corte bajo el dedo",
+          abs((probe.get("factor") or 9.0) - expected_factor) < 0.02, str(probe))
+
+    miss = cmd(client, "mesh.loop_probe", {"u": 0.02, "v": 0.02})
+    check("tocar el vacío no acierta", miss.get("hit") is False, str(miss))
+
+    begun = cmd(client, "tool.begin", {"tool": "LOOP_CUT", "edge": ring_edge_index,
+                                       "parameters": {"cuts": 1, "factor": 0.0}})
+    check("sesión loop cut", begun.get("active") is True, str(begun))
+    # El anillo del cubo son 4 aristas: un corte = 4 vértices nuevos encima de los
+    # 8 originales, y el re-target no cambia la cuenta (sigue siendo UN corte).
+    original_verts = cmd(client, "mesh.info")["verts"] - 4
+    retarget = cmd(client, "tool.loop_pick", {"u": touch.x, "v": touch.y})
+    pick = retarget.get("pick") or {}
+    params = retarget.get("parameters") or {}
+    check("loop_pick re-ubica con el toque", retarget.get("active") is True and pick.get("hit") is True, str(retarget))
+    check("la sesión toma edge y factor del sondeo",
+          params.get("edge") == ring_edge_index and abs((params.get("factor") or 9.0) - expected_factor) < 0.02,
+          str(params))
+    cut_verts = cmd(client, "mesh.info")["verts"]
+    check("el preview sigue siendo un corte del anillo", cut_verts == original_verts + 4,
+          f"{original_verts} -> {cut_verts}")
+    cmd(client, "tool.cancel")
+    restored = cmd(client, "mesh.info")["verts"]
+    check("cancelar restaura la topología", restored == original_verts, str(restored))
+    cmd(client, "mode.object")
+
+    print("\n[12] Snap continuo y rejilla GRID absoluta", flush=True)
+    # Vista FRONT: el nudge en pantalla mueve a lo largo del eje X de mundo, así las
+    # posiciones son comparables y los múltiplos del paso se pueden comprobar.
+    cmd(client, "object.select", {"name": cube})
+    cmd(client, "view.axis", {"axis": "FRONT"})
+    cmd(client, "transform.move", {"x": 0.0, "y": 0.0, "z": 0.0, "absolute": True})
+    time.sleep(0.2)
+
+    # MOVE + INCREMENT: una sola sesión, varios nudges espaciados -> posiciones
+    # progresivas. El snap cuantiza el acumulado en vivo, no reinicia en cada nudge.
+    cmd(client, "transform.begin", {"mode": "MOVE", "snap": True, "snap_type": "INCREMENT", "step": 0.05})
+    positions = []
+    for _ in range(8):
+        nudged = cmd(client, "transform.nudge", {"dx": 0.06, "dy": 0.0})
+        positions.append(nudged["values"][0])
+    distinct = len({round(v, 4) for v in positions})
+    check("INCREMENT acumula posiciones progresivas", distinct >= 3, f"{distinct}: {positions}")
+    # La comparación va en unidades de mundo: dividir entre el paso y pedir 1e-6
+    # multiplica el error de float32 de `location` por 20 y falla por un ulp.
+    check("los saltos de INCREMENT son múltiplos del paso",
+          all(abs(v - round(v / 0.05) * 0.05) < 1e-6 for v in positions), str(positions))
+    cmd(client, "transform.cancel")
+    time.sleep(0.2)
+
+    # MOVE + GRID: el objeto nace fuera de rejilla (x=0.3) y, con step 1.0, debe
+    # aterrizar en un múltiplo de 1.0 en coordenadas de mundo al primer nudge.
+    cmd(client, "transform.move", {"x": 0.3, "y": 0.0, "z": 0.0, "absolute": True})
+    time.sleep(0.2)
+    cmd(client, "transform.begin", {"mode": "MOVE", "snap": True, "snap_type": "GRID", "step": 1.0})
+    cmd(client, "transform.nudge", {"dx": 0.01, "dy": 0.0})
+    landed = bpy.data.objects[cube].location.x
+    check("GRID aterriza en la rejilla mundial", abs(landed - round(landed)) < 1e-6, str(landed))
+    cmd(client, "transform.cancel")
+
+    print("\n[13] Signo del giro de cámara", flush=True)
+    # Se mide la rotación RELATIVA de la cámara, independiente de la vista (el
+    # sentido en pantalla de un turntable se invierte al mirar desde el otro lado,
+    # por eso no se mide sobre un punto proyectado). `dx>0` debe girar la cámara
+    # alrededor del Z global en sentido horario (eje Z negativo) y `dy>0` sobre el
+    # eje derecha. Guarda contra el signo que se invirtió dos veces por medirlo
+    # desde una vista de eje o la cenital.
+    before_rot = tablet_camera.rotation.copy()
+    drag(client, "orbit", dx=0.1)
+    time.sleep(0.3)
+    rel = (tablet_camera.rotation @ before_rot.inverted()).normalized()
+    check("dedo a la derecha gira la cámara sobre Z negativo",
+          rel.axis[2] < -0.9 and abs(rel.angle) > 0.1,
+          f"axis={[round(c, 3) for c in rel.axis]} angle={rel.angle:.3f}")
+
+    before_rot = tablet_camera.rotation.copy()
+    drag(client, "orbit", dy=0.1)
+    time.sleep(0.3)
+    rel = (tablet_camera.rotation @ before_rot.inverted()).normalized()
+    right = before_rot @ Vector((1.0, 0.0, 0.0))
+    check("dedo abajo gira la cámara sobre el eje derecha",
+          rel.angle > 0.1 and rel.axis.dot(right) < -0.9,
+          f"right={[round(c, 3) for c in right]} axis={[round(c, 3) for c in rel.axis]} angle={rel.angle:.3f}")
 
 
 def run() -> None:

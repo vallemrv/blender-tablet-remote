@@ -19,7 +19,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -232,32 +235,58 @@ private fun OrientationPicker(
 }
 
 /**
- * Tipo de snap. Cicla entre los válidos para el modo: los geométricos solo existen
- * en MOVE, así que en rotar y escalar el botón solo ofrece libre, incremento y
- * rejilla. Enseñar más sería enseñar algo que el servidor rechaza.
+ * Tipo de snap. El desplegable solo contiene los válidos para el modo: los
+ * geométricos existen únicamente en MOVE, así que al rotar y escalar solo ofrece
+ * libre, incremento y rejilla. Enseñar más sería enseñar algo que el servidor
+ * rechaza.
  */
 @Composable
 private fun SnapPicker(mode: TransformMode, selected: SnapType, onSelect: (SnapType) -> Unit) {
     val options = SnapType.forMode(mode)
-    val index = options.indexOf(selected).coerceAtLeast(0)
     val active = selected != SnapType.NONE
-    Row(
-        Modifier
-            .height(Metrics.Touch)
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (active) Ink.Accent.copy(alpha = .22f) else Color.White.copy(alpha = .05f))
-            .clickableNoRipple { onSelect(options[(index + 1) % options.size]) }
-            .padding(horizontal = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            Icons.Default.GridOn,
-            if (active) "Snap: ${selected.label}" else "Snap desactivado",
-            Modifier.size(16.dp),
-            tint = if (active) Ink.Accent else Ink.Muted,
-        )
-        Spacer(Modifier.width(5.dp))
-        Text(selected.label, color = if (active) Ink.Accent else Ink.Muted, fontSize = 12.sp)
+    var expanded by remember(mode) { mutableStateOf(false) }
+
+    Box {
+        Row(
+            Modifier
+                .height(Metrics.Touch)
+                .clip(RoundedCornerShape(10.dp))
+                .background(if (active) Ink.Accent.copy(alpha = .22f) else Color.White.copy(alpha = .05f))
+                .clickableNoRipple { expanded = true }
+                .padding(start = 10.dp, end = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Default.GridOn,
+                if (active) "Snap: ${selected.label}" else "Snap desactivado",
+                Modifier.size(16.dp),
+                tint = if (active) Ink.Accent else Ink.Muted,
+            )
+            Spacer(Modifier.width(5.dp))
+            Text(selected.label, color = if (active) Ink.Accent else Ink.Muted, fontSize = 12.sp)
+            Icon(
+                Icons.Default.ArrowDropDown,
+                "Abrir tipos de snap",
+                Modifier.size(18.dp),
+                tint = if (active) Ink.Accent else Ink.Muted,
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            for (option in options) {
+                DropdownMenuItem(
+                    text = { Text(option.label) },
+                    leadingIcon = {
+                        if (option == selected) {
+                            Icon(Icons.Default.Check, null, tint = Ink.Accent)
+                        }
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelect(option)
+                    },
+                )
+            }
+        }
     }
 }
 

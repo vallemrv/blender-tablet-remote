@@ -136,4 +136,39 @@ class SurfaceCatalogTest {
         assertTrue(ActionId.SELECT_ADD_UNDER in actions)
         assertFalse("Borrar operaría sobre otra cosa que la tocada", ActionId.DELETE in actions)
     }
+
+    /**
+     * Agregar objetos vive solo en el vacío de Object Mode: es donde se colocan
+     * cosas nuevas. En Edit Mode añadir un objeto no procede y sobre un objeto
+     * ya hay qué operar.
+     */
+    @Test
+    fun `agregar solo en object mode y en el vacio`() {
+        for (context in everyContext()) {
+            val hasAdd = ActionId.ADD_OBJECT in RadialMenu.actionsFor(context)
+            assertEquals(
+                "Agregar apareció en $context",
+                BlenderMode.OBJECT == context.mode && !context.hit,
+                hasAdd,
+            )
+        }
+    }
+
+    /**
+     * La barra superior de tools (junto al ojo) es la única dueña de undo/redo y del
+     * submodo de selección: salieron del rail para no duplicarse. B/C viven en el
+     * long-click (RADIAL), no en la barra.
+     */
+    @Test
+    fun `la barra superior de tools es duena de undo redo y submodo`() {
+        for (id in listOf(
+            ActionId.UNDO, ActionId.REDO,
+            ActionId.SEL_VERTEX, ActionId.SEL_EDGE, ActionId.SEL_FACE,
+            ActionId.VIEW_SHADING,
+        )) {
+            assertEquals("$id debería estar en TOP_TOOLS", ActionSurface.TOP_TOOLS, SurfaceCatalog.surfaceOf(id))
+        }
+        assertEquals(ActionSurface.RADIAL, SurfaceCatalog.surfaceOf(ActionId.TOOL_BOX))
+        assertEquals(ActionSurface.RADIAL, SurfaceCatalog.surfaceOf(ActionId.TOOL_CIRCLE))
+    }
 }

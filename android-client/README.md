@@ -1,11 +1,13 @@
 # Cliente Android de Blender Tablet Remote
 
-Aplicación Kotlin y Jetpack Compose para tablets Android. Muestra el viewport MJPEG,
-envía órdenes por WebSocket y adapta la interacción a dedo, stylus y ratón.
+Aplicación Kotlin y Jetpack Compose para tablets Android. Muestra el viewport en H.264
+(MJPEG como fallback), envía órdenes por WebSocket y adapta la interacción a dedo,
+stylus y ratón.
 
-Consulta [`../AGENTS.md`](../AGENTS.md) para el estado real, [`../PLAN_FRONTEND.md`](../PLAN_FRONTEND.md)
-para el trabajo pendiente y [`../blender-backend/docs/protocol.md`](../blender-backend/docs/protocol.md)
-para el contrato de red.
+Consulta [`../AGENTS.md`](../AGENTS.md) para el estado real y
+[`../blender-backend/docs/protocol.md`](../blender-backend/docs/protocol.md) para el
+contrato de red. Si hay un ciclo abierto, su trabajo pendiente vive en un
+`PLAN_FRONTEND.md` de la raíz.
 
 ## Abrir y compilar
 

@@ -3,8 +3,8 @@
 Add-on Python que ejecuta en Blender las órdenes recibidas desde
 [`../android-client`](../android-client). El contrato canónico está en
 [`docs/protocol.md`](docs/protocol.md); el estado y las reglas globales, en
-[`../AGENTS.md`](../AGENTS.md); el trabajo pendiente, únicamente en
-[`../PLAN_BACKEND.md`](../PLAN_BACKEND.md).
+[`../AGENTS.md`](../AGENTS.md). Si hay un ciclo abierto, su trabajo pendiente vive en
+un `PLAN_BACKEND.md` de la raíz.
 
 ## Instalación
 

@@ -7,13 +7,12 @@ controles adaptados a dedo y stylus.
 ## Estado y documentación
 
 - [`AGENTS.md`](AGENTS.md): arquitectura, funcionalidades ya construidas y reglas de trabajo.
-- [`PLAN_BACKEND.md`](PLAN_BACKEND.md): único plan activo del add-on Python.
-- [`PLAN_FRONTEND.md`](PLAN_FRONTEND.md): único plan activo de la app Android.
 - [`blender-backend/docs/protocol.md`](blender-backend/docs/protocol.md): contrato canónico entre ambos lados.
 
-Los planes están separados por propiedad de directorios para permitir que dos agentes
-trabajen a la vez sin editar los mismos archivos. Los cambios compartidos empiezan por
-el protocolo y se coordinan como indica `AGENTS.md`.
+Cuando hay un ciclo abierto, su plan vive en un `PLAN_BACKEND.md`/`PLAN_FRONTEND.md`
+(separados por propiedad de directorios para que dos agentes trabajen a la vez sin
+editar los mismos archivos) y se borra al cerrarlo. Sin esos archivos, no hay ciclo
+abierto y el estado real vive solo en `AGENTS.md`.
 
 ## Arquitectura
 

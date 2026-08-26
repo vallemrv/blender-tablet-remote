@@ -38,6 +38,12 @@ class RemoteCamera:
         self._synced = False
         self.perspective = "PERSP"
         self.axis_view = None
+        # Caché de matrices del frame en curso: (rv3d, window_matrix, perspectiva,
+        # inversa). `project`/`ray` se llaman decenas de veces por frame (picking,
+        # box/circle, gizmo, captura) y reconstruir la cadena completa cada vez
+        # dominaba el allocator del hilo principal. Se invalida con cualquier cambio
+        # de cámara y si la ventana del PC cambia su window_matrix (redimensionado).
+        self._frame_cache = None
 
     # ------------------------------------------------------------ ciclo de vida
 
@@ -49,10 +55,12 @@ class RemoteCamera:
         self.rotation = rv3d.view_rotation.copy()
         self.distance = float(rv3d.view_distance)
         self._synced = True
+        self._frame_cache = None
 
     def reset(self) -> None:
         self._synced = False
         self.axis_view = None
+        self._frame_cache = None
 
     # ---------------------------------------------------------------- matrices
 
@@ -85,17 +93,49 @@ class RemoteCamera:
                        (0.0, 0.0, 0.0, 1.0)))
 
     def perspective_matrix(self, rv3d) -> Matrix:
-        return self.projection_matrix(rv3d) @ self.view_matrix()
+        """Proyección @ vista, con caché por frame (ver `_frame_cache`)."""
+        cache = self._frame_cache
+        window = rv3d.window_matrix
+        if cache is not None and cache[0] is rv3d and cache[1] == window:
+            return cache[2]
+        persp = self.projection_matrix(rv3d) @ self.view_matrix()
+        self._frame_cache = (rv3d, window.copy(), persp, None)
+        return persp
+
+    def _perspective_inverse(self, rv3d) -> Matrix:
+        cache = self._frame_cache
+        if cache is not None and cache[3] is not None and cache[0] is rv3d:
+            return cache[3]
+        inverse = self.perspective_matrix(rv3d).inverted()
+        cache = self._frame_cache
+        if cache is not None and cache[0] is rv3d:
+            self._frame_cache = (cache[0], cache[1], cache[2], inverse)
+        return inverse
+
+    def _invalidate(self) -> None:
+        self._frame_cache = None
 
     # ------------------------------------------------------------- navegación
 
     def orbit(self, dx: float, dy: float, sensitivity: float) -> None:
-        """Órbita tipo turntable: yaw sobre Z global, pitch sobre el eje derecha."""
+        """Órbita tipo turntable: yaw sobre Z global, pitch sobre el eje derecha.
+
+        El signo es el que hace que, en la vista por defecto (la que el usuario ve al
+        conectar), la escena acompañe al dedo: `dx` positivo (dedo a la derecha) mueve
+        la escena hacia la derecha, `dy` positivo (dedo abajo) hacia abajo.
+
+        OJO al medir esto: es un turntable alrededor del Z GLOBAL, así que el sentido
+        EN PANTALLA depende de la vista (desde FRONT/BACK se invierte respecto a la
+        vista por defecto, porque el "derecha" de pantalla cambia de lado). El signo
+        se decide y se comprueba SIEMPRE en la vista por defecto, nunca en una vista
+        de eje ni en la cenital. Se invirtió dos veces por medir desde esas vistas.
+        """
         yaw = Quaternion(Vector((0.0, 0.0, 1.0)), -dx * sensitivity)
         right = self.rotation @ Vector((1.0, 0.0, 0.0))
         pitch = Quaternion(right, -dy * sensitivity)
         self.rotation = (yaw @ pitch @ self.rotation).normalized()
         self.axis_view = None
+        self._invalidate()
 
     def pan(self, dx: float, dy: float, projection: Matrix | None = None) -> None:
         """Desplaza de forma que el punto bajo el dedo se queda bajo el dedo.
@@ -110,6 +150,7 @@ class RemoteCamera:
         up = self.rotation @ Vector((0.0, 1.0, 0.0))
         span_x, span_y = self.screen_span(projection)
         self.location = self.location - right * (dx * span_x) + up * (dy * span_y)
+        self._invalidate()
 
     def screen_span(self, projection: Matrix | None) -> tuple[float, float]:
         """Cuánto mundo abarca la pantalla completa a la distancia actual."""
@@ -121,11 +162,13 @@ class RemoteCamera:
 
     def zoom(self, factor: float) -> None:
         self.distance = max(MIN_DISTANCE, min(MAX_DISTANCE, self.distance / factor))
+        self._invalidate()
 
     def look_at(self, center, radius: float, fov: float = 0.85) -> None:
         """Encuadra una esfera sin cambiar la orientación."""
         self.location = Vector(center)
         self.distance = max(MIN_DISTANCE, min(MAX_DISTANCE, max(radius, 1e-3) / max(1e-3, math.sin(fov / 2))))
+        self._invalidate()
 
     def set_axis_view(self, name: str) -> None:
         """Vistas ortográficas estándar, en cuaterniones de vista de Blender."""
@@ -142,6 +185,7 @@ class RemoteCamera:
         if name in views:
             self.rotation = views[name].normalized()
             self.axis_view = name
+            self._invalidate()
 
     # ------------------------------------------------ proyección y des-proyección
 
@@ -154,7 +198,7 @@ class RemoteCamera:
 
     def ray(self, u: float, v: float, rv3d) -> tuple[Vector, Vector]:
         """(u, v) 0..1 arriba-izquierda -> (origen, dirección) del rayo en el mundo."""
-        inverse = self.perspective_matrix(rv3d).inverted()
+        inverse = self._perspective_inverse(rv3d)
         ndc_x = u * 2.0 - 1.0
         ndc_y = 1.0 - v * 2.0
 
@@ -194,6 +238,8 @@ class RemoteCamera:
             self.distance = max(MIN_DISTANCE, min(MAX_DISTANCE, float(distance)))
         if perspective is not None:
             self.perspective = perspective
+        if location is not None or rotation is not None or distance is not None or perspective is not None:
+            self._invalidate()
 
 
 # Única instancia: la vista de la tablet.

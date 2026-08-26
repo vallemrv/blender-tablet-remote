@@ -19,12 +19,15 @@ que necesita el cliente, y deja la puerta abierta a H.264/NVENC (§88) sin rehac
 from __future__ import annotations
 
 import queue
+import os
 import shutil
 import subprocess
 import threading
+import time
 
 from .. import log
 from .frames import FrameBuffer
+from .h264 import split_access_units
 
 FFMPEG = "ffmpeg"
 BOUNDARY_PREFIX = b"--"
@@ -35,6 +38,26 @@ QUEUE_SIZE = 1
 
 def available() -> bool:
     return shutil.which(FFMPEG) is not None
+
+
+_h264_available: bool | None = None
+
+
+def h264_available() -> bool:
+    """Comprueba una vez que este ffmpeg fue compilado con libx264."""
+    global _h264_available
+    if _h264_available is not None:
+        return _h264_available
+    if not available():
+        _h264_available = False
+        return False
+    try:
+        probe = subprocess.run([FFMPEG, "-hide_banner", "-encoders"], capture_output=True,
+                               timeout=3.0, check=False)
+        _h264_available = b"libx264 " in probe.stdout
+    except (OSError, subprocess.TimeoutExpired):
+        _h264_available = False
+    return _h264_available
 
 
 def _quality_to_qv(quality: int) -> int:
@@ -49,7 +72,8 @@ class JpegEncoder:
     def __init__(self, frames: FrameBuffer):
         self.frames = frames
         self._proc: subprocess.Popen | None = None
-        self._queue: queue.Queue[bytes | None] = queue.Queue(maxsize=QUEUE_SIZE)
+        self._queue: queue.Queue[tuple[bytes, float] | None] = queue.Queue(maxsize=QUEUE_SIZE)
+        self._capture_stamps: queue.Queue[float] = queue.Queue()
         self._writer: threading.Thread | None = None
         self._reader: threading.Thread | None = None
         self._size = (0, 0)
@@ -57,6 +81,8 @@ class JpegEncoder:
         self._lock = threading.Lock()
         self._dropped = 0
         self._encoded = 0
+        self._last_encode_ms = 0.0
+        self._max_encode_ms = 0.0
 
     # -------------------------------------------------------------------- API
 
@@ -66,7 +92,12 @@ class JpegEncoder:
 
     @property
     def stats(self) -> dict:
-        return {"encoded": self._encoded, "dropped": self._dropped}
+        return {
+            "encoded": self._encoded,
+            "dropped": self._dropped,
+            "last_encode_ms": round(self._last_encode_ms, 1),
+            "max_encode_ms": round(self._max_encode_ms, 1),
+        }
 
     def ensure(self, width: int, height: int, fps: float, quality: int) -> bool:
         """Arranca ffmpeg, o lo reinicia si cambió el formato. False si no se puede."""
@@ -76,10 +107,11 @@ class JpegEncoder:
             self._stop_locked()
             return self._start_locked(width, height, fps, quality)
 
-    def submit(self, raw: bytes) -> None:
+    def submit(self, raw: bytes, captured_at: float | None = None) -> None:
         """Llamado desde el hilo principal de Blender: no debe bloquear jamás."""
+        item = (raw, time.time() if captured_at is None else captured_at)
         try:
-            self._queue.put_nowait(raw)
+            self._queue.put_nowait(item)
         except queue.Full:
             # Latest frame wins. Antes se descartaba `raw`, conservando justamente
             # el frame viejo que provocaba que el viewport fuese por detrás del dedo.
@@ -89,7 +121,7 @@ class JpegEncoder:
             except queue.Empty:
                 pass
             try:
-                self._queue.put_nowait(raw)
+                self._queue.put_nowait(item)
             except queue.Full:
                 # El writer ganó la carrera y volvió a ocuparla: jamás bloquear el
                 # hilo principal por un fotograma.
@@ -129,6 +161,7 @@ class JpegEncoder:
         self._size = (width, height)
         self._quality = quality
         self._drain_queue()
+        self._drain_capture_stamps()
 
         self._writer = threading.Thread(target=self._write_loop, args=(proc,), name="btr-enc-w", daemon=True)
         self._reader = threading.Thread(target=self._read_loop, args=(proc,), name="btr-enc-r", daemon=True)
@@ -160,6 +193,7 @@ class JpegEncoder:
         self._writer = self._reader = None
         self._size = (0, 0)
         self._drain_queue()
+        self._drain_capture_stamps()
 
     def _drain_queue(self) -> None:
         while not self._queue.empty():
@@ -168,14 +202,25 @@ class JpegEncoder:
             except queue.Empty:
                 break
 
+    def _drain_capture_stamps(self) -> None:
+        while True:
+            try:
+                self._capture_stamps.get_nowait()
+            except queue.Empty:
+                break
+
     def _write_loop(self, proc: subprocess.Popen) -> None:
         stdin = proc.stdin
         assert stdin is not None
         try:
             while True:
-                raw = self._queue.get()
-                if raw is None or proc.poll() is not None:
+                item = self._queue.get()
+                if item is None or proc.poll() is not None:
                     break
+                raw, captured_at = item
+                # Registrar antes de escribir: ffmpeg puede producir y el reader
+                # despertar en cuanto el último byte entra en el pipe.
+                self._capture_stamps.put(captured_at)
                 stdin.write(raw)
                 stdin.flush()
         except (BrokenPipeError, OSError, ValueError):
@@ -188,8 +233,6 @@ class JpegEncoder:
 
     def _read_loop(self, proc: subprocess.Popen) -> None:
         """Parsea el multipart que emite el muxer mpjpeg y publica cada JPEG."""
-        import time
-
         stdout = proc.stdout
         assert stdout is not None
         try:
@@ -200,8 +243,17 @@ class JpegEncoder:
                 data = stdout.read(length)
                 if not data or len(data) < length:
                     break
+                try:
+                    captured_at = self._capture_stamps.get_nowait()
+                except queue.Empty:
+                    captured_at = time.time()
+                encode_ms = max(0.0, (time.time() - captured_at) * 1000.0)
+                self._last_encode_ms = encode_ms
+                self._max_encode_ms = max(self._max_encode_ms, encode_ms)
                 self._encoded += 1
-                self.frames.publish(data, time.time())
+                # X-Timestamp representa ahora el instante de captura, no el de
+                # publicación. Así el cliente mide también la cola/coste ffmpeg.
+                self.frames.publish(data, captured_at)
         except (OSError, ValueError):
             pass
 
@@ -227,3 +279,105 @@ class JpegEncoder:
                     length = int(value.strip())
                 except ValueError:
                     return None
+
+
+class H264Encoder(JpegEncoder):
+    """libx264 baseline/zerolatency; publica access units Annex B completos."""
+
+    def _start_locked(self, width: int, height: int, fps: float, quality: int) -> bool:
+        if not h264_available():
+            log.warn("ffmpeg sin libx264: se usará MJPEG")
+            return False
+        fps_i = max(1, int(fps))
+        # Un GOP de ~200 ms comprime mucho mejor que intra-only y limita lo que una
+        # reconexión/salto debe esperar para recuperar una referencia limpia.
+        gop = max(4, min(6, int(round(fps_i / 5))))
+        # CRF bajo = mejor calidad. El rango de UI histórico 20..95 se conserva.
+        crf = max(18, min(36, int(round(36 - (quality - 20) * 18 / 75))))
+        cmd = [
+            FFMPEG, "-hide_banner", "-loglevel", "error", "-f", "rawvideo",
+            "-pix_fmt", "rgba", "-s", f"{width}x{height}", "-r", str(fps_i),
+            "-i", "pipe:0", "-vf", "vflip", "-an", "-c:v", "libx264",
+            "-preset", "ultrafast", "-tune", "zerolatency", "-profile:v", "baseline",
+            "-pix_fmt", "yuv420p", "-bf", "0", "-g", str(gop),
+            "-keyint_min", str(gop), "-sc_threshold", "0", "-crf", str(crf),
+            "-x264-params", "aud=1:repeat-headers=1:bframes=0:rc-lookahead=0:sync-lookahead=0",
+            "-fflags", "nobuffer", "-flush_packets", "1", "-f", "h264", "pipe:1",
+        ]
+        try:
+            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL)
+        except OSError as exc:
+            log.error("no se pudo arrancar libx264: %s", exc)
+            return False
+        self._proc, self._size, self._quality = proc, (width, height), quality
+        self._drain_queue(); self._drain_capture_stamps()
+        self._writer = threading.Thread(target=self._write_loop, args=(proc,), name="btr-h264-w", daemon=True)
+        self._reader = threading.Thread(target=self._read_loop, args=(proc,), name="btr-h264-r", daemon=True)
+        self._writer.start(); self._reader.start()
+        log.info("encoder libx264 low-latency %dx%d crf=%d", width, height, crf)
+        return True
+
+    def _read_loop(self, proc: subprocess.Popen) -> None:
+        stdout = proc.stdout
+        assert stdout is not None
+        pending = b""
+        try:
+            while proc.poll() is None:
+                chunk = os.read(stdout.fileno(), 65536)
+                if not chunk:
+                    break
+                units, pending = split_access_units(pending + chunk)
+                for unit in units:
+                    self._publish_au(unit)
+            units, _ = split_access_units(pending, final=True)
+            for unit in units:
+                self._publish_au(unit)
+        except (OSError, ValueError):
+            pass
+
+    def _publish_au(self, data: bytes) -> None:
+        try:
+            captured_at = self._capture_stamps.get_nowait()
+        except queue.Empty:
+            captured_at = time.time()
+        encode_ms = max(0.0, (time.time() - captured_at) * 1000.0)
+        self._last_encode_ms = encode_ms
+        self._max_encode_ms = max(self._max_encode_ms, encode_ms)
+        self._encoded += 1
+        self.frames.publish(data, captured_at)
+
+
+class VideoEncoder:
+    """Alimenta H.264 preferido y JPEG fallback desde una sola captura GPU."""
+
+    def __init__(self, jpeg_frames: FrameBuffer, h264_frames: FrameBuffer):
+        self.jpeg = JpegEncoder(jpeg_frames)
+        self.h264 = H264Encoder(h264_frames)
+        self._wanted: set[str] = set()
+
+    @property
+    def stats(self) -> dict:
+        return {"active": sorted(self._wanted), "h264": self.h264.stats, "mjpeg": self.jpeg.stats}
+
+    def ensure(self, width: int, height: int, fps: float, quality: int,
+               formats: set[str] | None = None) -> bool:
+        wanted = {"h264", "mjpeg"} if formats is None else formats
+        h264_ok = self.h264.ensure(width, height, fps, quality) if "h264" in wanted else False
+        jpeg_ok = self.jpeg.ensure(width, height, fps, quality) if "mjpeg" in wanted else False
+        # No terminamos procesos desde el hilo principal al cambiar de cliente:
+        # terminate/join puede bloquear Blender. Un encoder inactivo queda dormido
+        # sin recibir raw frames y se reutiliza o se cierra al parar el stream.
+        self._wanted = ({"h264"} if h264_ok else set()) | ({"mjpeg"} if jpeg_ok else set())
+        return h264_ok or jpeg_ok
+
+    def submit(self, raw: bytes, captured_at: float | None = None) -> None:
+        stamp = time.time() if captured_at is None else captured_at
+        if "h264" in self._wanted and self.h264.running:
+            self.h264.submit(raw, stamp)
+        if "mjpeg" in self._wanted and self.jpeg.running:
+            self.jpeg.submit(raw, stamp)
+
+    def stop(self) -> None:
+        self._wanted.clear()
+        self.h264.stop(); self.jpeg.stop()
