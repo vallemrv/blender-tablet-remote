@@ -40,9 +40,9 @@ data class TouchProbe(
  * objeto que no está seleccionado ofrece seleccionarlo, y tocar el vacío ofrece
  * añadir objetos y operaciones de conjunto.
  *
- * En Object Mode estas acciones se pintan como menú contextual flotante
- * ([com.blendertablet.remote.ui.ContextSheet]) y en Edit como anillo radial;
- * esta clase es la fuente única en ambos casos.
+ * Tanto en Object como en Edit se pintan como el mismo anillo radial
+ * ([com.blendertablet.remote.ui.QuickMenu]); esta clase es la fuente única en
+ * ambos casos.
  *
  * Es una función pura a propósito: así [com.blendertablet.remote.model.SurfaceCatalog]
  * puede comprobarse contra ella y el test falla si alguien cuela aquí una acción cuyo
@@ -110,12 +110,13 @@ object RadialMenu {
             add(ActionId.DISSOLVE)
         }
 
-        if (context.mode == BlenderMode.OBJECT) {
-            if (context.hasSelection || context.hit) add(ActionId.HIDE_OBJECT)
-        } else {
-            if (context.hasSelection) add(ActionId.HIDE_GEOMETRY)
-            add(ActionId.REVEAL_GEOMETRY)
-        }
-        if (context.hasSelection) add(ActionId.DELETE)
+        if (context.hasSelection) add(ActionId.HIDE_GEOMETRY)
+        add(ActionId.REVEAL_GEOMETRY)
+
+        // Separar/Split/Normales/Bevel/Subdivide/Bridge/Borrar y demás viven en el
+        // catálogo de vértice/arista/cara, un panel vertical detrás de un único
+        // sector (plan 001): con Loop/Ring/Ocultar ya en el anillo, borrar cabe ahí
+        // sin gastar otro sector del tope de 8.
+        add(ActionId.EDIT_MESH_TOOLS)
     }
 }

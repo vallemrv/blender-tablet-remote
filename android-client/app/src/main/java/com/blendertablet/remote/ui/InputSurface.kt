@@ -518,6 +518,11 @@ private class GestureView(
                     hypot(shapeCurrentX - shapeStartX, shapeCurrentY - shapeStartY),
                     shapePaint,
                 )
+            } else if (shapeTool == ShapeTool.LINE) {
+                // Bisect: la línea completa, no un segmento acotado a la pantalla — es
+                // justo lo que verá el usuario cuando confirme (un plano que la cruza
+                // entera), y confirma visualmente que no es una selección por caja.
+                canvas.drawLine(shapeStartX, shapeStartY, shapeCurrentX, shapeCurrentY, shapePaint)
             }
         }
         if (knifePoints.isNotEmpty()) {

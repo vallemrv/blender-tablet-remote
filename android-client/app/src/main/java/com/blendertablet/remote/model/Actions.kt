@@ -96,6 +96,8 @@ enum class ActionId {
     HIDE_OBJECT,
     HIDE_GEOMETRY,
     REVEAL_GEOMETRY,
+    /** Entrada al catálogo de vértice/arista/cara (plan 001): abre panel vertical. */
+    EDIT_MESH_TOOLS,
     DUPLICATE_LINKED,
     RENAME,
     DELETE,
@@ -197,6 +199,7 @@ object SurfaceCatalog {
         ActionEntry(ActionId.SELECT_ADD_UNDER, ActionSurface.RADIAL, "Añadir a la selección"),
         ActionEntry(ActionId.SELECT_LOOP, ActionSurface.RADIAL, "Loop"),
         ActionEntry(ActionId.SELECT_RING, ActionSurface.RADIAL, "Ring"),
+        ActionEntry(ActionId.EDIT_MESH_TOOLS, ActionSurface.RADIAL, "Tools de malla"),
         ActionEntry(ActionId.HIDE_OBJECT, ActionSurface.RADIAL, "Ocultar objeto"),
         ActionEntry(ActionId.HIDE_GEOMETRY, ActionSurface.RADIAL, "Ocultar geometría"),
         ActionEntry(ActionId.REVEAL_GEOMETRY, ActionSurface.RADIAL, "Revelar geometría"),

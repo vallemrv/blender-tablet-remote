@@ -69,6 +69,7 @@ private fun specsFor(tool: EditTool): List<ParamSpec> = when (tool) {
         ParamSpec("merge_factor", "Fusión", 0.05, false, TransformMode.SCALE),
     )
     EditTool.KNIFE -> emptyList()
+    EditTool.BISECT -> emptyList()
 }
 
 private fun defaultValue(spec: ParamSpec): Double = if (spec.isInt) 1.0 else 0.0
@@ -97,8 +98,9 @@ fun EditToolTray(
     awaitingPick: Boolean = false,
 ) {
     if (!session.active && !awaitingPick) return
-    // El Knife tiene su propia bandeja (puntos, pop, cerrar, snap).
-    if (session.tool == EditTool.KNIFE) return
+    // Knife y Bisect tienen su propia bandeja (puntos/pop/cerrar, o el aviso de
+    // arrastre y clear inner/outer/fill).
+    if (session.tool == EditTool.KNIFE || session.tool == EditTool.BISECT) return
     FloatingPanel(modifier) {
         if (!session.active) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -135,6 +137,8 @@ fun EditToolTray(
                     BridgeParams(session, onParameter)
                 } else if (session.tool == EditTool.EXTRUDE) {
                     ExtrudeParams(session, onParameter)
+                } else if (session.tool == EditTool.INSET) {
+                    InsetParams(session, onParameter)
                 } else {
                     for (spec in specsFor(session.tool)) {
                         ParamStepper(
@@ -179,6 +183,20 @@ private fun LoopCutParams(session: ToolSession, onParameter: (String, Any?) -> U
     PillButton("Fijar", selected = session.flag("clamp", true)) {
         onParameter("clamp", !session.flag("clamp", true))
     }
+    SnapToggle(session, onParameter)
+}
+
+/**
+ * Snap de incremento real (B5/F5): NONE <-> INCREMENT con el paso por defecto del
+ * servidor (`snap_step`, 0.1). Cuadra el valor antes de aplicar la operación, así
+ * que cambia el resultado geométrico, no solo lo que se enseña.
+ */
+@Composable
+private fun SnapToggle(session: ToolSession, onParameter: (String, Any?) -> Unit) {
+    val snapType = (session.parameters["snap_type"] as? String) ?: "NONE"
+    PillButton("Snap", selected = snapType != "NONE") {
+        onParameter("snap_type", if (snapType == "NONE") "INCREMENT" else "NONE")
+    }
 }
 
 /**
@@ -196,7 +214,10 @@ private fun ExtrudeParams(session: ToolSession, onParameter: (String, Any?) -> U
         )
     }
     val variant = (session.parameters["variant"] as? String) ?: "REGION"
-    if (variant != "REGION") return
+    if (variant != "REGION") {
+        SnapToggle(session, onParameter)
+        return
+    }
     val constraint = (session.parameters["constraint"] as? String) ?: "FREE"
     PillButton("Libre", selected = constraint == "FREE") { onParameter("constraint", "FREE") }
     for (axis in listOf("X", "Y", "Z")) {
@@ -208,6 +229,20 @@ private fun ExtrudeParams(session: ToolSession, onParameter: (String, Any?) -> U
             PillButton(label, selected = orientation == wire) { onParameter("orientation", wire) }
         }
     }
+    SnapToggle(session, onParameter)
+}
+
+/** Parámetros de Inset: grosor, profundidad y snap de incremento real (F2/F5). */
+@Composable
+private fun InsetParams(session: ToolSession, onParameter: (String, Any?) -> Unit) {
+    for (spec in specsFor(EditTool.INSET)) {
+        ParamStepper(
+            spec = spec,
+            value = session.double(spec.key) ?: defaultValue(spec),
+            onCommit = { onParameter(spec.key, it) },
+        )
+    }
+    SnapToggle(session, onParameter)
 }
 
 /** Parámetros de Bridge Edge Loops: desfase, fusión y su toggle de fundir. */
@@ -268,6 +303,69 @@ fun KnifeTray(
                 if (session.points.size >= 2) Ink.Ok else Ink.Faint,
                 onClick = { if (session.points.size >= 2) onConfirm() },
             )
+        }
+    }
+}
+
+/**
+ * Bandeja de Bisect (F4). Armada (sin arrastre todavía) solo enseña el aviso de
+ * dibujar la línea; activa, muestra clear inner/outer, fill, snap y las dos salidas.
+ * Redibujar la línea no la cierra: el usuario puede ajustar el corte varias veces
+ * antes de confirmar.
+ */
+@Composable
+fun BisectTray(
+    session: ToolSession,
+    onParameter: (String, Any?) -> Unit,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (session.tool != EditTool.BISECT || (!session.active && !session.armed)) return
+    FloatingPanel(modifier) {
+        if (!session.active) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Arrastra una línea sobre la malla para cortar",
+                    color = Ink.Muted,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                RoundAction(Icons.Default.Close, "Cancelar", Ink.Bad, onCancel)
+            }
+            return@FloatingPanel
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                session.tool.label.uppercase(),
+                color = Ink.Accent,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.width(10.dp))
+            Row(
+                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PillButton("Vaciar interior", selected = session.flag("clear_inner")) {
+                    onParameter("clear_inner", !session.flag("clear_inner"))
+                }
+                PillButton("Vaciar exterior", selected = session.flag("clear_outer")) {
+                    onParameter("clear_outer", !session.flag("clear_outer"))
+                }
+                PillButton("Rellenar", selected = session.flag("fill")) {
+                    onParameter("fill", !session.flag("fill"))
+                }
+                PillButton("Snap", selected = session.flag("snap", true)) {
+                    onParameter("snap", !session.flag("snap", true))
+                }
+            }
+            Spacer(Modifier.width(10.dp))
+            RoundAction(Icons.Default.Close, "Descartar", Ink.Bad, onCancel)
+            Spacer(Modifier.width(4.dp))
+            RoundAction(Icons.Default.Check, "Confirmar", Ink.Ok, onConfirm)
         }
     }
 }

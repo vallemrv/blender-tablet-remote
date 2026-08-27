@@ -103,6 +103,7 @@ class WebSocketRemoteBlenderClient(
         val TOOL_COMMANDS = setOf(
             "tool.begin", "tool.parameter", "tool.nudge", "tool.status",
             "tool.loop_pick", "tool.knife_point", "tool.knife_pop", "tool.knife_close",
+            "tool.drag_line",
         )
     }
 
@@ -525,6 +526,13 @@ class WebSocketRemoteBlenderClient(
 
     override fun toolKnifeClose() = command("tool.knife_close")
 
+    override fun toolDragLine(startU: Double, startV: Double, endU: Double, endV: Double) = command(
+        "tool.drag_line",
+        JSONObject()
+            .put("start", JSONArray(listOf(startU, startV)))
+            .put("end", JSONArray(listOf(endU, endV))),
+    )
+
     private fun axesArray(axes: Set<Axis>) = JSONArray().apply {
         // Se mandan siempre en orden X, Y, Z: en ROTATE el servidor usa el primero,
         // y un Set no garantiza cuál sería.
@@ -609,6 +617,11 @@ class WebSocketRemoteBlenderClient(
                         // ofrecer en ese caso. Lo mismo el sondeo de loop cut.
                         if (command == "snap.query") _touchProbe.value = TouchProbe(hit = false)
                         else if (command == "mesh.loop_probe") _loopProbe.value = LoopProbe(hit = false)
+                        // Una línea de Bisect que no cruza geometría es un intento normal
+                        // (el usuario dibuja de nuevo), no un error que enseñar: el
+                        // backend ya deja la tool exactamente como estaba (armada o
+                        // activa con el plano anterior).
+                        else if (command == "tool.drag_line") Unit
                         else _errors.value = message.optString("error", "Error remoto")
                     }
                     command == "scene.get_state" -> result?.let(::updateState)

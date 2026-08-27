@@ -223,6 +223,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     // toque. Mientras exista, el teclado de vistas se eleva para no solaparse.
     val trayPresent = bottomTrayVisible(
         session.active, toolSession.active, state.activeTool, state.loopCutAwaitingTap,
+        toolSessionArmed = toolSession.armed,
     )
     val trayInset by animateDpAsState(
         targetValue = if (trayPresent) Metrics.TrayInset else 0.dp,
@@ -398,12 +399,24 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                         .padding(Metrics.EdgeMargin),
                 )
 
+                BisectTray(
+                    session = toolSession,
+                    onParameter = vm::setToolParameter,
+                    onConfirm = vm::confirmTool,
+                    onCancel = vm::cancelTool,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(Metrics.EdgeMargin),
+                )
+
                 ViewFooter(
                     projection = state.blender.view.perspective,
                     activeAxisView = state.blender.view.axisView,
                     inEdit = state.blender.mode == BlenderMode.EDIT,
                     selectionMode = state.blender.selectionMode,
                     showEditShortcuts = state.blender.features.editCatalog.available,
+                    editToolbarAvailable = state.blender.features.editToolbar.available,
                     localViewActive = state.localViewActive,
                     showLocal = state.blender.features.localView,
                     showGrow = state.blender.features.selectionGrow,
@@ -443,43 +456,35 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
         }
 
         quickMenuAt?.let { (x, y) ->
+            // Un único anillo curado para Object y Edit (plan 001): el catálogo del
+            // servidor ya no se vuelca entero al anillo, vive detrás del sector
+            // "Tools de malla" como panel vertical (ver quickActions/EDIT_MESH_TOOLS).
             val touchContext = vm.touchContext(probe)
-            val actions = quickActions(touchContext, vm) {
-                renameTarget = touchContext.objectName ?: state.blender.activeObject
-            }
             val dismiss = {
                 quickMenuAt = null
                 vm.clearProbe()
             }
-            // Object Mode pinta el menú como lista flotante. En Edit, el catálogo
-            // capability-gated sustituye el radial y se filtra por el selector top.
-            if (touchContext.mode == BlenderMode.OBJECT) {
-                ContextSheet(
-                    open = true,
-                    anchor = x to y,
-                    actions = actions,
-                    contextLabel = quickContextLabel(touchContext),
-                    onDismiss = dismiss,
-                )
-            } else if (state.blender.features.editCatalog.available) {
-                ContextSheet(
-                    open = true,
-                    anchor = x to y,
-                    actions = editCatalogActions(
-                        state.blender.features.editCatalog.actionsFor(state.blender.selectionMode), vm,
-                    ),
-                    contextLabel = editCatalogLabel(state.blender.selectionMode),
-                    onDismiss = dismiss,
-                )
+            val meshToolsChildren = if (touchContext.mode == BlenderMode.EDIT && state.blender.features.editCatalog.available) {
+                // Ya en el anillo (Loop/Ring/Ocultar) o en la barra izquierda
+                // (Extrude/Inset/Loop Cut/Cut) no se repiten aquí (F1 "cero duplicidades").
+                val excluded = RADIAL_TOP_LEVEL_CATALOG_IDS +
+                    if (state.blender.features.editToolbar.available) TOOLBAR_OWNED_CATALOG_IDS else emptySet()
+                val catalogActions = state.blender.features.editCatalog.actionsFor(state.blender.selectionMode)
+                    .filter { it.id !in excluded }
+                editCatalogActions(catalogActions, vm)
             } else {
-                QuickMenu(
-                    open = true,
-                    center = x to y,
-                    actions = actions,
-                    contextLabel = quickContextLabel(touchContext),
-                    onDismiss = dismiss,
-                )
+                emptyList()
             }
+            val actions = quickActions(touchContext, vm, meshToolsChildren) {
+                renameTarget = touchContext.objectName ?: state.blender.activeObject
+            }
+            QuickMenu(
+                open = true,
+                center = x to y,
+                actions = actions,
+                contextLabel = quickContextLabel(touchContext),
+                onDismiss = dismiss,
+            )
         }
 
         fileBrowserMode?.let { mode ->
@@ -529,6 +534,12 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     }
 }
 
+/** IDs de `edit_catalog` que la barra de tools activas ya cubre cuando existe. */
+private val TOOLBAR_OWNED_CATALOG_IDS = setOf("EXTRUDE", "INSET", "LOOP_CUT", "KNIFE")
+
+/** IDs de `edit_catalog` que ya viven directamente en el anillo de nivel 1. */
+private val RADIAL_TOP_LEVEL_CATALOG_IDS = setOf("SELECT_LOOP", "SELECT_RING", "HIDE", "REVEAL")
+
 /** Convierte el contrato opaco en filas, sin repartir nombres wire por la UI. */
 private fun editCatalogActions(actions: List<EditCatalogAction>, vm: MainViewModel): List<QuickAction> =
     actions.map { action ->
@@ -553,12 +564,6 @@ private fun editCatalogActions(actions: List<EditCatalogAction>, vm: MainViewMod
             )
         }
     }
-
-private fun editCatalogLabel(mode: SelectionMode): String = when (mode) {
-    SelectionMode.VERTEX -> "Vértice"
-    SelectionMode.EDGE -> "Arista"
-    SelectionMode.FACE -> "Cara"
-}
 
 /** Acción que descarta el archivo abierto y por tanto necesita confirmación. */
 private sealed class PendingDiscard(
@@ -740,6 +745,15 @@ private fun RailContent(
         onClick = { vm.transformBegin(TransformMode.SCALE) },
     )
 
+    // Barra de tools activas (edit_toolbar, B0/F1): Extrude, Inset, Loop Cut y Cut
+    // agrupados con la lógica de Blender, en vez de duplicarlos en el catálogo
+    // contextual. Un servidor sin la feature no la anuncia y no se dibuja nada aquí.
+    if (inEdit && state.blender.features.editToolbar.available) {
+        RailDivider()
+        RailLabel("EDITAR")
+        ToolbarFamilyButtons(state.blender.features.editToolbar.families, toolSession, vm)
+    }
+
     // El catálogo contextual toma propiedad de las operaciones topológicas. En un
     // servidor antiguo no existe y el rail histórico sigue íntegro.
     if (inEdit && !state.blender.features.editCatalog.available) {
@@ -759,6 +773,9 @@ private fun RailContent(
                 EditTool.LOOP_CUT -> true // sin arista queda armada y el próximo tap la elige
                 EditTool.BRIDGE_EDGE_LOOPS -> counts.selectionCounts.edges >= 6
                 EditTool.KNIFE -> true // no exige selección previa
+                // Bisect es de edit_toolbar (B4): un servidor sin esa feature no lo
+                // anuncia en available_tools y este rail legacy nunca lo ofrece.
+                EditTool.BISECT -> true
             }
             IconAction(
                 icon = editToolIcon(tool),
@@ -784,6 +801,7 @@ private fun editToolIcon(tool: EditTool) = when (tool) {
     EditTool.INSET -> Icons.Default.CropFree
     EditTool.SUBDIVIDE -> Icons.Default.Grid4x4
     EditTool.LOOP_CUT -> Icons.Default.LinearScale
+    EditTool.BISECT -> Icons.Default.ContentCut
     EditTool.BRIDGE_EDGE_LOOPS -> Icons.Default.JoinFull
     EditTool.KNIFE -> Icons.Default.ContentCut
 }
@@ -808,7 +826,7 @@ private fun deleteWhat(mode: SelectionMode): String = when (mode) {
 }
 
 /**
- * Menú de la pulsación larga: lista flotante en Object Mode, anillo en Edit.
+ * Menú de la pulsación larga: el mismo anillo radial en Object y en Edit (plan 001).
  *
  * Qué acciones salen lo decide [RadialMenu.actionsFor] a partir de lo que hay bajo el
  * dedo; aquí solo se les pone icono y se les conecta el comando. Esa separación es lo
@@ -818,13 +836,19 @@ private fun deleteWhat(mode: SelectionMode): String = when (mode) {
 private fun quickActions(
     context: TouchContext,
     vm: MainViewModel,
+    /** Catálogo de vértice/arista/cara ya filtrado y sin duplicar el anillo (F1/F4). */
+    meshToolsChildren: List<QuickAction>,
     onRename: () -> Unit,
-): List<QuickAction> = RadialMenu.actionsFor(context).map { id ->
+): List<QuickAction> = RadialMenu.actionsFor(context)
+    // Sin catálogo del servidor (edit_catalog no disponible) no hay nada que abrir.
+    .filter { it != ActionId.EDIT_MESH_TOOLS || meshToolsChildren.isNotEmpty() }
+    .map { id ->
     val label = SurfaceCatalog.labelOf(id)
     when (id) {
         // El catálogo Add completo, antes en el menú Objeto del top: en el vacío del
         // long-click está donde se le necesita, y el panel flotante lo ordena por
-        // categorías con salida por la X de la cabecera.
+        // categorías con salida por la X de la cabecera. Al ser un panel vertical con
+        // scroll (plan 001), Malla no necesita paginarse aunque tenga diez primitivas.
         ActionId.ADD_OBJECT -> QuickAction(
             label, Icons.Default.Add, tint = Ink.Accent,
             children = AddCategory.entries.map { category ->
@@ -843,6 +867,10 @@ private fun quickActions(
                 }
             },
         )
+        // Separar/Split/Normales/Bevel/Subdivide/Bridge/Borrar: el catálogo del
+        // servidor, ya sin lo que vive en el anillo (Loop/Ring/Ocultar) ni en la
+        // barra izquierda (Extrude/Inset/Loop Cut/Cut).
+        ActionId.EDIT_MESH_TOOLS -> QuickAction(label, Icons.Default.Build, children = meshToolsChildren)
         ActionId.SELECT_ALL -> QuickAction(label, Icons.Default.SelectAll) { vm.selectAll() }
         ActionId.DESELECT_ALL -> QuickAction(label, Icons.Default.Deselect) { vm.deselectAll() }
         // Caja y Círculo arman el arrastre por forma y cierran el menú: el siguiente

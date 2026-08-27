@@ -41,6 +41,8 @@ fun ViewFooter(
     inEdit: Boolean,
     selectionMode: SelectionMode,
     showEditShortcuts: Boolean,
+    /** Cuchillo vive en la barra de tools activas cuando `edit_toolbar` existe (F1). */
+    editToolbarAvailable: Boolean = false,
     localViewActive: Boolean,
     showLocal: Boolean,
     showGrow: Boolean,
@@ -77,7 +79,7 @@ fun ViewFooter(
                         }
                     }
                     if (editPage && inEdit && showEditShortcuts) {
-                        EditKeys(selectionMode, normalsPage, { normalsPage = it }, onEditAction)
+                        EditKeys(selectionMode, editToolbarAvailable, normalsPage, { normalsPage = it }, onEditAction)
                     } else {
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         NumKey("7", "Superior / inferior", activeAxisView in setOf("TOP", "BOTTOM")) { opposite("TOP", "BOTTOM") }
@@ -128,6 +130,7 @@ fun ViewFooter(
 @Composable
 private fun EditKeys(
     selectionMode: SelectionMode,
+    editToolbarAvailable: Boolean,
     normalsPage: Boolean,
     setNormalsPage: (Boolean) -> Unit,
     onAction: (EditFooterAction) -> Unit,
@@ -145,7 +148,11 @@ private fun EditKeys(
         Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             NumKey("F", if (selectionMode == SelectionMode.EDGE) "Rellenar" else "Crear arista/cara",
                 enabled = selectionMode != SelectionMode.FACE) { onAction(EditFooterAction.MAKE_EDGE_FACE) }
-            NumKey("K", "Cuchillo") { onAction(EditFooterAction.KNIFE) }
+            // Cuchillo vive en la barra de tools activas cuando edit_toolbar existe;
+            // aquí sería la duplicidad que el plan prohíbe (F1).
+            if (!editToolbarAvailable) {
+                NumKey("K", "Cuchillo") { onAction(EditFooterAction.KNIFE) }
+            }
             NumKey("P", "Separar a objeto") { onAction(EditFooterAction.SEPARATE) }
             NumKey("Y", "Split") { onAction(EditFooterAction.SPLIT) }
         }

@@ -263,6 +263,13 @@ interface RemoteBlenderClient {
     fun toolKnifePop()
     fun toolKnifeClose()
 
+    /**
+     * Bisect: arrastre de línea completo (inicio/fin normalizados, al soltar el
+     * dedo). Arma la sesión si estaba solo armada, o redibuja el plano si ya
+     * estaba activa.
+     */
+    fun toolDragLine(startU: Double, startV: Double, endU: Double, endV: Double)
+
     /** Ejecuta exclusivamente un comando publicado por el catálogo Edit. */
     fun editCatalogCommand(command: String, payload: Map<String, Any?> = emptyMap())
 }

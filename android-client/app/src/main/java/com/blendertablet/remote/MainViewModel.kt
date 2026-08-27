@@ -17,6 +17,7 @@ import com.blendertablet.remote.model.Constraint
 import com.blendertablet.remote.model.EditTool
 import com.blendertablet.remote.model.EditFooterAction
 import com.blendertablet.remote.model.EditCatalogAction
+import com.blendertablet.remote.model.EditToolbarFamily
 import com.blendertablet.remote.model.Gesture
 import com.blendertablet.remote.model.GesturePhase
 import com.blendertablet.remote.model.InputDebug
@@ -151,6 +152,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (_knifeScreenPoints.value.isNotEmpty()) _knifeScreenPoints.value = emptyList()
                 } else if (_knifeScreenPoints.value.size > count) {
                     _knifeScreenPoints.value = _knifeScreenPoints.value.take(count)
+                }
+                // Bisect arma el mismo mecanismo de "un dedo dibuja" que B/C (F4): un
+                // dedo traza la línea de corte en vez de orbitar, mientras la tool
+                // esté armada o activa. Se desarma solo al salir de Bisect, sin tocar
+                // una caja/círculo que el usuario hubiera armado a mano.
+                val bisectDrawing = (session.armed || session.active) && session.tool == EditTool.BISECT
+                if (bisectDrawing && local.value.shapeTool != ShapeTool.LINE) {
+                    local.update { it.copy(shapeTool = ShapeTool.LINE) }
+                } else if (!bisectDrawing && local.value.shapeTool == ShapeTool.LINE) {
+                    local.update { it.copy(shapeTool = ShapeTool.NONE) }
                 }
             }
         }
@@ -361,6 +372,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * hay que rearmarla desde el long-click (B/C).
      */
     fun shapeSelect(shape: ShapeTool, u0: Float, v0: Float, u1: Float, v1: Float) {
+        // Bisect es la excepción: no es selección y no se desarma sola tras un
+        // arrastre (F4 permite redibujar la línea mientras la sesión sigue viva). El
+        // watcher de [toolSession] es quien la desarma al salir de Bisect.
+        if (shape == ShapeTool.LINE) {
+            bisectDragLine(u0, v0, u1, v1)
+            return
+        }
         val op = local.value.selectionOp
         when (shape) {
             ShapeTool.BOX -> client.boxSelect(u0.toDouble(), v0.toDouble(), u1.toDouble(), v1.toDouble(), op)
@@ -369,7 +387,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 Math.hypot((u1 - u0).toDouble(), (v1 - v0).toDouble()),
                 op,
             )
-            ShapeTool.NONE -> Unit
+            ShapeTool.NONE, ShapeTool.LINE -> Unit
         }
         local.update { it.copy(shapeTool = ShapeTool.NONE) }
     }
@@ -533,7 +551,48 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         EditTool.LOOP_CUT -> mapOf("cuts" to 1.0, "smoothness" to 0.0, "factor" to 0.0)
         EditTool.BRIDGE_EDGE_LOOPS -> mapOf("twist_offset" to 0.0, "merge_factor" to 0.0)
         EditTool.KNIFE -> mapOf("snap" to 1.0)
+        EditTool.BISECT -> mapOf("clear_inner" to 0.0, "clear_outer" to 0.0, "fill" to 0.0, "snap" to 1.0)
     }
+
+    /**
+     * Activa una familia de la barra de tools activas (`edit_toolbar`, B1/F1).
+     *
+     * Tap sin variante conserva la última usada en esta familia, o la variante por
+     * defecto del servidor. Loop Cut y Knife reutilizan exactamente el flujo que ya
+     * tenían (toque en viewport / puntos); Bisect arma la sesión y espera el
+     * arrastre de línea; Extrude/Inset abren la sesión con la variante como
+     * parámetro, igual que ya hacía el catálogo contextual.
+     */
+    fun activateToolbarFamily(family: EditToolbarFamily, variantId: String? = null) {
+        val remembered = local.value.toolbarVariant[family.id]
+        val variant = family.variants.firstOrNull { it.id == (variantId ?: remembered) }
+            ?: family.variants.firstOrNull { it.id == family.defaultVariant }
+            ?: family.variants.firstOrNull { it.enabled }
+            ?: return
+        local.update { it.copy(toolbarVariant = it.toolbarVariant + (family.id to variant.id)) }
+        val toolWire = (variant.payload["tool"] as? String) ?: (family.payload["tool"] as? String) ?: family.id
+        val tool = EditTool.fromWire(toolWire) ?: return
+        when (tool) {
+            EditTool.LOOP_CUT, EditTool.KNIFE -> beginEditTool(tool)
+            EditTool.BISECT -> {
+                if (client.transformSession.value.active) client.transformCancel()
+                local.update { it.copy(activeTool = ActiveTool.BISECT, loopCutAwaitingTap = false) }
+                client.toolBegin(tool, toolDefaultParameters(tool))
+            }
+            else -> {
+                if (client.transformSession.value.active) client.transformCancel()
+                local.update { it.copy(activeTool = ActiveTool.valueOf(tool.name), loopCutAwaitingTap = false) }
+                val params = (family.parameters + variant.parameters)
+                    .associate { it.id to it.default }.toMutableMap<String, Any?>()
+                params["variant"] = variant.id
+                client.toolBegin(tool, params)
+            }
+        }
+    }
+
+    /** Bisect: arrastre de línea completo del viewport (F4), inicio/fin normalizados. */
+    fun bisectDragLine(u0: Float, v0: Float, u1: Float, v1: Float) =
+        client.toolDragLine(u0.toDouble(), v0.toDouble(), u1.toDouble(), v1.toDouble())
 
     /** Al abrir el menú Archivo: refresca nombre, "sin guardar" y recientes. */
     fun refreshFileMenu() {

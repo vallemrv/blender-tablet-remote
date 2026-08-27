@@ -14,7 +14,8 @@ enum class EditTool(val wire: String, val label: String, val requirement: String
     SUBDIVIDE("SUBDIVIDE", "Subdividir", "necesita aristas"),
     LOOP_CUT("LOOP_CUT", "Loop Cut", "necesita una arista"),
     BRIDGE_EDGE_LOOPS("BRIDGE_EDGE_LOOPS", "Bridge Edge Loops", "necesita dos loops de aristas"),
-    KNIFE("KNIFE", "Cuchillo", "necesita una malla");
+    KNIFE("KNIFE", "Cuchillo", "necesita una malla"),
+    BISECT("BISECT", "Bisect", "necesita una malla");
 
     companion object {
         fun fromWire(value: String?): EditTool? = entries.firstOrNull { it.wire == value }
@@ -41,6 +42,9 @@ enum class LoopFalloff(val wire: String, val label: String) {
     fun next(): LoopFalloff = entries[(ordinal + 1) % entries.size]
 }
 
+/** Línea de arrastre de una sesión Bisect, en coordenadas de pantalla normalizadas. */
+data class DragLine(val start: List<Double>, val end: List<Double>)
+
 /**
  * Sesión de herramienta paramétrica en curso, tal como la cuenta el servidor.
  *
@@ -48,15 +52,23 @@ enum class LoopFalloff(val wire: String, val label: String) {
  * `thickness` (inset), `cuts` (subdivide) o `factor` (loop cut). Los valores llegan
  * tipados: números como Double, opciones del modal (even/flip/clamp) como Boolean y
  * `falloff` como String.
+ *
+ * [armed] es la familia elegida (B1) esperando el primer toque/arrastre del viewport
+ * (Loop Cut, Bisect): sin backup ni preview todavía, `active` sigue en `false`. Puede
+ * estar armada sin estar activa, o activa (lo que implica armada). [tool]/[parameters]
+ * ya vienen rellenos en ese estado, para que la barra muestre el icono marcado.
  */
 data class ToolSession(
     val active: Boolean = false,
+    val armed: Boolean = false,
     val tool: EditTool = EditTool.EXTRUDE,
     val parameters: Map<String, Any?> = emptyMap(),
     /** Knife: puntos confirmados por el servidor, en coordenadas locales. */
     val points: List<List<Double>> = emptyList(),
     /** Knife: la polilínea está cerrada. */
     val closed: Boolean = false,
+    /** Bisect: última línea de arrastre resuelta por el servidor. */
+    val line: DragLine? = null,
 ) {
     val primaryKey: String
         get() = when (tool) {
@@ -65,7 +77,7 @@ data class ToolSession(
             EditTool.SUBDIVIDE -> "cuts"
             EditTool.LOOP_CUT -> "factor"
             EditTool.BRIDGE_EDGE_LOOPS -> "twist_offset"
-            EditTool.KNIFE -> ""
+            EditTool.KNIFE, EditTool.BISECT -> ""
         }
 
     fun double(key: String): Double? = (parameters[key] as? Number)?.toDouble()
@@ -81,4 +93,44 @@ data class LoopProbe(
     /** −1..1: coloca el corte del medio exactamente donde se tocó. */
     val factor: Double = 0.0,
     val ring: Int = 0,
+)
+
+/**
+ * Barra izquierda de tools activas de Edit Mode (`edit_toolbar`).
+ *
+ * A diferencia de [EditCatalog] (agrupado por submodo, acciones discretas), esto
+ * agrupa por familia con la lógica de Blender: una familia arma una variante y
+ * permanece marcada mientras hay sesión armada o activa. Convive con [EditCatalog]:
+ * un servidor sin esta feature sigue sirviendo solo el catálogo legacy.
+ */
+data class EditToolbar(
+    val families: List<EditToolbarFamily> = emptyList(),
+) {
+    val available: Boolean get() = families.isNotEmpty()
+}
+
+data class EditToolbarFamily(
+    val id: String,
+    val label: String,
+    val defaultVariant: String,
+    /** Comando fijo (normalmente `tool.begin`) y su payload base (p. ej. `tool`). */
+    val command: String?,
+    val payload: Map<String, Any?> = emptyMap(),
+    /** `PARAMETRIC`, `VIEWPORT_TAP`, `VIEWPORT_POLYLINE` o `VIEWPORT_DRAG_LINE`. */
+    val input: String = "PARAMETRIC",
+    val requirements: Map<String, Any?> = emptyMap(),
+    val variants: List<EditToolbarVariant> = emptyList(),
+    /** Parámetros compartidos por todas las variantes; cada variante puede sumar los suyos. */
+    val parameters: List<EditCatalogParameter> = emptyList(),
+)
+
+data class EditToolbarVariant(
+    val id: String,
+    val label: String,
+    val enabled: Boolean = true,
+    val input: String? = null,
+    /** Payload propio, fundido sobre el de la familia (p. ej. distinto `tool`). */
+    val payload: Map<String, Any?> = emptyMap(),
+    val requirements: Map<String, Any?> = emptyMap(),
+    val parameters: List<EditCatalogParameter> = emptyList(),
 )

@@ -9,7 +9,7 @@ enum class BlenderMode { OBJECT, EDIT }
 enum class SelectionMode { VERTEX, EDGE, FACE }
 /** Atajos de la página Edit; su adaptador wire vive en MainViewModel. */
 enum class EditFooterAction { MAKE_EDGE_FACE, KNIFE, SEPARATE, SPLIT, NORMALS, NORMALS_OUTSIDE, NORMALS_INSIDE, NORMALS_FLIP }
-enum class ActiveTool { SELECT, MOVE, ROTATE, SCALE, EXTRUDE, BEVEL, INSET, SUBDIVIDE, LOOP_CUT, BRIDGE_EDGE_LOOPS, KNIFE }
+enum class ActiveTool { SELECT, MOVE, ROTATE, SCALE, EXTRUDE, BEVEL, INSET, SUBDIVIDE, LOOP_CUT, BRIDGE_EDGE_LOOPS, KNIFE, BISECT }
 
 /**
  * Operación de selección que aplican el tap, la caja y el círculo. Mayús/Ctrl/Alt
@@ -18,8 +18,13 @@ enum class ActiveTool { SELECT, MOVE, ROTATE, SCALE, EXTRUDE, BEVEL, INSET, SUBD
  */
 enum class SelectionOp { SET, ADD, REMOVE, TOGGLE }
 
-/** Herramienta de arrastre por forma armada desde la barra superior (B/C). */
-enum class ShapeTool { NONE, BOX, CIRCLE }
+/**
+ * Herramienta de arrastre por forma. BOX/CIRCLE se arman desde la barra superior
+ * (B/C); LINE la arma automáticamente Bisect (edit_toolbar) mientras está armado o
+ * activo — no tiene botón propio, es el mismo mecanismo de "un dedo dibuja" que ya
+ * usan B/C, reinterpretado como línea de corte en vez de selección.
+ */
+enum class ShapeTool { NONE, BOX, CIRCLE, LINE }
 
 data class HiddenObject(val name: String, val type: String)
 data class ObjectChoiceFilter(val type: String? = null, val excludeSelf: Boolean = false)
@@ -51,6 +56,8 @@ data class ServerFeatures(
     val fileBrowse: Boolean = false,
     /** Catálogo contextual de Edit; vacío conserva por completo la interfaz legacy. */
     val editCatalog: EditCatalog = EditCatalog(),
+    /** Barra de tools activas; vacío conserva el rail y `edit_catalog` legacy. */
+    val editToolbar: EditToolbar = EditToolbar(),
 )
 
 /** Contrato extensible del menú Edit. Las claves wire se mantienen opacas a la UI. */
@@ -395,6 +402,8 @@ data class AppUiState(
     val localViewActive: Boolean = false,
     /** Loop Cut armado esperando el toque que coloca el corte. */
     val loopCutAwaitingTap: Boolean = false,
+    /** Última variante usada por familia de `edit_toolbar` (id de familia -> id de variante). */
+    val toolbarVariant: Map<String, String> = emptyMap(),
 )
 
 /**
@@ -409,5 +418,8 @@ fun bottomTrayVisible(
     toolSessionActive: Boolean,
     activeTool: ActiveTool,
     loopCutAwaitingTap: Boolean,
+    /** Bisect armado (edit_toolbar) esperando el arrastre de línea que activa la sesión. */
+    toolSessionArmed: Boolean = false,
 ): Boolean = sessionActive || toolSessionActive ||
-    (activeTool == ActiveTool.LOOP_CUT && !toolSessionActive && loopCutAwaitingTap)
+    (activeTool == ActiveTool.LOOP_CUT && !toolSessionActive && loopCutAwaitingTap) ||
+    (activeTool == ActiveTool.BISECT && !toolSessionActive && toolSessionArmed)

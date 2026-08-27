@@ -101,8 +101,51 @@ object StateParser {
                 ?.optBoolean("pick", false) == true,
             f.optJSONObject("files")?.optBoolean("browse", false) == true,
             editCatalog(f.optJSONObject("edit_catalog")),
+            editToolbar(f.optJSONObject("edit_toolbar")),
         )
     }
+
+    /**
+     * Lee la barra de tools activas sin asumir que el servidor conoce exactamente
+     * esta versión: familias, variantes y parámetros desconocidos se ignoran en vez
+     * de impedir que la tablet use el resto del servidor (mismo criterio que
+     * [editCatalog]).
+     */
+    fun editToolbar(json: JSONObject?): EditToolbar {
+        val array = json?.optJSONArray("families") ?: return EditToolbar()
+        val families = (0 until array.length()).mapNotNull { array.optJSONObject(it) }.mapNotNull { family ->
+            val id = family.optString("id")
+            if (id.isBlank()) return@mapNotNull null
+            EditToolbarFamily(
+                id = id,
+                label = family.optString("label").ifBlank { id },
+                defaultVariant = family.optString("default_variant"),
+                command = family.optString("command").takeIf(String::isNotBlank),
+                payload = jsonMap(family.optJSONObject("payload")),
+                input = family.optString("input", "PARAMETRIC"),
+                requirements = jsonMap(family.optJSONObject("requirements")),
+                variants = editToolbarVariants(family.optJSONArray("variants")),
+                parameters = editParameters(family.optJSONArray("parameters")),
+            )
+        }
+        return EditToolbar(families)
+    }
+
+    private fun editToolbarVariants(array: JSONArray?): List<EditToolbarVariant> =
+        if (array == null) emptyList() else (0 until array.length()).mapNotNull { array.optJSONObject(it) }
+            .mapNotNull { item ->
+                item.optString("id").takeIf(String::isNotBlank)?.let { id ->
+                    EditToolbarVariant(
+                        id = id,
+                        label = item.optString("label").ifBlank { id },
+                        enabled = item.optBoolean("enabled", true),
+                        input = item.optString("input").takeIf(String::isNotBlank),
+                        payload = jsonMap(item.optJSONObject("payload")),
+                        requirements = jsonMap(item.optJSONObject("requirements")),
+                        parameters = editParameters(item.optJSONArray("parameters")),
+                    )
+                }
+            }
 
     /**
      * Lee el catálogo sin asumir que el servidor conoce exactamente esta versión.
@@ -220,7 +263,10 @@ object StateParser {
     }
 
     fun toolSession(json: JSONObject?): ToolSession {
-        if (json == null || !json.optBoolean("active")) return ToolSession()
+        if (json == null) return ToolSession()
+        val active = json.optBoolean("active")
+        val armed = json.optBoolean("armed")
+        if (!active && !armed) return ToolSession()
         val tool = EditTool.fromWire(json.optString("tool")) ?: return ToolSession()
         val params = json.optJSONObject("parameters") ?: JSONObject()
         // Los valores llegan tipados (números, bools del modal, falloff string) y
@@ -241,10 +287,18 @@ object StateParser {
                 List(3) { i -> point.optDouble(i, 0.0) }
             }
         }
+        val line = json.optJSONObject("line")?.let(::dragLine)
         return ToolSession(
-            active = true, tool = tool, parameters = values,
-            points = points, closed = json.optBoolean("closed"),
+            active = active, armed = armed, tool = tool, parameters = values,
+            points = points, closed = json.optBoolean("closed"), line = line,
         )
+    }
+
+    /** Bisect: línea de arrastre en `u`/`v` normalizados, tal como la fijó el servidor. */
+    private fun dragLine(json: JSONObject): DragLine? {
+        val start = json.optJSONArray("start") ?: return null
+        val end = json.optJSONArray("end") ?: return null
+        return DragLine(List(2) { start.optDouble(it, 0.0) }, List(2) { end.optDouble(it, 0.0) })
     }
 
     /** `mesh.loop_probe`: dónde caería el corte si se confirma el toque. */
