@@ -767,7 +767,24 @@ def modeling_scenario(client: WSClient) -> None:
     confirmed = ok_reply("confirm loop cut", client.command("tool.confirm"))
     check("fase confirmada", confirmed.get("phase") == "CONFIRMED", str(confirmed))
     ok_reply("deseleccionar", client.command("selection.all", {"value": False}))
-    fail_reply("sin arista", client.command("tool.begin", {"tool": "LOOP_CUT"}), "empty_selection")
+    print("  LOOP_CUT: armado por toque (sin selección previa, B1/B3)")
+    armed = ok_reply("sin arista queda armada, no falla", client.command("tool.begin", {"tool": "LOOP_CUT"}))
+    check("fase ARMED", armed.get("phase") == "ARMED" and armed.get("armed") is True and armed.get("active") is False,
+          str(armed))
+    status_armed = ok_reply("tool.status en ARMED", client.command("tool.status"))
+    check("status refleja ARMED", status_armed.get("phase") == "ARMED" and status_armed.get("tool") == "LOOP_CUT",
+          str(status_armed))
+    ok_reply("encuadrar el cubo para el toque", client.command("view.frame_all"))
+    no_hit = client.command("tool.loop_pick", {"u": 0.02, "v": 0.02})
+    check("toque fuera de malla sigue armada", no_hit.get("ok") and (no_hit.get("result") or {}).get("phase") == "ARMED",
+          str(no_hit))
+    picked = ok_reply("primer toque activa la sesión", client.command("tool.loop_pick", {"u": 0.5, "v": 0.5}))
+    check("toque en viewport activa LOOP_CUT", picked.get("phase") == "ACTIVE" and picked.get("active") is True,
+          str(picked))
+    ok_reply("cancel tras armar por toque", client.command("tool.cancel"))
+    idle = ok_reply("tool.status vuelve a IDLE", client.command("tool.status"))
+    check("cancel desde armado deja IDLE", idle.get("phase") == "IDLE", str(idle))
+    fail_reply("loop_pick sin sesión ni armado", client.command("tool.loop_pick", {"u": 0.5, "v": 0.5}), "no_session")
 
     print("  LOOP_CUT: opciones del modal (falloff/even/flip/clamp)")
     fail_reply("falloff inválido", client.command("tool.begin", {
@@ -1116,6 +1133,177 @@ def extrude_axis_scenario(client: WSClient) -> None:
     ok_reply("volver object extrude axis", client.command("mode.object"))
 
 
+def inset_variant_scenario(client: WSClient) -> None:
+    print("\n[23] Inset: variante REGION/INDIVIDUAL")
+    ok_reply("escena inset variant", client.command("file.new"))
+    ok_reply("Cube inset variant", client.command("object.select", {"names": ["Cube"]}))
+    ok_reply("edit inset variant", client.command("mode.edit"))
+    ok_reply("cara inset variant", client.command("selection.face"))
+    ok_reply("dos caras", client.command("selection.elements", {"faces": [0, 1], "mode": "SET"}))
+
+    region = ok_reply("begin inset REGION", client.command("tool.begin", {
+        "tool": "INSET", "parameters": {"variant": "REGION", "thickness": 0.1}}))
+    check("variant REGION viaja en la sesión", region.get("parameters", {}).get("variant") == "REGION", str(region))
+    check("resultado anuncia REGION", region.get("preview", {}).get("variant") == "REGION", str(region))
+    ok_reply("cancel inset REGION", client.command("tool.cancel"))
+
+    individual = ok_reply("begin inset INDIVIDUAL", client.command("tool.begin", {
+        "tool": "INSET", "parameters": {"variant": "INDIVIDUAL", "thickness": 0.1}}))
+    check("variant INDIVIDUAL viaja en la sesión",
+          individual.get("parameters", {}).get("variant") == "INDIVIDUAL", str(individual))
+    check("resultado anuncia INDIVIDUAL", individual.get("preview", {}).get("variant") == "INDIVIDUAL", str(individual))
+    ok_reply("cancel inset INDIVIDUAL", client.command("tool.cancel"))
+    ok_reply("volver object inset variant", client.command("mode.object"))
+
+
+def scalar_snap_scenario(client: WSClient) -> None:
+    """Sesiones tool.* en vez de history.undo: en background no hay pila de undo,
+
+    así que cancel (que restaura desde el backup de la sesión) es la única forma
+    limpia de comparar "con snap" y "sin snap" sobre la misma selección.
+    """
+    print("\n[24] Snap real de incremento en Extrude y Loop Cut (B5)")
+    ok_reply("escena snap escalar", client.command("file.new"))
+    ok_reply("Cube snap escalar", client.command("object.select", {"names": ["Cube"]}))
+    ok_reply("edit snap escalar", client.command("mode.edit"))
+    ok_reply("cara snap escalar", client.command("selection.face"))
+    ok_reply("una cara", client.command("selection.elements", {"faces": [0], "mode": "SET"}))
+
+    plain = ok_reply("extrude sin snap", client.command("tool.begin", {
+        "tool": "EXTRUDE", "parameters": {"offset": 0.37}}))
+    check("offset sin snap se conserva exacto", abs(plain["preview"]["offset"] - 0.37) < 1e-9, str(plain))
+    ok_reply("cancel extrude sin snap", client.command("tool.cancel"))
+
+    ok_reply("misma cara para snap", client.command("selection.elements", {"faces": [0], "mode": "SET"}))
+    snapped = ok_reply("extrude con snap INCREMENT", client.command("tool.begin", {
+        "tool": "EXTRUDE", "parameters": {"offset": 0.37, "snap_type": "INCREMENT", "snap_step": 0.1}}))
+    check("INCREMENT cuadra 0.37 a 0.4", abs(snapped["preview"]["offset"] - 0.4) < 1e-9, str(snapped))
+    check("el snap sí cambia el resultado geométrico",
+          abs(snapped["preview"]["offset"] - plain["preview"]["offset"]) > 1e-6,
+          f"{plain['preview']['offset']} vs {snapped['preview']['offset']}")
+    ok_reply("cancel extrude con snap", client.command("tool.cancel"))
+
+    ok_reply("cara para snap inválido", client.command("selection.elements", {"faces": [0], "mode": "SET"}))
+    fail_reply("snap_type inválido", client.command("tool.begin", {
+        "tool": "EXTRUDE", "parameters": {"offset": 0.1, "snap_type": "VERTEX"}}), "bad_payload")
+
+    ok_reply("semilla loop cut snap", client.command("selection.edge"))
+    ok_reply("arista semilla snap", client.command("selection.elements", {"edges": [0], "mode": "SET"}))
+    loop_plain = ok_reply("loop cut sin snap", client.command("tool.begin", {
+        "tool": "LOOP_CUT", "parameters": {"factor": 0.23}}))
+    ok_reply("cancel loop cut sin snap", client.command("tool.cancel"))
+    ok_reply("arista semilla snap 2", client.command("selection.elements", {"edges": [0], "mode": "SET"}))
+    loop_snapped = ok_reply("loop cut con snap GRID (=INCREMENT)", client.command("tool.begin", {
+        "tool": "LOOP_CUT", "parameters": {"factor": 0.23, "snap_type": "GRID", "snap_step": 0.1}}))
+    check("GRID cuadra el factor como INCREMENT", abs(loop_snapped["preview"]["factor"] - 0.2) < 1e-9,
+          str(loop_snapped))
+    check("el snap de Loop Cut también cambia el resultado",
+          abs(loop_snapped["preview"]["factor"] - loop_plain["preview"]["factor"]) > 1e-6,
+          f"{loop_plain['preview']['factor']} vs {loop_snapped['preview']['factor']}")
+    ok_reply("cancel loop cut con snap", client.command("tool.cancel"))
+    ok_reply("volver object snap escalar", client.command("mode.object"))
+
+
+def bisect_scenario(client: WSClient) -> None:
+    print("\n[25] Cut: Bisect (arrastre de línea, B4)")
+    ok_reply("escena bisect", client.command("file.new"))
+    ok_reply("Cube bisect", client.command("object.select", {"names": ["Cube"]}))
+    fail_reply("bisect en Object", client.command("tool.begin", {"tool": "BISECT"}), "wrong_mode")
+
+    ok_reply("edit bisect", client.command("mode.edit"))
+    ok_reply("encuadrar cubo para bisect", client.command("view.frame_all"))
+    before = ok_reply("topo antes de bisect", client.command("mesh.info"))
+
+    armed = ok_reply("BISECT arma sin geometría", client.command("tool.begin", {"tool": "BISECT"}))
+    check("fase ARMED para Bisect", armed.get("phase") == "ARMED" and armed.get("active") is False, str(armed))
+    fail_reply("nudge no aplica a Bisect", client.command("tool.nudge", {"delta": 0.1}), "no_session")
+
+    degenerate = client.command("tool.drag_line", {"start": [0.5, 0.5], "end": [0.5, 0.5]})
+    check("línea de longitud cero es bad_payload", degenerate.get("code") == "bad_payload", str(degenerate))
+
+    activated = ok_reply("arrastre completo activa Bisect", client.command("tool.drag_line", {
+        "start": [0.1, 0.5], "end": [0.9, 0.5]}))
+    check("Bisect queda ACTIVE tras el arrastre", activated.get("phase") == "ACTIVE" and activated.get("active"),
+          str(activated))
+    preview = ok_reply("topo preview bisect", client.command("mesh.info"))
+    check("el corte añade aristas/vértices", preview["verts"] > before["verts"], f"{before} -> {preview}")
+
+    ok_reply("activar fill", client.command("tool.parameter", {"parameters": {"fill": True}}))
+    filled = ok_reply("topo con fill", client.command("mesh.info"))
+    check("fill añade caras nuevas en el corte", filled["faces"] >= preview["faces"], f"{preview} -> {filled}")
+
+    redrawn = ok_reply("redibujar línea no acumula", client.command("tool.drag_line", {
+        "start": [0.5, 0.1], "end": [0.5, 0.9]}))
+    check("redibujar sigue ACTIVE", redrawn.get("active") is True, str(redrawn))
+    redrawn_info = ok_reply("topo tras redibujar", client.command("mesh.info"))
+    check("redibujar reconstruye, no acumula", redrawn_info["verts"] < filled["verts"] * 2, str(redrawn_info))
+
+    ok_reply("cancel bisect", client.command("tool.cancel"))
+    cancelled = ok_reply("topo cancel bisect", client.command("mesh.info"))
+    check("cancel restaura la topología exacta", cancelled["verts"] == before["verts"], str(cancelled))
+
+    ok_reply("rearmar bisect", client.command("tool.begin", {"tool": "BISECT"}))
+    ok_reply("línea de confirmación", client.command("tool.drag_line", {"start": [0.1, 0.5], "end": [0.9, 0.5]}))
+    confirmed = ok_reply("confirm bisect", client.command("tool.confirm"))
+    check("confirm crea un único paso de sesión", confirmed.get("phase") == "CONFIRMED", str(confirmed))
+    after_confirm = ok_reply("topo tras confirm", client.command("mesh.info"))
+    check("confirm deja el corte", after_confirm["verts"] > before["verts"], str(after_confirm))
+
+    ok_reply("escena nueva para línea que falla", client.command("file.new"))
+    ok_reply("Cube línea que falla", client.command("object.select", {"names": ["Cube"]}))
+    ok_reply("edit línea que falla", client.command("mode.edit"))
+    ok_reply("encuadrar para línea que falla", client.command("view.frame_all"))
+    ok_reply("rearmar bisect para línea que falla", client.command("tool.begin", {"tool": "BISECT"}))
+    missed = client.command("tool.drag_line", {"start": [0.001, 0.999], "end": [0.01, 0.999]})
+    still_armed = ok_reply("tool.status tras línea fallida", client.command("tool.status"))
+    check("una línea que no cruza geometría vuelve a ARMED, no a IDLE",
+          still_armed.get("phase") in ("ARMED", "ACTIVE"), str((missed, still_armed)))
+    ok_reply("cancelar lo que quedara armado/activo", client.command("tool.cancel"))
+    ok_reply("volver object bisect", client.command("mode.object"))
+
+
+def rotate_scale_sign_scenario(client: WSClient) -> None:
+    """Fija el signo de B6 con pruebas: dedo a la derecha (dx > 0) es horario y
+
+    agranda, tanto en la transformación modal como en la ruta legacy de gestos.
+    Move, orbit, pan, zoom y roll no se tocan en este ciclo y no se prueban aquí.
+    """
+    print("\n[26] Signo de Rotate/Scale: arrastre horizontal (B6)")
+    ok_reply("escena signo rotate/scale", client.command("file.new"))
+    ok_reply("Cube signo rotate/scale", client.command("object.select", {"names": ["Cube"]}))
+
+    print("  Modal: Rotate")
+    begun = ok_reply("begin rotate modal", client.command("transform.begin", {"mode": "ROTATE"}))
+    check("ángulo arranca en cero", begun.get("angle", 0.0) == 0.0, str(begun))
+    nudged = ok_reply("nudge dx positivo (derecha)", client.command("transform.nudge", {"dx": 0.1, "dy": 0.0}))
+    check("dedo a la derecha da ángulo negativo (horario en pantalla)",
+          nudged.get("angle", 0.0) < 0.0, str(nudged))
+    ok_reply("cancel rotate modal", client.command("transform.cancel"))
+
+    print("  Modal: Scale")
+    begun = ok_reply("begin scale modal", client.command("transform.begin", {"mode": "SCALE"}))
+    check("valores arrancan en 1", all(abs(v - 1.0) < 1e-9 for v in begun.get("values", [])), str(begun))
+    nudged = ok_reply("nudge dx positivo agranda", client.command("transform.nudge", {"dx": 0.1, "dy": 0.0}))
+    check("dedo a la derecha agranda (factor > 1)", all(v > 1.0 for v in nudged.get("values", [])), str(nudged))
+    ok_reply("reabrir scale modal", client.command("transform.cancel"))
+    ok_reply("reabrir scale modal 2", client.command("transform.begin", {"mode": "SCALE"}))
+    nudged = ok_reply("nudge dx negativo encoge", client.command("transform.nudge", {"dx": -0.1, "dy": 0.0}))
+    check("dedo a la izquierda encoge (factor < 1)", all(v < 1.0 for v in nudged.get("values", [])), str(nudged))
+    ok_reply("cancel scale modal", client.command("transform.cancel"))
+
+    print("  Legacy: rotate (eje Z fijo, sin sesión modal)")
+    ok_reply("rot Z a cero", client.command("transform.rotate", {"z": 0.0, "absolute": True}))
+    client.gesture("rotate", "begin", axis="Z")
+    for _ in range(10):
+        client.gesture("rotate", "update", dx=0.02, axis="Z")
+    client.gesture("rotate", "end", dx=0.0, axis="Z")
+    time.sleep(0.3)
+    info = ok_reply("estado tras rotate legacy", client.command("scene.get_object", {"name": "Cube"}))
+    check("dedo a la derecha gira horario (Z negativo) en la ruta legacy",
+          info["rotation_euler"][2] < 0.0, str(info["rotation_euler"]))
+    ok_reply("reset rot legacy", client.command("transform.rotate", {"z": 0.0, "absolute": True}))
+
+
 def auth_scenario() -> None:
     print("\n[16] Autenticación")
     bad = WSClient("127.0.0.1", PORT, token="")
@@ -1231,6 +1419,10 @@ def client_worker(done: threading.Event) -> None:
             bridge_edge_loops_scenario(extra)
             knife_scenario(extra)
             extrude_axis_scenario(extra)
+            inset_variant_scenario(extra)
+            scalar_snap_scenario(extra)
+            bisect_scenario(extra)
+            rotate_scale_sign_scenario(extra)
         finally:
             extra.close()
 

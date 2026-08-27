@@ -5,7 +5,7 @@ PROTOCOL_VERSION = "2.0"
 ENUMS = {
     "mode": ["OBJECT", "EDIT"],
     "selection_mode": ["VERTEX", "EDGE", "FACE"],
-    "tool": ["SELECT", "MOVE", "ROTATE", "SCALE", "EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE"],
+    "tool": ["SELECT", "MOVE", "ROTATE", "SCALE", "EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE", "BISECT"],
     "modifier_type": ["SUBSURF", "ARRAY", "BEVEL", "SOLIDIFY", "BOOLEAN"],
     "subdivision_type": ["CATMULL_CLARK", "SIMPLE"],
     "boolean_operation": ["DIFFERENCE", "UNION", "INTERSECT"],
@@ -72,6 +72,18 @@ def _extrude_variants(face_mode=False):
         dict(variant, enabled=variant["id"] == "REGION") for variant in _EXTRUDE_VARIANTS
     ]
 
+# Snap por incremento/rejilla de un parámetro escalar de sesión (offset, factor...).
+# Igual que en transform_modal, GRID se trata como INCREMENT: no hay una rejilla de
+# mundo natural para un desplazamiento relativo de herramienta paramétrica.
+def _scalar_snap(applies_to, step):
+    return [
+        {"id": "snap_type", "label": "Snap", "type": "enum", "default": "NONE",
+         "values": ["NONE", "INCREMENT", "GRID"], "applies_to": applies_to},
+        {"id": "snap_step", "label": "Paso", "type": "float", "default": step, "min": 0.0001,
+         "applies_to": applies_to},
+    ]
+
+
 _TOOL_PARAMETERS = {
     "EXTRUDE": [
         {"id": "offset", "label": "Desplazamiento", "type": "float", "default": 0.0},
@@ -79,6 +91,7 @@ _TOOL_PARAMETERS = {
          "values": ["FREE", "X", "Y", "Z"], "applies_to": ["REGION"]},
         {"id": "orientation", "label": "Orientación", "type": "enum", "default": "GLOBAL",
          "values": ["GLOBAL", "LOCAL", "VIEW"], "applies_to": ["REGION"]},
+        *_scalar_snap(["offset"], 0.1),
     ],
     "BEVEL": [
         {"id": "offset", "label": "Ancho", "type": "float", "default": 0.1, "min": 0.0},
@@ -88,12 +101,18 @@ _TOOL_PARAMETERS = {
         {"id": "thickness", "label": "Grosor", "type": "float", "default": 0.1},
         {"id": "depth", "label": "Profundidad", "type": "float", "default": 0.0},
         {"id": "individual", "label": "Individual", "type": "bool", "default": False},
+        *_scalar_snap(["thickness"], 0.1),
     ],
     "SUBDIVIDE": [{"id": "cuts", "label": "Cortes", "type": "int", "default": 1, "min": 1}],
     "LOOP_CUT": [
         {"id": "cuts", "label": "Cortes", "type": "int", "default": 1, "min": 1},
         {"id": "smoothness", "label": "Suavidad", "type": "float", "default": 0.0},
         {"id": "factor", "label": "Posición", "type": "float", "default": 0.0, "min": -1.0, "max": 1.0},
+        {"id": "falloff", "label": "Perfil", "type": "enum", "default": "SMOOTH", "values": ENUMS["loop_falloff"]},
+        {"id": "even", "label": "Uniforme", "type": "bool", "default": False},
+        {"id": "flip", "label": "Invertir", "type": "bool", "default": False},
+        {"id": "clamp", "label": "Fijar al borde", "type": "bool", "default": True},
+        *_scalar_snap(["factor"], 0.1),
     ],
     "BRIDGE_EDGE_LOOPS": [
         {"id": "twist_offset", "label": "Desfase", "type": "int", "default": 0},
@@ -103,6 +122,95 @@ _TOOL_PARAMETERS = {
     ],
     "KNIFE": [
         {"id": "snap", "label": "Snap", "type": "bool", "default": True},
+    ],
+    "BISECT": [
+        {"id": "clear_inner", "label": "Vaciar interior", "type": "bool", "default": False},
+        {"id": "clear_outer", "label": "Vaciar exterior", "type": "bool", "default": False},
+        {"id": "fill", "label": "Rellenar corte", "type": "bool", "default": False},
+        {"id": "snap", "label": "Snap", "type": "bool", "default": True},
+    ],
+}
+
+
+# ---------------------------------------------------------------------------
+# `edit_toolbar`: la barra izquierda de herramientas activas de Edit Mode.
+#
+# A diferencia de `edit_catalog` (agrupado por submodo de selección, una lista
+# discreta de acciones), esta feature agrupa por *familia* con la lógica de
+# Blender: una familia tiene una o más variantes, se activa/arma con `tap` y
+# permanece marcada mientras hay sesión. El orden de `families` es el orden de
+# la barra y es contractual. `edit_catalog` no se toca: sigue siendo el único
+# catálogo para clientes que no anuncien soporte de `edit_toolbar`.
+_INSET_VARIANTS = [
+    {"id": "REGION", "label": "Región", "enabled": True},
+    {"id": "INDIVIDUAL", "label": "Individual", "enabled": True},
+]
+
+
+def _toolbar_variant(variant_id, label, *, enabled=True, requirements=None, input=None,
+                      payload=None, parameters=None):
+    item = {"id": variant_id, "label": label, "enabled": enabled}
+    if requirements is not None:
+        item["requirements"] = dict(_EDIT, **requirements)
+    if input is not None:
+        item["input"] = input
+    if payload is not None:
+        item["payload"] = payload
+    if parameters is not None:
+        item["parameters"] = parameters
+    return item
+
+
+def _toolbar_family(family_id, label, default_variant, *, input="PARAMETRIC",
+                     command="tool.begin", payload=None, requirements=None,
+                     variants, parameters=None):
+    return {
+        "id": family_id,
+        "label": label,
+        "default_variant": default_variant,
+        "execution": "SESSION",
+        "command": command,
+        "payload": payload if payload is not None else {"tool": family_id},
+        "input": input,
+        "requirements": dict(_EDIT, **(requirements or {})),
+        "variants": variants,
+        "parameters": parameters or [],
+    }
+
+
+EDIT_TOOLBAR = {
+    "version": 1,
+    "families": [
+        _toolbar_family(
+            "EXTRUDE", "Extrude", "REGION",
+            variants=[
+                _toolbar_variant("REGION", "Región", requirements=_selection("VERTEX", verts={"min": 1})),
+                _toolbar_variant("ALONG_NORMALS", "A lo largo de normales",
+                                 requirements=_selection("FACE", faces={"min": 1})),
+                _toolbar_variant("INDIVIDUAL", "Individual", requirements=_selection("FACE", faces={"min": 1})),
+            ],
+            parameters=_TOOL_PARAMETERS["EXTRUDE"],
+        ),
+        _toolbar_family(
+            "INSET", "Inset", "REGION",
+            requirements={"selection_modes": ["FACE"], "selection": {"faces": {"min": 1}}},
+            variants=[_toolbar_variant(v["id"], v["label"]) for v in _INSET_VARIANTS],
+            parameters=_TOOL_PARAMETERS["INSET"],
+        ),
+        _toolbar_family(
+            "LOOP_CUT", "Loop Cut", "LOOP_CUT", input="VIEWPORT_TAP",
+            variants=[_toolbar_variant("LOOP_CUT", "Loop Cut", input="VIEWPORT_TAP")],
+            parameters=_TOOL_PARAMETERS["LOOP_CUT"],
+        ),
+        _toolbar_family(
+            "CUT", "Cut", "KNIFE", command="tool.begin", payload={},
+            variants=[
+                _toolbar_variant("KNIFE", "Cuchillo", input="VIEWPORT_POLYLINE",
+                                 payload={"tool": "KNIFE"}, parameters=_TOOL_PARAMETERS["KNIFE"]),
+                _toolbar_variant("BISECT", "Bisect", input="VIEWPORT_DRAG_LINE",
+                                 payload={"tool": "BISECT"}, parameters=_TOOL_PARAMETERS["BISECT"]),
+            ],
+        ),
     ],
 }
 
@@ -202,13 +310,17 @@ FEATURES = {
                                "modifier.move", "modifier.set", "modifier.toggle", "modifier.apply"]},
     "visibility": {"version": 1, "object_hide": True, "hide_set": True},
     "transform_apply": {"version": 1, "components": ["location", "rotation", "scale"]},
-    "edit_tools": {"version": 2,
-                   "tools": ["EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE"],
+    "edit_tools": {"version": 3,
+                   "tools": ["EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS",
+                             "KNIFE", "BISECT"],
                    "loop_cut": {"pick": True, "probe": True, "falloff": ENUMS["loop_falloff"],
                                 "even": True, "flip": True, "clamp": True},
                    "knife": {"snap": True, "close": True, "pop": True, "cut_through": False,
-                             "threshold": 0.045}},
+                             "threshold": 0.045},
+                   "bisect": {"drag_line": True, "snap": True, "clear_inner": True,
+                              "clear_outer": True, "fill": True}},
     "edit_catalog": EDIT_CATALOG,
+    "edit_toolbar": EDIT_TOOLBAR,
     "files": {"version": 1, "browse": True, "default_folder": True,
               "relative_paths": True},
 }

@@ -89,6 +89,7 @@ MENU_COMMANDS = [
     "tool.confirm",
     "tool.cancel",
     "tool.status",
+    "tool.drag_line",
     # Selección contextual y borrado de malla (menú radial).
     "selection.all",
     "selection.invert",
@@ -225,6 +226,33 @@ def main() -> int:
     knife_feature = ((actual_caps.get("features") or {}).get("edit_tools") or {}).get("knife") or {}
     check("feature de Knife publica snap/close/pop", knife_feature == {
         "snap": True, "close": True, "pop": True, "cut_through": False, "threshold": 0.045}, str(knife_feature))
+
+    print("\n[0b] edit_toolbar: barra izquierda de tools activas")
+    toolbar = ((actual_caps.get("features") or {}).get("edit_toolbar") or {})
+    families = {f.get("id"): f for f in toolbar.get("families", [])}
+    check("edit_toolbar declara las cuatro familias en orden", [f.get("id") for f in toolbar.get("families", [])]
+          == ["EXTRUDE", "INSET", "LOOP_CUT", "CUT"], str(list(families)))
+    extrude_family = families.get("EXTRUDE", {})
+    check("Extrude anuncia sus tres variantes con requisitos propios",
+          {v["id"]: v.get("requirements", {}).get("selection_modes") for v in extrude_family.get("variants", [])}
+          == {"REGION": ["VERTEX"], "ALONG_NORMALS": ["FACE"], "INDIVIDUAL": ["FACE"]}, str(extrude_family))
+    inset_family = families.get("INSET", {})
+    check("Inset anuncia REGION e INDIVIDUAL", {v["id"] for v in inset_family.get("variants", [])}
+          == {"REGION", "INDIVIDUAL"}, str(inset_family))
+    loop_family = families.get("LOOP_CUT", {})
+    check("Loop Cut es de entrada VIEWPORT_TAP", loop_family.get("input") == "VIEWPORT_TAP", str(loop_family))
+    cut_family = families.get("CUT", {})
+    cut_variants = {v["id"]: v for v in cut_family.get("variants", [])}
+    check("Cut agrupa Knife y Bisect", set(cut_variants) == {"KNIFE", "BISECT"}, str(cut_variants))
+    check("Knife usa polilínea de viewport", cut_variants.get("KNIFE", {}).get("input") == "VIEWPORT_POLYLINE",
+          str(cut_variants.get("KNIFE")))
+    check("Bisect usa arrastre de línea de viewport",
+          cut_variants.get("BISECT", {}).get("input") == "VIEWPORT_DRAG_LINE", str(cut_variants.get("BISECT")))
+    check("Bisect anuncia clear_inner/clear_outer/fill",
+          {p["id"] for p in cut_variants.get("BISECT", {}).get("parameters", [])}
+          >= {"clear_inner", "clear_outer", "fill"}, str(cut_variants.get("BISECT")))
+    check("edit_catalog sigue disponible para clientes antiguos",
+          bool(((actual_caps.get("features") or {}).get("edit_catalog") or {}).get("groups")), "edit_catalog vacío")
     expected_stream = json.loads((fixtures / "hello.stream.json").read_text())
     check("hello.stream coincide con fixture",
           _contains(hello.get("stream") or {}, expected_stream), str(hello.get("stream")))
@@ -545,6 +573,21 @@ def main() -> int:
     probe = app.command("mesh.loop_probe", {"u": 0.5, "v": 0.5})
     check("mesh.loop_probe responde ok o no_viewport controlado",
           probe.get("ok") or probe.get("code") == "no_viewport", str(probe))
+
+    print("\n[17b] Cut: Bisect por arrastre de línea (tool.drag_line)")
+    app.command("view.frame_all")
+    armed = app.command("tool.begin", {"tool": "BISECT"})
+    check("BISECT arma sin geometría (ARMED, no error)",
+          armed.get("ok") and (armed.get("result") or {}).get("phase") == "ARMED", str(armed))
+    dragged = app.command("tool.drag_line", {"start": [0.1, 0.5], "end": [0.9, 0.5]})
+    check("tool.drag_line responde ok o no_viewport controlado",
+          dragged.get("ok") or dragged.get("code") == "no_viewport", str(dragged))
+    if dragged.get("ok"):
+        check("el arrastre activa la sesión Bisect",
+              (dragged.get("result") or {}).get("phase") == "ACTIVE", str(dragged))
+        app.command("tool.cancel")
+    else:
+        app.command("tool.cancel")
     app.command("mode.object")
 
     reply = app.command("modifier.add", {"type": "SUBSURF", "name": "Tablet Subsurf"})

@@ -216,7 +216,11 @@ class GestureManager:
         transform_cmds.move({"vector": list(delta), "space": "GLOBAL", "_no_undo": True})
 
     def _rotate(self, dx: float, options: dict) -> None:
-        """Giro alrededor del eje de visión (o de un eje fijo si se pidió)."""
+        """Giro alrededor del eje de visión (o de un eje fijo si se pidió).
+
+        Mismo signo que `transform_modal.nudge` (B6): dedo a la derecha gira en
+        sentido horario visto en pantalla, tanto con eje de visión como con X/Y/Z.
+        """
         axis = options.get("axis")
         if axis in {"X", "Y", "Z"}:
             vector = {"X": [1, 0, 0], "Y": [0, 1, 0], "Z": [0, 0, 1]}[axis]
@@ -226,7 +230,7 @@ class GestureManager:
         transform_cmds.rotate(
             {
                 "axis": vector,
-                "angle": dx * view_cmds.ORBIT_SENSITIVITY,
+                "angle": -dx * view_cmds.ORBIT_SENSITIVITY,
                 "radians": True,
                 "_no_undo": True,
                 **_clean(options),

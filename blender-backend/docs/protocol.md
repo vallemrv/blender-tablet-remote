@@ -389,27 +389,69 @@ Cada sesión incluye UUID `session_id`, `owner` y `phase`. Solo su conexión pro
 puede alterarla; al desconectarse se cancela. Funciona tanto en Object como en Edit y
 reconstruye matrices o coordenadas BMesh desde el snapshot inicial.
 
+Arrastre de un dedo (`gesture` `rotate`/`scale`, en modal o en la ruta legacy sin
+sesión abierta): `dx` horizontal maneja ambos — dedo a la derecha gira en sentido
+horario visto en pantalla y agranda; a la izquierda, antihorario y encoge. `move`,
+`orbit`, `pan`, `zoom` y `roll` no cambiaron.
+
 ### Herramientas paramétricas de Edit Mode
 
-`tool.begin` (`tool`: `EXTRUDE|BEVEL|INSET|SUBDIVIDE|LOOP_CUT|BRIDGE_EDGE_LOOPS`, `parameters`),
-`tool.parameter`, `tool.nudge`, `tool.confirm`, `tool.cancel` y `tool.status` forman una
-sesión propietaria. Cada preview se reconstruye desde una copia BMesh inicial; cancelar
-restaura exactamente la topología y confirmar crea un único paso de undo.
+`tool.begin` (`tool`: `EXTRUDE|BEVEL|INSET|SUBDIVIDE|LOOP_CUT|BRIDGE_EDGE_LOOPS|KNIFE|BISECT`,
+`parameters`), `tool.parameter`, `tool.nudge`, `tool.confirm`, `tool.cancel` y
+`tool.status` forman una sesión propietaria. Cada preview se reconstruye desde una
+copia BMesh inicial; cancelar restaura exactamente la topología y confirmar crea un
+único paso de undo.
 
-`LOOP_CUT` corta el anillo de la arista semilla (`edge` o la seleccionada). Sin semilla
-responde `empty_selection`. El parámetro primario de `tool.nudge` es `factor`
-(deslizamiento; ±0.999, o ±1.999 si la sesión lleva `clamp: false`). No es
-`mesh.subdivide` (eso corta la selección) ni `selection.loop`.
+`LOOP_CUT` y `BISECT` son herramientas de entrada por viewport: `tool.begin` puede
+dejarlas **armadas** (`active: false, armed: true, phase: "ARMED"`) en vez de fallar,
+cuando todavía no hay con qué construir la geometría (`LOOP_CUT` sin `edge` ni arista
+seleccionada; `BISECT` siempre arma). Armada, la herramienta no tiene backup ni
+preview — el primer toque/arrastre en el viewport (`tool.loop_pick` o
+`tool.drag_line`) es quien crea el backup y pasa a `ACTIVE`. `tool.status` refleja
+`armed`/`phase` en todo momento; `tool.cancel` en `ARMED` simplemente desarma
+(`phase: "CANCELLED"`, sin geometría que restaurar). Activar otra familia o variante
+mientras algo está armado o activo lo cancela/restaura primero: nunca confirma
+geometría implícitamente.
 
-`tool.loop_pick` (`u`, `v`) re-ubica el corte de una sesión `LOOP_CUT` activa: restaura
-la copia original, sondea con la semántica de `mesh.loop_probe` (los índices de `edge`
-son de la malla original, no del preview) y actualiza `edge` y `factor` en un solo
-paso. Responde con el estado de la sesión más `pick`. Requiere sesión activa
-(`no_session`) y que sea `LOOP_CUT` (`wrong_tool`).
+`LOOP_CUT` corta el anillo de la arista semilla (`edge` o la seleccionada). El
+parámetro primario de `tool.nudge` es `factor` (deslizamiento; ±0.999, o ±1.999 si la
+sesión lleva `clamp: false`). No es `mesh.subdivide` (eso corta la selección) ni
+`selection.loop`.
+
+`tool.loop_pick` (`u`, `v`) coloca (desde `ARMED`) o re-ubica (con sesión `ACTIVE`) el
+corte de `LOOP_CUT`: restaura la copia original si la había, sondea con la semántica
+de `mesh.loop_probe` (los índices de `edge` son de la malla original, no del preview)
+y fija/actualiza `edge` y `factor` en un solo paso. Responde con el estado de la
+sesión más `pick`. Sin sesión activa ni armada responde `no_session`; con sesión
+activa de otra tool, `wrong_tool`. Sin impacto bajo el dedo, `ARMED` se queda como
+estaba y `ACTIVE` conserva el corte anterior.
 
 La feature `edit_tools.loop_cut` anuncia `pick`, `probe`, `falloff`, `even`, `flip` y
 `clamp`; un cliente debe usar el flujo de colocación por toque solo si `pick` está
 anunciado.
+
+`BISECT` corta con un plano infinito cuya traza en pantalla es la línea que arrastra
+el dedo (`tool.drag_line`, `start`/`end`: `[u, v]` normalizados). El plano contiene la
+dirección de ese arrastre y la de visión (profundidad), así que se ve como una línea
+recta que cruza toda la pantalla; su posición perpendicular la fija el punto medio de
+la línea, con snap opcional a vértice/arista (parámetro `snap`, activado por
+defecto) igual que Knife. `tool.drag_line` en `ARMED` crea el backup y activa la
+sesión con ese plano; en `ACTIVE` reconstruye desde el backup con el plano nuevo, sin
+acumular cortes. Un arrastre que no cruza geometría responde `topology_incompatible`
+y la tool vuelve a `ARMED` (no se pierde la elección de Cut). Parámetros:
+`clear_inner`, `clear_outer` y `fill` (bool, todos `false` por defecto). No se nudea
+(`tool.nudge` responde `wrong_tool`); confirmar sin línea dibujada responde
+`empty_selection`. La feature `edit_tools.bisect` anuncia `drag_line`, `snap`,
+`clear_inner`, `clear_outer` y `fill`.
+
+Snap real de incremento/rejilla en parámetros escalares de sesión: `EXTRUDE.offset`,
+`INSET.thickness` y `LOOP_CUT.factor` aceptan `snap_type` (`NONE`\|`INCREMENT`\|`GRID`,
+`GRID` se trata como `INCREMENT` igual que en `transform_modal`) y `snap_step`
+(paso, por defecto `0.1`). Cuadran el valor antes de aplicar el corte, así que cambian
+el resultado geométrico real, no solo lo que se enseña. `INSET` e `EXTRUDE` también
+aceptan `variant` (`REGION`\|`INDIVIDUAL` para Inset; `REGION`\|`ALONG_NORMALS`\|`INDIVIDUAL`
+para Extrude) como parámetro de sesión — cambiarlo reconstruye desde el backup, no
+acumula.
 
 ### Catálogo contextual de Edit
 
@@ -457,6 +499,57 @@ backup igual que las demás sesiones y el catálogo fija el mínimo rápido de s
 el backend valida la topología completa.
 Extrude anuncia `REGION` en los tres grupos; `ALONG_NORMALS` e `INDIVIDUAL` sólo se
 habilitan en Cara. El cliente debe respetar `enabled` y no deducir compatibilidades.
+
+### Barra de tools activas de Edit (`edit_toolbar`)
+
+`server.capabilities.features.edit_toolbar` (versión 1) es la feature para la barra
+izquierda de Edit Mode con la lógica agrupada de Blender: herramienta activa con
+variantes, no una lista de acciones discretas. Convive con `edit_catalog` (que no
+cambia) — un cliente sin soporte de `edit_toolbar` sigue usando el catálogo legacy.
+
+`families` es una lista ordenada y contractual: `EXTRUDE`, `INSET`, `LOOP_CUT`, `CUT`.
+Cada familia tiene esta forma:
+
+```json
+{
+  "id": "EXTRUDE", "label": "Extrude", "default_variant": "REGION",
+  "execution": "SESSION", "command": "tool.begin", "payload": {"tool": "EXTRUDE"},
+  "input": "PARAMETRIC",
+  "requirements": {"mode": "EDIT"},
+  "variants": [
+    {"id": "REGION", "label": "Región", "enabled": true,
+     "requirements": {"mode": "EDIT", "selection_modes": ["VERTEX"], "selection": {"verts": {"min": 1}}}}
+  ],
+  "parameters": [{"id": "offset", "label": "Desplazamiento", "type": "float", "default": 0.0}]
+}
+```
+
+- `default_variant` es la variante que arma un tap sin variante recordada.
+- `input` describe qué alimenta la sesión una vez armada: `PARAMETRIC` (los
+  parámetros ya bastan, como Extrude/Inset), `VIEWPORT_TAP` (Loop Cut: el primer
+  toque en el viewport la activa vía `tool.loop_pick`), `VIEWPORT_POLYLINE` (Knife:
+  `tool.knife_point` repetido) o `VIEWPORT_DRAG_LINE` (Bisect: un arrastre completo
+  vía `tool.drag_line`). Puede repetirse por variante si difiere del de la familia
+  (es el caso de `CUT`).
+- `payload` son los campos fijos que hay que enviar junto a `parameters` al invocar
+  `command`; una variante puede traer su propio `payload` que se funde sobre el de
+  la familia (p. ej. `CUT` no fija `tool` a nivel de familia porque cada variante usa
+  uno distinto: `{"tool": "KNIFE"}` o `{"tool": "BISECT"}`).
+- `parameters` a nivel de familia son los compartidos por todas sus variantes
+  (Extrude expone `offset`/`constraint`/`orientation`/`snap_type`/`snap_step` con
+  `applies_to` marcando qué variantes los usan, igual que en `edit_catalog`); una
+  variante puede añadir los suyos propios (Knife trae `snap`; Bisect trae
+  `clear_inner`/`clear_outer`/`fill`/`snap`).
+- `variants[].requirements`, cuando existen, se evalúan igual que en `edit_catalog`:
+  mínimos para habilitar el botón, no una promesa de topología válida.
+
+`CUT` agrupa `KNIFE` y `BISECT` en un único slot de la barra: tap arma la variante
+recordada (o `KNIFE` por defecto), pulsación larga cambia de variante sin confirmar
+la sesión anterior. `LOOP_CUT` tiene una sola variante (`LOOP_CUT`) porque su entrada
+es el toque, no una elección de submodo.
+
+Familia o variante nueva cancela/restaura lo anterior (ver estados `ARMED`/`ACTIVE`
+más arriba): nunca hay confirmación implícita al cambiar de herramienta.
 
 ### Modificadores
 

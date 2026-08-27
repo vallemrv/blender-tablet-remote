@@ -222,14 +222,19 @@ class _Session:
     # -------------------------------------------------------------- acumular
 
     def nudge(self, dx: float, dy: float) -> None:
-        """Arrastre en pantalla (fracción de pantalla) -> incremento del modo."""
+        """Arrastre en pantalla (fracción de pantalla) -> incremento del modo.
+
+        Rotate y Scale comparten el eje horizontal (B6): dedo a la derecha gira en
+        sentido horario visto en pantalla y agranda; a la izquierda, antihorario y
+        encoge. Antes ambos usaban +dx crudo (Scale ni eso: usaba dy) y en tablet
+        real quedaban al revés / sin responder al arrastre horizontal.
+        """
         if self.mode == "MOVE":
             self.values += self.orientation_basis.inverted() @ self._screen_to_world(dx, dy)
         elif self.mode == "ROTATE":
-            self.angle += dx * ROTATE_SENSITIVITY
+            self.angle -= dx * ROTATE_SENSITIVITY
         else:
-            # Arrastrar hacia arriba agranda: en pantalla dy es negativo hacia arriba.
-            factor = 1.0 - dy * SCALE_SENSITIVITY
+            factor = 1.0 + dx * SCALE_SENSITIVITY
             self.values = Vector(max(MIN_SCALE, v * factor) for v in self.values)
 
     def _screen_to_world(self, dx: float, dy: float) -> Vector:

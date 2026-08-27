@@ -132,7 +132,7 @@ def extrude(payload: dict) -> dict:
     Extrude en Blender. Solo REGION lo admite; FREE conserva el comportamiento anterior.
     """
     obj, bm = _bm_and_obj()
-    offset = get_float(payload, "offset", 0.0)
+    offset = _apply_scalar_snap(get_float(payload, "offset", 0.0), payload)
     variant = str(payload.get("variant", "REGION")).upper()
     if variant not in {"REGION", "ALONG_NORMALS", "INDIVIDUAL"}:
         raise BadPayload("'variant' must be REGION, ALONG_NORMALS or INDIVIDUAL")
@@ -215,9 +215,12 @@ def inset(payload: dict) -> dict:
     if not faces:
         raise CommandError("No faces selected", code="empty_selection")
 
-    thickness = get_float(payload, "thickness", 0.1)
+    thickness = _apply_scalar_snap(get_float(payload, "thickness", 0.1), payload)
     depth = get_float(payload, "depth", 0.0)
-    individual = bool(payload.get("individual", False))
+    variant = str(payload.get("variant", "")).upper()
+    if variant and variant not in {"REGION", "INDIVIDUAL"}:
+        raise BadPayload("'variant' must be REGION or INDIVIDUAL")
+    individual = bool(payload.get("individual", False)) or variant == "INDIVIDUAL"
 
     if individual:
         ret = bmesh.ops.inset_individual(bm, faces=faces, thickness=thickness, depth=depth, use_even_offset=True)
@@ -230,7 +233,8 @@ def inset(payload: dict) -> dict:
     _select_geom(bm, faces)
     flush_bmesh(obj, bm)
     _undo(payload, "Remote inset")
-    return {"thickness": thickness, "depth": depth, "new_faces": len(ret.get("faces", []))}
+    return {"thickness": thickness, "depth": depth, "new_faces": len(ret.get("faces", [])),
+            "variant": "INDIVIDUAL" if individual else "REGION"}
 
 
 @command("mesh.bevel", mutating=True)
@@ -293,7 +297,7 @@ def loop_cut(payload: dict) -> dict:
     even = bool(payload.get("even", False))
     flip = bool(payload.get("flip", False))
     clamp = bool(payload.get("clamp", True))
-    factor = get_float(payload, "factor", 0.0)
+    factor = _apply_scalar_snap(get_float(payload, "factor", 0.0), payload)
     limit = 1.0 if clamp else 2.0
     if not -limit <= factor <= limit:
         raise BadPayload(f"'factor' must be between -{limit:g} and {limit:g}" + (" (clamp off allows more)" if clamp else ""))
@@ -516,6 +520,24 @@ def _average_vert_normal(verts) -> Vector:
     for v in verts:
         normal += v.normal
     return normal.normalized() if normal.length > 0 else Vector((0.0, 0.0, 1.0))
+
+
+def _apply_scalar_snap(value: float, payload: dict) -> float:
+    """Cuadra `value` a incrementos de `snap_step` si `snap_type` lo pide.
+
+    GRID se trata como INCREMENT: estos parámetros son relativos a la sesión
+    (desplazamiento, grosor, posición del corte), no una coordenada de mundo con una
+    rejilla propia, igual que ya hace transform_modal para ROTATE/SCALE.
+    """
+    snap_type = str(payload.get("snap_type", "NONE")).upper()
+    if snap_type == "NONE":
+        return value
+    if snap_type not in {"INCREMENT", "GRID"}:
+        raise BadPayload("'snap_type' must be NONE, INCREMENT or GRID")
+    step = get_float(payload, "snap_step", 0.1)
+    if step <= 0:
+        raise BadPayload("'snap_step' must be greater than zero")
+    return round(value / step) * step
 
 
 def _custom_direction(payload: dict) -> Vector | None:
@@ -741,3 +763,55 @@ def bridge_edge_loops(payload: dict) -> dict:
     _undo(payload, "Remote bridge edge loops")
     return {"loops": [len(loop) for loop in components], "faces": len(faces),
             "twist_offset": twist_offset, "merge": merge, "merge_factor": merge_factor}
+
+
+def bisect(payload: dict) -> dict:
+    """Corta con un plano infinito `plane_co`/`plane_no` (locales, ya resueltos).
+
+    Como Knife, opera sobre toda la malla visible, no solo la selección: es una
+    herramienta de Cut, no una operación sobre lo seleccionado. La sesión que la
+    llama (``tool.*``) es quien calcula el plano a partir del arrastre de pantalla;
+    aquí solo se aplica el corte, igual que ``bridge_edge_loops`` se limita al bmesh.
+    """
+    obj, bm = _bm_and_obj()
+    plane_co = payload.get("plane_co")
+    plane_no = payload.get("plane_no")
+    if not isinstance(plane_co, (list, tuple)) or len(plane_co) != 3:
+        raise BadPayload("'plane_co' must be [x, y, z]")
+    if not isinstance(plane_no, (list, tuple)) or len(plane_no) != 3:
+        raise BadPayload("'plane_no' must be [x, y, z]")
+    normal = Vector((float(plane_no[0]), float(plane_no[1]), float(plane_no[2])))
+    if normal.length < 1e-9:
+        raise BadPayload("'plane_no' cannot be a zero vector")
+    geom = [elem for elem in list(bm.verts) + list(bm.edges) + list(bm.faces) if not elem.hide]
+    if not geom:
+        raise CommandError("No geometry to bisect", code="empty_selection")
+    clear_inner = bool(payload.get("clear_inner", False))
+    clear_outer = bool(payload.get("clear_outer", False))
+    fill = bool(payload.get("fill", False))
+    try:
+        ret = bmesh.ops.bisect_plane(
+            bm, geom=geom, dist=1e-4,
+            plane_co=Vector((float(plane_co[0]), float(plane_co[1]), float(plane_co[2]))),
+            plane_no=normal.normalized(),
+            clear_inner=clear_inner, clear_outer=clear_outer,
+        )
+    except (ValueError, RuntimeError) as exc:
+        raise CommandError("Cannot bisect this geometry", code="topology_incompatible") from exc
+    cut_geom = ret.get("geom_cut", [])
+    cut_edges = [e for e in cut_geom if isinstance(e, bmesh.types.BMEdge)]
+    new_faces = []
+    if fill and cut_edges:
+        try:
+            fill_ret = bmesh.ops.edgenet_fill(bm, edges=cut_edges)
+            new_faces = fill_ret.get("faces", [])
+        except (ValueError, RuntimeError):
+            new_faces = []
+    if not cut_edges:
+        raise CommandError("The plane does not cross any geometry", code="topology_incompatible")
+    _deselect_all(bm)
+    _select_geom(bm, cut_geom + new_faces)
+    flush_bmesh(obj, bm)
+    _undo(payload, "Remote bisect")
+    return {"cut_edges": len(cut_edges), "clear_inner": clear_inner, "clear_outer": clear_outer,
+            "fill": fill, "new_faces": len(new_faces)}
