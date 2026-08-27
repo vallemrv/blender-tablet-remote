@@ -1,11 +1,15 @@
 # Blender Tablet Remote — guía para agentes
 
 Este archivo es la fuente de verdad sobre arquitectura, estado realizado y reglas de
-trabajo. Los planes históricos y el ciclo parcial `000` fueron retirados el 2026-08-26
-por autorización expresa del usuario después de consolidar aquí lo implementado. Esta
-versión se da por finalizada y no hay ningún plan activo. El próximo ciclo de mejoras o
-reparaciones, alimentado por el feedback de uso en tablet, empezará de nuevo en `000`
-con archivos separados por propietario.
+trabajo. El 2026-08-27 el usuario dio por concluido el ciclo funcional anterior tras
+validarlo en tablet y abrió una nueva serie de reparaciones desde `000`. Los planes
+anteriores de toolbar y radial se retiraron por esa autorización; el ciclo actual queda
+documentado en `000_PLAN_FRONTEND_REPARACIONES_RADIAL_INPUTS.md`.
+
+La primera reparación de esta serie corrige tres defectos Android: Caja/Círculo se
+arman explícitamente desde el radial y llegan a los handlers de selección por forma;
+Borrar aparece directamente en Edit y elige `VERTS`/`EDGES`/`FACES` por submodo; y los
+campos numéricos de las bandejas fijan un color de texto visible en `TextStyle`.
 
 El último
 ciclo cerrado entregó el **menú Edit contextual** alimentado por `edit.catalog`:

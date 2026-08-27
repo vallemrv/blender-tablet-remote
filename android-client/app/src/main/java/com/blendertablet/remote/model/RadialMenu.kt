@@ -95,10 +95,11 @@ object RadialMenu {
 
     private fun editActions(context: TouchContext): List<ActionId> = buildList {
         // Caja y Círculo arman el arrastre por forma: selección pura, va primero.
-        // SELECT_INVERT salió del anillo para no pasarse del tope de 8 en aristas.
+        // Con selección, Borrar sustituye a Seleccionar todo: así el destructivo
+        // contextual cabe también en Aristas sin superar el tope de ocho sectores.
         add(ActionId.TOOL_BOX)
         add(ActionId.TOOL_CIRCLE)
-        add(ActionId.SELECT_ALL)
+        if (!context.hasSelection) add(ActionId.SELECT_ALL)
 
         // Loop y Ring necesitan una arista de partida: sin ella el servidor
         // responde `empty_selection`, así que no se ofrecen.
@@ -113,10 +114,14 @@ object RadialMenu {
         if (context.hasSelection) add(ActionId.HIDE_GEOMETRY)
         add(ActionId.REVEAL_GEOMETRY)
 
-        // Separar/Split/Normales/Bevel/Subdivide/Bridge/Borrar y demás viven en el
-        // catálogo de vértice/arista/cara, un panel vertical detrás de un único
-        // sector (plan 001): con Loop/Ring/Ocultar ya en el anillo, borrar cabe ahí
-        // sin gastar otro sector del tope de 8.
+        // `mesh.delete` ya es contractual para VERTS/EDGES/FACES. Debe vivir en el
+        // primer anillo: esconderlo dentro de "Tools de malla" hacía que pareciera
+        // una fila sin handler y, con algunos catálogos, ni siquiera era alcanzable.
+        if (context.hasSelection) add(ActionId.DELETE)
+
+        // Separar/Split/Normales/Bevel/Subdivide/Bridge y demás viven en el catálogo
+        // de vértice/arista/cara, detrás de un único sector. Borrar se mantiene fuera
+        // porque es frecuente y depende directamente del submodo activo.
         add(ActionId.EDIT_MESH_TOOLS)
     }
 }

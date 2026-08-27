@@ -120,6 +120,19 @@ class SurfaceCatalogTest {
         }
     }
 
+    @Test
+    fun `edit ofrece borrar directamente segun el submodo activo`() {
+        for (mode in SelectionMode.entries) {
+            val actions = RadialMenu.actionsFor(
+                TouchContext(mode = BlenderMode.EDIT, selectionMode = mode, hit = true, hasSelection = true),
+            )
+            assertTrue("Falta Borrar para $mode: $actions", ActionId.DELETE in actions)
+            assertTrue("Falta Caja para $mode: $actions", ActionId.TOOL_BOX in actions)
+            assertTrue("Falta Círculo para $mode: $actions", ActionId.TOOL_CIRCLE in actions)
+            assertTrue("Menú de ${actions.size} entradas para $mode", actions.size <= RadialMenu.MAX_ACTIONS)
+        }
+    }
+
     /** Tocar un objeto ajeno a la selección ofrece engancharlo, no operarlo. */
     @Test
     fun `un objeto no seleccionado ofrece seleccionarlo`() {

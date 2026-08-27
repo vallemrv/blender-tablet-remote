@@ -357,7 +357,10 @@ private fun ValueInput(session: TransformSession, onValue: (List<Double>?, Doubl
         onValueChange = { text = it },
         singleLine = true,
         placeholder = { Text("4m · 25cm · 45° · 50%", color = Ink.Faint, fontSize = 11.sp) },
-        textStyle = TextStyle(fontSize = 13.sp, textAlign = TextAlign.End),
+        // Color explícito en el TextStyle: algunos Material3/Compose resolvían el
+        // color del LocalTextStyle antes que TextFieldColors y pintaban el input
+        // transparente sobre esta barra oscura.
+        textStyle = TextStyle(color = Ink.OnPanel, fontSize = 13.sp, textAlign = TextAlign.End),
         colors = TextFieldDefaults.colors(
             focusedContainerColor = Color.Transparent,
             unfocusedContainerColor = Color.Transparent,

@@ -357,6 +357,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         local.update { it.copy(shapeTool = if (it.shapeTool == tool) ShapeTool.NONE else tool) }
     }
 
+    /** El menú radial siempre arma B/C; repetir el botón nunca debe desarmarla. */
+    fun armShapeTool(tool: ShapeTool) {
+        require(tool == ShapeTool.BOX || tool == ShapeTool.CIRCLE)
+        local.update { it.copy(shapeTool = tool) }
+    }
+
     /**
      * La forma terminada de dibujar en el viewport. Box recibe las dos esquinas;
      * Circle el centro y un punto del borde, del que sale el radio. La operación

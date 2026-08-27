@@ -538,7 +538,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
 private val TOOLBAR_OWNED_CATALOG_IDS = setOf("EXTRUDE", "INSET", "LOOP_CUT", "KNIFE")
 
 /** IDs de `edit_catalog` que ya viven directamente en el anillo de nivel 1. */
-private val RADIAL_TOP_LEVEL_CATALOG_IDS = setOf("SELECT_LOOP", "SELECT_RING", "HIDE", "REVEAL")
+private val RADIAL_TOP_LEVEL_CATALOG_IDS = setOf("SELECT_LOOP", "SELECT_RING", "HIDE", "REVEAL", "DELETE")
 
 /** Convierte el contrato opaco en filas, sin repartir nombres wire por la UI. */
 private fun editCatalogActions(actions: List<EditCatalogAction>, vm: MainViewModel): List<QuickAction> =
@@ -875,8 +875,8 @@ private fun quickActions(
         ActionId.DESELECT_ALL -> QuickAction(label, Icons.Default.Deselect) { vm.deselectAll() }
         // Caja y Círculo arman el arrastre por forma y cierran el menú: el siguiente
         // arrastre de un dedo dibuja la forma en vez de orbitar.
-        ActionId.TOOL_BOX -> QuickAction(label, Icons.Default.SelectAll) { vm.toggleShapeTool(ShapeTool.BOX) }
-        ActionId.TOOL_CIRCLE -> QuickAction(label, Icons.Default.BlurOn) { vm.toggleShapeTool(ShapeTool.CIRCLE) }
+        ActionId.TOOL_BOX -> QuickAction(label, Icons.Default.SelectAll) { vm.armShapeTool(ShapeTool.BOX) }
+        ActionId.TOOL_CIRCLE -> QuickAction(label, Icons.Default.BlurOn) { vm.armShapeTool(ShapeTool.CIRCLE) }
         ActionId.SELECT_INVERT -> QuickAction(label, Icons.Default.Flip) { vm.invertSelection() }
         ActionId.SELECT_UNDER -> QuickAction(label, Icons.Default.TouchApp) {
             context.objectName?.let { vm.selectObject(it, add = false) }

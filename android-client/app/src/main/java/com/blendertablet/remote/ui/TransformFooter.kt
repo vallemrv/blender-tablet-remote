@@ -180,7 +180,7 @@ private fun AxisField(
             value = text,
             onValueChange = { editing = true; text = it },
             singleLine = true,
-            textStyle = TextStyle(fontSize = 13.sp, textAlign = TextAlign.End),
+            textStyle = TextStyle(color = Ink.OnPanel, fontSize = 13.sp, textAlign = TextAlign.End),
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = Color.Transparent,
                 unfocusedContainerColor = Color.Transparent,

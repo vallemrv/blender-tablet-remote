@@ -402,7 +402,7 @@ private fun PositionStepper(factor: Double, clamp: Boolean, onFactor: (Double) -
             value = shown,
             onValueChange = { text = it },
             singleLine = true,
-            textStyle = TextStyle(fontSize = 13.sp, textAlign = TextAlign.Center),
+            textStyle = TextStyle(color = Ink.OnPanel, fontSize = 13.sp, textAlign = TextAlign.Center),
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = Color.Transparent,
                 unfocusedContainerColor = Color.Transparent,
@@ -441,7 +441,7 @@ private fun ParamStepper(spec: ParamSpec, value: Double, onCommit: (Double) -> U
             value = if (text.isEmpty()) formatted else text,
             onValueChange = { text = it },
             singleLine = true,
-            textStyle = TextStyle(fontSize = 13.sp, textAlign = TextAlign.Center),
+            textStyle = TextStyle(color = Ink.OnPanel, fontSize = 13.sp, textAlign = TextAlign.Center),
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = Color.Transparent,
                 unfocusedContainerColor = Color.Transparent,
