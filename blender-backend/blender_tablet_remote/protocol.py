@@ -181,7 +181,7 @@ def _toolbar_family(family_id, label, default_variant, *, input="PARAMETRIC",
 
 
 EDIT_TOOLBAR = {
-    "version": 1,
+    "version": 2,
     "families": [
         _toolbar_family(
             "EXTRUDE", "Extrude", "REGION",
@@ -194,6 +194,11 @@ EDIT_TOOLBAR = {
             parameters=_TOOL_PARAMETERS["EXTRUDE"],
         ),
         _toolbar_family(
+            "BEVEL", "Bevel", "BEVEL",
+            variants=[_toolbar_variant("BEVEL", "Bisel")],
+            parameters=_TOOL_PARAMETERS["BEVEL"],
+        ),
+        _toolbar_family(
             "INSET", "Inset", "REGION",
             requirements={"selection_modes": ["FACE"], "selection": {"faces": {"min": 1}}},
             variants=[_toolbar_variant(v["id"], v["label"]) for v in _INSET_VARIANTS],
@@ -203,6 +208,12 @@ EDIT_TOOLBAR = {
             "LOOP_CUT", "Loop Cut", "LOOP_CUT", input="VIEWPORT_TAP",
             variants=[_toolbar_variant("LOOP_CUT", "Loop Cut", input="VIEWPORT_TAP")],
             parameters=_TOOL_PARAMETERS["LOOP_CUT"],
+        ),
+        _toolbar_family(
+            "BRIDGE_EDGE_LOOPS", "Bridge", "BRIDGE_EDGE_LOOPS",
+            requirements={"selection_modes": ["EDGE"], "selection": {"edges": {"min": 6}}},
+            variants=[_toolbar_variant("BRIDGE_EDGE_LOOPS", "Puente entre loops")],
+            parameters=_TOOL_PARAMETERS["BRIDGE_EDGE_LOOPS"],
         ),
         _toolbar_family(
             "CUT", "Cut", "KNIFE", command="tool.begin", payload={},

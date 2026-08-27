@@ -249,17 +249,25 @@ def main() -> int:
     print("\n[0b] edit_toolbar: barra izquierda de tools activas")
     toolbar = ((actual_caps.get("features") or {}).get("edit_toolbar") or {})
     families = {f.get("id"): f for f in toolbar.get("families", [])}
-    check("edit_toolbar declara las cuatro familias en orden", [f.get("id") for f in toolbar.get("families", [])]
-          == ["EXTRUDE", "INSET", "LOOP_CUT", "CUT"], str(list(families)))
+    check("edit_toolbar declara las seis familias en orden", [f.get("id") for f in toolbar.get("families", [])]
+          == ["EXTRUDE", "BEVEL", "INSET", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "CUT"], str(list(families)))
     extrude_family = families.get("EXTRUDE", {})
     check("Extrude anuncia sus tres variantes con requisitos propios",
           {v["id"]: v.get("requirements", {}).get("selection_modes") for v in extrude_family.get("variants", [])}
           == {"REGION": ["VERTEX"], "ALONG_NORMALS": ["FACE"], "INDIVIDUAL": ["FACE"]}, str(extrude_family))
+    bevel_family = families.get("BEVEL", {})
+    check("Bevel es tool.begin con snap escalar propio",
+          bevel_family.get("command") == "tool.begin" and bevel_family.get("payload") == {"tool": "BEVEL"}
+          and {p["id"] for p in bevel_family.get("parameters", [])} >= {"snap_type", "snap_step"}, str(bevel_family))
     inset_family = families.get("INSET", {})
     check("Inset anuncia REGION e INDIVIDUAL", {v["id"] for v in inset_family.get("variants", [])}
           == {"REGION", "INDIVIDUAL"}, str(inset_family))
     loop_family = families.get("LOOP_CUT", {})
     check("Loop Cut es de entrada VIEWPORT_TAP", loop_family.get("input") == "VIEWPORT_TAP", str(loop_family))
+    bridge_family = families.get("BRIDGE_EDGE_LOOPS", {})
+    check("Bridge Edge Loops exige 6 aristas y anuncia snap propio",
+          bridge_family.get("requirements", {}).get("selection") == {"edges": {"min": 6}}
+          and {p["id"] for p in bridge_family.get("parameters", [])} >= {"snap_type", "snap_step"}, str(bridge_family))
     cut_family = families.get("CUT", {})
     cut_variants = {v["id"]: v for v in cut_family.get("variants", [])}
     check("Cut agrupa Knife y Bisect", set(cut_variants) == {"KNIFE", "BISECT"}, str(cut_variants))

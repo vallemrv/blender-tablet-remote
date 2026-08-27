@@ -516,12 +516,16 @@ habilitan en Cara. El cliente debe respetar `enabled` y no deducir compatibilida
 
 ### Barra de tools activas de Edit (`edit_toolbar`)
 
-`server.capabilities.features.edit_toolbar` (versión 1) es la feature para la barra
+`server.capabilities.features.edit_toolbar` (versión 2) es la feature para la barra
 izquierda de Edit Mode con la lógica agrupada de Blender: herramienta activa con
 variantes, no una lista de acciones discretas. Convive con `edit_catalog` (que no
 cambia) — un cliente sin soporte de `edit_toolbar` sigue usando el catálogo legacy.
 
-`families` es una lista ordenada y contractual: `EXTRUDE`, `INSET`, `LOOP_CUT`, `CUT`.
+`families` es una lista ordenada y contractual: `EXTRUDE`, `BEVEL`, `INSET`, `LOOP_CUT`,
+`BRIDGE_EDGE_LOOPS`, `CUT`. Bevel y Bridge Edge Loops (versión 2) son familias de una
+sola variante, igual que Loop Cut: sin elección real de variante, solo aportan el
+selector de snap y el icono en la barra en vez de vivir escondidos en el catálogo
+contextual.
 Cada familia tiene esta forma:
 
 ```json

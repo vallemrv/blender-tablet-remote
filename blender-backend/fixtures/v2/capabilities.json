@@ -1597,7 +1597,7 @@
       }
     },
     "edit_toolbar": {
-      "version": 1,
+      "version": 2,
       "families": [
         {
           "id": "EXTRUDE",
@@ -1697,6 +1697,67 @@
               "applies_to": [
                 "REGION"
               ]
+            },
+            {
+              "id": "snap_type",
+              "label": "Snap",
+              "type": "enum",
+              "default": "NONE",
+              "values": [
+                "NONE",
+                "INCREMENT",
+                "GRID"
+              ],
+              "applies_to": [
+                "offset"
+              ]
+            },
+            {
+              "id": "snap_step",
+              "label": "Paso",
+              "type": "float",
+              "default": 0.1,
+              "min": 0.0001,
+              "applies_to": [
+                "offset"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "BEVEL",
+          "label": "Bevel",
+          "default_variant": "BEVEL",
+          "execution": "SESSION",
+          "command": "tool.begin",
+          "payload": {
+            "tool": "BEVEL"
+          },
+          "input": "PARAMETRIC",
+          "requirements": {
+            "mode": "EDIT"
+          },
+          "variants": [
+            {
+              "id": "BEVEL",
+              "label": "Bisel",
+              "enabled": true
+            }
+          ],
+          "parameters": [
+            {
+              "id": "offset",
+              "label": "Ancho",
+              "type": "float",
+              "default": 0.1,
+              "min": 0.0
+            },
+            {
+              "id": "segments",
+              "label": "Segmentos",
+              "type": "int",
+              "default": 1,
+              "min": 1
             },
             {
               "id": "snap_type",
@@ -1904,6 +1965,81 @@
           ]
         },
         {
+          "id": "BRIDGE_EDGE_LOOPS",
+          "label": "Bridge",
+          "default_variant": "BRIDGE_EDGE_LOOPS",
+          "execution": "SESSION",
+          "command": "tool.begin",
+          "payload": {
+            "tool": "BRIDGE_EDGE_LOOPS"
+          },
+          "input": "PARAMETRIC",
+          "requirements": {
+            "mode": "EDIT",
+            "selection_modes": [
+              "EDGE"
+            ],
+            "selection": {
+              "edges": {
+                "min": 6
+              }
+            }
+          },
+          "variants": [
+            {
+              "id": "BRIDGE_EDGE_LOOPS",
+              "label": "Puente entre loops",
+              "enabled": true
+            }
+          ],
+          "parameters": [
+            {
+              "id": "twist_offset",
+              "label": "Desfase",
+              "type": "int",
+              "default": 0
+            },
+            {
+              "id": "merge",
+              "label": "Fusionar",
+              "type": "bool",
+              "default": false
+            },
+            {
+              "id": "merge_factor",
+              "label": "Factor de fusión",
+              "type": "float",
+              "default": 0.0,
+              "min": 0.0,
+              "max": 1.0
+            },
+            {
+              "id": "snap_type",
+              "label": "Snap",
+              "type": "enum",
+              "default": "NONE",
+              "values": [
+                "NONE",
+                "INCREMENT",
+                "GRID"
+              ],
+              "applies_to": [
+                "merge_factor"
+              ]
+            },
+            {
+              "id": "snap_step",
+              "label": "Paso",
+              "type": "float",
+              "default": 0.1,
+              "min": 0.0001,
+              "applies_to": [
+                "merge_factor"
+              ]
+            }
+          ]
+        },
+        {
           "id": "CUT",
           "label": "Cut",
           "default_variant": "KNIFE",
@@ -2088,7 +2224,7 @@
     "scale_length": 0.0010000000474974513,
     "unit_system": "METRIC"
   },
-  "blender": "5.2.0 LTS",
+  "blender": "5.2.1 LTS",
   "commands": [
     "file.browse",
     "file.default_folder",

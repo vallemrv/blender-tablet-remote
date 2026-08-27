@@ -9,10 +9,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CallMade
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.LinearScale
+import androidx.compose.material.icons.filled.RoundedCorner
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -118,8 +120,10 @@ private fun activeVariantOf(family: EditToolbarFamily, session: ToolSession): Ed
 
 private fun familyIcon(family: EditToolbarFamily): ImageVector = when (family.id) {
     "EXTRUDE" -> Icons.AutoMirrored.Filled.CallMade
+    "BEVEL" -> Icons.Default.RoundedCorner
     "INSET" -> Icons.Default.CropFree
     "LOOP_CUT" -> Icons.Default.LinearScale
+    "BRIDGE_EDGE_LOOPS" -> Icons.AutoMirrored.Filled.CompareArrows
     "CUT" -> Icons.Default.ContentCut
     else -> Icons.Default.ContentCut
 }
