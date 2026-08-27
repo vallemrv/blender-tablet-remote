@@ -178,6 +178,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+        // Recuperación tras un fallback a MJPEG (§ fallbackToMjpeg): si h264Stream
+        // vuelve a decodificar frames de verdad -algo solo posible si una Surface
+        // nueva reabrió la conexión- se apaga el MJPEG y se vuelve a H.264.
+        viewModelScope.launch {
+            h264Stream.size.collect { size ->
+                if (size != null && !_h264Active.value && currentStreamEndpoint?.format == "h264") {
+                    stream.stop()
+                    _h264Active.value = true
+                }
+            }
+        }
 
         connectivity?.registerNetworkCallback(
             NetworkRequest.Builder()
@@ -218,10 +229,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun attachVideoSurface(surface: Surface) = h264Stream.attachSurface(surface)
     fun detachVideoSurface() = h264Stream.detachSurface()
 
+    /**
+     * H.264 se rindió tras varios reintentos (§ "el vídeo pierde calidad al hacer
+     * resize"). No es definitivo: [h264Stream] conserva el endpoint deseado, así que
+     * la próxima [attachVideoSurface] (el siguiente resize, o volver a primer plano)
+     * puede recuperarlo solo — ver el collector de `h264Stream.size` en `init`.
+     */
     private fun fallbackToMjpeg() {
         val endpoint = currentStreamEndpoint ?: return
         val alternative = endpoint.alternatives.firstOrNull { it.format == "mjpeg" } ?: return
-        h264Stream.stopTransport()
+        h264Stream.pauseForFallback()
         _h264Active.value = false
         stream.start(endpoint.host, endpoint.port, endpoint.token, alternative.path)
     }
