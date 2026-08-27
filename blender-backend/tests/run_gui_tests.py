@@ -248,6 +248,15 @@ def scenario(client: WSClient) -> None:
     circled = cmd(client, "selection.circle", {
         "u": 0.5, "v": 0.5, "radius": 0.5, "mode": "SET",
     })
+    cmd(client, "tool.begin", {"tool": "EXTRUDE", "parameters": {
+        "variant": "REGION", "snap_type": "FACE", "offset": 0.0}})
+    tool_snapped = cmd(client, "tool.snap_candidate", {
+        "u": 0.5, "v": 0.5, "snap_type": "FACE", "lock": True})
+    tool_candidate = tool_snapped.get("snap_candidate") or {}
+    check("Extrude bloquea candidato geométrico con position y screen",
+          bool(tool_candidate.get("id")) and len(tool_candidate.get("position", [])) == 3
+          and len(tool_candidate.get("screen", [])) == 2, str(tool_snapped))
+    cmd(client, "tool.cancel")
     check("Circle Select selecciona geometría proyectada", circled.get("affected", 0) > 0, str(circled))
     state = cmd(client, "scene.get_state")
     check("sigue en Edit Mode tras seleccionar", state.get("mode") == "EDIT", str(state.get("mode")))

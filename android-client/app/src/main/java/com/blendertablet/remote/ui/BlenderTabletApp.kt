@@ -248,6 +248,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
         ViewportInput(
             onDebug = vm::updateInput,
             onToolGesture = vm::toolGesture,
+            onToolPointer = vm::toolPointer,
             onViewGestureLive = { g, phase, dx, dy, factor ->
                 vm.viewGesture(g, phase, dx, dy, factor)
                 if (phase != GesturePhase.BEGIN && phase != GesturePhase.UPDATE) vm.requestState()
@@ -268,6 +269,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             input = viewportInput,
             shapeTool = state.shapeTool,
             knifePoints = knifeScreenPoints,
+            snapCandidate = toolSession.snapCandidate ?: session.snapCandidate,
             navigationOrbitEnabled = (session.active || toolSession.active) &&
                 quickMenuAt == null && !modifiersOpen,
             onShape = vm::shapeSelect,
@@ -583,6 +585,7 @@ private sealed class PendingDiscard(
 class ViewportInput(
     val onDebug: (com.blendertablet.remote.model.InputDebug) -> Unit,
     val onToolGesture: (GesturePhase, Float, Float) -> Unit,
+    val onToolPointer: (Float, Float) -> Unit,
     /** Con vídeo activo: al soltar el gesto se refresca el estado. */
     val onViewGestureLive: (Gesture, GesturePhase, Float, Float, Float) -> Unit,
     /** Sin vídeo: solo navega, no hay nada que refrescar aún. */
@@ -609,6 +612,7 @@ private fun ViewportLayer(
     input: ViewportInput,
     shapeTool: ShapeTool,
     knifePoints: List<Pair<Float, Float>>,
+    snapCandidate: com.blendertablet.remote.model.SnapCandidate?,
     navigationOrbitEnabled: Boolean,
     onShape: (ShapeTool, Float, Float, Float, Float) -> Unit,
     onLongPress: (px: Float, py: Float, u: Float, v: Float) -> Unit,
@@ -628,6 +632,7 @@ private fun ViewportLayer(
                     modifier = Modifier.fillMaxSize(),
                     onDebug = input.onDebug,
                     onToolGesture = input.onToolGesture,
+                    onToolPointer = input.onToolPointer,
                     onViewGesture = input.onViewGestureLive,
                     onTap = input.onTap,
                     onDoubleTap = input.onDoubleTap,
@@ -635,6 +640,7 @@ private fun ViewportLayer(
                     shapeTool = shapeTool,
                     navigationOrbitEnabled = navigationOrbitEnabled,
                     knifePoints = knifePoints,
+                    snapCandidate = snapCandidate,
                     onShape = onShape,
                 )
             }
@@ -646,12 +652,14 @@ private fun ViewportLayer(
                 modifier = Modifier.fillMaxSize(),
                 onDebug = input.onDebug,
                 onToolGesture = input.onToolGesture,
+                onToolPointer = input.onToolPointer,
                 onViewGesture = input.onViewGesturePlain,
                 onTap = input.onTap,
                 onDoubleTap = input.onDoubleTap,
                 onLongPress = onLongPress,
                 shapeTool = shapeTool,
                 knifePoints = knifePoints,
+                snapCandidate = snapCandidate,
                 onShape = onShape,
             )
             return@Box
@@ -678,12 +686,14 @@ private fun ViewportLayer(
                 modifier = Modifier.fillMaxSize(),
                 onDebug = input.onDebug,
                 onToolGesture = input.onToolGesture,
+                onToolPointer = input.onToolPointer,
                 onViewGesture = input.onViewGestureLive,
                 onTap = input.onTap,
                 onDoubleTap = input.onDoubleTap,
                 onLongPress = onLongPress,
                 shapeTool = shapeTool,
                 knifePoints = knifePoints,
+                snapCandidate = snapCandidate,
                 onShape = onShape,
             )
         }
@@ -891,7 +901,9 @@ private fun quickActions(
         ActionId.REVEAL_GEOMETRY -> QuickAction(label, Icons.Default.Visibility) { vm.revealSelection() }
         ActionId.DUPLICATE_LINKED -> QuickAction(label, Icons.Default.ContentCopy) { vm.duplicateLinked() }
         ActionId.RENAME -> QuickAction(label, Icons.Default.Edit, onClick = onRename)
-        ActionId.DISSOLVE -> QuickAction(label, Icons.Default.DeleteSweep) { vm.meshDelete("ONLY_FACES") }
+        ActionId.DISSOLVE -> QuickAction(label, Icons.Default.DeleteSweep) {
+            vm.meshDissolve(deleteWhat(context.selectionMode))
+        }
         ActionId.APPLY_TRANSFORMS -> QuickAction(
             label, Icons.Default.Transform,
             children = listOf(
@@ -909,10 +921,17 @@ private fun quickActions(
             ),
         )
         // Borrar es el destructivo: rojo y siempre el último del anillo.
-        ActionId.DELETE -> QuickAction(label, Icons.Default.Delete, tint = Ink.Bad) {
-            if (context.mode == BlenderMode.EDIT) vm.meshDelete(deleteWhat(context.selectionMode))
-            else vm.delete()
-        }
+        ActionId.DELETE -> if (context.mode == BlenderMode.EDIT) QuickAction(
+            "Borrar / disolver", Icons.Default.Delete, tint = Ink.Bad,
+            children = listOf(
+                QuickAction("Borrar ${context.selectionMode.name.lowercase()}", Icons.Default.Delete, tint = Ink.Bad) {
+                    vm.meshDelete(deleteWhat(context.selectionMode))
+                },
+                QuickAction("Disolver ${context.selectionMode.name.lowercase()}", Icons.Default.DeleteSweep) {
+                    vm.meshDissolve(deleteWhat(context.selectionMode))
+                },
+            ),
+        ) else QuickAction(label, Icons.Default.Delete, tint = Ink.Bad) { vm.delete() }
         // El catálogo tiene más acciones, pero son de otras superficies y
         // RadialMenu no las emite. Un `else` mudo evitaría que se notara.
         else -> QuickAction(label, Icons.Default.Adjust, enabled = false)

@@ -17,6 +17,8 @@ from . import command
 def _run(op, label: str) -> dict:
     if bpy.app.background:
         raise CommandError("Undo/redo is not available in background mode", code="no_undo_stack")
+    from .sessions import cancel_all
+    cancel_all(restore=True)
     try:
         with view3d_override():
             op()

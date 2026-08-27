@@ -107,16 +107,11 @@ object RadialMenu {
             add(ActionId.SELECT_LOOP)
             add(ActionId.SELECT_RING)
         }
-        if (context.selectionMode == SelectionMode.FACE && context.hasSelection) {
-            add(ActionId.DISSOLVE)
-        }
-
         if (context.hasSelection) add(ActionId.HIDE_GEOMETRY)
         add(ActionId.REVEAL_GEOMETRY)
 
-        // `mesh.delete` ya es contractual para VERTS/EDGES/FACES. Debe vivir en el
-        // primer anillo: esconderlo dentro de "Tools de malla" hacía que pareciera
-        // una fila sin handler y, con algunos catálogos, ni siquiera era alcanzable.
+        // El sector destructivo abre dos intenciones distintas: Borrar y Disolver.
+        // No se gastan dos sectores ni se confunde disolver con ONLY_FACES.
         if (context.hasSelection) add(ActionId.DELETE)
 
         // Separar/Split/Normales/Bevel/Subdivide/Bridge y demás viven en el catálogo

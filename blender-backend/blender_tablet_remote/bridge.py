@@ -331,7 +331,11 @@ def _pump() -> float | None:
     now = time.monotonic()
     if now - _last_event_poll >= EVENT_POLL_INTERVAL:
         _last_event_poll = now
-        _broadcast_events()
+        try:
+            _broadcast_events()
+        except Exception:  # noqa: BLE001 - un broadcast jamás desregistra el timer
+            _stats["errors"] += 1
+            log.error("event broadcast failed:\n%s", traceback.format_exc())
 
     # Un cliente de vídeo sin sesión WebSocket (el navegador de pruebas) también
     # cuenta: si no, el ritmo cae a TICK_IDLE y el stream baja a 4 fps.
@@ -354,8 +358,14 @@ def _broadcast_events() -> None:
         return
     for event in events:
         log.debug("event %s", event["event"])
-        _server.broadcast(event)
-    _broadcast_modal()
+        try:
+            _server.broadcast(event)
+        except Exception:  # noqa: BLE001 - los demás eventos y el timer continúan
+            log.error("broadcast of %s failed:\n%s", event.get("event"), traceback.format_exc())
+    try:
+        _broadcast_modal()
+    except Exception:  # noqa: BLE001 - estado modal inválido no mata el pump
+        log.error("modal broadcast failed:\n%s", traceback.format_exc())
 
 
 def _broadcast_modal() -> None:

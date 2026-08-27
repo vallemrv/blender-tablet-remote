@@ -240,7 +240,7 @@ def inset(payload: dict) -> dict:
 @command("mesh.bevel", mutating=True)
 def bevel(payload: dict) -> dict:
     obj, bm = _bm_and_obj()
-    offset = get_float(payload, "offset", 0.1)
+    offset = _apply_scalar_snap(get_float(payload, "offset", 0.1), payload)
     segments = max(1, get_int(payload, "segments", 1))
     profile = get_float(payload, "profile", 0.5)
     vert_mode, _edge_mode, _face_mode = _select_mode()
@@ -475,6 +475,8 @@ def subdivide(payload: dict) -> dict:
 
 @command("mesh.delete", mutating=True)
 def delete(payload: dict) -> dict:
+    from .sessions import cancel_all
+    cancel_all(restore=True)
     obj, bm = _bm_and_obj()
     what = str(payload.get("what", "VERTS")).upper()
     contexts = {"VERTS": "VERTS", "EDGES": "EDGES", "FACES": "FACES", "ONLY_FACES": "FACES_ONLY"}
@@ -494,6 +496,41 @@ def delete(payload: dict) -> dict:
     flush_bmesh(obj, bm)
     _undo(payload, "Remote mesh delete")
     return {"deleted": what, "count": len(geom)}
+
+
+@command("mesh.dissolve", mutating=True)
+def dissolve(payload: dict) -> dict:
+    """Disuelve la selección conservando la superficie circundante."""
+    from .sessions import cancel_all
+    cancel_all(restore=True)
+    obj, bm = _bm_and_obj()
+    what = str(payload.get("what", "VERTS")).upper()
+    if what == "VERTS":
+        geom = [v for v in bm.verts if v.select and not v.hide]
+        if not geom:
+            raise CommandError("No vertices selected", code="empty_selection")
+        bmesh.ops.dissolve_verts(bm, verts=geom,
+            use_face_split=bool(payload.get("use_face_split", False)),
+            use_boundary_tear=bool(payload.get("use_boundary_tear", False)))
+    elif what == "EDGES":
+        geom = [e for e in bm.edges if e.select and not e.hide]
+        if not geom:
+            raise CommandError("No edges selected", code="empty_selection")
+        bmesh.ops.dissolve_edges(bm, edges=geom,
+            use_verts=bool(payload.get("use_verts", True)),
+            use_face_split=bool(payload.get("use_face_split", False)))
+    elif what == "FACES":
+        geom = [f for f in bm.faces if f.select and not f.hide]
+        if not geom:
+            raise CommandError("No faces selected", code="empty_selection")
+        bmesh.ops.dissolve_faces(bm, faces=geom,
+            use_verts=bool(payload.get("use_verts", False)))
+    else:
+        raise BadPayload("'what' must be VERTS, EDGES or FACES")
+    count = len(geom)
+    flush_bmesh(obj, bm)
+    _undo(payload, "Remote mesh dissolve")
+    return {"dissolved": what, "count": count}
 
 
 @command("mesh.info")
@@ -739,7 +776,7 @@ def bridge_edge_loops(payload: dict) -> dict:
 
     twist_offset = get_int(payload, "twist_offset", 0)
     merge = bool(payload.get("merge", False))
-    merge_factor = get_float(payload, "merge_factor", 0.0)
+    merge_factor = _apply_scalar_snap(get_float(payload, "merge_factor", 0.0), payload)
     if not 0.0 <= merge_factor <= 1.0:
         raise BadPayload("'merge_factor' must be between 0 and 1")
     try:

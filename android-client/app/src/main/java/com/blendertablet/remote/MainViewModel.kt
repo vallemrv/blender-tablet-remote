@@ -287,6 +287,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             knifeTap(u, v)
             return
         }
+        if (knife.active && knife.snapType.geometric) {
+            client.toolSnapCandidate(u.toDouble(), v.toDouble(), knife.snapType, lock = true)
+            return
+        }
         // Loop Cut activo: el toque COLOCA el corte (primer toque) o lo re-ubica
         // (sesión ya abierta). Es el hover+click del Ctrl+R, con el dedo.
         if (local.value.activeTool == ActiveTool.LOOP_CUT) {
@@ -425,6 +429,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun selectRing() = client.selectRing()
     fun selectObject(name: String, add: Boolean) = client.selectObject(name, add)
     fun meshDelete(what: String) = client.meshDelete(what)
+    fun meshDissolve(what: String) = client.meshDissolve(what)
     fun duplicateLinked() = client.duplicateLinked()
     fun rename(newName: String, target: String? = null) = client.rename(newName, target)
 
@@ -488,6 +493,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun nudgeTool(delta: Double) = client.toolNudge(delta)
 
+    /** Seguimiento absoluto del dedo para snap geométrico durante el arrastre. */
+    fun toolPointer(u: Float, v: Float) {
+        val tool = client.toolSession.value
+        if (tool.active && tool.snapType.geometric) {
+            client.toolSnapCandidate(u.toDouble(), v.toDouble(), tool.snapType, lock = false)
+            return
+        }
+        val transform = client.transformSession.value
+        if (transform.active && transform.mode == TransformMode.MOVE && transform.snapType.geometric) {
+            client.transformSnapCandidate(u.toDouble(), v.toDouble(), transform.snapType, lock = false)
+        }
+    }
+
     /**
      * Único punto de enlace de los atajos Edit. B3--B8 aún no fijan sus comandos
      * wire: mantenerlo deliberadamente sin envío evita que la UI invente protocolos.
@@ -549,13 +567,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (client.toolSession.value.active) client.toolParameter(mapOf("snap" to enabled))
     }
 
-    private fun toolDefaultParameters(tool: EditTool): Map<String, Double> = when (tool) {
-        EditTool.EXTRUDE -> mapOf("offset" to 0.0)
-        EditTool.BEVEL -> mapOf("offset" to 0.02, "segments" to 1.0)
-        EditTool.INSET -> mapOf("thickness" to 0.1, "depth" to 0.0)
+    /**
+     * `snap_type: NONE` se siembra para las tools que lo anuncian en el catálogo
+     * (offset/thickness/factor/merge_factor). Sin esta clave en la sesión inicial,
+     * [ToolSession.availableSnapTypes] no puede distinguir "sin snap anunciado" de
+     * "snap aún no fijado" y el selector de la bandeja no aparece.
+     */
+    private fun toolDefaultParameters(tool: EditTool): Map<String, Any?> = when (tool) {
+        EditTool.EXTRUDE -> mapOf("offset" to 0.0, "snap_type" to "NONE")
+        EditTool.BEVEL -> mapOf("offset" to 0.02, "segments" to 1.0, "snap_type" to "NONE")
+        EditTool.INSET -> mapOf("thickness" to 0.1, "depth" to 0.0, "snap_type" to "NONE")
         EditTool.SUBDIVIDE -> mapOf("cuts" to 1.0)
-        EditTool.LOOP_CUT -> mapOf("cuts" to 1.0, "smoothness" to 0.0, "factor" to 0.0)
-        EditTool.BRIDGE_EDGE_LOOPS -> mapOf("twist_offset" to 0.0, "merge_factor" to 0.0)
+        EditTool.LOOP_CUT -> mapOf("cuts" to 1.0, "smoothness" to 0.0, "factor" to 0.0, "snap_type" to "NONE")
+        EditTool.BRIDGE_EDGE_LOOPS -> mapOf("twist_offset" to 0.0, "merge_factor" to 0.0, "snap_type" to "NONE")
         EditTool.KNIFE -> mapOf("snap" to 1.0)
         EditTool.BISECT -> mapOf("clear_inner" to 0.0, "clear_outer" to 0.0, "fill" to 0.0, "snap" to 1.0)
     }
@@ -749,9 +773,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // sube/baja el parámetro primario (offset, grosor o cortes) y no orbita.
         val tool = client.toolSession.value
         if (tool.active) {
-            if (phase == GesturePhase.UPDATE || phase == GesturePhase.END) {
+            if (tool.acceptsViewportNudge && !tool.snapType.geometric &&
+                (phase == GesturePhase.UPDATE || phase == GesturePhase.END)
+            ) {
                 client.toolNudge((-dy).toDouble())
             }
+            // Knife se maneja por taps (tool.knife_point), no por arrastre. El
+            // arrastre de un dedo queda deliberadamente inerte durante la sesión;
+            // dos dedos y el círculo de navegación usan onViewGesture y no pasan
+            // por aquí, por lo que siguen moviendo la cámara.
             return
         }
 

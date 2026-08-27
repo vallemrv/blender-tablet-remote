@@ -1184,8 +1184,12 @@ def scalar_snap_scenario(client: WSClient) -> None:
     ok_reply("cancel extrude con snap", client.command("tool.cancel"))
 
     ok_reply("cara para snap inválido", client.command("selection.elements", {"faces": [0], "mode": "SET"}))
-    fail_reply("snap_type inválido", client.command("tool.begin", {
-        "tool": "EXTRUDE", "parameters": {"offset": 0.1, "snap_type": "VERTEX"}}), "bad_payload")
+    geometric = ok_reply("snap geométrico arma Extrude sin candidato", client.command("tool.begin", {
+        "tool": "EXTRUDE", "parameters": {"offset": 0.1, "snap_type": "VERTEX"}}))
+    check("estado publica snap geométrico y candidato vacío",
+          geometric.get("snap_type") == "VERTEX" and geometric.get("snap_candidate") is None,
+          str(geometric))
+    ok_reply("cancel extrude geométrico", client.command("tool.cancel"))
 
     ok_reply("semilla loop cut snap", client.command("selection.edge"))
     ok_reply("arista semilla snap", client.command("selection.elements", {"edges": [0], "mode": "SET"}))
@@ -1421,8 +1425,10 @@ def client_worker(done: threading.Event) -> None:
             extrude_axis_scenario(extra)
             inset_variant_scenario(extra)
             scalar_snap_scenario(extra)
+            dissolve_scenario(extra)
             bisect_scenario(extra)
             rotate_scale_sign_scenario(extra)
+            session_exclusion_scenario(extra)
         finally:
             extra.close()
 
@@ -1433,6 +1439,70 @@ def client_worker(done: threading.Event) -> None:
         print(traceback.format_exc())
     finally:
         done.set()
+
+
+def dissolve_scenario(client: WSClient) -> None:
+    print("\n[27] Dissolve conserva superficie y es distinto de Delete")
+    for mode, what, field in (("vertex", "VERTS", "verts"),
+                              ("edge", "EDGES", "edges"),
+                              ("face", "FACES", "faces")):
+        ok_reply(f"escena dissolve {mode}", client.command("file.new"))
+        ok_reply(f"edit dissolve {mode}", client.command("mode.edit"))
+        ok_reply(f"submodo dissolve {mode}", client.command(f"selection.{mode}"))
+        before = ok_reply(f"topología antes dissolve {mode}", client.command("mesh.info"))
+        ok_reply(f"seleccionar elemento dissolve {mode}", client.command(
+            "selection.elements", {field: [0], "mode": "SET"}))
+        result = ok_reply(f"mesh.dissolve {what}", client.command("mesh.dissolve", {"what": what}))
+        check(f"dissolve responde tipo {what}", result.get("dissolved") == what, str(result))
+        after = ok_reply(f"topología tras dissolve {mode}", client.command("mesh.info"))
+        check(f"dissolve {mode} no añade geometría",
+              after[field] <= before[field], f"{before} -> {after}")
+        ok_reply(f"object tras dissolve {mode}", client.command("mode.object"))
+
+
+def session_exclusion_scenario(client: WSClient) -> None:
+    """Las dos familias globales no pueden conservar previews simultáneas."""
+    print("\n[sesiones] exclusión transform/tool")
+    ok_reply("escena limpia para exclusión", client.command("file.new"))
+    ok_reply("entrar Edit para exclusión", client.command("mode.edit"))
+    ok_reply("seleccionar todo para exclusión", client.command("selection.all", {"value": True}))
+    ok_reply("transform antes de tool", client.command("transform.begin", {"mode": "MOVE"}))
+    ok_reply("tool cancela transform", client.command("tool.begin", {
+        "tool": "EXTRUDE", "parameters": {"offset": 0.0},
+    }))
+    transform_state = ok_reply("estado transform tras tool", client.command("transform.status"))
+    check("tool.begin deja transform inactiva", transform_state.get("active") is False, str(transform_state))
+    ok_reply("transform cancela tool", client.command("transform.begin", {"mode": "MOVE"}))
+    tool_state = ok_reply("estado tool tras transform", client.command("tool.status"))
+    check("transform.begin deja tool inactiva", tool_state.get("active") is False, str(tool_state))
+    ok_reply("cancelar transform de exclusión", client.command("transform.cancel"))
+    ok_reply("volver Object tras exclusión", client.command("mode.object"))
+
+
+def main_thread_session_safety_tests() -> None:
+    """Reproduce el RNA eliminado que antes escapaba desde transform.session."""
+    from blender_tablet_remote.commands.modal import session
+
+    bpy.ops.object.select_all(action="SELECT")
+    session.begin("MOVE", [], False, None)
+    doomed = bpy.context.view_layer.objects.active
+    bpy.data.objects.remove(doomed, do_unlink=True)
+    modal_state = session.status()
+    check("status invalida Object RNA eliminado", modal_state.get("active") is False, str(modal_state))
+
+    original_broadcast_events = bridge._broadcast_events
+    original_last_poll = bridge._last_event_poll
+    try:
+        def broken_broadcast():
+            raise ReferenceError("simulated stale RNA during broadcast")
+
+        bridge._broadcast_events = broken_broadcast
+        bridge._last_event_poll = 0.0
+        interval = bridge._pump()
+        check("pump sobrevive a excepción de broadcast", interval is not None, str(interval))
+    finally:
+        bridge._broadcast_events = original_broadcast_events
+        bridge._last_event_poll = original_last_poll
 
 
 def main() -> int:
@@ -1455,6 +1525,8 @@ def main() -> int:
 
     if not done.is_set():
         _results.append(("timeout global", False, "los tests no terminaron en 90s"))
+
+    main_thread_session_safety_tests()
 
     bridge.stop()
 

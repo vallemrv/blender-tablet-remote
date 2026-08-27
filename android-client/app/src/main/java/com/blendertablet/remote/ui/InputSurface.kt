@@ -14,6 +14,8 @@ import com.blendertablet.remote.model.GesturePhase
 import com.blendertablet.remote.model.InputDebug
 import com.blendertablet.remote.model.NavigationOrbitLayout
 import com.blendertablet.remote.model.ShapeTool
+import com.blendertablet.remote.model.SnapCandidate
+import com.blendertablet.remote.model.SnapType
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.hypot
@@ -40,6 +42,8 @@ fun InputSurface(
     modifier: Modifier = Modifier,
     onDebug: (InputDebug) -> Unit,
     onToolGesture: (GesturePhase, Float, Float) -> Unit,
+    /** Posición absoluta del dedo durante la herramienta, normalizada 0..1. */
+    onToolPointer: (Float, Float) -> Unit = { _, _ -> },
     onViewGesture: (Gesture, GesturePhase, Float, Float, Float) -> Unit,
     onTap: (Float, Float, Boolean) -> Unit,
     onDoubleTap: () -> Unit,
@@ -53,17 +57,19 @@ fun InputSurface(
     onShape: (ShapeTool, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> },
     /** Puntos del Knife en pantalla, para dibujarlos sobre el vídeo. */
     knifePoints: List<Pair<Float, Float>> = emptyList(),
+    snapCandidate: SnapCandidate? = null,
 ) {
     AndroidView(
         modifier = modifier,
-        factory = { context -> GestureView(context, onDebug, onToolGesture, onViewGesture, onTap, onDoubleTap) },
+        factory = { context -> GestureView(context, onDebug, onToolGesture, onToolPointer, onViewGesture, onTap, onDoubleTap) },
         update = { view ->
-            view.updateCallbacks(onDebug, onToolGesture, onViewGesture, onTap, onDoubleTap)
+            view.updateCallbacks(onDebug, onToolGesture, onToolPointer, onViewGesture, onTap, onDoubleTap)
             view.onLongPress = onLongPress
             view.shapeTool = shapeTool
             view.navigationOrbitEnabled = navigationOrbitEnabled
             view.onShape = onShape
             view.knifePoints = knifePoints
+            view.snapCandidate = snapCandidate
             view.invalidate()
         },
     )
@@ -86,6 +92,7 @@ private class GestureView(
     context: Context,
     private var onDebug: (InputDebug) -> Unit,
     private var onToolGesture: (GesturePhase, Float, Float) -> Unit,
+    private var onToolPointer: (Float, Float) -> Unit,
     private var onViewGesture: (Gesture, GesturePhase, Float, Float, Float) -> Unit,
     private var onTap: (Float, Float, Boolean) -> Unit,
     private var onDoubleTap: () -> Unit,
@@ -141,6 +148,12 @@ private class GestureView(
     var onShape: (ShapeTool, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> }
     /** Puntos del Knife (normalizados) para el overlay. */
     var knifePoints: List<Pair<Float, Float>> = emptyList()
+    var snapCandidate: SnapCandidate? = null
+    private val candidatePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.parseColor("#66E3A4")
+        style = Paint.Style.STROKE
+        strokeWidth = 2.5f * resources.displayMetrics.density
+    }
     private val knifePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = android.graphics.Color.parseColor("#FFB84C")
         style = Paint.Style.STROKE
@@ -163,11 +176,12 @@ private class GestureView(
     fun updateCallbacks(
         debug: (InputDebug) -> Unit,
         toolGesture: (GesturePhase, Float, Float) -> Unit,
+        toolPointer: (Float, Float) -> Unit,
         viewGestureCb: (Gesture, GesturePhase, Float, Float, Float) -> Unit,
         tap: (Float, Float, Boolean) -> Unit,
         doubleTap: () -> Unit,
     ) {
-        onDebug = debug; onToolGesture = toolGesture; onViewGesture = viewGestureCb
+        onDebug = debug; onToolGesture = toolGesture; onToolPointer = toolPointer; onViewGesture = viewGestureCb
         onTap = tap; onDoubleTap = doubleTap
     }
 
@@ -303,6 +317,7 @@ private class GestureView(
         pendingDy += dy
         if (e.eventTime - lastDispatchAt >= DISPATCH_MS) {
             onToolGesture(GesturePhase.UPDATE, nx(pendingDx), ny(pendingDy))
+            onToolPointer(nx(e.x), ny(e.y))
             pendingDx = 0f; pendingDy = 0f
             lastDispatchAt = e.eventTime
         }
@@ -537,6 +552,7 @@ private class GestureView(
                 canvas.drawLine(u0 * width, v0 * height, u1 * width, v1 * height, knifePaint)
             }
         }
+        drawSnapCandidate(canvas)
         val remaining = tapFeedbackUntil - android.os.SystemClock.uptimeMillis()
         if (remaining <= 0L || tapFeedbackX < 0f) return
         tapPaint.alpha = (255f * remaining / 220f).toInt().coerceIn(0, 255)
@@ -544,6 +560,26 @@ private class GestureView(
         val radius = (10f + 9f * progress) * resources.displayMetrics.density
         canvas.drawCircle(tapFeedbackX, tapFeedbackY, radius, tapPaint)
         postInvalidateOnAnimation()
+    }
+
+    private fun drawSnapCandidate(canvas: Canvas) {
+        val candidate = snapCandidate ?: return
+        if (candidate.screen.size < 2) return
+        val x = candidate.screen[0].toFloat() * width
+        val y = candidate.screen[1].toFloat() * height
+        val r = 9f * resources.displayMetrics.density
+        when (candidate.type) {
+            SnapType.VERTEX -> canvas.drawCircle(x, y, r, candidatePaint)
+            SnapType.EDGE -> {
+                canvas.drawLine(x - r, y, x + r, y, candidatePaint)
+                canvas.drawCircle(x, y, r * .45f, candidatePaint)
+            }
+            SnapType.FACE -> canvas.drawRect(x - r, y - r, x + r, y + r, candidatePaint)
+            else -> {
+                canvas.drawLine(x - r, y, x + r, y, candidatePaint)
+                canvas.drawLine(x, y - r, x, y + r, candidatePaint)
+            }
+        }
     }
 
     private fun drawNavigationOrbit(canvas: Canvas) {

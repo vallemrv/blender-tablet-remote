@@ -41,6 +41,7 @@ class ToolSession:
         self.points = []  # anclas del Knife, en coordenadas locales
         self.closed = False
         self.line = None  # {"start": [u, v], "end": [u, v]} de la sesión Bisect
+        self.snap_candidate = None
         # Armado: familia/variante elegida, aún sin backup ni preview (B1/B3/B4).
         self.armed_tool = None
         self.armed_owner = None
@@ -100,7 +101,11 @@ class ToolSession:
             raise CommandError("No tool in progress", code="no_session")
         if owner is not None and self.owner_id is not None and owner != self.owner_id:
             raise CommandError("Tool session belongs to another client", code="session_owned")
-        if self.obj.name not in bpy.data.objects or self.obj.mode != "EDIT":
+        try:
+            valid = self.obj.name in bpy.data.objects and self.obj.mode == "EDIT"
+        except ReferenceError:
+            valid = False
+        if not valid:
             self.close()
             raise CommandError("Tool session invalidated", code="session_invalidated")
 
@@ -119,6 +124,13 @@ class ToolSession:
         bm.from_mesh(self.backup)
         bmesh.update_edit_mesh(self.obj.data, loop_triangles=True, destructive=True)
 
+    def restore_safely(self):
+        try:
+            self.restore()
+            return True
+        except (ReferenceError, RuntimeError):
+            return False
+
     def preview(self):
         self.restore()
         if self.tool == "KNIFE":
@@ -132,6 +144,25 @@ class ToolSession:
             bmesh.update_edit_mesh(self.obj.data, loop_triangles=True, destructive=True)
             return
         payload = dict(self.params)
+        if str(payload.get("snap_type", "NONE")).upper() in {"VERTEX", "EDGE", "FACE", "CURSOR"}:
+            payload["snap_type"] = "NONE"  # aún no hay candidato o ya se resuelve abajo
+        if self.tool == "EXTRUDE" and self.snap_candidate is not None:
+            if str(payload.get("variant", "REGION")).upper() != "REGION":
+                raise CommandError("Geometric snap requires Extrude REGION", code="incompatible_parameter")
+            bm = bmesh.from_edit_mesh(self.obj.data)
+            selected = [v.co.copy() for v in bm.verts if v.select and not v.hide]
+            if not selected:
+                raise CommandError("No vertices selected", code="empty_selection")
+            source_local = Vector((0.0, 0.0, 0.0))
+            for coordinate in selected:
+                source_local += coordinate
+            source_local /= len(selected)
+            source_world = self.obj.matrix_world @ source_local
+            target_world = Vector(self.snap_candidate["position"])
+            delta_world = target_world - source_world
+            payload["direction"] = list((self.obj.matrix_world.inverted().to_3x3() @ delta_world).normalized()) if delta_world.length else [0, 0, 1]
+            payload["offset"] = delta_world.length
+            payload["snap_type"] = "NONE"  # el destino ya quedó resuelto exactamente
         payload["_no_undo"] = True
         handlers = {"EXTRUDE": mesh_commands.extrude, "BEVEL": mesh_commands.bevel,
                     "INSET": mesh_commands.inset, "SUBDIVIDE": mesh_commands.subdivide,
@@ -148,9 +179,21 @@ class ToolSession:
 
     def status(self):
         if self.active:
+            try:
+                self.require(None)
+            except CommandError as exc:
+                if exc.code in {"session_invalidated", "no_session"}:
+                    return {"active": False, "armed": False, "phase": "INVALIDATED"}
+                raise
+            except (ReferenceError, RuntimeError):
+                self.close()
+                return {"active": False, "armed": False, "phase": "INVALIDATED"}
             state = {"active": True, "armed": True, "phase": "ACTIVE", "session_id": self.session_id,
                      "owner": self.owner_id, "tool": self.tool, "parameters": self.params,
                      "preview": self.result}
+            state["snap_type"] = str(self.params.get("snap_type", "NONE")).upper()
+            state["snap_step"] = float(self.params.get("snap_step", 0.1))
+            state["snap_candidate"] = self.snap_candidate
             if self.tool == "KNIFE":
                 state["points"] = [list(p) for p in self.points]
                 state["closed"] = self.closed
@@ -184,6 +227,8 @@ def begin(payload):
     params = dict(params)
     if "edge" in payload and "edge" not in params:
         params["edge"] = payload["edge"]
+    from .sessions import cancel_transform
+    cancel_transform(restore=True)
     tool_session.begin(tool, payload.get("_client_id"), params)
     return tool_session.status()
 
@@ -213,6 +258,32 @@ def parameter(payload):
     if not isinstance(params, dict):
         raise BadPayload("'parameters' must be an object")
     tool_session.params.update(params)
+    if str(tool_session.params.get("snap_type", "NONE")).upper() not in {"VERTEX", "EDGE", "FACE", "CURSOR"}:
+        tool_session.snap_candidate = None
+    tool_session.preview()
+    return tool_session.status()
+
+
+@command("tool.snap_candidate", mutating=True)
+def snap_candidate(payload):
+    """Sondea y opcionalmente bloquea un candidato geométrico para Extrude REGION."""
+    tool_session.require(payload.get("_client_id"))
+    if tool_session.tool != "EXTRUDE" or str(tool_session.params.get("variant", "REGION")).upper() != "REGION":
+        raise CommandError("Geometric snap requires Extrude REGION", code="wrong_tool")
+    snap_type = str(payload.get("snap_type", tool_session.params.get("snap_type", "VERTEX"))).upper()
+    if snap_type not in {"VERTEX", "EDGE", "FACE", "CURSOR"}:
+        raise BadPayload("'snap_type' must be VERTEX, EDGE, FACE or CURSOR")
+    from .snap import query_candidate
+    tool_session.restore()
+    query = dict(payload, snap_type=snap_type)
+    candidate = query_candidate(query)
+    if not candidate.get("hit"):
+        tool_session.snap_candidate = None
+        tool_session.preview()
+        return tool_session.status()
+    tool_session.params["snap_type"] = snap_type
+    if bool(payload.get("lock", True)):
+        tool_session.snap_candidate = candidate
     tool_session.preview()
     return tool_session.status()
 

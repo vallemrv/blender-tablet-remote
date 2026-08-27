@@ -26,8 +26,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -352,23 +350,12 @@ private fun ValueInput(session: TransformSession, onValue: (List<Double>?, Doubl
         text = ""
     }
 
-    TextField(
+    CompactNumericField(
         value = text,
         onValueChange = { text = it },
-        singleLine = true,
-        placeholder = { Text("4m · 25cm · 45° · 50%", color = Ink.Faint, fontSize = 11.sp) },
-        // Color explícito en el TextStyle: algunos Material3/Compose resolvían el
-        // color del LocalTextStyle antes que TextFieldColors y pintaban el input
-        // transparente sobre esta barra oscura.
-        textStyle = TextStyle(color = Ink.OnPanel, fontSize = 13.sp, textAlign = TextAlign.End),
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = Color.Transparent,
-            unfocusedContainerColor = Color.Transparent,
-            focusedTextColor = Ink.OnPanel,
-            unfocusedTextColor = Ink.Muted,
-        ),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { commit() }),
+        placeholder = "4m · 25cm · 45° · 50%",
+        textAlign = TextAlign.End,
+        onDone = { commit() },
         modifier = Modifier.width(118.dp),
     )
 }

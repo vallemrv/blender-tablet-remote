@@ -89,6 +89,7 @@ MENU_COMMANDS = [
     "tool.confirm",
     "tool.cancel",
     "tool.status",
+    "tool.snap_candidate",
     "tool.drag_line",
     # Selección contextual y borrado de malla (menú radial).
     "selection.all",
@@ -101,6 +102,7 @@ MENU_COMMANDS = [
     "selection.ring",
     "snap.query",
     "mesh.delete",
+    "mesh.dissolve",
     # Footer de vistas.
     "view.axis",
     "view.frame_all",
@@ -192,6 +194,23 @@ def main() -> int:
             check(f"{action_id} declara ejecución y requisitos",
                   entry.get("execution") in {"DISCRETE", "SESSION"}
                   and isinstance(entry.get("requirements"), dict), str(entry))
+        dissolve = entries.get("DISSOLVE") or {}
+        check(f"DISSOLVE {selection_mode} está habilitado y separado de DELETE",
+              dissolve.get("enabled") is True and dissolve.get("command") == "mesh.dissolve"
+              and dissolve.get("payload", {}).get("what")
+                  == {"VERTEX": "VERTS", "EDGE": "EDGES", "FACE": "FACES"}[selection_mode],
+              str(dissolve))
+    snap_feature = ((actual_caps.get("features") or {}).get("edit_tools") or {}).get("snap") or {}
+    check("tools anuncian candidato geométrico bloqueable",
+          snap_feature.get("candidate_command") == "tool.snap_candidate"
+          and snap_feature.get("geometric_tools") == ["EXTRUDE"]
+          and snap_feature.get("locked_candidate") is True, str(snap_feature))
+    candidate_fixture = json.loads((fixtures / "tool.snap_candidate.json").read_text())
+    check("fixture candidato usa position y screen normalizado",
+          len(candidate_fixture.get("position", [])) == 3
+          and len(candidate_fixture.get("screen", [])) == 2
+          and all(0.0 <= value <= 1.0 for value in candidate_fixture["screen"]),
+          str(candidate_fixture))
     face_extrude = next((entry for entry in groups.get("FACE", []) if entry.get("id") == "EXTRUDE"), {})
     face_variants = {item.get("id"): item.get("enabled") for item in face_extrude.get("variants", [])}
     check("extrude Cara anuncia sus tres variantes", face_variants == {
@@ -215,7 +234,7 @@ def main() -> int:
           and bridge.get("command") == "tool.begin"
           and bridge.get("payload") == {"tool": "BRIDGE_EDGE_LOOPS"}
           and [parameter.get("id") for parameter in bridge.get("parameters", [])]
-              == ["twist_offset", "merge", "merge_factor"], str(bridge))
+              == ["twist_offset", "merge", "merge_factor", "snap_type", "snap_step"], str(bridge))
     knife = next((entry for entry in groups.get("FACE", []) if entry.get("id") == "KNIFE"), {})
     check("Knife anuncia sesión habilitada sin requisito de selección",
           knife.get("enabled") is True and knife.get("execution") == "SESSION"

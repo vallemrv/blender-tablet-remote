@@ -126,7 +126,7 @@
       ]
     },
     "edit_tools": {
-      "version": 3,
+      "version": 4,
       "tools": [
         "EXTRUDE",
         "BEVEL",
@@ -165,6 +165,23 @@
         "clear_inner": true,
         "clear_outer": true,
         "fill": true
+      },
+      "snap": {
+        "scalar": [
+          "INCREMENT",
+          "GRID"
+        ],
+        "geometric": [
+          "VERTEX",
+          "EDGE",
+          "FACE",
+          "CURSOR"
+        ],
+        "candidate_command": "tool.snap_candidate",
+        "geometric_tools": [
+          "EXTRUDE"
+        ],
+        "locked_candidate": true
       }
     },
     "edit_catalog": {
@@ -321,6 +338,30 @@
                 "type": "int",
                 "default": 1,
                 "min": 1
+              },
+              {
+                "id": "snap_type",
+                "label": "Snap",
+                "type": "enum",
+                "default": "NONE",
+                "values": [
+                  "NONE",
+                  "INCREMENT",
+                  "GRID"
+                ],
+                "applies_to": [
+                  "offset"
+                ]
+              },
+              {
+                "id": "snap_step",
+                "label": "Paso",
+                "type": "float",
+                "default": 0.1,
+                "min": 0.0001,
+                "applies_to": [
+                  "offset"
+                ]
               }
             ],
             "command": "tool.begin",
@@ -424,6 +465,29 @@
             "variants": [],
             "parameters": [],
             "command": "mesh.split"
+          },
+          {
+            "id": "DISSOLVE",
+            "label": "Disolver",
+            "enabled": true,
+            "execution": "DISCRETE",
+            "requirements": {
+              "mode": "EDIT",
+              "selection_modes": [
+                "VERTEX"
+              ],
+              "selection": {
+                "verts": {
+                  "min": 1
+                }
+              }
+            },
+            "variants": [],
+            "parameters": [],
+            "command": "mesh.dissolve",
+            "payload": {
+              "what": "VERTS"
+            }
           },
           {
             "id": "DELETE",
@@ -563,6 +627,30 @@
                 "default": 0.0,
                 "min": 0.0,
                 "max": 1.0
+              },
+              {
+                "id": "snap_type",
+                "label": "Snap",
+                "type": "enum",
+                "default": "NONE",
+                "values": [
+                  "NONE",
+                  "INCREMENT",
+                  "GRID"
+                ],
+                "applies_to": [
+                  "merge_factor"
+                ]
+              },
+              {
+                "id": "snap_step",
+                "label": "Paso",
+                "type": "float",
+                "default": 0.1,
+                "min": 0.0001,
+                "applies_to": [
+                  "merge_factor"
+                ]
               }
             ],
             "command": "tool.begin",
@@ -720,6 +808,30 @@
                 "type": "int",
                 "default": 1,
                 "min": 1
+              },
+              {
+                "id": "snap_type",
+                "label": "Snap",
+                "type": "enum",
+                "default": "NONE",
+                "values": [
+                  "NONE",
+                  "INCREMENT",
+                  "GRID"
+                ],
+                "applies_to": [
+                  "offset"
+                ]
+              },
+              {
+                "id": "snap_step",
+                "label": "Paso",
+                "type": "float",
+                "default": 0.1,
+                "min": 0.0001,
+                "applies_to": [
+                  "offset"
+                ]
               }
             ],
             "command": "tool.begin",
@@ -928,7 +1040,7 @@
           {
             "id": "DISSOLVE",
             "label": "Disolver",
-            "enabled": false,
+            "enabled": true,
             "execution": "DISCRETE",
             "requirements": {
               "mode": "EDIT",
@@ -942,7 +1054,11 @@
               }
             },
             "variants": [],
-            "parameters": []
+            "parameters": [],
+            "command": "mesh.dissolve",
+            "payload": {
+              "what": "EDGES"
+            }
           },
           {
             "id": "DELETE",
@@ -1201,6 +1317,30 @@
                 "type": "int",
                 "default": 1,
                 "min": 1
+              },
+              {
+                "id": "snap_type",
+                "label": "Snap",
+                "type": "enum",
+                "default": "NONE",
+                "values": [
+                  "NONE",
+                  "INCREMENT",
+                  "GRID"
+                ],
+                "applies_to": [
+                  "offset"
+                ]
+              },
+              {
+                "id": "snap_step",
+                "label": "Paso",
+                "type": "float",
+                "default": 0.1,
+                "min": 0.0001,
+                "applies_to": [
+                  "offset"
+                ]
               }
             ],
             "command": "tool.begin",
@@ -1374,7 +1514,7 @@
           {
             "id": "DISSOLVE",
             "label": "Disolver",
-            "enabled": false,
+            "enabled": true,
             "execution": "DISCRETE",
             "requirements": {
               "mode": "EDIT",
@@ -1388,7 +1528,11 @@
               }
             },
             "variants": [],
-            "parameters": []
+            "parameters": [],
+            "command": "mesh.dissolve",
+            "payload": {
+              "what": "FACES"
+            }
           },
           {
             "id": "DELETE",
@@ -1960,6 +2104,7 @@
     "history.undo",
     "mesh.bevel",
     "mesh.delete",
+    "mesh.dissolve",
     "mesh.extrude",
     "mesh.info",
     "mesh.inset",
@@ -2040,6 +2185,7 @@
     "tool.loop_pick",
     "tool.nudge",
     "tool.parameter",
+    "tool.snap_candidate",
     "tool.status",
     "transform.apply",
     "transform.axes",

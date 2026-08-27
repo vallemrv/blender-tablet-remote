@@ -183,7 +183,11 @@ class _Session:
             raise CommandError("Transform session belongs to another client", code="session_owned")
         if self.edit_object is not None:
             obj = self.edit_object
-            if obj.name not in bpy.data.objects or obj.mode != "EDIT":
+            try:
+                valid = obj.name in bpy.data.objects and obj.mode == "EDIT"
+            except ReferenceError:
+                valid = False
+            if not valid:
                 self.invalidate("mode_or_object_changed")
             bm = bmesh.from_edit_mesh(obj.data)
             topology = (len(bm.verts), len(bm.edges), len(bm.faces))
@@ -199,7 +203,14 @@ class _Session:
             self._edit_sel_counts = sel_counts
             return
         # Un objeto borrado a mitad de transformación deja una referencia muerta.
-        self.originals = [(o, m) for o, m in self.originals if o.name in bpy.data.objects]
+        valid_originals = []
+        for obj, matrix in self.originals:
+            try:
+                if obj.name in bpy.data.objects:
+                    valid_originals.append((obj, matrix))
+            except ReferenceError:
+                continue
+        self.originals = valid_originals
         if not self.originals:
             self.reset()
             raise CommandError("The objects being transformed are gone", code="no_session")
@@ -207,7 +218,7 @@ class _Session:
             self.invalidate("selection_changed")
 
     def invalidate(self, reason: str) -> None:
-        self.restore()
+        self.restore_safely()
         session_id = self.session_id
         self.reset()
         self.phase = "INVALIDATED"
@@ -363,11 +374,33 @@ class _Session:
         for obj, original in self.originals:
             obj.matrix_world = original
 
+    def restore_safely(self) -> bool:
+        """Restaura si los RNA siguen vivos; una referencia eliminada no debe escapar."""
+        try:
+            self.restore()
+            return True
+        except (ReferenceError, RuntimeError):
+            return False
+
+    def invalidate_silently(self) -> None:
+        self.restore_safely()
+        self.reset()
+        self.phase = "INVALIDATED"
+
     # ---------------------------------------------------------------- estado
 
     def status(self) -> dict:
         if not self.active:
             return {"active": False}
+        try:
+            self.require()
+        except CommandError as exc:
+            if exc.code in {"session_invalidated", "no_session"}:
+                return {"active": False, "phase": "INVALIDATED"}
+            raise
+        except (ReferenceError, RuntimeError):
+            self.invalidate_silently()
+            return {"active": False, "phase": "INVALIDATED"}
         values, angle = self._effective()
         return {
             "active": True,
@@ -457,8 +490,10 @@ def begin(payload: dict) -> dict:
 
     # Una sesión abierta se descarta: empezar a mover con algo a medias sería
     # acumular dos transformaciones sin que el usuario lo pidiera.
+    from .sessions import cancel_tool
+    cancel_tool(restore=True)
     if session.active:
-        session.restore()
+        session.restore_safely()
 
     step = _parse_step(payload)
     if step is None and payload.get("mode") == "ROTATE" and "step_degrees" in payload:

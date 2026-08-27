@@ -11,6 +11,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -23,6 +24,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -31,11 +35,51 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
+/** Campo exacto de 34 dp: Material TextField impone 56 dp y se recorta en las trays. */
+@Composable
+fun CompactNumericField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    textAlign: TextAlign = TextAlign.Center,
+    placeholder: String? = null,
+    onDone: () -> Unit,
+) {
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = TextStyle(color = Ink.OnPanel, fontSize = 13.sp, textAlign = textAlign),
+        cursorBrush = SolidColor(Ink.Accent),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { onDone() }),
+        modifier = modifier
+            .height(34.dp)
+            .clip(RoundedCornerShape(7.dp))
+            .background(Color.White.copy(alpha = .07f)),
+        decorationBox = { inner ->
+            Box(
+                Modifier.fillMaxSize().padding(horizontal = 6.dp),
+                contentAlignment = if (textAlign == TextAlign.End) Alignment.CenterEnd else Alignment.Center,
+            ) {
+                if (value.isEmpty() && placeholder != null) {
+                    Text(placeholder, color = Ink.Faint, fontSize = 11.sp, maxLines = 1)
+                }
+                inner()
+            }
+        },
+    )
+}
 
 /**
  * Piezas de interfaz reutilizables: botones de icono compactos, píldoras y paneles

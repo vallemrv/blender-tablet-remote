@@ -5,7 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -69,8 +70,14 @@ data class QuickAction(
     val children: List<QuickAction> = emptyList(),
     /** Extrude: tap ejecuta la variante por defecto; long-click abre variantes. */
     val opensChildrenOnClick: Boolean = true,
-    val onClick: () -> Unit = {},
     val onLongClick: (() -> Unit)? = null,
+    /**
+     * Debe ser el último parámetro funcional: Kotlin asigna aquí la trailing lambda
+     * de `QuickAction(...) { acción() }`. Cuando onLongClick estaba después, todos
+     * esos taps quedaban con un onClick vacío y la acción terminaba conectada a una
+     * pulsación larga que el usuario nunca había pedido.
+     */
+    val onClick: () -> Unit = {},
 ) {
     val isGroup: Boolean get() = children.isNotEmpty()
 }
@@ -130,7 +137,7 @@ private fun RadialRing(
 ) {
     val progress by animateFloatAsState(1f, tween(150), label = "quickmenu")
 
-    BoxWithConstraints(modifier.fillMaxSize().clickableNoRipple(onDismiss)) {
+    BoxWithConstraints(modifier.fillMaxSize()) {
         val density = LocalDensity.current.density
         // El centro llega en píxeles; el ajuste a bordes se hace en dp.
         val (cxDp, cyDp) = RadialLayout.clampCenter(
@@ -140,8 +147,40 @@ private fun RadialRing(
         val cx = cxDp * density
         val cy = cyDp * density
 
+        fun activate(action: QuickAction, longPress: Boolean = false) {
+            when {
+                longPress && action.isGroup && !action.opensChildrenOnClick -> onEnter(action)
+                longPress && action.onLongClick != null -> action.onLongClick.invoke()
+                action.isGroup && action.opensChildrenOnClick -> onEnter(action)
+                else -> {
+                    action.onClick()
+                    onDismiss()
+                }
+            }
+        }
+
         // Velo suave: indica que el menú captura el siguiente toque.
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .35f * progress)))
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = .35f * progress))
+                .pointerInput(actions, cxDp, cyDp) {
+                    detectTapGestures(
+                        onTap = { point ->
+                            val index = RadialLayout.hitIndex(
+                                point.x / density, point.y / density, cxDp, cyDp, actions.size,
+                            )
+                            if (index == null) onDismiss() else if (actions[index].enabled) activate(actions[index])
+                        },
+                        onLongPress = { point ->
+                            val index = RadialLayout.hitIndex(
+                                point.x / density, point.y / density, cxDp, cyDp, actions.size,
+                            )
+                            if (index != null && actions[index].enabled) activate(actions[index], longPress = true)
+                        },
+                    )
+                },
+        )
 
         // Etiqueta central: qué hay bajo el dedo.
         Box(
@@ -171,8 +210,6 @@ private fun RadialRing(
                 dx = (cos(angle) * distance).toFloat().dp,
                 dy = (sin(angle) * distance).toFloat().dp,
                 progress = progress,
-                onEnter = { onEnter(action) },
-                onDismiss = onDismiss,
             )
         }
     }
@@ -183,7 +220,6 @@ private fun RadialRing(
  * `opensChildrenOnClick = false` (Extrude en el catálogo legacy: variante por
  * defecto en tap, selector en long-click) tap ejecuta y long-click entra.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun RadialItem(
     action: QuickAction,
@@ -192,12 +228,7 @@ private fun RadialItem(
     dx: Dp,
     dy: Dp,
     progress: Float,
-    onEnter: () -> Unit,
-    onDismiss: () -> Unit,
-    closeOnActivate: Boolean = !action.isGroup || !action.opensChildrenOnClick,
 ) {
-    val entersOnTap = action.isGroup && action.opensChildrenOnClick
-    val entersOnLongClick = action.isGroup && !action.opensChildrenOnClick
     Column(
         Modifier
             .offset { IntOffset(x.roundToInt(), y.roundToInt()) }
@@ -207,23 +238,6 @@ private fun RadialItem(
             .alpha(progress)
             .clip(RoundedCornerShape(14.dp))
             .background(if (action.enabled) Ink.Elevated else Ink.Elevated.copy(alpha = .5f))
-            .then(
-                if (action.enabled) {
-                    Modifier.combinedClickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = {
-                            if (entersOnTap) onEnter() else {
-                                action.onClick()
-                                if (closeOnActivate) onDismiss()
-                            }
-                        },
-                        onLongClick = if (entersOnLongClick) onEnter else null,
-                    )
-                } else {
-                    Modifier
-                }
-            )
             .padding(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

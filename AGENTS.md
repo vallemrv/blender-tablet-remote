@@ -6,10 +6,22 @@ validarlo en tablet y abrió una nueva serie de reparaciones desde `000`. Los pl
 anteriores de toolbar y radial se retiraron por esa autorización; el ciclo actual queda
 documentado en `000_PLAN_FRONTEND_REPARACIONES_RADIAL_INPUTS.md`.
 
-La primera reparación de esta serie corrige tres defectos Android: Caja/Círculo se
-arman explícitamente desde el radial y llegan a los handlers de selección por forma;
-Borrar aparece directamente en Edit y elige `VERTS`/`EDGES`/`FACES` por submodo; y los
-campos numéricos de las bandejas fijan un color de texto visible en `TextStyle`.
+La primera reparación de esta serie corrige tres defectos Android: el radial resuelve
+todos sus sectores con un único hit-test geométrico y `QuickAction.onClick` es el último
+parámetro funcional (antes la trailing lambda de Kotlin se asignaba a `onLongClick` y
+el tap quedaba vacío); Borrar aparece directamente en Edit y elige
+`VERTS`/`EDGES`/`FACES` por submodo; y los campos numéricos usan un `BasicTextField`
+compacto de 34 dp, pues el mínimo de 56 dp de Material3 recortaba el texto dentro de
+las bandejas horizontales.
+
+La congelación observada después se diagnosticó en el servidor vivo: una sesión modal
+retenía un `Object` RNA eliminado, `session.status()` lanzaba `ReferenceError` durante
+el broadcast y la excepción desregistraba el timer `_pump`, dejando los sockets abiertos
+pero sin procesar comandos ni frames. El backend ahora blinda pump/broadcast, invalida
+referencias RNA desaparecidas, hace mutuamente excluyentes `transform.*` y `tool.*`, y
+cierra sesiones antes de undo/redo y borrados. Android no envía `tool.nudge` para Knife
+ni Bisect. La reproducción viva `transform.begin → delete` y `transform.begin → KNIFE`
+mantiene el servidor operativo.
 
 El último
 ciclo cerrado entregó el **menú Edit contextual** alimentado por `edit.catalog`:

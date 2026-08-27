@@ -85,6 +85,11 @@ data class SnapCandidate(
     val type: SnapType,
     val id: String,
     val objectName: String?,
+    /** Posición mundial/local informativa, si el servidor la publica. */
+    val position: List<Double> = emptyList(),
+    /** Centro del marcador en coordenadas normalizadas del viewport. */
+    val screen: List<Double> = emptyList(),
+    val distance: Double? = null,
 )
 
 /** Relativo = delta desde el snapshot de inicio; absoluto = valor objetivo. */

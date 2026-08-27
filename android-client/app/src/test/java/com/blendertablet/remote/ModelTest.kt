@@ -6,6 +6,7 @@ import com.blendertablet.remote.model.EditTool
 import com.blendertablet.remote.model.LoopFalloff
 import com.blendertablet.remote.model.SelectionMode
 import com.blendertablet.remote.model.ToolSession
+import com.blendertablet.remote.model.SnapType
 import com.blendertablet.remote.model.bottomTrayVisible
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -13,6 +14,41 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ModelTest {
+    @Test fun `extrude region ofrece snap geometrico y las demas tools solo escalar`() {
+        val extrude = ToolSession(
+            active = true, tool = EditTool.EXTRUDE,
+            parameters = mapOf("variant" to "REGION", "snap_type" to "NONE"),
+        )
+        assertTrue(SnapType.VERTEX in extrude.availableSnapTypes)
+        val inset = ToolSession(
+            active = true, tool = EditTool.INSET,
+            parameters = mapOf("snap_type" to "NONE"),
+        )
+        assertEquals(listOf(SnapType.NONE, SnapType.INCREMENT, SnapType.GRID), inset.availableSnapTypes)
+        assertFalse(SnapType.VERTEX in inset.availableSnapTypes)
+        val bevel = ToolSession(active = true, tool = EditTool.BEVEL, parameters = mapOf("snap_type" to "NONE"))
+        assertEquals(listOf(SnapType.NONE, SnapType.INCREMENT, SnapType.GRID), bevel.availableSnapTypes)
+        val bridge = ToolSession(
+            active = true, tool = EditTool.BRIDGE_EDGE_LOOPS, parameters = mapOf("snap_type" to "NONE"),
+        )
+        assertEquals(listOf(SnapType.NONE, SnapType.INCREMENT, SnapType.GRID), bridge.availableSnapTypes)
+        val subdivide = ToolSession(active = true, tool = EditTool.SUBDIVIDE, parameters = emptyMap())
+        assertTrue(subdivide.availableSnapTypes.isEmpty())
+    }
+
+    @Test fun `tool session parsea paso y candidato visual de snap`() {
+        val json = org.json.JSONObject(
+            """{"active":true,"tool":"EXTRUDE","snap_type":"VERTEX","snap_step":0.01,
+              "parameters":{"variant":"REGION","snap_type":"VERTEX","snap_step":0.01},
+              "snap_candidate":{"hit":true,"snap_type":"VERTEX","id":"Cube:VERTEX:3",
+              "object":"Cube","position":[1,2,3],"screen":[0.25,0.75],"distance":0.004}}""",
+        )
+        val session = com.blendertablet.remote.network.StateParser.toolSession(json)
+        assertEquals(SnapType.VERTEX, session.snapType)
+        assertEquals(.01, session.snapStep, 1e-12)
+        assertEquals(listOf(.25, .75), session.snapCandidate?.screen)
+        assertEquals("Cube:VERTEX:3", session.snapCandidate?.id)
+    }
     @Test fun defaultStateStartsInVertexSelection() {
         assertEquals(SelectionMode.VERTEX, BlenderState().selectionMode)
     }

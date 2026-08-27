@@ -75,6 +75,8 @@ def set_active(payload: dict) -> dict:
 
 @command("object.delete", mutating=True)
 def delete(payload: dict) -> dict:
+    from .sessions import cancel_all
+    cancel_all(restore=True)
     objs = resolve_objects(payload)
     removed = [o.name for o in objs]
     for obj in objs:

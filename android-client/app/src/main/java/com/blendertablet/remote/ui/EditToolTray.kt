@@ -12,9 +12,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import com.blendertablet.remote.model.EditTool
 import com.blendertablet.remote.model.LoopFalloff
 import com.blendertablet.remote.model.ToolSession
+import com.blendertablet.remote.model.SnapType
 import com.blendertablet.remote.model.ValueParser
 import com.blendertablet.remote.model.TransformMode
 import kotlin.math.roundToInt
@@ -139,6 +143,8 @@ fun EditToolTray(
                     ExtrudeParams(session, onParameter)
                 } else if (session.tool == EditTool.INSET) {
                     InsetParams(session, onParameter)
+                } else if (session.tool == EditTool.BEVEL) {
+                    BevelParams(session, onParameter)
                 } else {
                     for (spec in specsFor(session.tool)) {
                         ParamStepper(
@@ -193,9 +199,39 @@ private fun LoopCutParams(session: ToolSession, onParameter: (String, Any?) -> U
  */
 @Composable
 private fun SnapToggle(session: ToolSession, onParameter: (String, Any?) -> Unit) {
-    val snapType = (session.parameters["snap_type"] as? String) ?: "NONE"
-    PillButton("Snap", selected = snapType != "NONE") {
-        onParameter("snap_type", if (snapType == "NONE") "INCREMENT" else "NONE")
+    val options = session.availableSnapTypes
+    if (options.isEmpty()) return
+    val selected = session.snapType
+    var expanded by remember(session.tool) { mutableStateOf(false) }
+    androidx.compose.foundation.layout.Box {
+        PillButton("Snap: ${selected.label}", selected = selected != SnapType.NONE) { expanded = true }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.label) },
+                    leadingIcon = { Icon(Icons.Default.GridOn, null) },
+                    onClick = {
+                        expanded = false
+                        onParameter("snap_type", option.name)
+                    },
+                )
+            }
+        }
+    }
+    if (selected == SnapType.INCREMENT || selected == SnapType.GRID) {
+        val distance = session.tool in setOf(EditTool.EXTRUDE, EditTool.INSET, EditTool.BEVEL)
+        val presets = if (distance) {
+            listOf("1mm" to .001, "1cm" to .01, "10cm" to .1, "1m" to 1.0)
+        } else {
+            listOf("1%" to .01, "5%" to .05, "10%" to .1, "25%" to .25)
+        }
+        androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            presets.forEach { (label, step) ->
+                PillButton(label, selected = kotlin.math.abs(session.snapStep - step) < 1e-9) {
+                    onParameter("snap_step", step)
+                }
+            }
+        }
     }
 }
 
@@ -245,9 +281,23 @@ private fun InsetParams(session: ToolSession, onParameter: (String, Any?) -> Uni
     SnapToggle(session, onParameter)
 }
 
-/** Parámetros de Bridge Edge Loops: desfase, fusión y su toggle de fundir. */
+/** Parámetros de Bevel: ancho, segmentos y snap de incremento real. */
 @Composable
-private fun BridgeParams(session: ToolSession, onParameter: (String, Any?) -> Unit) {    for (spec in specsFor(EditTool.BRIDGE_EDGE_LOOPS)) {
+private fun BevelParams(session: ToolSession, onParameter: (String, Any?) -> Unit) {
+    for (spec in specsFor(EditTool.BEVEL)) {
+        ParamStepper(
+            spec = spec,
+            value = session.double(spec.key) ?: defaultValue(spec),
+            onCommit = { onParameter(spec.key, it) },
+        )
+    }
+    SnapToggle(session, onParameter)
+}
+
+/** Parámetros de Bridge Edge Loops: desfase, fusión, su toggle de fundir y snap del factor. */
+@Composable
+private fun BridgeParams(session: ToolSession, onParameter: (String, Any?) -> Unit) {
+    for (spec in specsFor(EditTool.BRIDGE_EDGE_LOOPS)) {
         ParamStepper(
             spec = spec,
             value = session.double(spec.key) ?: defaultValue(spec),
@@ -257,6 +307,7 @@ private fun BridgeParams(session: ToolSession, onParameter: (String, Any?) -> Un
     PillButton("Fusionar", selected = session.flag("merge")) {
         onParameter("merge", !session.flag("merge"))
     }
+    SnapToggle(session, onParameter)
 }
 
 /**
@@ -398,19 +449,10 @@ private fun PositionStepper(factor: Double, clamp: Boolean, onFactor: (Double) -
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("Posición", color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.padding(end = 4.dp))
         StepperButton("−") { onFactor(percentToFactor((percent - 5).coerceAtLeast(min).toDouble())) }
-        TextField(
+        CompactNumericField(
             value = shown,
             onValueChange = { text = it },
-            singleLine = true,
-            textStyle = TextStyle(color = Ink.OnPanel, fontSize = 13.sp, textAlign = TextAlign.Center),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = Color.Transparent,
-                unfocusedContainerColor = Color.Transparent,
-                focusedTextColor = Ink.OnPanel,
-                unfocusedTextColor = Ink.Muted,
-            ),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { commit() }),
+            onDone = { commit() },
             modifier = Modifier.width(44.dp),
         )
         StepperButton("+") { onFactor(percentToFactor((percent + 5).coerceAtMost(max).toDouble())) }
@@ -437,19 +479,10 @@ private fun ParamStepper(spec: ParamSpec, value: Double, onCommit: (Double) -> U
             val next = if (spec.isInt) maxOf(1.0, value - spec.step) else value - spec.step
             onCommit(next)
         }
-        TextField(
+        CompactNumericField(
             value = if (text.isEmpty()) formatted else text,
             onValueChange = { text = it },
-            singleLine = true,
-            textStyle = TextStyle(color = Ink.OnPanel, fontSize = 13.sp, textAlign = TextAlign.Center),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = Color.Transparent,
-                unfocusedContainerColor = Color.Transparent,
-                focusedTextColor = Ink.OnPanel,
-                unfocusedTextColor = Ink.Muted,
-            ),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { commit() }),
+            onDone = { commit() },
             modifier = Modifier.width(64.dp),
         )
         StepperButton("+") {

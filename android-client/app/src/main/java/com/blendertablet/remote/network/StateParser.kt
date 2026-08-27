@@ -259,6 +259,9 @@ object StateParser {
             type = type,
             id = json.optString("id"),
             objectName = json.optString("object").takeIf { it.isNotBlank() && it != "null" },
+            position = doubles(json.optJSONArray("position")),
+            screen = doubles(json.optJSONArray("screen")),
+            distance = json.optDouble("distance").takeUnless { it.isNaN() },
         )
     }
 
@@ -291,6 +294,9 @@ object StateParser {
         return ToolSession(
             active = active, armed = armed, tool = tool, parameters = values,
             points = points, closed = json.optBoolean("closed"), line = line,
+            snapType = enum(json.optString("snap_type", params.optString("snap_type")), SnapType.NONE),
+            snapStep = json.optDouble("snap_step", params.optDouble("snap_step", 0.1)),
+            snapCandidate = candidate(json.optJSONObject("snap_candidate")),
         )
     }
 

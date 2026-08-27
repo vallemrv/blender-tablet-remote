@@ -2,6 +2,7 @@ package com.blendertablet.remote
 
 import com.blendertablet.remote.model.RadialLayout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -52,5 +53,24 @@ class RadialLayoutTest {
         val (x, y) = RadialLayout.clampCenter(0f, 0f, 50f, 50f)
         assertEquals(25f, x, 0.01f)
         assertEquals(25f, y, 0.01f)
+    }
+
+    @Test
+    fun `cada icono radial resuelve su indice`() {
+        val count = 8
+        val cx = 300f
+        val cy = 240f
+        for (index in 0 until count) {
+            val angle = Math.toRadians(-90.0 + index * (360.0 / count))
+            val x = cx + kotlin.math.cos(angle).toFloat() * RadialLayout.RADIUS_DP
+            val y = cy + kotlin.math.sin(angle).toFloat() * RadialLayout.RADIUS_DP
+            assertEquals(index, RadialLayout.hitIndex(x, y, cx, cy, count))
+        }
+    }
+
+    @Test
+    fun `centro y exterior no ejecutan acciones`() {
+        assertNull(RadialLayout.hitIndex(300f, 240f, 300f, 240f, 8))
+        assertNull(RadialLayout.hitIndex(0f, 0f, 300f, 240f, 8))
     }
 }

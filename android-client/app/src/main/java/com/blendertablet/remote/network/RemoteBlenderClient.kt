@@ -240,8 +240,10 @@ interface RemoteBlenderClient {
     fun toolBegin(tool: EditTool, parameters: Map<String, Any?>)
     fun toolParameter(parameters: Map<String, Any?>)
     fun toolNudge(delta: Double)
+    fun toolSnapCandidate(u: Double, v: Double, snapType: SnapType, lock: Boolean = false)
     fun toolConfirm()
     fun toolCancel()
+    fun meshDissolve(what: String)
 
     /**
      * Coloca el próximo loop cut donde caiga el toque (u,v): la respuesta llega en

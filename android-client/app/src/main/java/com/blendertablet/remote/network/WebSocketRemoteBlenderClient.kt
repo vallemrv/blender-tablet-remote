@@ -103,7 +103,7 @@ class WebSocketRemoteBlenderClient(
         val TOOL_COMMANDS = setOf(
             "tool.begin", "tool.parameter", "tool.nudge", "tool.status",
             "tool.loop_pick", "tool.knife_point", "tool.knife_pop", "tool.knife_close",
-            "tool.drag_line",
+            "tool.drag_line", "tool.snap_candidate",
         )
     }
 
@@ -115,6 +115,11 @@ class WebSocketRemoteBlenderClient(
     private val pending = ConcurrentHashMap<String, String>()
     private val sentAtNs = ConcurrentHashMap<String, Long>()
     private val stateRequestInFlight = AtomicBoolean(false)
+    private val toolSnapInFlight = AtomicBoolean(false)
+    @Volatile private var pendingToolSnap: ToolSnapRequest? = null
+    private data class ToolSnapRequest(val u: Double, val v: Double, val type: SnapType, val lock: Boolean)
+    private val transformSnapInFlight = AtomicBoolean(false)
+    @Volatile private var pendingTransformSnap: ToolSnapRequest? = null
 
     // Identificadores de comando: un contador basta (un SecureRandom por envío era
     // caro y no aporta nada: los ids solo tienen que ser únicos por conexión).
@@ -354,6 +359,7 @@ class WebSocketRemoteBlenderClient(
     override fun modifierToggle(name: String, viewport: Boolean?, render: Boolean?) = command("modifier.toggle", JSONObject().put("name", name).apply { viewport?.let { put("viewport", it) }; render?.let { put("render", it) } })
     override fun modifierApply(name: String) = command("modifier.apply", JSONObject().put("name", name))
     override fun meshDelete(what: String) = command("mesh.delete", JSONObject().put("what", what))
+    override fun meshDissolve(what: String) = command("mesh.dissolve", JSONObject().put("what", what))
     override fun undo() = command("history.undo")
     override fun redo() = command("history.redo")
     override fun frameSelected() = command("view.frame_selected")
@@ -441,10 +447,25 @@ class WebSocketRemoteBlenderClient(
             .put("step", step),
     )
 
-    override fun transformSnapCandidate(u: Double, v: Double, snapType: SnapType, lock: Boolean) = command(
-        "transform.snap_candidate",
-        JSONObject().put("u", u).put("v", v).put("snap_type", snapType.name).put("lock", lock),
-    )
+    override fun transformSnapCandidate(u: Double, v: Double, snapType: SnapType, lock: Boolean) {
+        pendingTransformSnap = ToolSnapRequest(u, v, snapType, lock)
+        flushTransformSnap()
+    }
+
+    private fun flushTransformSnap() {
+        if (!transformSnapInFlight.compareAndSet(false, true)) return
+        val request = pendingTransformSnap
+        if (request == null || !_transformSession.value.active) {
+            transformSnapInFlight.set(false)
+            return
+        }
+        pendingTransformSnap = null
+        command(
+            "transform.snap_candidate",
+            JSONObject().put("u", request.u).put("v", request.v)
+                .put("snap_type", request.type.name).put("lock", request.lock),
+        )
+    }
 
     override fun transformValue(values: List<Double>?, angleDegrees: Double?) {
         val payload = JSONObject()
@@ -467,6 +488,26 @@ class WebSocketRemoteBlenderClient(
     override fun toolParameter(parameters: Map<String, Any?>) =
         command("tool.parameter", JSONObject().put("parameters", JSONObject(parameters)))
 
+    override fun toolSnapCandidate(u: Double, v: Double, snapType: SnapType, lock: Boolean) {
+        pendingToolSnap = ToolSnapRequest(u, v, snapType, lock)
+        flushToolSnap()
+    }
+
+    private fun flushToolSnap() {
+        if (!toolSnapInFlight.compareAndSet(false, true)) return
+        val request = pendingToolSnap
+        if (request == null || !_toolSession.value.active) {
+            toolSnapInFlight.set(false)
+            return
+        }
+        pendingToolSnap = null
+        command(
+            "tool.snap_candidate",
+            JSONObject().put("u", request.u).put("v", request.v)
+                .put("snap_type", request.type.name).put("threshold", 0.035).put("lock", request.lock),
+        )
+    }
+
     /**
      * Empuja el parámetro primario mientras se arrastra el dedo.
      *
@@ -478,6 +519,9 @@ class WebSocketRemoteBlenderClient(
      * navegación van por su canal y no como comandos.
      */
     override fun toolNudge(delta: Double) {
+        // Defensa de frontera: Knife/Bisect nunca admiten nudge aunque otro caller
+        // invoque accidentalmente este método en el futuro.
+        if (!_toolSession.value.acceptsViewportNudge) return
         val key = _toolSession.value.primaryKey
         val limit = when (key) {
             "cuts" -> 1.0
@@ -610,6 +654,8 @@ class WebSocketRemoteBlenderClient(
                 // El hueco queda libre incluso si el nudge falló: si no, un error
                 // dejaría la herramienta sorda al arrastre para siempre.
                 if (command == "tool.nudge") nudgeInFlight = false
+                if (command == "tool.snap_candidate") toolSnapInFlight.set(false)
+                if (command == "transform.snap_candidate") transformSnapInFlight.set(false)
                 when {
                     !message.optBoolean("ok", false) -> {
                         // Un sondeo fallido no es un error que enseñar: significa que
@@ -617,6 +663,8 @@ class WebSocketRemoteBlenderClient(
                         // ofrecer en ese caso. Lo mismo el sondeo de loop cut.
                         if (command == "snap.query") _touchProbe.value = TouchProbe(hit = false)
                         else if (command == "mesh.loop_probe") _loopProbe.value = LoopProbe(hit = false)
+                        else if (command == "tool.snap_candidate") flushToolSnap()
+                        else if (command == "transform.snap_candidate") flushTransformSnap()
                         // Una línea de Bisect que no cruza geometría es un intento normal
                         // (el usuario dibuja de nuevo), no un error que enseñar: el
                         // backend ya deja la tool exactamente como estaba (armada o
@@ -664,9 +712,19 @@ class WebSocketRemoteBlenderClient(
                     }
                     // Los modales devuelven el estado de la sesión; confirmar y
                     // cancelar la cierran y sí necesitan refrescar la escena.
-                    command in MODAL_COMMANDS -> _transformSession.value = StateParser.session(result)
+                    command in MODAL_COMMANDS -> {
+                        _transformSession.value = StateParser.session(result)
+                        if (command == "transform.snap_candidate") {
+                            transformSnapInFlight.set(false)
+                            flushTransformSnap()
+                        }
+                    }
                     command in TOOL_COMMANDS -> {
                         _toolSession.value = StateParser.toolSession(result)
+                        if (command == "tool.snap_candidate") {
+                            toolSnapInFlight.set(false)
+                            flushToolSnap()
+                        }
                         // Lo que se acumuló mientras el servidor pensaba sale ahora.
                         flushNudge()
                     }

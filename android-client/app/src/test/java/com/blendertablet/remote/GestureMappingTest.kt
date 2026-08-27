@@ -3,6 +3,7 @@ package com.blendertablet.remote
 import com.blendertablet.remote.model.EditTool
 import com.blendertablet.remote.model.Gesture
 import com.blendertablet.remote.model.TransformMode
+import com.blendertablet.remote.model.ToolSession
 import kotlin.math.abs
 import kotlin.math.pow
 import org.junit.Assert.assertEquals
@@ -32,6 +33,28 @@ private fun zoomFactor(spanRatio: Float): Float = spanRatio.pow(ZOOM_GAIN)
 private fun zoomApplies(factor: Float): Boolean = abs(factor - 1f) > ZOOM_DEADZONE
 
 class GestureMappingTest {
+
+    @Test
+    fun `knife y bisect no convierten el arrastre de un dedo en tool nudge`() {
+        assertTrue(!ToolSession(active = true, tool = EditTool.KNIFE).acceptsViewportNudge)
+        assertTrue(!ToolSession(active = true, tool = EditTool.BISECT).acceptsViewportNudge)
+    }
+
+    @Test
+    fun `las previews parametricas conservan el nudge del viewport`() {
+        val nudged = listOf(
+            EditTool.EXTRUDE,
+            EditTool.BEVEL,
+            EditTool.INSET,
+            EditTool.SUBDIVIDE,
+            EditTool.LOOP_CUT,
+            EditTool.BRIDGE_EDGE_LOOPS,
+        )
+        nudged.forEach { tool ->
+            assertTrue("$tool debe aceptar nudge", ToolSession(active = true, tool = tool).acceptsViewportNudge)
+        }
+        assertTrue(!ToolSession(active = false, tool = EditTool.EXTRUDE).acceptsViewportNudge)
+    }
 
     @Test
     fun `el pellizco es mas suave que el movimiento crudo de los dedos`() {

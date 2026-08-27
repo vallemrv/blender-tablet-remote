@@ -69,7 +69,18 @@ data class ToolSession(
     val closed: Boolean = false,
     /** Bisect: última línea de arrastre resuelta por el servidor. */
     val line: DragLine? = null,
+    val snapType: SnapType = SnapType.NONE,
+    val snapStep: Double = 0.1,
+    val snapCandidate: SnapCandidate? = null,
 ) {
+    /**
+     * Solo las previews paramétricas aceptan arrastre vertical como `tool.nudge`.
+     * Knife construye una polilínea por taps y Bisect recibe una línea completa;
+     * enviarles nudges no tiene significado y puede reconstruir la malla en vano.
+     */
+    val acceptsViewportNudge: Boolean
+        get() = active && tool != EditTool.KNIFE && tool != EditTool.BISECT
+
     val primaryKey: String
         get() = when (tool) {
             EditTool.EXTRUDE, EditTool.BEVEL -> "offset"
@@ -84,6 +95,15 @@ data class ToolSession(
     fun flag(key: String, default: Boolean = false): Boolean = (parameters[key] as? Boolean) ?: default
     fun falloff(default: LoopFalloff = LoopFalloff.SMOOTH): LoopFalloff =
         (parameters["falloff"] as? String)?.let(LoopFalloff::fromWire) ?: default
+
+    /** Tipos que el contrato admite realmente para esta sesión concreta. */
+    val availableSnapTypes: List<SnapType>
+        get() = when {
+            tool == EditTool.EXTRUDE && (parameters["variant"] as? String ?: "REGION") == "REGION" ->
+                SnapType.entries
+            "snap_type" in parameters -> listOf(SnapType.NONE, SnapType.INCREMENT, SnapType.GRID)
+            else -> emptyList()
+        }
 }
 
 /** Resultado de `mesh.loop_probe`: la arista y el punto donde cae el toque. */

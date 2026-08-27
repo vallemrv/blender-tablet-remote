@@ -235,6 +235,9 @@ confundir con `selection.hide` / `selection.reveal`, que ocultan geometría en E
 | `selection.more` / `selection.less` | — en Edit Mode |
 | `selection.loop` / `.ring` | `edge` (opcional; usa la seleccionada), `mode` |
 
+`mesh.delete` elimina topología. `mesh.dissolve` conserva la superficie vecina y
+acepta `what: VERTS|EDGES|FACES`; son acciones distintas.
+
 `selection.pick` es **el comando del tap**: lanza un rayo desde la cámara del viewport.
 En Object Mode selecciona el objeto tocado; en Edit Mode, con oclusión real (SOLID),
 solo considera elementos de la cara visible impactada y exige que vértices/aristas
@@ -445,13 +448,24 @@ y la tool vuelve a `ARMED` (no se pierde la elección de Cut). Parámetros:
 `clear_inner`, `clear_outer` y `fill`.
 
 Snap real de incremento/rejilla en parámetros escalares de sesión: `EXTRUDE.offset`,
-`INSET.thickness` y `LOOP_CUT.factor` aceptan `snap_type` (`NONE`\|`INCREMENT`\|`GRID`,
+`BEVEL.offset`, `INSET.thickness`, `LOOP_CUT.factor` y
+`BRIDGE_EDGE_LOOPS.merge_factor` aceptan `snap_type` (`NONE`\|`INCREMENT`\|`GRID`,
 `GRID` se trata como `INCREMENT` igual que en `transform_modal`) y `snap_step`
 (paso, por defecto `0.1`). Cuadran el valor antes de aplicar el corte, así que cambian
 el resultado geométrico real, no solo lo que se enseña. `INSET` e `EXTRUDE` también
 aceptan `variant` (`REGION`\|`INDIVIDUAL` para Inset; `REGION`\|`ALONG_NORMALS`\|`INDIVIDUAL`
 para Extrude) como parámetro de sesión — cambiarlo reconstruye desde el backup, no
-acumula.
+acumula. Los pasos de Extrude/Bevel/Inset son distancias en Blender Units (la UI los
+presenta en cm/m usando `units.scale_length`); Loop Cut y merge son factores
+adimensionales. En escalares `GRID` equivale a `INCREMENT`.
+
+Extrude `REGION` admite snap geométrico. Durante el arrastre el cliente llama
+`tool.snap_candidate` con `u`, `v`, `snap_type` (`VERTEX|EDGE|FACE|CURSOR`),
+`threshold` y `lock`. `tool.status` publica `snap_type`, `snap_step` y
+`snap_candidate` (o null), cuya forma común es
+`{hit,snap_type,id,object?,element?,position:[x,y,z],screen:[u,v],distance}`.
+`position` está en mundo y `screen` normalizado arriba-izquierda para el icono local.
+Cada candidato reconstruye la preview desde el backup inicial.
 
 ### Catálogo contextual de Edit
 
@@ -490,8 +504,8 @@ El primer conjunto congelado incluye las operaciones ya disponibles (Loop/Ring,
 Extrude, Bevel, Inset, Subdivide, Loop Cut, Delete y Hide/Reveal), y los IDs nuevos
 `BRIDGE_EDGE_LOOPS`, `MAKE_EDGE_FACE`, `KNIFE`, `SEPARATE`, `SPLIT`,
 `RECALCULATE_NORMALS_OUTSIDE`, `RECALCULATE_NORMALS_INSIDE` y `FLIP_NORMALS`.
-`KNIFE` y `DISSOLVE` se anuncian deshabilitados hasta que exista
-su comando; una app no debe enviar un wire para una entrada con `enabled: false`.
+`DISSOLVE` se anuncia habilitado en Vértice/Arista/Cara mediante `mesh.dissolve`,
+separado de `DELETE`. Una app no debe enviar un wire para una entrada deshabilitada.
 `BRIDGE_EDGE_LOOPS` es una sesión de Arista: requiere exactamente dos loops cerrados
 disjuntos de igual longitud. Sus parámetros son `twist_offset` (int, 0), `merge`
 (bool, false) y `merge_factor` (float, 0..1, 0). La preview se reconstruye desde el

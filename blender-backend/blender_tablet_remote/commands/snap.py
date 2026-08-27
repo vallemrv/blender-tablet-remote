@@ -33,7 +33,9 @@ def query_candidate(payload: dict) -> dict:
     snap_type = str(payload.get("snap_type", payload.get("type", "VERTEX"))).upper()
     if snap_type == "CURSOR":
         return {"hit": True, "snap_type": "CURSOR", "id": "CURSOR",
-                "position": list(_cursor().location), "distance": 0.0}
+                "position": list(_cursor().location),
+                "screen": [float(payload.get("u", 0.5)), float(payload.get("v", 0.5))],
+                "distance": 0.0}
     if snap_type not in GEOMETRIC_TYPES:
         raise BadPayload("'snap_type' must be VERTEX, EDGE, FACE or CURSOR")
     found = find_view3d()
@@ -52,7 +54,8 @@ def query_candidate(payload: dict) -> dict:
         return {"hit": False, "snap_type": snap_type}
     if snap_type == "FACE":
         return {"hit": True, "snap_type": snap_type, "id": f"{obj.name}:FACE:{face_index}",
-                "object": obj.name, "element": face_index, "position": list(location), "distance": 0.0}
+                "object": obj.name, "element": face_index, "position": list(location),
+                "screen": [u, v], "distance": 0.0}
 
     mesh = obj.data
     if not 0 <= face_index < len(mesh.polygons):
@@ -84,7 +87,8 @@ def query_candidate(payload: dict) -> dict:
     if distance > threshold:
         return {"hit": False, "snap_type": snap_type, "distance": distance}
     return {"hit": True, "snap_type": snap_type, "id": f"{obj.name}:{snap_type}:{element}",
-            "object": obj.name, "element": element, "position": list(position), "distance": distance}
+            "object": obj.name, "element": element, "position": list(position),
+            "screen": list(camera.project(position, rv3d) or (u, v)), "distance": distance}
 
 
 @command("snap.query")

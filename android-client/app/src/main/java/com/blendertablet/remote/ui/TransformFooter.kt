@@ -24,8 +24,6 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -176,22 +174,14 @@ private fun AxisField(
         ) {
             Text(label, color = Color.Black.copy(alpha = .75f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
         }
-        TextField(
+        CompactNumericField(
             value = text,
             onValueChange = { editing = true; text = it },
-            singleLine = true,
-            textStyle = TextStyle(color = Ink.OnPanel, fontSize = 13.sp, textAlign = TextAlign.End),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = Color.Transparent,
-                unfocusedContainerColor = Color.Transparent,
-                focusedTextColor = Ink.OnPanel,
-                unfocusedTextColor = Ink.Muted,
-            ),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = {
+            textAlign = TextAlign.End,
+            onDone = {
                 text.replace(',', '.').trim().toFloatOrNull()?.let(onCommit)
                 editing = false
-            }),
+            },
             modifier = Modifier.width(96.dp),
         )
     }
