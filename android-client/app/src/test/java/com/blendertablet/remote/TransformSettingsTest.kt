@@ -75,6 +75,8 @@ class TransformSettingsTest {
     @Test
     fun `el snap geometrico solo existe al mover`() {
         assertTrue(SnapType.forMode(TransformMode.MOVE).contains(SnapType.VERTEX))
+        assertTrue(SnapType.forMode(TransformMode.MOVE).contains(SnapType.EDGE_CENTER))
+        assertTrue(SnapType.forMode(TransformMode.MOVE).contains(SnapType.FACE_CENTER))
         for (mode in listOf(TransformMode.ROTATE, TransformMode.SCALE)) {
             for (type in SnapType.forMode(mode)) {
                 assertFalse("$type no vale para $mode", type.geometric)

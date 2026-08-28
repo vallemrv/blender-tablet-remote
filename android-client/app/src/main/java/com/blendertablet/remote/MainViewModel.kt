@@ -9,10 +9,13 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.blendertablet.remote.data.ConnectionPreferences
 import com.blendertablet.remote.data.ConnectionSettings
+import com.blendertablet.remote.data.SnapPreferences
+import com.blendertablet.remote.data.SnapSettings
 import com.blendertablet.remote.model.ActiveTool
 import com.blendertablet.remote.model.Axis
 import com.blendertablet.remote.model.AppUiState
 import com.blendertablet.remote.model.BlenderMode
+import com.blendertablet.remote.model.ConnectionStatus
 import com.blendertablet.remote.model.Constraint
 import com.blendertablet.remote.model.EditTool
 import com.blendertablet.remote.model.EditFooterAction
@@ -56,7 +59,11 @@ import kotlinx.coroutines.launch
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val client: RemoteBlenderClient = WebSocketRemoteBlenderClient(viewModelScope)
-    private val local = MutableStateFlow(AppUiState())
+    private val snapPreferences = SnapPreferences(application)
+    private val local = MutableStateFlow(AppUiState(
+        snapType = snapPreferences.current.type,
+        snapStep = snapPreferences.current.step,
+    ))
     private val preferences = ConnectionPreferences(application)
     private val stream = ViewportStream(viewModelScope)
     private var currentStreamEndpoint: com.blendertablet.remote.network.StreamEndpoint? = null
@@ -119,6 +126,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     loopCutArmed = false
                     client.toolBegin(EditTool.LOOP_CUT, toolDefaultParameters(EditTool.LOOP_CUT))
                 }
+            }
+        }
+        // Los overlays los apaga el ojo, pero viven en el servidor: si la conexión
+        // se cae con la interfaz oculta, Blender se queda sin rejilla y el estado
+        // local ya no manda nada. Al (re)conectar se reimpone lo que dice el ojo.
+        // Se espera a que además estén las capabilities: CONNECTED llega antes de
+        // saber si el servidor entiende `view.overlays`, y preguntarlo a ciegas
+        // dispararía un error visible contra un backend anterior.
+        viewModelScope.launch {
+            combine(client.connection, client.state) { status, remote ->
+                status == ConnectionStatus.CONNECTED && remote.features.overlays
+            }.distinctUntilChanged().collect { ready ->
+                if (ready) client.viewOverlays(local.value.controlsVisible)
             }
         }
         // Colocación por toque: el sondeo responde con la arista y el factor, y
@@ -271,7 +291,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         loopCutArmed = false
         local.update { it.copy(loopCutAwaitingTap = false) }
     }
-    fun toggleControls() = local.update { it.copy(controlsVisible = !it.controlsVisible) }
+    /**
+     * El ojo de la barra superior: esconde toda la interfaz y, con ella, la rejilla
+     * y los overlays del viewport remoto. Un "ocultar controles" que dejara la
+     * rejilla puesta no serviría para lo que se usa (ver el modelo limpio), así que
+     * el mismo gesto apaga `space.overlay` en el servidor.
+     */
+    fun toggleControls() {
+        val visible = !local.value.controlsVisible
+        local.update { it.copy(controlsVisible = visible) }
+        if (client.state.value.features.overlays) client.viewOverlays(visible)
+    }
     fun toggleDebug() = local.update { it.copy(debugVisible = !it.debugVisible) }
 
     /**
@@ -314,7 +344,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val blender = uiState.value.blender
             if (blender.mode == BlenderMode.EDIT) {
                 if (client.toolSession.value.active) {
-                    client.toolLoopPick(u.toDouble(), v.toDouble())
+                    val add = blender.features.loopCutMultiple && local.value.selectionOp == SelectionOp.ADD
+                    client.toolLoopPick(u.toDouble(), v.toDouble(), add = add)
                     return
                 }
                 if (local.value.loopCutAwaitingTap) {
@@ -354,6 +385,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Wireframe/sólido del viewport capturado (botón de la barra superior). */
     fun toggleShading() = client.viewShading("TOGGLE")
+
+    fun toggleProportional() {
+        val enabled = !client.state.value.editSettings.proportional
+        client.editSettings(mapOf("proportional" to enabled))
+        client.transformSession.value.takeIf { it.active }?.let { transformBegin(it.mode) }
+    }
+
+    fun toggleAutoMerge() {
+        client.editSettings(mapOf("auto_merge" to !client.state.value.editSettings.autoMerge))
+    }
+
+    fun scaleProportionalRadius(factor: Double) {
+        val radius = (client.state.value.editSettings.radius * factor).coerceIn(0.0001, 1_000.0)
+        client.editSettings(mapOf("radius" to radius))
+        client.transformSession.value.takeIf { it.active }?.let { transformBegin(it.mode) }
+    }
+
+    fun cycleProportionalFalloff() {
+        val options = listOf("SMOOTH", "SPHERE", "ROOT", "SHARP", "LINEAR", "CONSTANT", "INVERSE_SQUARE")
+        val current = client.state.value.editSettings.falloff
+        val next = options[(options.indexOf(current).coerceAtLeast(0) + 1) % options.size]
+        client.editSettings(mapOf("falloff" to next))
+        client.transformSession.value.takeIf { it.active }?.let { transformBegin(it.mode) }
+    }
 
     /** Aísla la selección (el `/` del footer de vistas). Optimista: no hay push. */
     fun toggleLocalView() {
@@ -424,8 +479,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun deselectAll() = client.selectAll(false)
     fun invertSelection() = client.invertSelection()
     fun hideSelection() = client.hideSelection()
-    fun revealSelection() = client.revealSelection()
     fun hideObject(name: String? = null) = client.hideObjects(name?.let(::listOf))
+    fun toggleObjectShading(name: String? = null) = client.shadeObjects(name?.let(::listOf))
     fun revealObject(name: String) = client.revealObjects(listOf(name))
     fun revealAllObjects() = client.revealObjects()
     fun applyTransform(location: Boolean, rotation: Boolean, scale: Boolean) =
@@ -442,8 +497,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setModifier(name: String, key: String, value: Any?) = client.modifierSet(name, mapOf(key to value))
     fun toggleModifier(name: String, viewport: Boolean? = null, render: Boolean? = null) = client.modifierToggle(name, viewport, render)
     fun applyModifier(name: String) = client.modifierApply(name)
-    fun selectLoop() = client.selectLoop()
+    fun selectLoop() {
+        val op = local.value.selectionOp
+        client.selectLoop(if (op == SelectionOp.TOGGLE) SelectionOp.ADD else op)
+    }
     fun selectRing() = client.selectRing()
+
+    /** La `L` de Blender: de lo tocado a toda la pieza suelta que lo contiene. */
+    fun selectLinked() = client.selectLinked()
     fun selectObject(name: String, add: Boolean) = client.selectObject(name, add)
     fun meshDelete(what: String) = client.meshDelete(what)
     fun meshDissolve(what: String) = client.meshDissolve(what)
@@ -484,6 +545,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             objectName = objectName,
             objectSelected = objectName != null && objectName in blender.selectedObjects,
             hasSelection = blender.context.hasSelection(blender.mode, blender.selectionMode),
+            objectShadingAvailable = blender.features.objectShading,
         )
     }
 
@@ -505,8 +567,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } else client.toolBegin(tool, toolDefaultParameters(tool))
     }
 
-    fun setToolParameter(key: String, value: Any?) =
+    fun setToolParameter(key: String, value: Any?) {
+        when (key) {
+            "snap_type" -> (value as? String)?.let { wire ->
+                SnapType.entries.firstOrNull { it.name == wire }?.let(::rememberSnapType)
+            }
+            "snap_step" -> (value as? Number)?.toDouble()?.let(::rememberSnapStep)
+        }
         client.toolParameter(mapOf(key to value))
+    }
 
     fun nudgeTool(delta: Double) = client.toolNudge(delta)
 
@@ -552,7 +621,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             local.update { it.copy(activeTool = ActiveTool.valueOf(tool.name), loopCutAwaitingTap = false) }
             val params = action.parameters.associate { it.id to it.default }.toMutableMap()
             if (variant != null) params["variant"] = variant
-            client.toolBegin(tool, params)
+            client.toolBegin(tool, withGlobalSnap(tool, params))
             return
         }
         client.editCatalogCommand(action.command, action.payload)
@@ -571,6 +640,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Knife: quitar el último punto y cerrar la polilínea. */
     fun knifePop() = client.toolKnifePop()
+    fun loopCutPop() = client.toolLoopPop()
     fun knifeClose() = client.toolKnifeClose()
 
     /** Knife: un toque añade un punto (optimista; se recorta si el servidor lo rechaza). */
@@ -590,7 +660,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * [ToolSession.availableSnapTypes] no puede distinguir "sin snap anunciado" de
      * "snap aún no fijado" y el selector de la bandeja no aparece.
      */
-    private fun toolDefaultParameters(tool: EditTool): Map<String, Any?> = when (tool) {
+    private fun toolDefaultParameters(tool: EditTool): Map<String, Any?> = withGlobalSnap(tool, when (tool) {
         EditTool.EXTRUDE -> mapOf("offset" to 0.0, "snap_type" to "NONE")
         EditTool.BEVEL -> mapOf("offset" to 0.02, "segments" to 1.0, "snap_type" to "NONE")
         EditTool.INSET -> mapOf("thickness" to 0.1, "depth" to 0.0, "snap_type" to "NONE")
@@ -599,6 +669,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         EditTool.BRIDGE_EDGE_LOOPS -> mapOf("twist_offset" to 0.0, "merge_factor" to 0.0, "snap_type" to "NONE")
         EditTool.KNIFE -> mapOf("snap" to 1.0)
         EditTool.BISECT -> mapOf("clear_inner" to 0.0, "clear_outer" to 0.0, "fill" to 0.0, "snap" to 1.0)
+    })
+
+    private fun withGlobalSnap(tool: EditTool, parameters: Map<String, Any?>): Map<String, Any?> {
+        if ("snap_type" !in parameters) return parameters
+        val chosen = local.value.snapType
+        val compatible = if (tool == EditTool.EXTRUDE || !chosen.geometric) chosen else SnapType.NONE
+        return parameters + mapOf(
+            "snap_type" to compatible.name,
+            "snap_step" to local.value.snapStep,
+        )
+    }
+
+    private fun rememberSnapType(type: SnapType) {
+        local.update { it.copy(snapType = type) }
+        snapPreferences.save(SnapSettings(type, local.value.snapStep))
+    }
+
+    private fun rememberSnapStep(step: Double) {
+        local.update { it.copy(snapStep = step) }
+        snapPreferences.save(SnapSettings(local.value.snapType, step))
     }
 
     /**
@@ -632,7 +722,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val params = (family.parameters + variant.parameters)
                     .associate { it.id to it.default }.toMutableMap<String, Any?>()
                 params["variant"] = variant.id
-                client.toolBegin(tool, params)
+                client.toolBegin(tool, withGlobalSnap(tool, params))
             }
         }
     }
@@ -720,7 +810,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Elige el tipo de snap. Con sesión abierta se aplica en vivo. */
     fun setSnapType(type: SnapType) {
-        local.update { it.copy(snapType = type) }
+        rememberSnapType(type)
         val session = client.transformSession.value
         if (session.active) client.transformSnap(snapTypeFor(session.mode), session.step)
     }
@@ -793,7 +883,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (tool.acceptsViewportNudge && !tool.snapType.geometric &&
                 (phase == GesturePhase.UPDATE || phase == GesturePhase.END)
             ) {
-                client.toolNudge((-dy).toDouble())
+                val sensitivity = if (tool.tool == EditTool.LOOP_CUT) 2.0 else 1.0
+                client.toolNudge(-dy.toDouble() * sensitivity)
             }
             // Knife se maneja por taps (tool.knife_point), no por arrastre. El
             // arrastre de un dedo queda deliberadamente inerte durante la sesión;

@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -98,6 +99,7 @@ fun EditToolTray(
     onParameter: (String, Any?) -> Unit,
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
+    onLoopPop: () -> Unit,
     modifier: Modifier = Modifier,
     awaitingPick: Boolean = false,
 ) {
@@ -136,6 +138,11 @@ fun EditToolTray(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (session.tool == EditTool.LOOP_CUT) {
+                    Text(
+                        "Loops: ${session.loopCount} · Mayús+toque añade",
+                        color = Ink.Muted,
+                        fontSize = 11.sp,
+                    )
                     LoopCutParams(session, onParameter)
                 } else if (session.tool == EditTool.BRIDGE_EDGE_LOOPS) {
                     BridgeParams(session, onParameter)
@@ -156,6 +163,10 @@ fun EditToolTray(
                 }
             }
             Spacer(Modifier.width(10.dp))
+            if (session.tool == EditTool.LOOP_CUT && session.loopCount > 1) {
+                RoundAction(Icons.AutoMirrored.Filled.Undo, "Deshacer último loop", Ink.Muted, onLoopPop)
+                Spacer(Modifier.width(4.dp))
+            }
             RoundAction(Icons.Default.Close, "Descartar", Ink.Bad, onCancel)
             Spacer(Modifier.width(4.dp))
             RoundAction(Icons.Default.Check, "Confirmar", Ink.Ok, onConfirm)

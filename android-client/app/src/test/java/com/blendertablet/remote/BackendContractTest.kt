@@ -170,8 +170,23 @@ class BackendContractTest {
         assertTrue(features.modifiers)
         assertTrue(features.visibility)
         assertTrue(features.transformApply)
+        assertTrue(features.objectShading)
         assertTrue(features.loopCutPick)
+        assertTrue(features.loopCutMultiple)
         assertTrue(features.fileBrowse)
+        assertTrue(features.editSettings)
+    }
+
+    @Test fun `ajustes de edicion conservan proporcional y Auto Merge`() {
+        val settings = StateParser.editSettings(JSONObject(
+            """{"proportional":true,"proportional_connected":false,"falloff":"LINEAR",
+                "radius":2.5,"auto_merge":true,"merge_threshold":0.002}"""
+        ))
+        assertTrue(settings.proportional)
+        assertEquals("LINEAR", settings.falloff)
+        assertEquals(2.5, settings.radius, 0.0)
+        assertTrue(settings.autoMerge)
+        assertEquals(0.002, settings.mergeThreshold, 0.0)
     }
 
     @Test fun `la sesion de loop cut conserva tipos de los parametros`() {
@@ -187,6 +202,7 @@ class BackendContractTest {
         assertEquals(false, session.flag("flip"))
         assertEquals(true, session.flag("clamp", true))
         assertEquals(LoopFalloff.SPHERE, session.falloff())
+        assertEquals(1, session.loopCount)
     }
 
     @Test fun `el sondeo de loop cut devuelve arista y factor`() {

@@ -102,7 +102,7 @@ class WebSocketRemoteBlenderClient(
         /** Comandos cuya respuesta ES el estado de la sesión de herramienta. */
         val TOOL_COMMANDS = setOf(
             "tool.begin", "tool.parameter", "tool.nudge", "tool.status",
-            "tool.loop_pick", "tool.knife_point", "tool.knife_pop", "tool.knife_close",
+            "tool.loop_pick", "tool.loop_pop", "tool.knife_point", "tool.knife_pop", "tool.knife_close",
             "tool.drag_line", "tool.snap_candidate",
         )
     }
@@ -326,8 +326,10 @@ class WebSocketRemoteBlenderClient(
         "object.select",
         JSONObject().put("name", name).put("mode", if (add) "ADD" else "SET").put("active", true),
     )
-    override fun selectLoop() = command("selection.loop")
+    override fun selectLoop(mode: SelectionOp) =
+        command("selection.loop", JSONObject().put("mode", mode.name))
     override fun selectRing() = command("selection.ring")
+    override fun selectLinked() = command("selection.linked")
 
     override fun probeTouch(u: Double, v: Double, snapType: SnapType) = command(
         "snap.query",
@@ -341,12 +343,14 @@ class WebSocketRemoteBlenderClient(
     override fun setSelectionMode(mode: SelectionMode) = command("selection.${mode.name.lowercase()}")
     override fun invertSelection() = command("selection.invert")
     override fun hideSelection() = command("selection.hide")
-    override fun revealSelection() = command("selection.reveal")
     override fun hideObjects(objects: List<String>?, unselected: Boolean) = command("object.hide", JSONObject().apply {
         objects?.let { put("objects", JSONArray(it)) }; put("unselected", unselected)
     })
     override fun revealObjects(objects: List<String>?, select: Boolean) = command("object.reveal", JSONObject().apply {
         objects?.let { put("objects", JSONArray(it)) }; put("select", select)
+    })
+    override fun shadeObjects(objects: List<String>?, mode: String) = command("object.shade", JSONObject().apply {
+        objects?.let { put("objects", JSONArray(it)) }; put("mode", mode)
     })
     override fun transformApply(location: Boolean, rotation: Boolean, scale: Boolean) = command(
         "transform.apply", JSONObject().put("location", location).put("rotation", rotation).put("scale", scale))
@@ -369,6 +373,8 @@ class WebSocketRemoteBlenderClient(
         command("view.perspective", JSONObject().put("mode", projection.name))
 
     override fun viewShading(mode: String) = command("view.shading", JSONObject().put("mode", mode))
+
+    override fun viewOverlays(show: Boolean) = command("view.overlays", JSONObject().put("show", show))
 
     override fun viewLocal(enabled: Boolean?) = command(
         "view.local",
@@ -452,6 +458,9 @@ class WebSocketRemoteBlenderClient(
         flushTransformSnap()
     }
 
+    override fun editSettings(parameters: Map<String, Any?>) =
+        command("edit.settings_set", JSONObject(parameters))
+
     private fun flushTransformSnap() {
         if (!transformSnapInFlight.compareAndSet(false, true)) return
         val request = pendingTransformSnap
@@ -525,7 +534,10 @@ class WebSocketRemoteBlenderClient(
         val key = _toolSession.value.primaryKey
         val limit = when (key) {
             "cuts" -> 1.0
-            "factor" -> 0.02
+            // Loop Cut necesita conservar una porción útil del arrastre mientras
+            // Blender reconstruye el preview. 0.02 descartaba casi todo el gesto
+            // con lápiz y hacía depender la velocidad de la latencia del servidor.
+            "factor" -> 0.12
             else -> 0.025
         }
         // Solo conservamos un paso pequeño mientras hay preview en vuelo. Acumular
@@ -560,8 +572,10 @@ class WebSocketRemoteBlenderClient(
         _loopProbe.value = null
     }
 
-    override fun toolLoopPick(u: Double, v: Double) =
-        command("tool.loop_pick", JSONObject().put("u", u).put("v", v))
+    override fun toolLoopPick(u: Double, v: Double, add: Boolean) =
+        command("tool.loop_pick", JSONObject().put("u", u).put("v", v).put("add", add))
+
+    override fun toolLoopPop() = command("tool.loop_pop")
 
     override fun toolKnifePoint(u: Double, v: Double) =
         command("tool.knife_point", JSONObject().put("u", u).put("v", v))
@@ -691,6 +705,7 @@ class WebSocketRemoteBlenderClient(
                             selectedObjects = (visibility.optJSONArray("selected_objects") ?: JSONArray()).let { a -> (0 until a.length()).map { a.optString(it) } },
                             activeObject = visibility.optString("active_object").takeIf { it.isNotBlank() && it != "null" })
                     }
+                    command == "object.shade" -> result?.let(::updateState)
                     // selection.pick ya incluye el snapshot: evita esperar el evento
                     // semántico y hacer un segundo viaje scene.get_state. Lo mismo
                     // box/circle/more/less, que vuelven con el estado completo.
@@ -703,6 +718,7 @@ class WebSocketRemoteBlenderClient(
                         val shading = if (r.optString("shading") == "WIREFRAME") Shading.WIREFRAME else Shading.SOLID
                         _state.value = _state.value.copy(view = _state.value.view.copy(shading = shading))
                     }
+                    command == "edit.settings_set" -> result?.let(::updateState)
                     command == "file.recent" -> updateRecentFiles(result)
                     command == "file.locations" -> updateFileLocations(result)
                     command == "file.browse" -> updateFileBrowser(result)

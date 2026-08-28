@@ -7,5 +7,5 @@
   "pivot": "MEDIAN",
   "available_tools": ["SELECT", "MOVE", "ROTATE", "SCALE", "EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT"],
   "available_constraints": ["FREE", "X", "Y", "Z", "XY", "XZ", "YZ", "NORMAL", "VIEW"],
-  "available_snap_types": ["NONE", "INCREMENT", "GRID", "VERTEX", "EDGE", "FACE", "CURSOR"]
+  "available_snap_types": ["NONE", "INCREMENT", "GRID", "VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER", "CURSOR"]
 }

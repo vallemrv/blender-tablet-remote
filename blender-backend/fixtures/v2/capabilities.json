@@ -42,8 +42,24 @@
       "geometric_snap": true,
       "locked_candidate": true
     },
+    "edit_settings": {
+      "version": 1,
+      "proportional": true,
+      "falloffs": [
+        "SMOOTH",
+        "SPHERE",
+        "ROOT",
+        "SHARP",
+        "LINEAR",
+        "CONSTANT",
+        "INVERSE_SQUARE"
+      ],
+      "radius": true,
+      "auto_merge": true,
+      "merge_threshold": true
+    },
     "selection": {
-      "version": 3,
+      "version": 4,
       "operations": [
         "SET",
         "ADD",
@@ -60,10 +76,11 @@
       "topology": [
         "LOOP",
         "RING"
-      ]
+      ],
+      "linked": true
     },
     "view": {
-      "version": 3,
+      "version": 4,
       "axis_views": [
         "FRONT",
         "BACK",
@@ -81,7 +98,8 @@
         "WIREFRAME",
         "SOLID"
       ],
-      "local_view": true
+      "local_view": true,
+      "overlays": true
     },
     "stream": {
       "version": 2,
@@ -125,8 +143,16 @@
         "scale"
       ]
     },
+    "object_shading": {
+      "version": 1,
+      "modes": [
+        "TOGGLE",
+        "FLAT",
+        "SMOOTH"
+      ]
+    },
     "edit_tools": {
-      "version": 4,
+      "version": 5,
       "tools": [
         "EXTRUDE",
         "BEVEL",
@@ -150,7 +176,9 @@
         ],
         "even": true,
         "flip": true,
-        "clamp": true
+        "clamp": true,
+        "multiple": true,
+        "pop": true
       },
       "knife": {
         "snap": true,
@@ -174,7 +202,9 @@
         "geometric": [
           "VERTEX",
           "EDGE",
+          "EDGE_CENTER",
           "FACE",
+          "FACE_CENTER",
           "CURSOR"
         ],
         "candidate_command": "tool.snap_candidate",
@@ -188,6 +218,26 @@
       "version": 1,
       "groups": {
         "VERTEX": [
+          {
+            "id": "SELECT_LINKED",
+            "label": "Seleccionar enlazado",
+            "enabled": true,
+            "execution": "DISCRETE",
+            "requirements": {
+              "mode": "EDIT",
+              "selection_modes": [
+                "VERTEX"
+              ],
+              "selection": {
+                "verts": {
+                  "min": 1
+                }
+              }
+            },
+            "variants": [],
+            "parameters": [],
+            "command": "selection.linked"
+          },
           {
             "id": "MAKE_EDGE_FACE",
             "label": "Crear arista/cara",
@@ -550,6 +600,26 @@
           }
         ],
         "EDGE": [
+          {
+            "id": "SELECT_LINKED",
+            "label": "Seleccionar enlazado",
+            "enabled": true,
+            "execution": "DISCRETE",
+            "requirements": {
+              "mode": "EDIT",
+              "selection_modes": [
+                "EDGE"
+              ],
+              "selection": {
+                "edges": {
+                  "min": 1
+                }
+              }
+            },
+            "variants": [],
+            "parameters": [],
+            "command": "selection.linked"
+          },
           {
             "id": "SELECT_LOOP",
             "label": "Seleccionar loop",
@@ -1121,6 +1191,26 @@
           }
         ],
         "FACE": [
+          {
+            "id": "SELECT_LINKED",
+            "label": "Seleccionar enlazado",
+            "enabled": true,
+            "execution": "DISCRETE",
+            "requirements": {
+              "mode": "EDIT",
+              "selection_modes": [
+                "FACE"
+              ],
+              "selection": {
+                "faces": {
+                  "min": 1
+                }
+              }
+            },
+            "variants": [],
+            "parameters": [],
+            "command": "selection.linked"
+          },
           {
             "id": "EXTRUDE",
             "label": "Extruir",
@@ -2189,7 +2279,9 @@
       "GRID",
       "VERTEX",
       "EDGE",
+      "EDGE_CENTER",
       "FACE",
+      "FACE_CENTER",
       "CURSOR"
     ],
     "session_phase": [
@@ -2214,6 +2306,15 @@
       "SHARP",
       "LINEAR",
       "INVERSE_SQUARE"
+    ],
+    "proportional_falloff": [
+      "SMOOTH",
+      "SPHERE",
+      "ROOT",
+      "SHARP",
+      "LINEAR",
+      "CONSTANT",
+      "INVERSE_SQUARE"
     ]
   },
   "units": {
@@ -2226,6 +2327,8 @@
   },
   "blender": "5.2.1 LTS",
   "commands": [
+    "edit.settings",
+    "edit.settings_set",
     "file.browse",
     "file.default_folder",
     "file.info",
@@ -2269,6 +2372,7 @@
     "object.delete",
     "object.duplicate",
     "object.hide",
+    "object.shade",
     "object.rename",
     "object.reveal",
     "object.select",
@@ -2288,6 +2392,7 @@
     "selection.info",
     "selection.invert",
     "selection.less",
+    "selection.linked",
     "selection.loop",
     "selection.more",
     "selection.pick",
@@ -2319,6 +2424,7 @@
     "tool.knife_point",
     "tool.knife_pop",
     "tool.loop_pick",
+    "tool.loop_pop",
     "tool.nudge",
     "tool.parameter",
     "tool.snap_candidate",
@@ -2344,6 +2450,7 @@
     "view.gizmo",
     "view.local",
     "view.orbit",
+    "view.overlays",
     "view.pan",
     "view.perspective",
     "view.roll",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import bpy
+import bmesh
 from mathutils import Vector
 
 from .. import state
@@ -107,6 +108,7 @@ def sel_elements(payload: dict) -> dict:
     bm = edit_bmesh(obj)
     mode = _selection_op(payload)
     if mode == "SET":
+        bm.select_history.clear()
         for seq in (bm.verts, bm.edges, bm.faces):
             for elem in seq:
                 elem.select = False
@@ -268,6 +270,10 @@ def _pick_element(obj, world_location, face_index: int, mode: str, payload: dict
         return {"hit": False, "reason": "outside_threshold", "distance": distance}
 
     _apply_op(target, mode)
+    if target.select:
+        bm.select_history.add(target)
+    else:
+        bm.select_history.discard(target)
     bm.select_flush(target.select)
     flush_bmesh(obj, bm, destructive=False)
     return {"hit": True, "object": obj.name, "element": kind, "index": target.index,
@@ -275,13 +281,11 @@ def _pick_element(obj, world_location, face_index: int, mode: str, payload: dict
 
 
 def _pick_through(obj, bm, rv3d, touch: Vector, threshold: float, mode: str, sel_mode) -> dict | None:
-    """Pick en wireframe+xray: candidatos de toda la malla, ciclando con ADD/TOGGLE.
+    """Pick en wireframe+xray: el candidato más próximo al punto tocado.
 
     Se ve (y se quiere tocar) el armazón entero, no solo la cara frontal del rayo:
-    vértices y aristas se puntúan por distancia en pantalla al toque y, con
-    ADD/TOGGLE sobre elementos ya seleccionados, se avanza al no seleccionado más
-    cercano — el equivalente táctil del Alt+click de Blender, igual que
-    `_cycle_behind` en Object Mode.
+    vértices y aristas se puntúan por distancia en pantalla al toque. Los
+    modificadores cambian la operación, nunca el elemento elegido.
     """
     matrix = obj.matrix_world
     scored: list[tuple[float, object]] = []
@@ -312,19 +316,18 @@ def _pick_through(obj, bm, rv3d, touch: Vector, threshold: float, mode: str, sel
         return None
 
     if mode == "SET":
+        bm.select_history.clear()
         for collection in (bm.verts, bm.edges, bm.faces):
             for elem in collection:
                 elem.select = False
 
-    ordered = sorted(scored, key=lambda item: item[0])
-    distance, target = ordered[0]
-    if mode in ("ADD", "TOGGLE"):
-        for candidate_distance, candidate in ordered:
-            if not candidate.select:
-                distance, target = candidate_distance, candidate
-                break
+    distance, target = min(scored, key=lambda item: item[0])
 
     _apply_op(target, mode)
+    if target.select:
+        bm.select_history.add(target)
+    else:
+        bm.select_history.discard(target)
     bm.select_flush(target.select)
     flush_bmesh(obj, bm, destructive=False)
     return {"hit": True, "object": obj.name, "element": kind, "index": target.index,
@@ -450,6 +453,9 @@ def _seed_edge(bm, payload: dict):
         if edge.hide:
             raise CommandError("Edge is hidden", code="not_found")
         return edge
+    active = bm.select_history.active
+    if isinstance(active, bmesh.types.BMEdge) and active.select and not active.hide:
+        return active
     return next((edge for edge in bm.edges if edge.select and not edge.hide), None)
 
 
@@ -472,12 +478,24 @@ def _edge_loop(seed):
     result, pending = {seed}, [(seed, vert) for vert in seed.verts]
     while pending:
         incoming, vertex = pending.pop()
-        direction = (incoming.other_vert(vertex).co - vertex.co).normalized()
-        candidates = [edge for edge in vertex.link_edges if edge != incoming and not edge.hide and edge not in result]
-        if not candidates:
-            continue
-        continuation = max(candidates, key=lambda edge: direction.dot((vertex.co - edge.other_vert(vertex).co).normalized()))
-        if direction.dot((vertex.co - continuation.other_vert(vertex).co).normalized()) < 0.5:
+        visible = [edge for edge in vertex.link_edges if not edge.hide]
+        candidates = [edge for edge in visible if edge != incoming and edge not in result]
+
+        # Un edge loop es una relación topológica, no una línea geométricamente
+        # recta. En un vértice regular de una superficie de quads continúa por la
+        # única arista que no comparte cara con la entrante. Esto permite que el
+        # loop doble por las esquinas (por ejemplo, el anillo creado al hacer un
+        # Loop Cut en un cubo). En polos o topología no-quad la continuación es
+        # ambigua y debe detenerse.
+        if len(visible) == 2 and len(candidates) == 1:
+            continuation = candidates[0]
+        elif len(visible) == 4 and all(len(face.edges) == 4 for face in vertex.link_faces):
+            incoming_faces = set(incoming.link_faces)
+            opposite = [edge for edge in candidates if incoming_faces.isdisjoint(edge.link_faces)]
+            if len(opposite) != 1:
+                continue
+            continuation = opposite[0]
+        else:
             continue
         result.add(continuation)
         pending.append((continuation, continuation.other_vert(vertex)))
@@ -510,6 +528,51 @@ def loop_select(payload: dict) -> dict:
 @command("selection.ring", mutating=True)
 def ring_select(payload: dict) -> dict:
     return _topology_select(payload, _edge_ring)
+
+
+@command("selection.linked", mutating=True)
+def linked(payload: dict) -> dict:
+    """Selecciona las islas conectadas a lo ya seleccionado (la `L` / `Ctrl+L`).
+
+    La `L` de Blender siembra con lo que hay bajo el ratón; aquí siembra la propia
+    selección, que en la tablet es lo mismo: se toca la pieza (queda seleccionada) y
+    el anillo la extiende a todo lo que cuelga de ella. Sin selección no hay isla que
+    elegir, así que se responde `empty_selection` en vez de adivinar.
+
+    El recorrido es por aristas y se para en lo oculto: una parte escondida no debe
+    reaparecer en la selección por estar pegada a lo que se tocó.
+    """
+    obj = active_object()
+    bm = edit_bmesh(obj)
+    stack = [v for v in bm.verts if v.select and not v.hide]
+    if not stack:
+        raise CommandError("Select something first", code="empty_selection")
+
+    island = set(stack)
+    while stack:
+        vert = stack.pop()
+        for edge in vert.link_edges:
+            if edge.hide:
+                continue
+            other = edge.other_vert(vert)
+            if other.hide or other in island:
+                continue
+            island.add(other)
+            stack.append(other)
+
+    for vert in island:
+        vert.select = True
+    # Marcar solo los vértices deja el submodo activo sin nada seleccionado (en Caras
+    # no hay cara marcada), y `select_flush_mode` lo desharía. Se sube a mano.
+    for edge in bm.edges:
+        if not edge.hide and all(v in island for v in edge.verts):
+            edge.select = True
+    for face in bm.faces:
+        if not face.hide and all(v in island for v in face.verts):
+            face.select = True
+    bm.select_flush_mode()
+    flush_bmesh(obj, bm, destructive=False)
+    return dict(sel_info({}), affected=len(island))
 
 
 @command("selection.invert", mutating=True)

@@ -37,6 +37,8 @@ class ToolSession:
         self.params = {}
         self.obj = None
         self.backup = None
+        self.original_backup = None
+        self.loop_history = []  # [(base anterior, parámetros del corte anterior)]
         self.result = None
         self.points = []  # anclas del Knife, en coordenadas locales
         self.closed = False
@@ -87,6 +89,8 @@ class ToolSession:
         bm.to_mesh(backup)
         self.active, self.session_id, self.owner_id = True, str(uuid.uuid4()), owner
         self.tool, self.params, self.obj, self.backup = tool, dict(params), obj, backup
+        if tool == "LOOP_CUT":
+            self.original_backup = backup
         self.points = []
         self.closed = False
         self.line = None
@@ -116,13 +120,21 @@ class ToolSession:
         if owner is not None and self.armed_owner is not None and owner != self.armed_owner:
             raise CommandError("Tool session belongs to another client", code="session_owned")
 
-    def restore(self):
-        if self.obj is None or self.backup is None or self.obj.mode != "EDIT":
+    def _restore_mesh(self, source):
+        if self.obj is None or source is None or self.obj.mode != "EDIT":
             return
         bm = bmesh.from_edit_mesh(self.obj.data)
         bm.clear()
-        bm.from_mesh(self.backup)
+        bm.from_mesh(source)
         bmesh.update_edit_mesh(self.obj.data, loop_triangles=True, destructive=True)
+
+    def restore(self):
+        """Restaura el estado anterior a toda la sesión, también con loops acumulados."""
+        self._restore_mesh(self.original_backup or self.backup)
+
+    def restore_preview_base(self):
+        """Restaura solo la base del corte activo antes de reconstruir su preview."""
+        self._restore_mesh(self.backup)
 
     def restore_safely(self):
         try:
@@ -132,7 +144,7 @@ class ToolSession:
             return False
 
     def preview(self):
-        self.restore()
+        self.restore_preview_base()
         if self.tool == "KNIFE":
             bm = bmesh.from_edit_mesh(self.obj.data)
             try:
@@ -144,7 +156,7 @@ class ToolSession:
             bmesh.update_edit_mesh(self.obj.data, loop_triangles=True, destructive=True)
             return
         payload = dict(self.params)
-        if str(payload.get("snap_type", "NONE")).upper() in {"VERTEX", "EDGE", "FACE", "CURSOR"}:
+        if str(payload.get("snap_type", "NONE")).upper() in {"VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER", "CURSOR"}:
             payload["snap_type"] = "NONE"  # aún no hay candidato o ya se resuelve abajo
         if self.tool == "EXTRUDE" and self.snap_candidate is not None:
             if str(payload.get("variant", "REGION")).upper() != "REGION":
@@ -172,10 +184,12 @@ class ToolSession:
         self.result = handlers[self.tool](payload)
 
     def close(self):
-        backup = self.backup
+        backups = {mesh for mesh in [self.backup, self.original_backup] if mesh is not None}
+        backups.update(base for base, _params in self.loop_history)
         self.reset()
-        if backup is not None and backup.name in bpy.data.meshes:
-            bpy.data.meshes.remove(backup)
+        for backup in backups:
+            if backup.name in bpy.data.meshes:
+                bpy.data.meshes.remove(backup)
 
     def status(self):
         if self.active:
@@ -199,6 +213,8 @@ class ToolSession:
                 state["closed"] = self.closed
             if self.tool == "BISECT":
                 state["line"] = self.line
+            if self.tool == "LOOP_CUT":
+                state["loop_count"] = len(self.loop_history) + 1
             return state
         if self.armed_tool:
             return {"active": False, "armed": True, "phase": "ARMED", "tool": self.armed_tool,
@@ -258,7 +274,7 @@ def parameter(payload):
     if not isinstance(params, dict):
         raise BadPayload("'parameters' must be an object")
     tool_session.params.update(params)
-    if str(tool_session.params.get("snap_type", "NONE")).upper() not in {"VERTEX", "EDGE", "FACE", "CURSOR"}:
+    if str(tool_session.params.get("snap_type", "NONE")).upper() not in {"VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER", "CURSOR"}:
         tool_session.snap_candidate = None
     tool_session.preview()
     return tool_session.status()
@@ -271,8 +287,8 @@ def snap_candidate(payload):
     if tool_session.tool != "EXTRUDE" or str(tool_session.params.get("variant", "REGION")).upper() != "REGION":
         raise CommandError("Geometric snap requires Extrude REGION", code="wrong_tool")
     snap_type = str(payload.get("snap_type", tool_session.params.get("snap_type", "VERTEX"))).upper()
-    if snap_type not in {"VERTEX", "EDGE", "FACE", "CURSOR"}:
-        raise BadPayload("'snap_type' must be VERTEX, EDGE, FACE or CURSOR")
+    if snap_type not in {"VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER", "CURSOR"}:
+        raise BadPayload("Unsupported geometric 'snap_type'")
     from .snap import query_candidate
     tool_session.restore()
     query = dict(payload, snap_type=snap_type)
@@ -529,8 +545,24 @@ def loop_pick(payload):
     if find_view3d() is None:
         raise CommandError("No 3D viewport available", code="no_viewport")
 
+    if tool_session.active and bool(payload.get("add", False)):
+        # El preview actual pasa a ser la base inmutable del siguiente corte. Se
+        # sondea antes de copiar porque el usuario está tocando precisamente esa
+        # topología ya cortada; sus índices coinciden con la copia recién creada.
+        probe = mesh_commands.loop_probe(dict(payload))
+        if not probe.get("hit"):
+            return dict(tool_session.status(), pick=probe)
+        bm = bmesh.from_edit_mesh(tool_session.obj.data)
+        new_base = bpy.data.meshes.new(".remote_loop_base")
+        bm.to_mesh(new_base)
+        tool_session.loop_history.append((tool_session.backup, dict(tool_session.params)))
+        tool_session.backup = new_base
+        tool_session.params.update({"edge": probe["edge"], "factor": probe["factor"]})
+        tool_session.preview()
+        return dict(tool_session.status(), pick=probe)
+
     if tool_session.active:
-        tool_session.restore()
+        tool_session.restore_preview_base()
         probe = mesh_commands.loop_probe(dict(payload))
         if not probe.get("hit"):
             # Sin arista bajo el dedo la sesión queda como estaba.
@@ -549,6 +581,24 @@ def loop_pick(payload):
     tool_session.disarm()
     tool_session._activate("LOOP_CUT", owner_id, params)
     return dict(tool_session.status(), pick=probe)
+
+
+@command("tool.loop_pop", mutating=True)
+def loop_pop(payload):
+    """Descarta el corte activo y vuelve al anterior para poder editarlo."""
+    tool_session.require(payload.get("_client_id"))
+    if tool_session.tool != "LOOP_CUT":
+        raise CommandError("loop_pop requires a LOOP_CUT session", code="wrong_tool")
+    if not tool_session.loop_history:
+        raise CommandError("There is no previous loop cut", code="empty_history")
+    current_base = tool_session.backup
+    previous_base, previous_params = tool_session.loop_history.pop()
+    tool_session.backup = previous_base
+    tool_session.params = previous_params
+    tool_session.preview()
+    if current_base is not tool_session.original_backup and current_base.name in bpy.data.meshes:
+        bpy.data.meshes.remove(current_base)
+    return tool_session.status()
 
 
 @command("tool.nudge", mutating=True)

@@ -48,16 +48,31 @@ data class ModifierState(
 )
 data class ServerFeatures(
     val modifiers: Boolean = false, val visibility: Boolean = false,
-    val transformApply: Boolean = false, val loopCut: Boolean = false,
+    val transformApply: Boolean = false, val objectShading: Boolean = false,
+    val loopCut: Boolean = false,
     val shading: Boolean = false, val localView: Boolean = false,
+    /** `view.overlays`: el ojo puede apagar rejilla y overlays del viewport. */
+    val overlays: Boolean = false,
     val selectionGrow: Boolean = false, val selectionShapes: Boolean = false,
     /** Colocación del loop cut tocando la malla (`edit_tools.loop_cut.pick`). */
     val loopCutPick: Boolean = false,
+    /** Mayús+toque acumula cortes y permite volver al anterior. */
+    val loopCutMultiple: Boolean = false,
     val fileBrowse: Boolean = false,
+    val editSettings: Boolean = false,
     /** Catálogo contextual de Edit; vacío conserva por completo la interfaz legacy. */
     val editCatalog: EditCatalog = EditCatalog(),
     /** Barra de tools activas; vacío conserva el rail y `edit_catalog` legacy. */
     val editToolbar: EditToolbar = EditToolbar(),
+)
+
+data class EditSettings(
+    val proportional: Boolean = false,
+    val proportionalConnected: Boolean = false,
+    val falloff: String = "SMOOTH",
+    val radius: Double = 1.0,
+    val autoMerge: Boolean = false,
+    val mergeThreshold: Double = 0.001,
 )
 
 /** Contrato extensible del menú Edit. Las claves wire se mantienen opacas a la UI. */
@@ -164,6 +179,9 @@ data class TransformSession(
     val step: Double = 0.01,
     val orientation: Orientation = Orientation.GLOBAL,
     val valueMode: ValueMode = ValueMode.RELATIVE,
+    val proportional: Boolean = false,
+    val proportionalRadius: Double = 1.0,
+    val proportionalFalloff: String = "SMOOTH",
     /** Metros o factor, según el modo. En ROTATE no se usa: manda [angle]. */
     val values: List<Double> = listOf(0.0, 0.0, 0.0),
     /** Grados. */
@@ -363,6 +381,7 @@ data class BlenderState(
     val modifiers: List<ModifierState> = emptyList(),
     val modifierOptions: List<ModifierTypeDescriptor> = emptyList(),
     val features: ServerFeatures = ServerFeatures(),
+    val editSettings: EditSettings = EditSettings(),
 )
 
 data class InputDebug(
@@ -389,6 +408,8 @@ data class AppUiState(
     val recentFiles: List<RecentFile> = emptyList(),
     /** Preferencias de la barra de transformación; sobreviven a cerrar la sesión. */
     val snapType: SnapType = SnapType.NONE,
+    /** Último paso elegido para las herramientas paramétricas con snap escalar. */
+    val snapStep: Double = 0.1,
     val stepIndex: Map<TransformMode, Int> = emptyMap(),
     /** Restricción elegida para la próxima transformación. */
     val constraint: Constraint = Constraint.FREE,

@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Deselect
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Flip
 import androidx.compose.material.icons.filled.Grid4x4
+import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.JoinFull
 import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.ContentCut
@@ -57,11 +58,11 @@ import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.ViewInAr
-import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Transform
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Waves
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -162,7 +163,9 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
 
     var railOpen by remember { mutableStateOf(false) }
     var quickMenuAt by remember { mutableStateOf<Pair<Float, Float>?>(null) }
-    var chromeVisible by remember { mutableStateOf(true) }
+    // El ojo vive en el estado del ViewModel, no aquí: apagar los controles apaga
+    // también los overlays del servidor, y esa parte no es local.
+    val chromeVisible = state.controlsVisible
     var fileBrowserMode by remember { mutableStateOf<FileBrowserMode?>(null) }
     // Guarda a QUIÉN se renombra: el sondeo se borra al cerrar el anillo.
     var renameTarget by remember { mutableStateOf<String?>(null) }
@@ -355,6 +358,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
 
                 TransformBar(
                     session = session,
+                    editSettings = state.blender.editSettings,
                     stepIndex = vm.stepIndex(session.mode),
                     snapType = snapType,
                     constraint = constraint,
@@ -367,6 +371,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     onStep = { vm.setStep(session.mode, it) },
                     onValueMode = vm::setValueMode,
                     onValue = vm::transformValue,
+                    onProportionalRadius = vm::scaleProportionalRadius,
+                    onProportionalFalloff = vm::cycleProportionalFalloff,
                     onConfirm = vm::transformConfirm,
                     onCancel = vm::transformCancel,
                     modifier = Modifier
@@ -380,6 +386,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     onParameter = vm::setToolParameter,
                     onConfirm = vm::confirmTool,
                     onCancel = vm::cancelTool,
+                    onLoopPop = vm::loopCutPop,
                     awaitingPick = state.activeTool == ActiveTool.LOOP_CUT &&
                         !toolSession.active && state.loopCutAwaitingTap,
                     modifier = Modifier
@@ -419,14 +426,11 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     selectionMode = state.blender.selectionMode,
                     showEditShortcuts = state.blender.features.editCatalog.available,
                     editToolbarAvailable = state.blender.features.editToolbar.available,
-                    localViewActive = state.localViewActive,
-                    showLocal = state.blender.features.localView,
                     showGrow = state.blender.features.selectionGrow,
                     onAxis = vm::viewAxis,
                     onOrbit = vm::viewOrbitStep,
                     onRotate180 = { vm.viewOrbitStep(1f, 0f) },
                     onProjection = vm::viewPerspective,
-                    onLocal = vm::toggleLocalView,
                     onMore = vm::selectMore,
                     onLess = vm::selectLess,
                     onEditAction = vm::editFooterAction,
@@ -443,13 +447,14 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
         }
 
         // Barra de tools junto al ojo (wireframe, B/C, Ctrl/Alt, undo/redo) y, en
-        // Edit Mode, los submodos de selección a su derecha. El ojo sigue al final
-        // para ocultar del todo la interfaz (§70).
+        // Edit Mode, los submodos de selección a su derecha. Vive fuera del chrome
+        // solo para que el ojo siga accesible: la propia barra se esconde con el
+        // resto y deja el viewport limpio, sin controles y sin rejilla (§70).
         TopToolbar(
             state = state,
             vm = vm,
             chromeVisible = chromeVisible,
-            onToggleChrome = { chromeVisible = !chromeVisible },
+            onToggleChrome = vm::toggleControls,
             modifier = Modifier.align(Alignment.TopEnd).padding(Metrics.EdgeMargin),
         )
 
@@ -540,7 +545,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
 private val TOOLBAR_OWNED_CATALOG_IDS = setOf("EXTRUDE", "INSET", "LOOP_CUT", "KNIFE")
 
 /** IDs de `edit_catalog` que ya viven directamente en el anillo de nivel 1. */
-private val RADIAL_TOP_LEVEL_CATALOG_IDS = setOf("SELECT_LOOP", "SELECT_RING", "HIDE", "REVEAL", "DELETE")
+private val RADIAL_TOP_LEVEL_CATALOG_IDS =
+    setOf("SELECT_LOOP", "SELECT_RING", "SELECT_LINKED", "HIDE", "DELETE")
 
 /** Convierte el contrato opaco en filas, sin repartir nombres wire por la UI. */
 private fun editCatalogActions(actions: List<EditCatalogAction>, vm: MainViewModel): List<QuickAction> =
@@ -896,9 +902,13 @@ private fun quickActions(
         }
         ActionId.SELECT_LOOP -> QuickAction(label, Icons.Default.Timeline) { vm.selectLoop() }
         ActionId.SELECT_RING -> QuickAction(label, Icons.Default.Rowing) { vm.selectRing() }
+        ActionId.SELECT_LINKED -> QuickAction(label, Icons.Default.Hub) { vm.selectLinked() }
         ActionId.HIDE_OBJECT -> QuickAction(label, Icons.Default.VisibilityOff) { vm.hideObject(context.objectName) }
+        ActionId.SHADE_OBJECT -> QuickAction(label, Icons.Default.WbSunny) {
+            vm.toggleObjectShading(context.objectName)
+        }
+        ActionId.VIEW_LOCAL -> QuickAction(label, Icons.Default.CenterFocusStrong) { vm.toggleLocalView() }
         ActionId.HIDE_GEOMETRY -> QuickAction(label, Icons.Default.VisibilityOff) { vm.hideSelection() }
-        ActionId.REVEAL_GEOMETRY -> QuickAction(label, Icons.Default.Visibility) { vm.revealSelection() }
         ActionId.DUPLICATE_LINKED -> QuickAction(label, Icons.Default.ContentCopy) { vm.duplicateLinked() }
         ActionId.RENAME -> QuickAction(label, Icons.Default.Edit, onClick = onRename)
         ActionId.DISSOLVE -> QuickAction(label, Icons.Default.DeleteSweep) {

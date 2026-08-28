@@ -25,7 +25,7 @@ from ..camera import camera
 from ..errors import BadPayload, CommandError
 from . import command
 
-GEOMETRIC_TYPES = {"VERTEX", "EDGE", "FACE"}
+GEOMETRIC_TYPES = {"VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER"}
 
 
 def query_candidate(payload: dict) -> dict:
@@ -37,7 +37,7 @@ def query_candidate(payload: dict) -> dict:
                 "screen": [float(payload.get("u", 0.5)), float(payload.get("v", 0.5))],
                 "distance": 0.0}
     if snap_type not in GEOMETRIC_TYPES:
-        raise BadPayload("'snap_type' must be VERTEX, EDGE, FACE or CURSOR")
+        raise BadPayload("Unsupported geometric 'snap_type'")
     found = find_view3d()
     if found is None:
         raise CommandError("No 3D viewport available", code="no_viewport")
@@ -52,16 +52,29 @@ def query_candidate(payload: dict) -> dict:
         bpy.context.evaluated_depsgraph_get(), origin, direction)
     if not hit or obj is None or obj.type != "MESH":
         return {"hit": False, "snap_type": snap_type}
-    if snap_type == "FACE":
-        return {"hit": True, "snap_type": snap_type, "id": f"{obj.name}:FACE:{face_index}",
-                "object": obj.name, "element": face_index, "position": list(location),
-                "screen": [u, v], "distance": 0.0}
-
     mesh = obj.data
     if not 0 <= face_index < len(mesh.polygons):
         return {"hit": False, "snap_type": snap_type}
     polygon = mesh.polygons[face_index]
     touch = Vector((u, v))
+
+    if snap_type == "FACE":
+        return {"hit": True, "snap_type": snap_type, "id": f"{obj.name}:FACE:{face_index}",
+                "object": obj.name, "element": face_index, "position": list(location),
+                "screen": [u, v], "distance": 0.0}
+    if snap_type == "FACE_CENTER":
+        position = obj.matrix_world @ polygon.center
+        projected = camera.project(position, rv3d)
+        if projected is None:
+            return {"hit": False, "snap_type": snap_type}
+        distance = (Vector(projected) - touch).length
+        if distance > threshold:
+            return {"hit": False, "snap_type": snap_type, "distance": distance}
+        return {"hit": True, "snap_type": snap_type,
+                "id": f"{obj.name}:FACE_CENTER:{face_index}", "object": obj.name,
+                "element": face_index, "position": list(position),
+                "screen": list(projected), "distance": distance}
+
     candidates = []
     if snap_type == "VERTEX":
         for index in polygon.vertices:
@@ -69,7 +82,7 @@ def query_candidate(payload: dict) -> dict:
             projected = camera.project(position, rv3d)
             if projected is not None:
                 candidates.append(((Vector(projected) - touch).length, index, position))
-    else:
+    elif snap_type == "EDGE":
         for edge_key in polygon.edge_keys:
             a = obj.matrix_world @ mesh.vertices[edge_key[0]].co
             b = obj.matrix_world @ mesh.vertices[edge_key[1]].co
@@ -81,6 +94,15 @@ def query_candidate(payload: dict) -> dict:
                 0.0, min(1.0, (touch - Vector(pa)).dot(segment) / segment.length_squared))
             candidates.append(((touch - (Vector(pa) + segment * t)).length,
                                f"{edge_key[0]}-{edge_key[1]}", a.lerp(b, t)))
+    else:  # EDGE_CENTER
+        for edge_key in polygon.edge_keys:
+            a = obj.matrix_world @ mesh.vertices[edge_key[0]].co
+            b = obj.matrix_world @ mesh.vertices[edge_key[1]].co
+            position = a.lerp(b, 0.5)
+            projected = camera.project(position, rv3d)
+            if projected is not None:
+                candidates.append(((Vector(projected) - touch).length,
+                                   f"{edge_key[0]}-{edge_key[1]}", position))
     if not candidates:
         return {"hit": False, "snap_type": snap_type}
     distance, element, position = min(candidates, key=lambda item: item[0])

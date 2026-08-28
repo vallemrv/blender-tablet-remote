@@ -63,6 +63,26 @@ def select_all(payload: dict) -> dict:
     return {"selected_objects": [o.name for o in bpy.context.view_layer.objects if o.select_get()]}
 
 
+@command("object.shade", mutating=True)
+def shade(payload: dict) -> dict:
+    """Alterna o fija sombreado plano/suave en las mallas indicadas o seleccionadas."""
+    _require_object_mode()
+    mode = str(payload.get("mode", "TOGGLE")).upper()
+    if mode not in {"TOGGLE", "FLAT", "SMOOTH"}:
+        raise BadPayload("'mode' must be TOGGLE, FLAT or SMOOTH")
+    meshes = [obj for obj in resolve_objects(payload) if obj.type == "MESH"]
+    if not meshes:
+        raise CommandError("Object shading requires at least one mesh", code="wrong_type")
+    polygons = [polygon for obj in meshes for polygon in obj.data.polygons]
+    smooth = (not polygons or not all(polygon.use_smooth for polygon in polygons)) \
+        if mode == "TOGGLE" else mode == "SMOOTH"
+    for polygon in polygons:
+        polygon.use_smooth = smooth
+    undo_push("Remote shade smooth" if smooth else "Remote shade flat")
+    return dict(state.snapshot(include_view=False), shaded=[obj.name for obj in meshes],
+                shade="SMOOTH" if smooth else "FLAT")
+
+
 @command("object.set_active")
 def set_active(payload: dict) -> dict:
     name = payload.get("name")

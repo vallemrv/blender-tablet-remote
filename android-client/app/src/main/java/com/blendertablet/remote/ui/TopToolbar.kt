@@ -34,6 +34,10 @@ import com.blendertablet.remote.model.Shading
  * para cambiar de selección sin abrir nada. La selección por caja B y círculo C
  * vive en el long-click (RADIAL); armada, un chip sobre el viewport la señala y
  * la desarma.
+ *
+ * La barra entera está fuera del chrome para que el ojo siga siendo alcanzable con
+ * la interfaz oculta, pero con `chromeVisible == false` solo queda el ojo: si algo
+ * de aquí sobreviviera, "ocultar controles" no ocultaría los controles.
  */
 @Composable
 fun TopToolbar(
@@ -47,41 +51,54 @@ fun TopToolbar(
     val inEdit = blender.mode == BlenderMode.EDIT
 
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        // Modo (Object/Edit) en su propio panel, fuera del rail y sin mezclarse con
-        // el del ojo: es la barra de modo, la primera de la fila superior.
-        ModeBar(state, vm)
+        // Esta barra vive fuera del chrome porque tiene que sobrevivir al ojo, pero
+        // solo el ojo: con la interfaz oculta no queda nada más en pantalla, ni el
+        // modo, ni los modificadores de selección, ni los submodos.
+        if (chromeVisible) {
+            // Modo (Object/Edit) en su propio panel, fuera del rail y sin mezclarse
+            // con el del ojo: es la barra de modo, la primera de la fila superior.
+            ModeBar(state, vm)
 
-        FloatingPanel {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                if (blender.features.shading) {
-                    IconAction(
-                        Icons.Default.Grid4x4, "Wireframe",
-                        selected = blender.view.shading == Shading.WIREFRAME,
-                    ) { vm.toggleShading() }
-                }
-                PillButton("Mayús", selected = state.selectionOp == SelectionOp.TOGGLE) { vm.toggleSelectionOp(SelectionOp.TOGGLE) }
-                PillButton("Ctrl", selected = state.selectionOp == SelectionOp.ADD) { vm.toggleSelectionOp(SelectionOp.ADD) }
-                PillButton("Alt", selected = state.selectionOp == SelectionOp.REMOVE) { vm.toggleSelectionOp(SelectionOp.REMOVE) }
-                IconAction(Icons.AutoMirrored.Filled.Undo, "Deshacer") { vm.undo() }
-                IconAction(Icons.AutoMirrored.Filled.Redo, "Rehacer") { vm.redo() }
-            }
-        }
-
-        if (inEdit) {
             FloatingPanel {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    IconAction(
-                        Icons.Default.ScatterPlot, "Vértices",
-                        selected = blender.selectionMode == SelectionMode.VERTEX,
-                    ) { vm.setSelectionMode(SelectionMode.VERTEX) }
-                    IconAction(
-                        Icons.Default.LinearScale, "Aristas",
-                        selected = blender.selectionMode == SelectionMode.EDGE,
-                    ) { vm.setSelectionMode(SelectionMode.EDGE) }
-                    IconAction(
-                        Icons.Default.CropSquare, "Caras",
-                        selected = blender.selectionMode == SelectionMode.FACE,
-                    ) { vm.setSelectionMode(SelectionMode.FACE) }
+                    if (blender.features.shading) {
+                        IconAction(
+                            Icons.Default.Grid4x4, "Wireframe",
+                            selected = blender.view.shading == Shading.WIREFRAME,
+                        ) { vm.toggleShading() }
+                    }
+                    if (inEdit && blender.features.editSettings) {
+                        PillButton("Prop", selected = blender.editSettings.proportional) {
+                            vm.toggleProportional()
+                        }
+                        PillButton("Merge", selected = blender.editSettings.autoMerge) {
+                            vm.toggleAutoMerge()
+                        }
+                    }
+                    PillButton("Mayús", selected = state.selectionOp == SelectionOp.TOGGLE) { vm.toggleSelectionOp(SelectionOp.TOGGLE) }
+                    PillButton("Ctrl", selected = state.selectionOp == SelectionOp.ADD) { vm.toggleSelectionOp(SelectionOp.ADD) }
+                    PillButton("Alt", selected = state.selectionOp == SelectionOp.REMOVE) { vm.toggleSelectionOp(SelectionOp.REMOVE) }
+                    IconAction(Icons.AutoMirrored.Filled.Undo, "Deshacer") { vm.undo() }
+                    IconAction(Icons.AutoMirrored.Filled.Redo, "Rehacer") { vm.redo() }
+                }
+            }
+
+            if (inEdit) {
+                FloatingPanel {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        IconAction(
+                            Icons.Default.ScatterPlot, "Vértices",
+                            selected = blender.selectionMode == SelectionMode.VERTEX,
+                        ) { vm.setSelectionMode(SelectionMode.VERTEX) }
+                        IconAction(
+                            Icons.Default.LinearScale, "Aristas",
+                            selected = blender.selectionMode == SelectionMode.EDGE,
+                        ) { vm.setSelectionMode(SelectionMode.EDGE) }
+                        IconAction(
+                            Icons.Default.CropSquare, "Caras",
+                            selected = blender.selectionMode == SelectionMode.FACE,
+                        ) { vm.setSelectionMode(SelectionMode.FACE) }
+                    }
                 }
             }
         }

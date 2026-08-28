@@ -54,8 +54,18 @@ object StateParser {
             objects = objects(json.optJSONArray("objects")),
             hiddenObjects = hiddenObjects(json.optJSONArray("hidden_objects")),
             modifiers = modifiers(json.optJSONObject("active")?.optJSONArray("modifiers")),
+            editSettings = editSettings(json.optJSONObject("edit_settings")),
         )
     }
+
+    fun editSettings(json: JSONObject?): EditSettings = EditSettings(
+        proportional = json?.optBoolean("proportional", false) ?: false,
+        proportionalConnected = json?.optBoolean("proportional_connected", false) ?: false,
+        falloff = json?.optString("falloff", "SMOOTH") ?: "SMOOTH",
+        radius = json?.optDouble("radius", 1.0) ?: 1.0,
+        autoMerge = json?.optBoolean("auto_merge", false) ?: false,
+        mergeThreshold = json?.optDouble("merge_threshold", 0.001) ?: 0.001,
+    )
 
     fun hiddenObjects(array: JSONArray?): List<HiddenObject> = if (array == null) emptyList() else
         (0 until array.length()).mapNotNull { array.optJSONObject(it) }.map {
@@ -92,14 +102,19 @@ object StateParser {
         val selection = f.optJSONObject("selection")
         return ServerFeatures(
             f.has("modifiers"), f.has("visibility"), f.has("transform_apply"),
+            f.has("object_shading"),
             f.optJSONObject("context") != null,
             view?.has("shading") == true,
             view?.optBoolean("local_view", false) == true,
+            view?.optBoolean("overlays", false) == true,
             selection?.optBoolean("grow", false) == true,
             selection?.has("shapes") == true,
             f.optJSONObject("edit_tools")?.optJSONObject("loop_cut")
                 ?.optBoolean("pick", false) == true,
+            f.optJSONObject("edit_tools")?.optJSONObject("loop_cut")
+                ?.optBoolean("multiple", false) == true,
             f.optJSONObject("files")?.optBoolean("browse", false) == true,
+            f.optJSONObject("edit_settings") != null,
             editCatalog(f.optJSONObject("edit_catalog")),
             editToolbar(f.optJSONObject("edit_toolbar")),
         )
@@ -243,6 +258,9 @@ object StateParser {
             step = json.optDouble("step", 0.01),
             orientation = enum(json.optString("orientation"), Orientation.GLOBAL),
             valueMode = enum(json.optString("value_mode"), ValueMode.RELATIVE),
+            proportional = json.optBoolean("proportional", false),
+            proportionalRadius = json.optDouble("proportional_radius", 1.0),
+            proportionalFalloff = json.optString("proportional_falloff", "SMOOTH"),
             values = List(3) { values.optDouble(it, 0.0) },
             angle = json.optDouble("angle", 0.0),
         )
@@ -297,6 +315,7 @@ object StateParser {
             snapType = enum(json.optString("snap_type", params.optString("snap_type")), SnapType.NONE),
             snapStep = json.optDouble("snap_step", params.optDouble("snap_step", 0.1)),
             snapCandidate = candidate(json.optJSONObject("snap_candidate")),
+            loopCount = json.optInt("loop_count", if (active && tool == EditTool.LOOP_CUT) 1 else 0),
         )
     }
 

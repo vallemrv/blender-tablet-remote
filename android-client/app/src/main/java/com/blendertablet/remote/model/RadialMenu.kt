@@ -18,6 +18,8 @@ data class TouchContext(
     val objectSelected: Boolean = false,
     /** Hay algo seleccionado en el submodo activo (para Loop/Ring, Merge, etc.). */
     val hasSelection: Boolean = false,
+    /** El servidor anuncia `object.shade`; servidores antiguos no ven el toggle. */
+    val objectShadingAvailable: Boolean = false,
 )
 
 /**
@@ -72,9 +74,9 @@ object RadialMenu {
             context.hit -> {
                 add(ActionId.DUPLICATE_LINKED)
                 add(ActionId.RENAME)
-                add(ActionId.SELECT_ALL)
-                add(ActionId.DESELECT_ALL)
                 add(ActionId.HIDE_OBJECT)
+                add(ActionId.VIEW_LOCAL)
+                if (context.objectShadingAvailable) add(ActionId.SHADE_OBJECT)
                 add(ActionId.APPLY_TRANSFORMS)
                 add(ActionId.SET_ORIGIN)
             }
@@ -85,8 +87,10 @@ object RadialMenu {
                 add(ActionId.ADD_OBJECT)
                 add(ActionId.TOOL_BOX)
                 add(ActionId.TOOL_CIRCLE)
-                add(ActionId.SELECT_ALL)
-                add(ActionId.DESELECT_ALL)
+                if (context.hasSelection) {
+                    add(ActionId.HIDE_OBJECT)
+                    add(ActionId.VIEW_LOCAL)
+                }
             }
         }
         // Borrar solo si hay algo que borrar, y siempre el último: es el destructivo.
@@ -107,8 +111,14 @@ object RadialMenu {
             add(ActionId.SELECT_LOOP)
             add(ActionId.SELECT_RING)
         }
-        if (context.hasSelection) add(ActionId.HIDE_GEOMETRY)
-        add(ActionId.REVEAL_GEOMETRY)
+        // Enlazado (la `L`) siembra con lo seleccionado: sin semilla no hay isla.
+        if (context.hasSelection) {
+            add(ActionId.SELECT_LINKED)
+            add(ActionId.HIDE_GEOMETRY)
+        }
+        // "Mostrar oculto" salió del anillo: es raro comparado con lo demás y no
+        // cabía junto a Enlazado en Aristas, donde el tope de ocho ya iba lleno.
+        // Sigue a un toque, dentro de "Tools de malla".
 
         // El sector destructivo abre dos intenciones distintas: Borrar y Disolver.
         // No se gastan dos sectores ni se confunde disolver con ONLY_FACES.

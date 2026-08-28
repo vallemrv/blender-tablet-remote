@@ -72,6 +72,7 @@ data class ToolSession(
     val snapType: SnapType = SnapType.NONE,
     val snapStep: Double = 0.1,
     val snapCandidate: SnapCandidate? = null,
+    val loopCount: Int = 0,
 ) {
     /**
      * Solo las previews paramétricas aceptan arrastre vertical como `tool.nudge`.

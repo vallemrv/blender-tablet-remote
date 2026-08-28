@@ -117,9 +117,9 @@ interface RemoteBlenderClient {
     fun setSelectionMode(mode: SelectionMode)
     fun invertSelection()
     fun hideSelection()
-    fun revealSelection()
     fun hideObjects(objects: List<String>? = null, unselected: Boolean = false)
     fun revealObjects(objects: List<String>? = null, select: Boolean = true)
+    fun shadeObjects(objects: List<String>? = null, mode: String = "TOGGLE")
     fun transformApply(location: Boolean, rotation: Boolean, scale: Boolean)
     fun requestModifierOptions()
 
@@ -133,8 +133,11 @@ interface RemoteBlenderClient {
     fun modifierApply(name: String)
 
     /** Loop y Ring parten de una arista ya seleccionada. */
-    fun selectLoop()
+    fun selectLoop(mode: SelectionOp = SelectionOp.SET)
     fun selectRing()
+
+    /** La `L` de Blender: extiende la selección a las islas conectadas. */
+    fun selectLinked()
     fun meshDelete(what: String)
     fun undo()
     fun redo()
@@ -166,6 +169,9 @@ interface RemoteBlenderClient {
 
     /** Wireframe/sólido del viewport capturado. */
     fun viewShading(mode: String = "TOGGLE")
+
+    /** Rejilla, ejes y demás overlays del viewport capturado. */
+    fun viewOverlays(show: Boolean)
 
     /** Aísla la selección ocultando el resto (el `/` de Blender). */
     fun viewLocal(enabled: Boolean? = null)
@@ -236,6 +242,8 @@ interface RemoteBlenderClient {
     fun transformConfirm()
     fun transformCancel()
 
+    fun editSettings(parameters: Map<String, Any?>)
+
     /** Herramientas paramétricas de Edit Mode (preview → confirmar/cancelar). */
     fun toolBegin(tool: EditTool, parameters: Map<String, Any?>)
     fun toolParameter(parameters: Map<String, Any?>)
@@ -258,7 +266,8 @@ interface RemoteBlenderClient {
     fun clearLoopProbe()
 
     /** Re-ubica el corte de una sesión LOOP_CUT activa tocando la malla. */
-    fun toolLoopPick(u: Double, v: Double)
+    fun toolLoopPick(u: Double, v: Double, add: Boolean = false)
+    fun toolLoopPop()
 
     /** Knife: añade un punto a la polilínea. */
     fun toolKnifePoint(u: Double, v: Double)

@@ -2,9 +2,14 @@
 
 Este archivo es la fuente de verdad sobre arquitectura, estado realizado y reglas de
 trabajo. El 2026-08-27 el usuario dio por concluido el ciclo funcional anterior tras
-validarlo en tablet y abrió una nueva serie de reparaciones desde `000`. Los planes
-anteriores de toolbar y radial se retiraron por esa autorización; el ciclo actual queda
-documentado en `000_PLAN_FRONTEND_REPARACIONES_RADIAL_INPUTS.md`.
+validarlo en tablet y abrió una nueva serie de reparaciones desde `000`. Esa serie
+(`000`–`003`) quedó implementada, probada y retirada por autorización del usuario el
+2026-08-28; su estado funcional relevante está consolidado en este archivo. El ciclo
+activo vuelve a empezar en `000` y añade el toggle Plano/Suave de Object Mode, descrito
+en `000_PLAN_BACKEND_SOMBREADO_OBJETO.md` y
+`000_PLAN_FRONTEND_SOMBREADO_OBJETO.md`. El `001` activo amplía Loop Cut para acumular
+cortes con Mayús+toque dentro de una única sesión reversible. El `002` sustituye las
+pestañas V/E del teclado de vistas por iconos inequívocos de Vista/Herramientas.
 
 La primera reparación de esta serie corrige tres defectos Android: el radial resuelve
 todos sus sectores con un único hit-test geométrico y `QuickAction.onClick` es el último
@@ -28,8 +33,8 @@ ciclo cerrado entregó el **menú Edit contextual** alimentado por `edit.catalog
 Vértice/Arista/Cara según el selector, con Bridge Edge Loops, F, P, Y, Normales y
 variantes de Extrude, más la página "Atajos" del footer y el círculo de navegación
 durante sesiones. El núcleo de KNIFE se entregó como sesión táctil de polilínea
-(puntos por toque, overlay, bandeja con deshacer/cerrar/snap). DISSOLVE queda reservado
-(`enabled: false`).
+(puntos por toque, overlay, bandeja con deshacer/cerrar/snap). `mesh.dissolve` está
+habilitado para Vértice/Arista/Cara y se mantiene separado de Delete.
 Antes cerró la reorganización de superficies:
 Object/Edit salen del rail a una barra de modo horizontal propia junto al ojo
 (`TOP_MODE`), la bandeja de transformación Mover/Rotar/Escalar adopta la misma
@@ -143,6 +148,10 @@ README.md                           entrada para humanos
   re-ubica una sesión LOOP_CUT activa (restaura la copia original antes de sondear: los
   índices de `edge` son de la malla original, no del preview). Feature
   `edit_tools.loop_cut` con `pick/probe/falloff/even/flip/clamp`.
+- Loop Cut múltiple: `tool.loop_pick(add=true)` fija el preview actual como base y
+  abre otro corte sobre la topología resultante; `tool.loop_pop` vuelve al anterior.
+  `loop_count` viaja en la sesión, confirmar agrupa todo en un undo y cancelar restaura
+  la malla previa al primer corte. Feature `edit_tools.loop_cut.multiple/pop`.
 - Catálogo contextual de Edit (`edit.catalog`, feature `edit_catalog`): acciones
   agrupadas por VERTEX/EDGE/FACE con id estable, etiqueta, requisitos, tipo de ejecución
   (DISCRETE/SESSION), variantes y parámetros tipados. Implementadas este ciclo:
@@ -152,11 +161,21 @@ README.md                           entrada para humanos
   separate`), `mesh.normals_recalculate`/`mesh.normals_flip`, y variantes de
   `mesh.extrude` (`REGION`/`ALONG_NORMALS`/`INDIVIDUAL`). KNIFE es una sesión táctil
   (`tool.knife_point/pop/close`, motor geométrico en `commands/knife.py` sin
-  `knife_tool` ni `bisect_plane`); DISSOLVE queda reservado (`enabled: false`).
+  `knife_tool` ni `bisect_plane`). `mesh.dissolve` está habilitado para
+  VERTS/EDGES/FACES y se mantiene separado de Delete.
 - Snap incremental, rejilla, cursor y candidatos Vertex/Edge/Face bloqueables. En la
   sesión modal, `INCREMENT` cuadra el delta a múltiplos relativos del punto de partida y
   `GRID` clava la posición resultante a la rejilla mundial absoluta (un objeto que nace
   fuera de rejilla aterriza en ella); ROTATE/SCALE tratan GRID como INCREMENT.
+- Las tools paramétricas anuncian snap escalar por schema y Extrude REGION admite
+  candidato geométrico bloqueable mediante `tool.snap_candidate`; Android sigue el
+  dedo de forma coalescida y dibuja el marcador sin acumular previews. Bevel y Bridge
+  Edge Loops también publican sus controles de snap en `edit_toolbar`.
+- Ajustes globales de Edit (`edit.settings`/`edit.settings_set`, feature
+  `edit_settings`): edición proporcional real para MOVE/ROTATE/SCALE con radio y perfil
+  de caída, preview reversible y exclusión de vértices ocultos; Auto Merge suelda al
+  confirmar MOVE según el umbral configurado. Ambos usan `ToolSettings` de Blender y
+  persisten entre transformaciones.
 - Cámara independiente, vistas estándar, Persp/Ortho y encuadre. `camera.roll` (giro de
   rueda sobre el eje de visión) y `view.roll`/gesto `roll`, con la escena acompañando al
   dedo (`view.roll_delta` invierte el ángulo de rueda a rotación de cámara).
@@ -188,6 +207,8 @@ README.md                           entrada para humanos
 - `object.hide` / `object.reveal` (H / Alt+H de objetos vía `hide_set/hide_get`,
   distintos de `selection.hide/reveal` en Edit) y `transform.apply` (hornea T/R/S sin
   confundirse con `transform.reset`, con `shared_data` para mallas Alt+D).
+- `object.shade` alterna o fija `FLAT`/`SMOOTH` sobre las caras de objetos MESH, con
+  capability `object_shading`, targets explícitos y un único paso de undo.
 - Estado y eventos ricos: `active.modifiers[]`, `hidden_objects:[{name,type}]`,
   `modifiers.changed`, `visibility.changed`.
 - `context_snapshot()` usa `Mesh.total_vert_sel/edge_sel/face_sel` (O(1)) en vez de
@@ -224,6 +245,9 @@ README.md                           entrada para humanos
   la respuesta remota del picking.
 - Transformación modal con restricciones, orientación (desplegable de tipos de snap
   válidos por modo), unidades y confirm/cancel.
+- En Edit Mode, `Prop` y `Merge` viven junto a Wireframe. La bandeja de transformación
+  expone radio y perfil cuando la edición proporcional está activa; el estado procede
+  del servidor y se conserva globalmente entre movimientos.
 - Bandeja paramétrica para Extrude/Bevel/Inset/Subdivide/Loop Cut (`EditToolTray`), en
   una franja horizontal desplazable (no apilada en vertical): rótulo a la izquierda,
   parámetros en fila y descartar/confirmar fijos a la derecha.
@@ -236,6 +260,9 @@ README.md                           entrada para humanos
   toggles Uniforme/Invertir/Fijar (`ToolSession.parameters` pasó a `Map<String, Any?>`
   para conservar bools y string). Con `loopCutPick` no anunciado se conserva el flujo
   legacy (seleccionar arista y esperar el snapshot).
+- Con una sesión Loop Cut activa, Mayús (modificador ADD) + toque acumula otro loop.
+  La bandeja muestra el número de loops y ofrece “Deshacer último”; el toque normal
+  conserva su función de recolocar el corte activo.
 - Menú Edit contextual gobernado por el catálogo (`EditCatalog` en `StateParser`): el
   long-click en Edit abre Vértice, Arista o Cara según `selectionMode`, con las acciones
   anunciadas, sus variantes (Extrude) y su ejecución (DISCRETE → `editCatalogCommand`;
@@ -244,7 +271,8 @@ README.md                           entrada para humanos
   quedan ocultos por el catálogo. El rail histórico de herramientas solo aparece si el
   servidor no anuncia el catálogo.
 - Página "Atajos" de `ViewFooter` (solo Edit): F, P, Y y Normales (Exterior/Interior/
-  Voltear), además de la página de Vistas existente.
+  Voltear), además de la página de Vistas existente. Las páginas se alternan con
+  iconos de Vista y Herramientas, no con las letras V/E que se confundían con teclas.
 - Círculo de navegación derecho (`NavigationOrbitLayout`): visible solo con sesión activa;
   un `DOWN` dentro captura ORBIT sin alimentar la tool, y fuera conserva el nudge.
 - Knife táctil: sesión `tool.knife_point/pop/close` con puntos por toque, overlay de la
@@ -311,6 +339,8 @@ README.md                           entrada para humanos
   forma (`ShapeTool` + overlay en `InputSurface`) y envían `selection.box`/`circle`.
   Salieron de la barra superior por decisión del usuario. En el anillo Edit sustituyen a
   `SELECT_INVERT` para no pasarse del tope de 8.
+- Borrar y Disolver son intenciones distintas en el menú Edit contextual; Disolver usa
+  `mesh.dissolve` para Vértice/Arista/Cara y nunca emula la operación con `ONLY_FACES`.
 - Toast de error auto-descarta a los ~5 s: `client.clearError()` + `LaunchedEffect`
   sobre `state.error`.
 - Teclado de vistas (`ViewFooter.kt`): 9 gira 180° (ya no duplica al 7), 5 enseña el
@@ -334,7 +364,7 @@ Cada acción ejecutable vive en una sola superficie visible:
   y, en Edit, el submodo de selección.
 - Rail: herramienta activa y utilidades (duplicar, diagnóstico); el modo ya no está aquí.
 - Footer/bandeja: parámetros de la herramienta activa.
-- Footer de vistas (`FOOTER_VIEWS`): navegación, proyección, aislar y crecer/decrecer.
+- Footer de vistas (`FOOTER_VIEWS`): navegación, proyección y crecer/decrecer.
 - Long-click: acciones frecuentes sobre el contexto señalado, la selección por forma
   (B/C) y el catálogo Add completo cuando se pulsa el vacío en Object Mode. En Object
   Mode se pinta como menú contextual flotante y en Edit como anillo radial.
@@ -363,9 +393,13 @@ Estado actual de las superficies añadidas en el último ciclo:
 - Caja (`TOOL_BOX`) y círculo (`TOOL_CIRCLE`): solo en `RADIAL` (long-click), en el
   vacío de Object Mode y en el anillo Edit. Ya no están en `TOP_TOOLS`; en Edit
   sustituyen a `SELECT_INVERT`, que sale del anillo para no pasarse del tope de 8.
-- Aislar selección (`VIEW_LOCAL`) y crecer/decrecer (`SELECT_MORE`/`SELECT_LESS`): solo
-  en el footer de vistas (`FOOTER_VIEWS`). `VIEW_FRAME_SELECTED` salió del catálogo: el
-  encuadre de selección es el gesto de doble toque.
+- Aislar selección (`VIEW_LOCAL`): solo en el long-click de Object Mode, como
+  `/ Aislar selección`, junto a Ocultar objeto y en sustitución de Seleccionar todo /
+  Deseleccionar. Crecer/decrecer (`SELECT_MORE`/`SELECT_LESS`) permanece en el footer
+  de vistas (`FOOTER_VIEWS`). `VIEW_FRAME_SELECTED` salió del catálogo: el encuadre de
+  selección es el gesto de doble toque.
+- Plano/Suave (`SHADE_OBJECT`): solo en el long-click sobre un objeto seleccionado de
+  Object Mode y únicamente cuando el servidor anuncia `object_shading`.
 
 ## Contrato compartido
 
@@ -593,8 +627,9 @@ largo de normales / Individual). En el footer de vistas, la página "Atajos" (so
 ofrece F, P, Y y Normales. El círculo de navegación derecho aparece durante una sesión
 activa para orbitar sin alimentar la tool. El núcleo de KNIFE está entregado como sesión
 táctil de polilínea (puntos por toque, overlay, bandeja con deshacer/cerrar/snap).
-DISSOLVE queda reservado (`enabled: false`). Bisect, hover anticipado y eraser no forman
-parte de la versión cerrada. El bloqueo X/Y/Z de Extrude sí está implementado.
+Disolver está habilitado para Vértice/Arista/Cara y separado de Delete. Bisect también
+está implementado; hover anticipado y eraser no forman parte de la versión cerrada. El
+bloqueo X/Y/Z de Extrude sí está implementado.
 
 Los resultados de pruebas de cierre se registran en el commit de la versión, no como
 conteos congelados en esta guía. El smoke y cualquier incidencia observada en tablet

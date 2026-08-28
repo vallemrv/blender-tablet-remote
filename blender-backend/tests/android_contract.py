@@ -38,6 +38,7 @@ MENU_COMMANDS = [
     "object.rename",
     "object.hide",
     "object.reveal",
+    "object.shade",
     "transform.apply",
     "modifier.add_options",
     "modifier.add",
@@ -49,6 +50,7 @@ MENU_COMMANDS = [
     "mesh.loop_cut",
     "mesh.loop_probe",
     "tool.loop_pick",
+    "tool.loop_pop",
     "tool.knife_point",
     "tool.knife_pop",
     "tool.knife_close",
@@ -176,6 +178,17 @@ def main() -> int:
     expected_caps = json.loads((fixtures / "capabilities.json").read_text())
     actual_caps = app.command("server.capabilities").get("result") or {}
     check("capabilities coincide con fixture", _contains(actual_caps, expected_caps), str(actual_caps.get("features")))
+    check("snap anuncia centros de arista y cara",
+          {"EDGE_CENTER", "FACE_CENTER"} <= set((actual_caps.get("enums") or {}).get("snap_type", [])),
+          str((actual_caps.get("enums") or {}).get("snap_type")))
+    edit_settings_feature = (actual_caps.get("features") or {}).get("edit_settings") or {}
+    check("capability anuncia proporcional y Auto Merge",
+          edit_settings_feature.get("proportional") is True
+          and edit_settings_feature.get("auto_merge") is True,
+          str(edit_settings_feature))
+    check("capability anuncia sombreado de objeto",
+          "TOGGLE" in ((actual_caps.get("features") or {}).get("object_shading") or {}).get("modes", []),
+          str((actual_caps.get("features") or {}).get("object_shading")))
     edit_catalog = ((actual_caps.get("features") or {}).get("edit_catalog") or {})
     groups = edit_catalog.get("groups") or {}
     check("catálogo Edit anuncia los tres submodos", set(groups) >= {"VERTEX", "EDGE", "FACE"}, str(groups))
@@ -264,6 +277,10 @@ def main() -> int:
           == {"REGION", "INDIVIDUAL"}, str(inset_family))
     loop_family = families.get("LOOP_CUT", {})
     check("Loop Cut es de entrada VIEWPORT_TAP", loop_family.get("input") == "VIEWPORT_TAP", str(loop_family))
+    loop_feature = ((actual_caps.get("features") or {}).get("edit_tools") or {}).get("loop_cut") or {}
+    check("Loop Cut anuncia acumulación y pop",
+          loop_feature.get("multiple") is True and loop_feature.get("pop") is True,
+          str(loop_feature))
     bridge_family = families.get("BRIDGE_EDGE_LOOPS", {})
     check("Bridge Edge Loops exige 6 aristas y anuncia snap propio",
           bridge_family.get("requirements", {}).get("selection") == {"edges": {"min": 6}}

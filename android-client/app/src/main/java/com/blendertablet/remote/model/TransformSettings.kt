@@ -68,7 +68,9 @@ enum class SnapType(val label: String, val geometric: Boolean = false) {
     GRID("Rejilla"),
     VERTEX("Vértice", geometric = true),
     EDGE("Arista", geometric = true),
+    EDGE_CENTER("Centro arista", geometric = true),
     FACE("Cara", geometric = true),
+    FACE_CENTER("Centro cara", geometric = true),
     CURSOR("Cursor", geometric = true);
 
     companion object {

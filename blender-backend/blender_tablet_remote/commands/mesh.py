@@ -317,6 +317,13 @@ def loop_cut(payload: dict) -> dict:
     bm.verts.ensure_lookup_table()
     bm.edges.ensure_lookup_table()
     new_verts = [bm.verts[i] for i in range(vert_count, len(bm.verts))]
+    # Cada vértice nuevo nace sobre una arista del ring original. Guardar esa
+    # procedencia antes de desplazar el corte permite distinguir las aristas de
+    # los loops transversales de los tramos adyacentes creados al partir el ring.
+    source_segment = {
+        vert: _closest_segment(vert.co, segments)[0]
+        for vert in new_verts
+    }
     if factor or even or flip:
         for vert in new_verts:
             index, start, end, t = _closest_segment(vert.co, segments)
@@ -337,8 +344,23 @@ def loop_cut(payload: dict) -> dict:
             t = min(0.999, max(0.001, t)) if clamp else min(2.0, max(-1.0, t))
             vert.co = start.lerp(end, t)
     new_edges = [bm.edges[i] for i in range(edge_count, len(bm.edges))]
+    cut_edges = [
+        edge for edge in new_edges
+        if edge.verts[0] in source_segment
+        and edge.verts[1] in source_segment
+        and source_segment[edge.verts[0]] != source_segment[edge.verts[1]]
+    ] if len(ring) > 1 else new_edges
     _deselect_all(bm)
-    _select_geom(bm, new_edges or new_verts)
+    if cut_edges:
+        # No usar select_flush(True): cuando todos los bordes de una cara quedan
+        # marcados, BMesh selecciona también la cara y vuelve a incorporar sus
+        # aristas longitudinales. Loop Cut debe dejar solo los loops nuevos.
+        for edge in cut_edges:
+            edge.select = True
+            for vert in edge.verts:
+                vert.select = True
+    else:
+        _select_geom(bm, new_verts)
     flush_bmesh(obj, bm)
     _undo(payload, "Remote loop cut")
     return {"cuts": cuts, "factor": factor, "smoothness": smoothness, "falloff": falloff,

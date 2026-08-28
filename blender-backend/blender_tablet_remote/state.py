@@ -17,7 +17,8 @@ _CONSTRAINTS_OBJECT = ["FREE", "X", "Y", "Z", "XY", "XZ", "YZ", "VIEW"]
 _CONSTRAINTS_EDIT = ["FREE", "X", "Y", "Z", "XY", "XZ", "YZ", "NORMAL", "VIEW"]
 _ORIENTATIONS_OBJECT = ["GLOBAL", "LOCAL", "VIEW"]
 _ORIENTATIONS_EDIT = ["GLOBAL", "LOCAL", "NORMAL", "VIEW"]
-_SNAP_TYPES = ["NONE", "INCREMENT", "GRID", "VERTEX", "EDGE", "FACE", "CURSOR"]
+_SNAP_TYPES = ["NONE", "INCREMENT", "GRID", "VERTEX", "EDGE", "EDGE_CENTER",
+               "FACE", "FACE_CENTER", "CURSOR"]
 
 
 def selection_mode() -> str:
@@ -51,6 +52,8 @@ def snapshot(include_view: bool = True) -> dict:
         "frame": bpy.context.scene.frame_current,
         "hidden_objects": hidden_objects(),
     }
+    from .commands.modal import edit_settings_state
+    state["edit_settings"] = edit_settings_state()
     state.update(context_snapshot())
 
     if active is not None:
@@ -68,6 +71,11 @@ def snapshot(include_view: bool = True) -> dict:
         from .commands.view import shading_state
 
         state["shading"] = shading_state()
+        # Los overlays los apaga el ojo de la tablet, pero también pueden cambiar en
+        # el PC: viaja en el snapshot para que el botón no mienta tras reconectar.
+        from .commands.view import overlays_state
+
+        state["overlays"] = overlays_state()
         # Va con el estado para que la tablet pueda pintar el manipulador en cuanto
         # cambia la selección, sin una segunda petición.
         from .commands.view import gizmo_state

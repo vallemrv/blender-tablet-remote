@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.blendertablet.remote.model.Axis
 import com.blendertablet.remote.model.Constraint
+import com.blendertablet.remote.model.EditSettings
 import com.blendertablet.remote.model.Orientation
 import com.blendertablet.remote.model.SnapType
 import com.blendertablet.remote.model.TransformMode
@@ -75,6 +76,7 @@ private val AxisColors = mapOf(
 @Composable
 fun TransformBar(
     session: TransformSession,
+    editSettings: EditSettings,
     stepIndex: Int,
     snapType: SnapType,
     constraint: Constraint,
@@ -87,6 +89,8 @@ fun TransformBar(
     onStep: (Int) -> Unit,
     onValueMode: (ValueMode) -> Unit,
     onValue: (List<Double>?, Double?) -> Unit,
+    onProportionalRadius: (Double) -> Unit,
+    onProportionalFalloff: () -> Unit,
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
@@ -108,6 +112,14 @@ fun TransformBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Readout(session)
+                if (session.proportional) {
+                    PillButton("Radio −") { onProportionalRadius(0.5) }
+                    Text("${"%.3g".format(editSettings.radius)}", color = Ink.OnPanel, fontSize = 11.sp)
+                    PillButton("Radio +") { onProportionalRadius(2.0) }
+                    PillButton("Perfil: ${falloffLabel(editSettings.falloff)}") {
+                        onProportionalFalloff()
+                    }
+                }
                 SnapCandidateHint(session)
                 Divider()
                 // Restricción: libre, eje o plano. En ROTATE solo ejes simples.
@@ -137,6 +149,16 @@ fun TransformBar(
             RoundAction(Icons.Default.Check, "Confirmar", Ink.Ok, onConfirm)
         }
     }
+}
+
+private fun falloffLabel(value: String) = when (value) {
+    "SPHERE" -> "Esfera"
+    "ROOT" -> "Raíz"
+    "SHARP" -> "Agudo"
+    "LINEAR" -> "Lineal"
+    "CONSTANT" -> "Constante"
+    "INVERSE_SQUARE" -> "Inv. cuadrado"
+    else -> "Suave"
 }
 
 /**

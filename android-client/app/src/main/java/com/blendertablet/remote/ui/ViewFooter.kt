@@ -12,6 +12,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -19,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -31,8 +34,8 @@ import com.blendertablet.remote.model.SelectionMode
  *
  * Las vistas (7/1/3) alternan entre la cara y su opuesta; 9 ya no duplica a 7, sino
  * que gira la vista 180°. 5 enseña el estado real de la proyección (resaltado solo en
- * ORTHO). El encuadre sale de aquí (lo hace el doble toque): en su sitio `/` aísla la
- * selección, y `+`/`−` crecen/disminuyen la selección en Edit Mode.
+ * ORTHO). El encuadre y `/` salen de aquí (doble toque y menú contextual,
+ * respectivamente); `+`/`−` crecen/disminuyen la selección en Edit Mode.
  */
 @Composable
 fun ViewFooter(
@@ -43,14 +46,11 @@ fun ViewFooter(
     showEditShortcuts: Boolean,
     /** Cuchillo vive en la barra de tools activas cuando `edit_toolbar` existe (F1). */
     editToolbarAvailable: Boolean = false,
-    localViewActive: Boolean,
-    showLocal: Boolean,
     showGrow: Boolean,
     onAxis: (String) -> Unit,
     onOrbit: (Float, Float) -> Unit,
     onRotate180: () -> Unit,
     onProjection: (Projection) -> Unit,
-    onLocal: () -> Unit,
     onMore: () -> Unit,
     onLess: () -> Unit,
     onEditAction: (EditFooterAction) -> Unit,
@@ -74,8 +74,12 @@ fun ViewFooter(
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     if (inEdit && showEditShortcuts) {
                         Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                            NumKey("V", "Página de vistas", selected = !editPage) { editPage = false }
-                            NumKey("E", "Atajos de Edit", selected = editPage) { editPage = true }
+                            PageKey(Icons.Default.ViewInAr, "Página de vistas", selected = !editPage) {
+                                editPage = false
+                            }
+                            PageKey(Icons.Default.Build, "Atajos de Edit", selected = editPage) {
+                                editPage = true
+                            }
                         }
                     }
                     if (editPage && inEdit && showEditShortcuts) {
@@ -103,7 +107,6 @@ fun ViewFooter(
                         NumKey("1", "Frontal / trasera", activeAxisView in setOf("FRONT", "BACK")) { opposite("FRONT", "BACK") }
                         NumKey("2", "Orbitar abajo") { onOrbit(0f, 0.06f) }
                         NumKey("3", "Derecha / izquierda", activeAxisView in setOf("RIGHT", "LEFT")) { opposite("RIGHT", "LEFT") }
-                        NumKey("/", "Aislar selección", selected = localViewActive, enabled = showLocal, onClick = onLocal)
                     }
                     Spacer(Modifier.height(2.dp))
                     }
@@ -159,6 +162,27 @@ private fun EditKeys(
         Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             NumKey("N", "Normales", enabled = selectionMode == SelectionMode.FACE) { setNormalsPage(true) }
         }
+    }
+}
+
+@Composable
+private fun PageKey(
+    icon: ImageVector,
+    description: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val background = if (selected) Ink.Accent.copy(alpha = .24f) else Color.White.copy(alpha = .05f)
+    val content = if (selected) Ink.Accent else Ink.Muted
+    Box(
+        Modifier
+            .size(38.dp)
+            .clip(RoundedCornerShape(9.dp))
+            .background(background)
+            .clickableNoRipple(onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, description, Modifier.size(19.dp), tint = content)
     }
 }
 

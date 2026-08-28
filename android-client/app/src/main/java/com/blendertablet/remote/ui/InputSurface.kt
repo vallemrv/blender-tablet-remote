@@ -574,6 +574,8 @@ private class GestureView(
                 canvas.drawLine(x - r, y, x + r, y, candidatePaint)
                 canvas.drawCircle(x, y, r * .45f, candidatePaint)
             }
+            SnapType.EDGE_CENTER, SnapType.FACE_CENTER ->
+                canvas.drawRect(x - r * .65f, y - r * .65f, x + r * .65f, y + r * .65f, candidatePaint)
             SnapType.FACE -> canvas.drawRect(x - r, y - r, x + r, y + r, candidatePaint)
             else -> {
                 canvas.drawLine(x - r, y, x + r, y, candidatePaint)

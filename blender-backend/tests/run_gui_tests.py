@@ -183,6 +183,44 @@ def scenario(client: WSClient) -> None:
 
     candidate = cmd(client, "snap.query", {"u": 0.5, "v": 0.5, "snap_type": "FACE"})
     check("snap encuentra la cara visible", bool(candidate.get("hit") and candidate.get("id")), str(candidate))
+    from mathutils import Vector as SnapVector
+    from blender_tablet_remote.bpy_utils import find_view3d as snap_find_view3d
+    from blender_tablet_remote.camera import camera as snap_camera
+
+    snap_obj = bpy.data.objects[cube]
+    visible_polygon = snap_obj.data.polygons[candidate["element"]]
+    snap_rv3d = snap_find_view3d()[3]
+    face_center_world = snap_obj.matrix_world @ visible_polygon.center
+    face_center_screen = snap_camera.project(face_center_world, snap_rv3d)
+    face_center = cmd(client, "snap.query", {
+        "u": face_center_screen[0], "v": face_center_screen[1],
+        "snap_type": "FACE_CENTER", "threshold": 0.02,
+    })
+    check("snap detecta el centro exacto de la cara",
+          face_center.get("hit") and
+          (SnapVector(face_center.get("position")) - face_center_world).length < 1e-5,
+          str(face_center))
+
+    edge_key = visible_polygon.edge_keys[0]
+    edge_center_world = (
+        snap_obj.matrix_world @ snap_obj.data.vertices[edge_key[0]].co
+    ).lerp(snap_obj.matrix_world @ snap_obj.data.vertices[edge_key[1]].co, 0.5)
+    edge_center_screen = snap_camera.project(edge_center_world, snap_rv3d)
+    # Un punto exactamente sobre la silueta puede caer fuera por precisión del
+    # raycast; entrar un 3 % en la cara conserva el centro dentro del umbral.
+    edge_probe_screen = (
+        edge_center_screen[0] * .97 + face_center_screen[0] * .03,
+        edge_center_screen[1] * .97 + face_center_screen[1] * .03,
+    )
+    edge_center = cmd(client, "snap.query", {
+        "u": edge_probe_screen[0], "v": edge_probe_screen[1],
+        "snap_type": "EDGE_CENTER", "threshold": 0.04,
+    })
+    check("snap detecta el punto medio exacto de la arista",
+          edge_center.get("hit") and
+          (SnapVector(edge_center.get("position")) - edge_center_world).length < 1e-5,
+          str(edge_center))
+
     cmd(client, "transform.begin", {"mode": "MOVE", "snap_type": "FACE"})
     snapped = cmd(client, "transform.snap_candidate", {
         "u": 0.5, "v": 0.5, "snap_type": "FACE", "lock": True,
@@ -452,11 +490,11 @@ def scenario(client: WSClient) -> None:
     cycle_hit = cmd(client, "selection.pick", {
         "u": p_back[0], "v": p_back[1], "threshold": wide, "mode": "ADD",
     })
-    check("ADD cicla de la esquina trasera a la frontal",
-          cycle_hit.get("index") == front.index, str(cycle_hit))
+    check("ADD conserva el vertice exacto bajo el dedo",
+          cycle_hit.get("index") == back.index, str(cycle_hit))
     info = cmd(client, "selection.info")
-    check("quedan seleccionadas las dos esquinas",
-          sorted(info.get("verts", [])) == sorted((front.index, back.index)), str(info))
+    check("ADD no incorpora una esquina cercana que no se tocó",
+          info.get("verts", []) == [back.index], str(info))
 
     cmd(client, "selection.all", {"value": False})
     cmd(client, "mode.object")
@@ -520,6 +558,16 @@ def scenario(client: WSClient) -> None:
     cut_verts = cmd(client, "mesh.info")["verts"]
     check("el preview sigue siendo un corte del anillo", cut_verts == original_verts + 4,
           f"{original_verts} -> {cut_verts}")
+    added = cmd(client, "tool.loop_pick", {"u": touch.x, "v": touch.y, "add": True})
+    multi_verts = cmd(client, "mesh.info")["verts"]
+    check("Mayús/add acumula un segundo loop",
+          added.get("loop_count") == 2 and multi_verts > cut_verts,
+          f"{added} | {cut_verts} -> {multi_verts}")
+    popped = cmd(client, "tool.loop_pop")
+    pop_verts = cmd(client, "mesh.info")["verts"]
+    check("loop_pop vuelve al corte anterior editable",
+          popped.get("loop_count") == 1 and pop_verts == cut_verts,
+          f"{popped} | {pop_verts}")
     cmd(client, "tool.cancel")
     restored = cmd(client, "mesh.info")["verts"]
     check("cancelar restaura la topología", restored == original_verts, str(restored))

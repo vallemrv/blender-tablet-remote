@@ -245,6 +245,37 @@ def shading(payload: dict) -> dict:
     return {"shading": shading_state()}
 
 
+def overlays_state() -> bool:
+    """¿Se están dibujando los overlays (rejilla, ejes, cage de Edit)?"""
+    found = _shading_space()
+    if found is None:
+        return True
+    return bool(found[1].overlay.show_overlays)
+
+
+@command("view.overlays")
+def overlays(payload: dict) -> dict:
+    """Enciende o apaga los overlays del viewport capturado.
+
+    `draw_view3d` sí pinta el motor de overlays (la rejilla del suelo, los ejes, el
+    cage de Edit Mode); lo que no pinta son los gizmos de la región, ver `view.gizmo`.
+    Así que apagar `space.overlay.show_overlays` deja el vídeo limpio, solo la
+    escena. Es lo que pide el ojo de la tablet al ocultar la interfaz: sin controles
+    encima y sin rejilla debajo.
+
+    Sin `show` alterna. Cambia el espacio VIEW_3D real, igual que `view.shading`.
+    """
+    show = payload.get("show")
+    if show is not None and not isinstance(show, bool):
+        raise BadPayload("'show' must be a boolean")
+    found = _shading_space()
+    if found is None:
+        raise CommandError("No 3D viewport available", code="no_viewport")
+    _area, space = found
+    space.overlay.show_overlays = (not space.overlay.show_overlays) if show is None else show
+    return {"overlays": bool(space.overlay.show_overlays)}
+
+
 # ---------------------------------------------------------------- aislamiento
 
 # Objetos ocultados por `view.local`. Solo estos se restauran al salir: lo que ya

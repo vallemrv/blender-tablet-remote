@@ -211,6 +211,7 @@ edición, no sobre el objeto.
 | `object.rename` | `name`, `new_name` |
 | `object.hide` | `objects[]` (opcional), `unselected` (bool, Shift+H) |
 | `object.reveal` | `objects[]` (opcional), `select` (bool, def. true) |
+| `object.shade` | `objects[]` (opcional), `mode`: `TOGGLE`\|`FLAT`\|`SMOOTH` |
 
 `object.hide` / `object.reveal` son la H / Alt+H de **objetos** (`obj.hide_set`). No
 confundir con `selection.hide` / `selection.reveal`, que ocultan geometría en Edit.
@@ -234,6 +235,7 @@ confundir con `selection.hide` / `selection.reveal`, que ocultan geometría en E
 | `selection.circle` | `u`, `v`, `radius`, `mode` |
 | `selection.more` / `selection.less` | — en Edit Mode |
 | `selection.loop` / `.ring` | `edge` (opcional; usa la seleccionada), `mode` |
+| `selection.linked` | — en Edit Mode; siembra con la selección |
 
 `mesh.delete` elimina topología. `mesh.dissolve` conserva la superficie vecina y
 acepta `what: VERTS|EDGES|FACES`; son acciones distintas.
@@ -341,6 +343,7 @@ viewport (`no_viewport` en background) y Edit Mode (`wrong_mode`).
 | `view.axis` | `axis`: `FRONT`\|`BACK`\|`LEFT`\|`RIGHT`\|`TOP`\|`BOTTOM` |
 | `view.perspective` | `mode`: `PERSP`\|`ORTHO`\|`TOGGLE` |
 | `view.shading` | `mode`: `WIREFRAME`\|`SOLID`\|`TOGGLE` |
+| `view.overlays` | `show` (bool; por defecto toggle) |
 | `view.local` | `enabled` (bool; por defecto toggle) |
 | `view.get` / `view.set` | `location`, `rotation` (quaternion wxyz), `distance` |
 
@@ -352,6 +355,19 @@ través. El paquete es inseparable también al togglear: `TOGGLE` solo considera
 estado actual viaja en `scene.get_state` como `shading` (top-level): `"WIREFRAME"` o
 `"SOLID"` (`"SOLID"` si no hay viewport, p. ej. en background).
 Requiere viewport (`no_viewport` en background).
+
+`view.overlays` enciende o apaga los overlays de ese mismo espacio
+(`space.overlay.show_overlays`): la rejilla del suelo, los ejes y el cage de Edit Mode,
+que `draw_view3d` **sí** dibuja (lo que no dibuja son los gizmos de la región, ver
+`view.gizmo`). Sin `show` alterna. Devuelve `{"overlays": bool}` y el estado viaja
+también en `scene.get_state` como `overlays` (top-level). Requiere viewport
+(`no_viewport` en background). Lo usa el botón del ojo de la tablet: ocultar los
+controles deja el vídeo limpio, sin interfaz encima y sin rejilla debajo.
+
+`selection.linked` extiende la selección a las islas conectadas (la `L` / `Ctrl+L`):
+recorre por aristas desde lo ya seleccionado y se detiene en lo oculto. Sin selección
+de partida responde `empty_selection`. Devuelve `selection.info` más `affected` (número
+de vértices de las islas).
 
 `view.local` aísla la selección: oculta todo objeto visible no seleccionado y recuerda
 exactamente qué ocultó para restaurarlo al desactivar (el `/` de Blender). Es un
@@ -367,10 +383,10 @@ transformación todavía viva.
 
 | Comando | Payload |
 |---|---|
-| `transform.begin` | `mode`: `MOVE`\|`ROTATE`\|`SCALE`, `axes[]`/`constraint`, `orientation`, `value_mode`, `snap`, `snap_type`, `step` |
+| `transform.begin` | `mode`: `MOVE`\|`ROTATE`\|`SCALE`, `axes[]`/`constraint`, `orientation`, `value_mode`, `snap`, `snap_type`, `step`; en Edit también `proportional`, `radius`, `falloff` |
 | `transform.axes` | `axes[]` — cambia la restricción en vivo |
 | `transform.snap` | `snap` (bool), `step` |
-| `snap.query` | `u`, `v`, `snap_type`: `VERTEX`\|`EDGE`\|`FACE`\|`CURSOR`, `threshold` |
+| `snap.query` | `u`, `v`, `snap_type`: `VERTEX`\|`EDGE`\|`EDGE_CENTER`\|`FACE`\|`FACE_CENTER`\|`CURSOR`, `threshold` |
 | `transform.snap_candidate` | igual que `snap.query`, `lock` (predeterminado true) |
 | `transform.nudge` | `dx`, `dy` — normalmente llega por el canal de gestos |
 | `transform.value` | `values`: [x,y,z], o `angle` en GRADOS si el modo es ROTATE |
@@ -391,6 +407,20 @@ Snap incremental y rejilla en la sesión modal:
 Cada sesión incluye UUID `session_id`, `owner` y `phase`. Solo su conexión propietaria
 puede alterarla; al desconectarse se cancela. Funciona tanto en Object como en Edit y
 reconstruye matrices o coordenadas BMesh desde el snapshot inicial.
+
+### Ajustes globales de Edit
+
+`edit.settings` devuelve `edit_settings`; el mismo bloque también viaja en
+`scene.get_state`. `edit.settings_set` cambia uno o varios valores: `proportional`
+(bool), `falloff` (`SMOOTH|SPHERE|ROOT|SHARP|LINEAR|CONSTANT|INVERSE_SQUARE`),
+`radius` (> 0), `auto_merge` (bool) y `merge_threshold` (>= 0). Son ajustes globales
+respaldados por `ToolSettings` de Blender y se conservan entre transformaciones.
+
+La edición proporcional afecta a los vértices visibles dentro del radio durante
+MOVE/ROTATE/SCALE, con peso según el perfil elegido; cancelar restaura todas las
+coordenadas originales. Auto Merge se aplica al confirmar un MOVE en Edit Mode:
+los vértices seleccionados que queden a `merge_threshold` de geometría estacionaria
+se sueldan dentro del mismo paso de undo de la sesión.
 
 Arrastre de un dedo (`gesture` `rotate`/`scale`, en modal o en la ruta legacy sin
 sesión abierta): `dx` horizontal maneja ambos — dedo a la derecha gira en sentido
@@ -421,7 +451,7 @@ parámetro primario de `tool.nudge` es `factor` (deslizamiento; ±0.999, o ±1.9
 sesión lleva `clamp: false`). No es `mesh.subdivide` (eso corta la selección) ni
 `selection.loop`.
 
-`tool.loop_pick` (`u`, `v`) coloca (desde `ARMED`) o re-ubica (con sesión `ACTIVE`) el
+`tool.loop_pick` (`u`, `v`, `add` opcional) coloca (desde `ARMED`) o re-ubica (con sesión `ACTIVE`) el
 corte de `LOOP_CUT`: restaura la copia original si la había, sondea con la semántica
 de `mesh.loop_probe` (los índices de `edge` son de la malla original, no del preview)
 y fija/actualiza `edge` y `factor` en un solo paso. Responde con el estado de la
@@ -429,7 +459,14 @@ sesión más `pick`. Sin sesión activa ni armada responde `no_session`; con ses
 activa de otra tool, `wrong_tool`. Sin impacto bajo el dedo, `ARMED` se queda como
 estaba y `ACTIVE` conserva el corte anterior.
 
-La feature `edit_tools.loop_cut` anuncia `pick`, `probe`, `falloff`, `even`, `flip` y
+Con `add: true`, el preview actual se fija como base acumulada y el toque crea otro
+Loop Cut sobre la topología resultante. El estado publica `loop_count`. Todos los
+cortes se confirman con un solo undo y cancelar restaura la malla anterior a la sesión.
+`tool.loop_pop` descarta el corte activo y vuelve al anterior para editarlo; sin
+historial responde `empty_history`.
+
+La feature `edit_tools.loop_cut` anuncia `pick`, `probe`, `falloff`, `even`, `flip`,
+`multiple`, `pop` y
 `clamp`; un cliente debe usar el flujo de colocación por toque solo si `pick` está
 anunciado.
 
@@ -460,7 +497,7 @@ presenta en cm/m usando `units.scale_length`); Loop Cut y merge son factores
 adimensionales. En escalares `GRID` equivale a `INCREMENT`.
 
 Extrude `REGION` admite snap geométrico. Durante el arrastre el cliente llama
-`tool.snap_candidate` con `u`, `v`, `snap_type` (`VERTEX|EDGE|FACE|CURSOR`),
+`tool.snap_candidate` con `u`, `v`, `snap_type` (`VERTEX|EDGE|EDGE_CENTER|FACE|FACE_CENTER|CURSOR`),
 `threshold` y `lock`. `tool.status` publica `snap_type`, `snap_step` y
 `snap_candidate` (o null), cuya forma común es
 `{hit,snap_type,id,object?,element?,position:[x,y,z],screen:[u,v],distance}`.

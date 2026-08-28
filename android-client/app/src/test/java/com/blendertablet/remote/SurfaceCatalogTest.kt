@@ -150,6 +150,35 @@ class SurfaceCatalogTest {
         assertFalse("Borrar operaría sobre otra cosa que la tocada", ActionId.DELETE in actions)
     }
 
+    @Test
+    fun `object seleccionado ofrece ocultar y aislar en vez de seleccionar todo`() {
+        val actions = RadialMenu.actionsFor(TouchContext(
+            mode = BlenderMode.OBJECT,
+            hit = true,
+            objectName = "Mesa",
+            objectSelected = true,
+            hasSelection = true,
+        ))
+
+        assertTrue(ActionId.HIDE_OBJECT in actions)
+        assertTrue(ActionId.VIEW_LOCAL in actions)
+        assertFalse(ActionId.SELECT_ALL in actions)
+        assertFalse(ActionId.DESELECT_ALL in actions)
+        assertEquals(ActionSurface.RADIAL, SurfaceCatalog.surfaceOf(ActionId.VIEW_LOCAL))
+    }
+
+    @Test
+    fun `sombreado object depende de capability y conserva el limite`() {
+        val base = TouchContext(
+            mode = BlenderMode.OBJECT, hit = true, objectName = "Mesa",
+            objectSelected = true, hasSelection = true,
+        )
+        assertFalse(ActionId.SHADE_OBJECT in RadialMenu.actionsFor(base))
+        val actions = RadialMenu.actionsFor(base.copy(objectShadingAvailable = true))
+        assertTrue(ActionId.SHADE_OBJECT in actions)
+        assertTrue(actions.size <= RadialMenu.MAX_ACTIONS)
+    }
+
     /**
      * Agregar objetos vive solo en el vacío de Object Mode: es donde se colocan
      * cosas nuevas. En Edit Mode añadir un objeto no procede y sobre un objeto

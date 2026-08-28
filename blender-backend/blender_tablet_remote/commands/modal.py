@@ -23,6 +23,7 @@ import uuid
 import bpy
 import bmesh
 from mathutils import Matrix, Vector
+from mathutils.kdtree import KDTree
 
 from .. import state
 from ..bpy_utils import require_rv3d, selected_objects, undo_push
@@ -41,6 +42,40 @@ ROTATE_SENSITIVITY = math.pi
 SCALE_SENSITIVITY = 2.0
 
 MIN_SCALE = 1e-4
+PROPORTIONAL_FALLOFFS = {"SMOOTH", "SPHERE", "ROOT", "SHARP", "LINEAR", "CONSTANT", "INVERSE_SQUARE"}
+
+
+def edit_settings_state() -> dict:
+    settings = bpy.context.scene.tool_settings
+    return {
+        "proportional": bool(settings.use_proportional_edit),
+        "proportional_connected": bool(settings.use_proportional_connected),
+        "falloff": str(settings.proportional_edit_falloff),
+        "radius": float(settings.proportional_size),
+        "auto_merge": bool(settings.use_mesh_automerge),
+        "merge_threshold": float(settings.double_threshold),
+    }
+
+
+def _falloff_weight(falloff: str, distance: float, radius: float) -> float:
+    if distance <= 0.0:
+        return 1.0
+    if radius <= 0.0 or distance >= radius:
+        return 0.0
+    x = 1.0 - distance / radius
+    if falloff == "CONSTANT":
+        return 1.0
+    if falloff == "LINEAR":
+        return x
+    if falloff == "SHARP":
+        return x * x
+    if falloff == "ROOT":
+        return math.sqrt(x)
+    if falloff == "SPHERE":
+        return math.sqrt(max(0.0, 2.0 * x - x * x))
+    if falloff == "INVERSE_SQUARE":
+        return x * (2.0 - x)
+    return x * x * (3.0 - 2.0 * x)  # SMOOTH
 
 
 class _Session:
@@ -84,11 +119,16 @@ class _Session:
         self.edit_world_inv = None
         # Pivote en coordenadas locales de la malla (ya calculado en begin).
         self.pivot_local = None
+        self.proportional = False
+        self.proportional_radius = 1.0
+        self.proportional_falloff = "SMOOTH"
+        self.edit_weights: dict[int, float] = {}
 
     # ------------------------------------------------------------------ ciclo
 
     def begin(self, mode: str, axes: list[str], snap: bool, step: float | None,
-              owner_id=None, orientation="GLOBAL", value_mode="RELATIVE", snap_type="NONE") -> None:
+              owner_id=None, orientation="GLOBAL", value_mode="RELATIVE", snap_type="NONE",
+              proportional=None, proportional_radius=None, proportional_falloff=None) -> None:
         active = bpy.context.view_layer.objects.active
         edit = active is not None and active.mode == "EDIT" and active.type == "MESH"
         objs = selected_objects()
@@ -107,6 +147,12 @@ class _Session:
         self.snap = snap
         self.snap_type = snap_type
         self.step = DEFAULT_STEP[mode] if step is None else step
+        tool_settings = bpy.context.scene.tool_settings
+        self.proportional = bool(tool_settings.use_proportional_edit if proportional is None else proportional)
+        self.proportional_radius = float(tool_settings.proportional_size if proportional_radius is None else proportional_radius)
+        self.proportional_falloff = str(
+            tool_settings.proportional_edit_falloff if proportional_falloff is None else proportional_falloff
+        ).upper()
         if edit:
             bm = bmesh.from_edit_mesh(active.data)
             bm.verts.ensure_lookup_table()
@@ -115,14 +161,34 @@ class _Session:
                 self.reset()
                 raise CommandError("Nothing selected", code="empty_selection")
             self.edit_object = active
-            self.edit_coords = {v.index: v.co.copy() for v in selected}
+            selected_indices = frozenset(v.index for v in selected)
+            if self.proportional:
+                tree = KDTree(len(selected))
+                for tree_index, vert in enumerate(selected):
+                    tree.insert(active.matrix_world @ vert.co, tree_index)
+                tree.balance()
+                for vert in bm.verts:
+                    if vert.hide:
+                        continue
+                    if vert.index in selected_indices:
+                        weight = 1.0
+                    else:
+                        _co, _index, distance = tree.find(active.matrix_world @ vert.co)
+                        weight = _falloff_weight(
+                            self.proportional_falloff, distance, self.proportional_radius)
+                    if weight > 0.0:
+                        self.edit_coords[vert.index] = vert.co.copy()
+                        self.edit_weights[vert.index] = weight
+            else:
+                self.edit_coords = {v.index: v.co.copy() for v in selected}
+                self.edit_weights = {v.index: 1.0 for v in selected}
             self.edit_topology = (len(bm.verts), len(bm.edges), len(bm.faces))
-            self.selection_signature = frozenset(self.edit_coords)
+            self.selection_signature = selected_indices
             self._edit_sel_counts = (active.data.total_vert_sel, active.data.total_edge_sel,
                                      active.data.total_face_sel)
             self.edit_world = active.matrix_world.copy()
             self.edit_world_inv = self.edit_world.inverted()
-            local_center = sum(self.edit_coords.values(), Vector()) / len(self.edit_coords)
+            local_center = sum((vert.co for vert in selected), Vector()) / len(selected)
             self.pivot = active.matrix_world @ local_center
             self.pivot_local = local_center
         else:
@@ -351,7 +417,7 @@ class _Session:
             # co' = W⁻¹·(W·co + delta_mundo) = co + W⁻¹·delta_mundo
             delta_local = world_inv @ (self.orientation_basis @ values)
             for index, original_local in self.edit_coords.items():
-                verts[index].co = original_local + delta_local
+                verts[index].co = original_local + delta_local * self.edit_weights.get(index, 1.0)
         else:
             if self.mode == "ROTATE":
                 linear = Matrix.Rotation(angle, 3, self.rotation_axis)
@@ -360,7 +426,8 @@ class _Session:
             pivot_local = self.pivot_local
             local_matrix = world_inv.to_3x3() @ linear @ world.to_3x3()
             for index, original_local in self.edit_coords.items():
-                verts[index].co = pivot_local + local_matrix @ (original_local - pivot_local)
+                transformed = pivot_local + local_matrix @ (original_local - pivot_local)
+                verts[index].co = original_local.lerp(transformed, self.edit_weights.get(index, 1.0))
         bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
     def restore(self) -> None:
         if self.edit_object is not None and self.edit_object.name in bpy.data.objects and self.edit_object.mode == "EDIT":
@@ -417,6 +484,9 @@ class _Session:
             "snap_candidate": self.snap_candidate,
             "snap_locked": self.snap_locked,
             "step": self.step,
+            "proportional": self.proportional,
+            "proportional_radius": self.proportional_radius,
+            "proportional_falloff": self.proportional_falloff,
             "objects": [o.name for o, _m in self.originals] or ([self.edit_object.name] if self.edit_object else []),
             # Lo que la barra enseña mientras se arrastra. La rotación va en grados
             # porque es lo que se lee, no radianes.
@@ -483,10 +553,21 @@ def begin(payload: dict) -> dict:
     if value_mode not in ("RELATIVE", "ABSOLUTE"):
         raise BadPayload("'value_mode' must be RELATIVE or ABSOLUTE")
     snap_type = str(payload.get("snap_type", "INCREMENT" if payload.get("snap") else "NONE")).upper()
-    if snap_type not in {"NONE", "INCREMENT", "GRID", "VERTEX", "EDGE", "FACE", "CURSOR"}:
+    if snap_type not in {"NONE", "INCREMENT", "GRID", "VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER", "CURSOR"}:
         raise BadPayload("Unknown 'snap_type'")
-    if mode != "MOVE" and snap_type in {"VERTEX", "EDGE", "FACE", "CURSOR"}:
+    if mode != "MOVE" and snap_type in {"VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER", "CURSOR"}:
         raise BadPayload("Geometric snap is only valid for MOVE")
+    proportional_falloff = str(payload.get(
+        "proportional_falloff", bpy.context.scene.tool_settings.proportional_edit_falloff)).upper()
+    if proportional_falloff not in PROPORTIONAL_FALLOFFS:
+        raise BadPayload("Unknown proportional falloff")
+    try:
+        proportional_radius = float(payload.get(
+            "proportional_radius", bpy.context.scene.tool_settings.proportional_size))
+    except (TypeError, ValueError):
+        raise BadPayload("'proportional_radius' must be a number")
+    if proportional_radius <= 0.0:
+        raise BadPayload("'proportional_radius' must be greater than zero")
 
     # Una sesión abierta se descarta: empezar a mover con algo a medias sería
     # acumular dos transformaciones sin que el usuario lo pidiera.
@@ -500,7 +581,9 @@ def begin(payload: dict) -> dict:
         step = math.radians(float(payload["step_degrees"]))
 
     session.begin(mode, _parse_axes(payload), bool(payload.get("snap", False)), step,
-                  payload.get("_client_id"), orientation, value_mode, snap_type)
+                  payload.get("_client_id"), orientation, value_mode, snap_type,
+                  payload.get("proportional"), proportional_radius,
+                  proportional_falloff)
     session.apply()
     return session.status()
 
@@ -524,7 +607,7 @@ def set_snap(payload: dict) -> dict:
         session.snap = bool(payload["snap"])
     if "snap_type" in payload:
         snap_type = str(payload["snap_type"]).upper()
-        if snap_type not in {"NONE", "INCREMENT", "GRID", "VERTEX", "EDGE", "FACE", "CURSOR"}:
+        if snap_type not in {"NONE", "INCREMENT", "GRID", "VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER", "CURSOR"}:
             raise BadPayload("Unknown 'snap_type'")
         session.snap_type = snap_type
     step = _parse_step(payload, session.step)
@@ -601,6 +684,19 @@ def confirm(payload: dict) -> dict:
     """Cierra la transformación y la deja como un único paso de undo."""
     session.require(payload.get("_client_id"))
     session.apply()
+    if session.edit_object is not None and session.mode == "MOVE" and bpy.context.scene.tool_settings.use_mesh_automerge:
+        bm = bmesh.from_edit_mesh(session.edit_object.data)
+        bm.verts.ensure_lookup_table()
+        moved = [bm.verts[index] for index in session.selection_signature if index < len(bm.verts)]
+        stationary = [vert for vert in bm.verts if vert.index not in session.selection_signature and not vert.hide]
+        if moved:
+            found = bmesh.ops.find_doubles(
+                bm, verts=moved + stationary, keep_verts=stationary,
+                dist=float(bpy.context.scene.tool_settings.double_threshold),
+            )
+            if found.get("targetmap"):
+                bmesh.ops.weld_verts(bm, targetmap=found["targetmap"])
+                bmesh.update_edit_mesh(session.edit_object.data, loop_triangles=True, destructive=True)
     undo_push(f"Remote {session.mode.lower()}")
     session.reset()
     return dict(state.snapshot(include_view=False), active=False)
@@ -618,3 +714,39 @@ def cancel(payload: dict) -> dict:
 @command("transform.status")
 def status(payload: dict) -> dict:
     return session.status()
+
+
+@command("edit.settings")
+def get_edit_settings(payload: dict) -> dict:
+    return edit_settings_state()
+
+
+@command("edit.settings_set", mutating=True)
+def set_edit_settings(payload: dict) -> dict:
+    settings = bpy.context.scene.tool_settings
+    if "proportional" in payload:
+        settings.use_proportional_edit = bool(payload["proportional"])
+    if "falloff" in payload:
+        falloff = str(payload["falloff"]).upper()
+        if falloff not in PROPORTIONAL_FALLOFFS:
+            raise BadPayload("Unknown proportional falloff")
+        settings.proportional_edit_falloff = falloff
+    if "radius" in payload:
+        try:
+            radius = float(payload["radius"])
+        except (TypeError, ValueError):
+            raise BadPayload("'radius' must be a number")
+        if radius <= 0.0:
+            raise BadPayload("'radius' must be greater than zero")
+        settings.proportional_size = radius
+    if "auto_merge" in payload:
+        settings.use_mesh_automerge = bool(payload["auto_merge"])
+    if "merge_threshold" in payload:
+        try:
+            threshold = float(payload["merge_threshold"])
+        except (TypeError, ValueError):
+            raise BadPayload("'merge_threshold' must be a number")
+        if threshold <= 0.0:
+            raise BadPayload("'merge_threshold' must be greater than zero")
+        settings.double_threshold = threshold
+    return dict(state.snapshot(include_view=False), edit_settings=edit_settings_state())

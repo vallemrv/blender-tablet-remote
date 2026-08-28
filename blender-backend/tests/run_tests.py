@@ -59,6 +59,37 @@ def fail_reply(name: str, reply: dict, expect_code: str = "") -> None:
 
 
 def scenario(client: WSClient) -> None:
+    from blender_tablet_remote.commands.selection import _edge_loop, _seed_edge
+
+    loop_bm = bmesh.new()
+    bmesh.ops.create_cube(loop_bm, size=2.0)
+    vertical_edges = [
+        edge for edge in loop_bm.edges
+        if abs((edge.verts[1].co - edge.verts[0].co).normalized().z) > 0.9
+    ]
+    bmesh.ops.subdivide_edges(
+        loop_bm, edges=vertical_edges, cuts=1, use_grid_fill=True)
+    middle_loop = {
+        edge for edge in loop_bm.edges
+        if all(abs(vertex.co.z) < 1e-6 for vertex in edge.verts)
+    }
+    selected_loop = _edge_loop(next(iter(middle_loop)))
+    check(
+        "selection.loop recorre las esquinas de un Loop Cut cerrado",
+        selected_loop == middle_loop,
+        f"esperadas={len(middle_loop)}, seleccionadas={len(selected_loop)}",
+    )
+    first_seed, last_seed = tuple(middle_loop)[:2]
+    first_seed.select = True
+    last_seed.select = True
+    loop_bm.select_history.add(first_seed)
+    loop_bm.select_history.add(last_seed)
+    check(
+        "selection.loop usa como semilla la última arista tocada",
+        _seed_edge(loop_bm, {}) is last_seed,
+    )
+    loop_bm.free()
+
     print("\n[0] Transporte H.264 preferido y MJPEG fallback")
     import socket
 
@@ -720,6 +751,15 @@ def modeling_scenario(client: WSClient) -> None:
     check("el cubo sigue visible", client.command("scene.get_object", {"name": "Cube"})["result"]["visible"] is True)
     ok_reply("revelar todo", client.command("object.reveal"))
 
+    print("  shade flat / smooth")
+    shaded = ok_reply("object.shade smooth", client.command(
+        "object.shade", {"objects": ["Cube"], "mode": "SMOOTH"}))
+    check("shade devuelve SMOOTH", shaded.get("shade") == "SMOOTH", str(shaded))
+    toggled = ok_reply("object.shade toggle", client.command(
+        "object.shade", {"objects": ["Cube"], "mode": "TOGGLE"}))
+    check("toggle vuelve a FLAT", toggled.get("shade") == "FLAT", str(toggled))
+    fail_reply("shade inválido", client.command("object.shade", {"mode": "CURVED"}), "bad_payload")
+
     print("  transform.apply")
     ok_reply("escala 2", client.command("transform.scale", {"factor": 2.0}))
     ok_reply("apply scale", client.command("transform.apply", {"scale": True}))
@@ -764,6 +804,9 @@ def modeling_scenario(client: WSClient) -> None:
     ok_reply("begin cuts=2", client.command("tool.begin", {"tool": "LOOP_CUT", "parameters": {"cuts": 2}}))
     verts_two = ok_reply("verts cuts=2", client.command("mesh.info"))["verts"]
     check("cuts=2 crea más geometría", verts_two > verts_one, f"{verts_one} -> {verts_two}")
+    loop_selection = ok_reply("selección del preview cuts=2", client.command("selection.info"))
+    check("Loop Cut selecciona solo los dos loops nuevos",
+          len(loop_selection.get("edges", [])) == 8, str(loop_selection))
     confirmed = ok_reply("confirm loop cut", client.command("tool.confirm"))
     check("fase confirmada", confirmed.get("phase") == "CONFIRMED", str(confirmed))
     ok_reply("deseleccionar", client.command("selection.all", {"value": False}))
@@ -793,6 +836,7 @@ def modeling_scenario(client: WSClient) -> None:
         "tool": "LOOP_CUT", "edge": 0, "parameters": {"factor": 1.5}}), "bad_payload")
     ok_reply("factor 1.5 sin clamp", client.command("tool.begin", {
         "tool": "LOOP_CUT", "edge": 0, "parameters": {"factor": 1.5, "clamp": False}}))
+    fail_reply("loop_pop sin corte anterior", client.command("tool.loop_pop"), "empty_history")
     ok_reply("cancel factor largo", client.command("tool.cancel"))
 
     def _preview_cut_verts():
@@ -1428,6 +1472,7 @@ def client_worker(done: threading.Event) -> None:
             dissolve_scenario(extra)
             bisect_scenario(extra)
             rotate_scale_sign_scenario(extra)
+            proportional_automerge_scenario(extra)
             session_exclusion_scenario(extra)
         finally:
             extra.close()
@@ -1458,6 +1503,64 @@ def dissolve_scenario(client: WSClient) -> None:
         check(f"dissolve {mode} no añade geometría",
               after[field] <= before[field], f"{before} -> {after}")
         ok_reply(f"object tras dissolve {mode}", client.command("mode.object"))
+
+
+def proportional_automerge_scenario(client: WSClient) -> None:
+    print("\n[28] Edición proporcional y Auto Merge")
+    ok_reply("escena limpia proporcional", client.command("file.new"))
+    ok_reply("entrar Edit proporcional", client.command("mode.edit"))
+    ok_reply("submodo vértice proporcional", client.command("selection.vertex"))
+    ok_reply("seleccionar un vértice proporcional", client.command(
+        "selection.elements", {"verts": [0], "mode": "SET"}))
+    settings = ok_reply("activar proporcional", client.command("edit.settings_set", {
+        "proportional": True,
+        "falloff": "LINEAR",
+        "radius": 10.0,
+        "auto_merge": False,
+    }))
+    check("estado publica proporcional", settings.get("edit_settings", {}).get("proportional") is True,
+          str(settings.get("edit_settings")))
+
+    obj = bpy.context.view_layer.objects.active
+    bm = bmesh.from_edit_mesh(obj.data)
+    bm.verts.ensure_lookup_table()
+    before = [vert.co.copy() for vert in bm.verts]
+    ok_reply("begin proporcional", client.command("transform.begin", {"mode": "MOVE"}))
+    ok_reply("mover proporcional", client.command("transform.value", {"values": [1.0, 0.0, 0.0]}))
+    bm = bmesh.from_edit_mesh(obj.data)
+    bm.verts.ensure_lookup_table()
+    moved = [(vert.co - before[vert.index]).length for vert in bm.verts]
+    check("seleccionado recibe movimiento completo", abs(moved[0] - 1.0) < 1e-4, str(moved))
+    check("proporcional mueve vecinos con peso", any(1e-4 < distance < 0.9999 for distance in moved[1:]),
+          str(moved))
+    ok_reply("cancel proporcional", client.command("transform.cancel"))
+    bm = bmesh.from_edit_mesh(obj.data)
+    bm.verts.ensure_lookup_table()
+    restored = [(vert.co - before[vert.index]).length for vert in bm.verts]
+    check("cancel restaura todos los vértices", max(restored) < 1e-5, str(restored))
+
+    ok_reply("configurar Auto Merge", client.command("edit.settings_set", {
+        "proportional": False,
+        "auto_merge": True,
+        "merge_threshold": 0.001,
+    }))
+    bm = bmesh.from_edit_mesh(obj.data)
+    bm.verts.ensure_lookup_table()
+    vertex_count = len(bm.verts)
+    target_delta = bm.verts[1].co - bm.verts[0].co
+    ok_reply("begin Auto Merge", client.command("transform.begin", {"mode": "MOVE"}))
+    ok_reply("llevar vértice al vecino", client.command("transform.value", {
+        "values": list(target_delta),
+    }))
+    ok_reply("confirmar Auto Merge", client.command("transform.confirm"))
+    bm = bmesh.from_edit_mesh(obj.data)
+    check("Auto Merge suelda al confirmar", len(bm.verts) == vertex_count - 1,
+          f"{vertex_count} -> {len(bm.verts)}")
+    ok_reply("desactivar ajustes de prueba", client.command("edit.settings_set", {
+        "proportional": False,
+        "auto_merge": False,
+    }))
+    ok_reply("volver Object tras proporcional", client.command("mode.object"))
 
 
 def session_exclusion_scenario(client: WSClient) -> None:
