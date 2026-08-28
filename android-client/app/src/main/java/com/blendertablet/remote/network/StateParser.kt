@@ -113,6 +113,8 @@ object StateParser {
                 ?.optBoolean("pick", false) == true,
             f.optJSONObject("edit_tools")?.optJSONObject("loop_cut")
                 ?.optBoolean("multiple", false) == true,
+            f.optJSONObject("edit_tools")?.optJSONObject("knife")
+                ?.optBoolean("drag", false) == true,
             f.optJSONObject("files")?.optBoolean("browse", false) == true,
             f.optJSONObject("edit_settings") != null,
             editCatalog(f.optJSONObject("edit_catalog")),
@@ -309,9 +311,14 @@ object StateParser {
             }
         }
         val line = json.optJSONObject("line")?.let(::dragLine)
+        val projectedArray = json.optJSONArray("projected_points")
+        val projected = if (projectedArray == null) emptyList() else
+            (0 until projectedArray.length()).mapNotNull { index ->
+                projectedArray.optJSONArray(index)?.let { point -> List(2) { i -> point.optDouble(i, 0.0) } }
+            }
         return ToolSession(
             active = active, armed = armed, tool = tool, parameters = values,
-            points = points, closed = json.optBoolean("closed"), line = line,
+            points = points, projectedPoints = projected, closed = json.optBoolean("closed"), line = line,
             snapType = enum(json.optString("snap_type", params.optString("snap_type")), SnapType.NONE),
             snapStep = json.optDouble("snap_step", params.optDouble("snap_step", 0.1)),
             snapCandidate = candidate(json.optJSONObject("snap_candidate")),

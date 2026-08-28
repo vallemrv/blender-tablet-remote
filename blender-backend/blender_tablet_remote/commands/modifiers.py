@@ -1,7 +1,7 @@
 """modifier.* — pila no destructiva del objeto activo.
 
 API de datablock (`obj.modifiers.new`), no operadores. El catálogo es deliberadamente
-corto: Subsurf, Array, Bevel, Solidify y Boolean. Bevel aquí no es `mesh.bevel`.
+corto: Subsurf, Array, Bevel, Solidify, Boolean y Mirror. Bevel aquí no es `mesh.bevel`.
 """
 
 from __future__ import annotations
@@ -46,6 +46,21 @@ SCHEMA = {
         "object": {"type": "object", "default": None, "object_filter": {"type": "MESH", "exclude_self": True}},
         "solver": {"type": "enum", "default": "EXACT", "values": ["EXACT", "FAST"]},
     },
+    "MIRROR": {
+        "use_axis_x": {"type": "bool", "default": True},
+        "use_axis_y": {"type": "bool", "default": False},
+        "use_axis_z": {"type": "bool", "default": False},
+        "use_bisect_x": {"type": "bool", "default": False},
+        "use_bisect_y": {"type": "bool", "default": False},
+        "use_bisect_z": {"type": "bool", "default": False},
+        "use_bisect_flip_x": {"type": "bool", "default": False},
+        "use_bisect_flip_y": {"type": "bool", "default": False},
+        "use_bisect_flip_z": {"type": "bool", "default": False},
+        "use_clip": {"type": "bool", "default": False},
+        "use_merge": {"type": "bool", "default": True},
+        "merge_threshold": {"type": "float", "default": 0.001, "min": 0.0, "max": 1.0, "step": 0.001},
+        "mirror_object": {"type": "object", "default": None, "object_filter": {"exclude_self": True}},
+    },
 }
 
 CATALOG = {
@@ -54,6 +69,7 @@ CATALOG = {
     "BEVEL": {"blender": "BEVEL", "default_name": "Bevel"},
     "SOLIDIFY": {"blender": "SOLIDIFY", "default_name": "Solidify"},
     "BOOLEAN": {"blender": "BOOLEAN", "default_name": "Boolean"},
+    "MIRROR": {"blender": "MIRROR", "default_name": "Mirror"},
 }
 
 
@@ -97,8 +113,21 @@ def _operand(obj, name):
     return other
 
 
-def _write(mod, kind: str, params: dict, obj) -> None:
+def _mirror_object(obj, name):
+    if name is None or name == "":
+        return None
+    other = bpy.data.objects.get(str(name))
+    if other is None:
+        raise CommandError(f"Object not found: {name}", code="not_found")
+    if other == obj:
+        raise BadPayload("Mirror object cannot be the same object")
+    return other
+
+
+def _write(mod, kind: str, params: dict, obj, preserve_current: bool = False) -> None:
+    current = _read(mod)["parameters"] if preserve_current else {}
     data = _defaults(kind)
+    data.update(current)
     data.update({key: params[key] for key in _keys(kind) if key in params})
     if kind == "SUBSURF":
         mod.levels = _bounded_int(data["levels"], "levels", 0, 6)
@@ -145,6 +174,15 @@ def _write(mod, kind: str, params: dict, obj) -> None:
         mod.solver = solver
         if "object" in params or data["object"] is not None:
             mod.object = _operand(obj, data["object"])
+    elif kind == "MIRROR":
+        mod.use_axis = tuple(bool(data[f"use_axis_{axis}"]) for axis in "xyz")
+        mod.use_bisect_axis = tuple(bool(data[f"use_bisect_{axis}"]) for axis in "xyz")
+        mod.use_bisect_flip_axis = tuple(bool(data[f"use_bisect_flip_{axis}"]) for axis in "xyz")
+        mod.use_clip = bool(data["use_clip"])
+        mod.use_mirror_merge = bool(data["use_merge"])
+        mod.merge_threshold = _bounded_float(data["merge_threshold"], "merge_threshold", 0.0, 1.0)
+        if "mirror_object" in params or data["mirror_object"] is not None:
+            mod.mirror_object = _mirror_object(obj, data["mirror_object"])
 
 
 def _bounded_float(value, key, minimum, maximum):
@@ -207,6 +245,16 @@ def _read(mod) -> dict:
             "object": mod.object.name if mod.object else None,
             "solver": str(mod.solver),
         }
+    elif kind == "MIRROR":
+        params = {
+            **{f"use_axis_{axis}": bool(mod.use_axis[index]) for index, axis in enumerate("xyz")},
+            **{f"use_bisect_{axis}": bool(mod.use_bisect_axis[index]) for index, axis in enumerate("xyz")},
+            **{f"use_bisect_flip_{axis}": bool(mod.use_bisect_flip_axis[index]) for index, axis in enumerate("xyz")},
+            "use_clip": bool(mod.use_clip),
+            "use_merge": bool(mod.use_mirror_merge),
+            "merge_threshold": float(mod.merge_threshold),
+            "mirror_object": mod.mirror_object.name if mod.mirror_object else None,
+        }
     return {
         "name": mod.name,
         "type": kind or mod.type,
@@ -232,7 +280,15 @@ def add_options(payload: dict) -> dict:
         "ARRAY": {"parameters": {"count": _number("int", 2, 1, 1000, 1), "relative_offset": _number("float3", [1.0, 0.0, 0.0], -1000.0, 1000.0, 0.1), "use_merge": {"type": "bool", "default": False}, "merge_threshold": _number("float", 0.01, 0.0, 1000.0, 0.001)}},
         "BEVEL": {"parameters": {"width": _number("float", 0.1, 0.0, 1000.0, 0.01), "segments": _number("int", 1, 1, 1000, 1), "affect": _enum("EDGES", ["EDGES", "VERTICES"]), "limit_method": _enum("ANGLE", ["NONE", "ANGLE"]), "angle_limit": _number("float", 30.0, 0.0, 180.0, 1.0), "profile": _number("float", 0.5, 0.0, 1.0, 0.05)}},
         "SOLIDIFY": {"parameters": {"thickness": _number("float", 0.1, -1000.0, 1000.0, 0.01), "offset": _number("float", -1.0, -1.0, 1.0, 0.1), "use_even_offset": {"type": "bool", "default": True}, "use_rim": {"type": "bool", "default": True}}},
-        "BOOLEAN": {"parameters": {"operation": _enum("DIFFERENCE", ["DIFFERENCE", "UNION", "INTERSECT"]), "object": {"type": "object", "default": None, "object_filter": {"type": "MESH", "exclude_self": True}}, "solver": _enum("EXACT", ["EXACT", "FAST"])}}
+        "BOOLEAN": {"parameters": {"operation": _enum("DIFFERENCE", ["DIFFERENCE", "UNION", "INTERSECT"]), "object": {"type": "object", "default": None, "object_filter": {"type": "MESH", "exclude_self": True}}, "solver": _enum("EXACT", ["EXACT", "FAST"])}},
+        "MIRROR": {"parameters": {
+            "use_axis_x": {"type": "bool", "default": True}, "use_axis_y": {"type": "bool", "default": False}, "use_axis_z": {"type": "bool", "default": False},
+            "use_bisect_x": {"type": "bool", "default": False}, "use_bisect_y": {"type": "bool", "default": False}, "use_bisect_z": {"type": "bool", "default": False},
+            "use_bisect_flip_x": {"type": "bool", "default": False}, "use_bisect_flip_y": {"type": "bool", "default": False}, "use_bisect_flip_z": {"type": "bool", "default": False},
+            "use_clip": {"type": "bool", "default": False}, "use_merge": {"type": "bool", "default": True},
+            "merge_threshold": _number("float", 0.001, 0.0, 1.0, 0.001),
+            "mirror_object": {"type": "object", "default": None, "object_filter": {"exclude_self": True}}
+        }}
     }}
 
 
@@ -308,7 +364,7 @@ def set_params(payload: dict) -> dict:
     if not isinstance(params, dict):
         raise BadPayload("'parameters' must be an object")
     filtered = {key: params[key] for key in _keys(kind) if key in params}
-    _write(mod, kind, filtered, obj)
+    _write(mod, kind, filtered, obj, preserve_current=True)
     undo_push("Remote set modifier")
     return stack(obj)
 

@@ -29,6 +29,14 @@ import com.blendertablet.remote.model.ModifierDefault
  * en la tablet, y encima en silencio, porque el parseo es tolerante a propósito.
  */
 class BackendContractTest {
+    @Test fun `knife lee anclas reproyectadas y candidato exacto`() {
+        val session = StateParser.toolSession(fixture("tool.knife_drag.json"))
+        assertEquals(EditTool.KNIFE, session.tool)
+        assertEquals(listOf(0.35, 0.5), session.projectedPoints.first())
+        assertEquals(SnapType.EDGE, session.snapCandidate?.type)
+        assertEquals("Cube:EDGE:4", session.snapCandidate?.id)
+    }
+
 
     private fun fixture(name: String): JSONObject {
         // Las pruebas corren con el directorio del módulo como raíz, pero se busca
@@ -151,7 +159,11 @@ class BackendContractTest {
 
     @Test fun `descriptores cubren cinco modifiers y boolean null`() {
         val options = StateParser.modifierOptions(fixture("modifier.add_options.json"))
-        assertEquals(setOf("SUBSURF", "ARRAY", "BEVEL", "SOLIDIFY", "BOOLEAN"), options.map { it.type }.toSet())
+        assertEquals(setOf("SUBSURF", "ARRAY", "BEVEL", "SOLIDIFY", "BOOLEAN", "MIRROR"), options.map { it.type }.toSet())
+        val mirror = options.single { it.type == "MIRROR" }
+        assertEquals(true, (mirror.parameters.single { it.name == "use_axis_x" }.default as ModifierDefault.BooleanValue).value)
+        assertEquals(false, (mirror.parameters.single { it.name == "use_axis_y" }.default as ModifierDefault.BooleanValue).value)
+        assertTrue(mirror.parameters.single { it.name == "mirror_object" }.objectFilter?.excludeSelf == true)
         val operand = options.first { it.type == "BOOLEAN" }.parameters.first { it.name == "object" }
         assertEquals(ModifierDefault.Null, operand.default)
         assertEquals("MESH", operand.objectFilter?.type)

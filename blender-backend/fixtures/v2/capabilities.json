@@ -112,13 +112,14 @@
       "capture_default": "OFFSCREEN"
     },
     "modifiers": {
-      "version": 1,
+      "version": 2,
       "types": [
         "SUBSURF",
         "ARRAY",
         "BEVEL",
         "SOLIDIFY",
-        "BOOLEAN"
+        "BOOLEAN",
+        "MIRROR"
       ],
       "commands": [
         "modifier.add_options",
@@ -152,7 +153,7 @@
       ]
     },
     "edit_tools": {
-      "version": 5,
+      "version": 6,
       "tools": [
         "EXTRUDE",
         "BEVEL",
@@ -185,7 +186,10 @@
         "close": true,
         "pop": true,
         "cut_through": false,
-        "threshold": 0.045
+        "threshold": 0.045,
+        "drag": true,
+        "projection": true,
+        "snap_types": ["VERTEX", "EDGE", "FACE"]
       },
       "bisect": {
         "drag_line": true,
@@ -2145,7 +2149,7 @@
               "id": "KNIFE",
               "label": "Cuchillo",
               "enabled": true,
-              "input": "VIEWPORT_POLYLINE",
+              "input": "VIEWPORT_DRAG_SEGMENTS",
               "payload": {
                 "tool": "KNIFE"
               },
@@ -2234,7 +2238,8 @@
       "ARRAY",
       "BEVEL",
       "SOLIDIFY",
-      "BOOLEAN"
+      "BOOLEAN",
+      "MIRROR"
     ],
     "subdivision_type": [
       "CATMULL_CLARK",
@@ -2372,12 +2377,12 @@
     "object.delete",
     "object.duplicate",
     "object.hide",
-    "object.shade",
     "object.rename",
     "object.reveal",
     "object.select",
     "object.select_all",
     "object.set_active",
+    "object.shade",
     "scene.get_context",
     "scene.get_object",
     "scene.get_state",
@@ -2421,6 +2426,7 @@
     "tool.confirm",
     "tool.drag_line",
     "tool.knife_close",
+    "tool.knife_drag",
     "tool.knife_point",
     "tool.knife_pop",
     "tool.loop_pick",

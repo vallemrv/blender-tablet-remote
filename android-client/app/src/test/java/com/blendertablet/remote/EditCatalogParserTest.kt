@@ -44,7 +44,7 @@ class EditCatalogParserTest {
                "parameters":[{"id":"offset","label":"Desplazamiento","type":"float","default":0.0}]},
               {"id":"CUT","label":"Cut","default_variant":"KNIFE","command":"tool.begin","payload":{},
                "variants":[
-                 {"id":"KNIFE","label":"Cuchillo","input":"VIEWPORT_POLYLINE","payload":{"tool":"KNIFE"}},
+                 {"id":"KNIFE","label":"Cuchillo","input":"VIEWPORT_DRAG_SEGMENTS","payload":{"tool":"KNIFE"}},
                  {"id":"BISECT","label":"Bisect","input":"VIEWPORT_DRAG_LINE","payload":{"tool":"BISECT"},
                   "parameters":[{"id":"fill","label":"Rellenar","type":"bool","default":false}]}
                ]}
@@ -59,6 +59,7 @@ class EditCatalogParserTest {
         val cut = toolbar.families.first { it.id == "CUT" }
         assertEquals("tool.begin", cut.command)
         assertTrue(cut.payload.isEmpty())
+        assertEquals("VIEWPORT_DRAG_SEGMENTS", cut.variants.first { it.id == "KNIFE" }.input)
         val bisect = cut.variants.first { it.id == "BISECT" }
         assertEquals("VIEWPORT_DRAG_LINE", bisect.input)
         assertEquals("BISECT", bisect.payload["tool"])

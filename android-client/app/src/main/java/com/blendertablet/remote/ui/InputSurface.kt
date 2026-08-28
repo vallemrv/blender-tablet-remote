@@ -47,6 +47,8 @@ fun InputSurface(
     onViewGesture: (Gesture, GesturePhase, Float, Float, Float) -> Unit,
     onTap: (Float, Float, Boolean) -> Unit,
     onDoubleTap: () -> Unit,
+    knifeActive: Boolean = false,
+    onKnifeDrag: (GesturePhase, Float, Float) -> Unit = { _, _, _ -> },
     /** Pulsación larga: abre el menú rápido en píxeles de esta vista. */
     onLongPress: (px: Float, py: Float, u: Float, v: Float) -> Unit = { _, _, _, _ -> },
     /** Herramienta de forma armada (B/C); NONE = gesto normal de un dedo. */
@@ -66,6 +68,8 @@ fun InputSurface(
             view.updateCallbacks(onDebug, onToolGesture, onToolPointer, onViewGesture, onTap, onDoubleTap)
             view.onLongPress = onLongPress
             view.shapeTool = shapeTool
+            view.knifeActive = knifeActive
+            view.onKnifeDrag = onKnifeDrag
             view.navigationOrbitEnabled = navigationOrbitEnabled
             view.onShape = onShape
             view.knifePoints = knifePoints
@@ -144,6 +148,8 @@ private class GestureView(
 
     /** Herramienta de forma (B/C). Con una armada, el dedo dibuja en vez de orbitar. */
     var shapeTool: ShapeTool = ShapeTool.NONE
+    var knifeActive: Boolean = false
+    var onKnifeDrag: (GesturePhase, Float, Float) -> Unit = { _, _, _ -> }
     var navigationOrbitEnabled: Boolean = false
     var onShape: (ShapeTool, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> }
     /** Puntos del Knife (normalizados) para el overlay. */
@@ -160,6 +166,7 @@ private class GestureView(
         strokeWidth = 2.5f * resources.displayMetrics.density
     }
     private var shapeDrawing = false
+    private var knifeDrawing = false
     private var shapeStartX = 0f
     private var shapeStartY = 0f
     private var shapeCurrentX = 0f
@@ -217,6 +224,15 @@ private class GestureView(
                     invalidate()
                     return true
                 }
+                if (knifeActive) {
+                    knifeDrawing = true
+                    shapeStartX = event.x; shapeStartY = event.y
+                    shapeCurrentX = event.x; shapeCurrentY = event.y
+                    lastDispatchAt = event.eventTime
+                    onKnifeDrag(GesturePhase.BEGIN, nx(event.x), ny(event.y))
+                    invalidate()
+                    return true
+                }
                 // Con B/C armada, un dedo dibuja la forma: no orbita, no selecciona
                 // y no abre el menú. El tap simple no hace nada (se resuelve al soltar).
                 if (shapeTool != ShapeTool.NONE) {
@@ -247,6 +263,11 @@ private class GestureView(
                     shapeDrawing = false
                     invalidate()
                 }
+                if (knifeDrawing) {
+                    onKnifeDrag(GesturePhase.CANCEL, nx(shapeCurrentX), ny(shapeCurrentY))
+                    knifeDrawing = false
+                    invalidate()
+                }
                 endToolGesture()
                 endNavigationOrbit()
                 // La sesión de navegación NO se cierra: solo se reancla. Cerrarla
@@ -258,7 +279,14 @@ private class GestureView(
             // tres dedos para la captura de pantalla y nunca llega completo.
             MotionEvent.ACTION_MOVE ->
                 if (event.pointerCount >= 2) handlePair(event)
-                else if (shapeDrawing) {
+                else if (knifeDrawing) {
+                    shapeCurrentX = event.x; shapeCurrentY = event.y
+                    if (event.eventTime - lastDispatchAt >= DISPATCH_MS) {
+                        onKnifeDrag(GesturePhase.UPDATE, nx(event.x), ny(event.y))
+                        lastDispatchAt = event.eventTime
+                    }
+                    invalidate()
+                } else if (shapeDrawing) {
                     shapeCurrentX = event.x; shapeCurrentY = event.y
                     invalidate()
                 } else if (navigationOrbitActive) handleNavigationOrbit(event) else handleSingle(event)
@@ -278,6 +306,14 @@ private class GestureView(
                     parent?.requestDisallowInterceptTouchEvent(false)
                     return true
                 }
+                if (knifeDrawing) {
+                    shapeCurrentX = event.x; shapeCurrentY = event.y
+                    onKnifeDrag(GesturePhase.END, nx(event.x), ny(event.y))
+                    knifeDrawing = false
+                    invalidate()
+                    parent?.requestDisallowInterceptTouchEvent(false)
+                    return true
+                }
                 val wasNavigationOrbit = navigationOrbitActive
                 endToolGesture()
                 endNavigationOrbit()
@@ -289,6 +325,8 @@ private class GestureView(
             MotionEvent.ACTION_CANCEL -> {
                 removeCallbacks(longPressRunnable)
                 shapeDrawing = false
+                if (knifeDrawing) onKnifeDrag(GesturePhase.CANCEL, nx(shapeCurrentX), ny(shapeCurrentY))
+                knifeDrawing = false
                 invalidate()
                 cancelGestures()
                 parent?.requestDisallowInterceptTouchEvent(false)
@@ -551,6 +589,11 @@ private class GestureView(
                 val (u1, v1) = knifePoints[index]
                 canvas.drawLine(u0 * width, v0 * height, u1 * width, v1 * height, knifePaint)
             }
+        }
+        if (knifeDrawing) {
+            val start = knifePoints.lastOrNull()?.let { (u, v) -> u * width to v * height }
+                ?: (shapeStartX to shapeStartY)
+            canvas.drawLine(start.first, start.second, shapeCurrentX, shapeCurrentY, candidatePaint)
         }
         drawSnapCandidate(canvas)
         val remaining = tapFeedbackUntil - android.os.SystemClock.uptimeMillis()

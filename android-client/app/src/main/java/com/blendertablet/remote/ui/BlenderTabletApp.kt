@@ -252,6 +252,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             onDebug = vm::updateInput,
             onToolGesture = vm::toolGesture,
             onToolPointer = vm::toolPointer,
+            onKnifeDrag = vm::knifeDrag,
             onViewGestureLive = { g, phase, dx, dy, factor ->
                 vm.viewGesture(g, phase, dx, dy, factor)
                 if (phase != GesturePhase.BEGIN && phase != GesturePhase.UPDATE) vm.requestState()
@@ -260,6 +261,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             onTap = vm::pick,
             onDoubleTap = vm::frameSelected,
             onSurfaceAvailable = vm::attachVideoSurface,
+            onSurfaceChanged = vm::changeVideoSurface,
             onSurfaceDestroyed = vm::detachVideoSurface,
         )
     }
@@ -272,6 +274,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             input = viewportInput,
             shapeTool = state.shapeTool,
             knifePoints = knifeScreenPoints,
+            knifeActive = toolSession.active && toolSession.tool == EditTool.KNIFE &&
+                state.blender.features.knifeDrag,
             snapCandidate = toolSession.snapCandidate ?: session.snapCandidate,
             navigationOrbitEnabled = (session.active || toolSession.active) &&
                 quickMenuAt == null && !modifiersOpen,
@@ -372,6 +376,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     onValueMode = vm::setValueMode,
                     onValue = vm::transformValue,
                     onProportionalRadius = vm::scaleProportionalRadius,
+                    onProportionalRadiusValue = vm::setProportionalRadius,
                     onProportionalFalloff = vm::cycleProportionalFalloff,
                     onConfirm = vm::transformConfirm,
                     onCancel = vm::transformCancel,
@@ -592,6 +597,7 @@ class ViewportInput(
     val onDebug: (com.blendertablet.remote.model.InputDebug) -> Unit,
     val onToolGesture: (GesturePhase, Float, Float) -> Unit,
     val onToolPointer: (Float, Float) -> Unit,
+    val onKnifeDrag: (GesturePhase, Float, Float) -> Unit,
     /** Con vídeo activo: al soltar el gesto se refresca el estado. */
     val onViewGestureLive: (Gesture, GesturePhase, Float, Float, Float) -> Unit,
     /** Sin vídeo: solo navega, no hay nada que refrescar aún. */
@@ -599,7 +605,8 @@ class ViewportInput(
     val onTap: (Float, Float, Boolean) -> Unit,
     val onDoubleTap: () -> Unit,
     val onSurfaceAvailable: (android.view.Surface) -> Unit,
-    val onSurfaceDestroyed: () -> Unit,
+    val onSurfaceChanged: (android.view.Surface, Int, Int) -> Unit,
+    val onSurfaceDestroyed: (android.view.Surface) -> Unit,
 )
 
 /**
@@ -617,6 +624,7 @@ private fun ViewportLayer(
     h264Size: Pair<Int, Int>?,
     input: ViewportInput,
     shapeTool: ShapeTool,
+    knifeActive: Boolean,
     knifePoints: List<Pair<Float, Float>>,
     snapCandidate: com.blendertablet.remote.model.SnapCandidate?,
     navigationOrbitEnabled: Boolean,
@@ -632,6 +640,7 @@ private fun ViewportLayer(
                 VideoSurface(
                     modifier = Modifier.fillMaxSize(),
                     onSurfaceAvailable = input.onSurfaceAvailable,
+                    onSurfaceChanged = input.onSurfaceChanged,
                     onSurfaceDestroyed = input.onSurfaceDestroyed,
                 )
                 InputSurface(
@@ -642,6 +651,8 @@ private fun ViewportLayer(
                     onViewGesture = input.onViewGestureLive,
                     onTap = input.onTap,
                     onDoubleTap = input.onDoubleTap,
+                    knifeActive = knifeActive,
+                    onKnifeDrag = input.onKnifeDrag,
                     onLongPress = onLongPress,
                     shapeTool = shapeTool,
                     navigationOrbitEnabled = navigationOrbitEnabled,
@@ -662,6 +673,8 @@ private fun ViewportLayer(
                 onViewGesture = input.onViewGesturePlain,
                 onTap = input.onTap,
                 onDoubleTap = input.onDoubleTap,
+                knifeActive = knifeActive,
+                onKnifeDrag = input.onKnifeDrag,
                 onLongPress = onLongPress,
                 shapeTool = shapeTool,
                 knifePoints = knifePoints,
@@ -696,6 +709,8 @@ private fun ViewportLayer(
                 onViewGesture = input.onViewGestureLive,
                 onTap = input.onTap,
                 onDoubleTap = input.onDoubleTap,
+                knifeActive = knifeActive,
+                onKnifeDrag = input.onKnifeDrag,
                 onLongPress = onLongPress,
                 shapeTool = shapeTool,
                 knifePoints = knifePoints,

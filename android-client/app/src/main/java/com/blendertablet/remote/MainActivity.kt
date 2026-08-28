@@ -56,6 +56,11 @@ class MainActivity : ComponentActivity() {
         viewModel.onForeground()
     }
 
+    override fun onStop() {
+        viewModel.onBackground()
+        super.onStop()
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) enterImmersiveMode()

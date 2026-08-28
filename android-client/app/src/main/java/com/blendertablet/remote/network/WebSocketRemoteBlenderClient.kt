@@ -102,7 +102,7 @@ class WebSocketRemoteBlenderClient(
         /** Comandos cuya respuesta ES el estado de la sesión de herramienta. */
         val TOOL_COMMANDS = setOf(
             "tool.begin", "tool.parameter", "tool.nudge", "tool.status",
-            "tool.loop_pick", "tool.loop_pop", "tool.knife_point", "tool.knife_pop", "tool.knife_close",
+            "tool.loop_pick", "tool.loop_pop", "tool.knife_drag", "tool.knife_point", "tool.knife_pop", "tool.knife_close",
             "tool.drag_line", "tool.snap_candidate",
         )
     }
@@ -118,6 +118,9 @@ class WebSocketRemoteBlenderClient(
     private val toolSnapInFlight = AtomicBoolean(false)
     @Volatile private var pendingToolSnap: ToolSnapRequest? = null
     private data class ToolSnapRequest(val u: Double, val v: Double, val type: SnapType, val lock: Boolean)
+    private val knifeDragInFlight = AtomicBoolean(false)
+    @Volatile private var pendingKnifeDrag: KnifeDragRequest? = null
+    private data class KnifeDragRequest(val phase: GesturePhase, val u: Double, val v: Double)
     private val transformSnapInFlight = AtomicBoolean(false)
     @Volatile private var pendingTransformSnap: ToolSnapRequest? = null
 
@@ -580,6 +583,25 @@ class WebSocketRemoteBlenderClient(
     override fun toolKnifePoint(u: Double, v: Double) =
         command("tool.knife_point", JSONObject().put("u", u).put("v", v))
 
+    override fun toolKnifeDrag(phase: GesturePhase, u: Double, v: Double) {
+        pendingKnifeDrag = KnifeDragRequest(phase, u, v)
+        flushKnifeDrag()
+    }
+
+    private fun flushKnifeDrag() {
+        if (!knifeDragInFlight.compareAndSet(false, true)) return
+        val request = pendingKnifeDrag
+        if (request == null || !_toolSession.value.active) {
+            knifeDragInFlight.set(false)
+            return
+        }
+        pendingKnifeDrag = null
+        command("tool.knife_drag", JSONObject().put("phase", request.phase.name)
+            .put("u", request.u).put("v", request.v))
+    }
+
+    override fun requestToolStatus() = command("tool.status")
+
     override fun toolKnifePop() = command("tool.knife_pop")
 
     override fun toolKnifeClose() = command("tool.knife_close")
@@ -669,6 +691,7 @@ class WebSocketRemoteBlenderClient(
                 // dejaría la herramienta sorda al arrastre para siempre.
                 if (command == "tool.nudge") nudgeInFlight = false
                 if (command == "tool.snap_candidate") toolSnapInFlight.set(false)
+                if (command == "tool.knife_drag") knifeDragInFlight.set(false)
                 if (command == "transform.snap_candidate") transformSnapInFlight.set(false)
                 when {
                     !message.optBoolean("ok", false) -> {
@@ -678,6 +701,7 @@ class WebSocketRemoteBlenderClient(
                         if (command == "snap.query") _touchProbe.value = TouchProbe(hit = false)
                         else if (command == "mesh.loop_probe") _loopProbe.value = LoopProbe(hit = false)
                         else if (command == "tool.snap_candidate") flushToolSnap()
+                        else if (command == "tool.knife_drag") flushKnifeDrag()
                         else if (command == "transform.snap_candidate") flushTransformSnap()
                         // Una línea de Bisect que no cruza geometría es un intento normal
                         // (el usuario dibuja de nuevo), no un error que enseñar: el
@@ -740,6 +764,10 @@ class WebSocketRemoteBlenderClient(
                         if (command == "tool.snap_candidate") {
                             toolSnapInFlight.set(false)
                             flushToolSnap()
+                        }
+                        if (command == "tool.knife_drag") {
+                            knifeDragInFlight.set(false)
+                            flushKnifeDrag()
                         }
                         // Lo que se acumuló mientras el servidor pensaba sale ahora.
                         flushNudge()

@@ -20,9 +20,12 @@ internal class H264ViewportStream(private val scope: CoroutineScope, private val
     private val decoder = H264SurfaceDecoder { handleFailure(it) }
     private var job: Job? = null
     private var call: Call? = null
-    private var surface: Surface? = null
+    @Volatile private var surface: Surface? = null
     private var desiredEndpoint: StreamEndpoint? = null
     private var dimensions: Pair<Int, Int>? = null
+    private var surfaceSize: Pair<Int, Int>? = null
+    @Volatile private var foreground = true
+    @Volatile private var transportGeneration = 0
     // Un resize de ventana o el sistema reclamando el codec de hardware invalidan
     // el decoder/la Surface durante un instante: reintentar aquí evita caer a MJPEG
     // por un tropiezo transitorio. Se resetea con cada frame sano y con cada Surface
@@ -33,23 +36,52 @@ internal class H264ViewportStream(private val scope: CoroutineScope, private val
 
     fun attachSurface(value: Surface) {
         surface = value
+        surfaceSize = null
         dimensions = null
         retryAttempts = 0
-        desiredEndpoint?.let(::open)
+        if (foreground) desiredEndpoint?.let(::open)
     }
 
-    fun detachSurface() {
+    fun surfaceChanged(value: Surface, width: Int, height: Int) {
+        if (surface !== value || width <= 0 || height <= 0) return
+        val newSize = width to height
+        if (surfaceSize == newSize) return
+        surfaceSize = newSize
+        dimensions = null
+        retryAttempts = 0
+        if (foreground) desiredEndpoint?.let(::open)
+    }
+
+    fun detachSurface(value: Surface) {
+        // SurfaceView puede entregar el destroy antiguo después de crear el nuevo.
+        if (surface !== value) return
         surface = null
+        surfaceSize = null
         dimensions = null
         cancelTransport()
         decoder.stop()
+    }
+
+    fun pause() {
+        foreground = false
+        cancelTransport()
+        decoder.stop()
+        dimensions = null
+    }
+
+    fun resume() {
+        if (foreground) return
+        foreground = true
+        dimensions = null
+        retryAttempts = 0
+        if (surface?.isValid == true) desiredEndpoint?.let(::open)
     }
 
     fun start(endpoint: StreamEndpoint) {
         stopTransport()
         desiredEndpoint = endpoint
         retryAttempts = 0
-        if (surface != null) open(endpoint)
+        if (foreground && surface?.isValid == true) open(endpoint)
     }
 
     /**
@@ -66,6 +98,7 @@ internal class H264ViewportStream(private val scope: CoroutineScope, private val
 
     private fun open(endpoint: StreamEndpoint) {
         cancelTransport()
+        val openedGeneration = transportGeneration
         val url = buildString {
             append("http://").append(endpoint.host).append(':').append(endpoint.port).append(endpoint.path)
             if (endpoint.token.isNotBlank()) append("?token=").append(endpoint.token)
@@ -79,7 +112,8 @@ internal class H264ViewportStream(private val scope: CoroutineScope, private val
                     val source = response.body?.source() ?: throw IOException("Respuesta H.264 vacía")
                     while (true) {
                         val packet = H264Framing.read(source) ?: break
-                        val target = surface ?: continue
+                        if (openedGeneration != transportGeneration) break
+                        val target = surface?.takeIf { it.isValid } ?: continue
                         val newDimensions = packet.width to packet.height
                         if (dimensions != newDimensions) {
                             dimensions = newDimensions
@@ -92,19 +126,21 @@ internal class H264ViewportStream(private val scope: CoroutineScope, private val
                 }
                 throw IOException("Stream H.264 finalizado")
             } catch (t: Throwable) {
-                if (job?.isActive == true) handleFailure(t.message ?: "Fallo H.264")
+                if (openedGeneration == transportGeneration && job?.isActive == true) {
+                    handleFailure(t.message ?: "Fallo H.264")
+                }
             }
         }
     }
 
     private fun handleFailure(message: String) {
         val endpoint = desiredEndpoint
-        if (endpoint != null && surface != null && retryAttempts < MAX_RETRIES) {
+        if (endpoint != null && foreground && surface?.isValid == true && retryAttempts < MAX_RETRIES) {
             retryAttempts++
             cancelTransport()
             scope.launch {
                 delay(RETRY_DELAY_MS)
-                if (desiredEndpoint == endpoint && surface != null) open(endpoint)
+                if (desiredEndpoint == endpoint && foreground && surface?.isValid == true) open(endpoint)
             }
             return
         }
@@ -113,6 +149,7 @@ internal class H264ViewportStream(private val scope: CoroutineScope, private val
 
     /** Cancela de verdad la conexión en vuelo: un `Job.cancel()` no interrumpe un `execute()` bloqueado. */
     private fun cancelTransport() {
+        transportGeneration++
         job?.cancel()
         job = null
         call?.cancel()

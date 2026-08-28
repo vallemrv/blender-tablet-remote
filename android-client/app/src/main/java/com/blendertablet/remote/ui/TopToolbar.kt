@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.automirrored.filled.CallMerge
 import androidx.compose.material.icons.filled.CropSquare
+import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.Grid4x4
 import androidx.compose.material.icons.filled.LinearScale
 import androidx.compose.material.icons.filled.ScatterPlot
@@ -68,10 +70,16 @@ fun TopToolbar(
                         ) { vm.toggleShading() }
                     }
                     if (inEdit && blender.features.editSettings) {
-                        PillButton("Prop", selected = blender.editSettings.proportional) {
+                        IconAction(
+                            Icons.Default.BlurOn, "Edición proporcional",
+                            selected = blender.editSettings.proportional,
+                        ) {
                             vm.toggleProportional()
                         }
-                        PillButton("Merge", selected = blender.editSettings.autoMerge) {
+                        IconAction(
+                            Icons.AutoMirrored.Filled.CallMerge, "Auto Merge",
+                            selected = blender.editSettings.autoMerge,
+                        ) {
                             vm.toggleAutoMerge()
                         }
                     }

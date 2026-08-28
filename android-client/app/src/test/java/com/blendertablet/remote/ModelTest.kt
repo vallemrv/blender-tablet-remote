@@ -8,12 +8,22 @@ import com.blendertablet.remote.model.SelectionMode
 import com.blendertablet.remote.model.ToolSession
 import com.blendertablet.remote.model.SnapType
 import com.blendertablet.remote.model.bottomTrayVisible
+import com.blendertablet.remote.network.StateParser
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ModelTest {
+    @Test fun `knife conserva anclas 3d y lee su proyeccion vigente`() {
+        val session = StateParser.toolSession(org.json.JSONObject(
+            """{"active":true,"tool":"KNIFE","points":[[1,2,3],[4,5,6]],
+                "projected_points":[[0.25,0.4],[0.7,0.8]],"closed":false}"""
+        ))
+        assertEquals(2, session.points.size)
+        assertEquals(listOf(0.25, 0.4), session.projectedPoints.first())
+    }
+
     @Test fun `extrude region ofrece snap geometrico y las demas tools solo escalar`() {
         val extrude = ToolSession(
             active = true, tool = EditTool.EXTRUDE,

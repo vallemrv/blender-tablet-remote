@@ -676,9 +676,23 @@ def modeling_scenario(client: WSClient) -> None:
 
     opts = ok_reply("modifier.add_options", client.command("modifier.add_options"))
     types = opts.get("types", {})
-    for kind in ("SUBSURF", "ARRAY", "BEVEL", "SOLIDIFY", "BOOLEAN"):
+    for kind in ("SUBSURF", "ARRAY", "BEVEL", "SOLIDIFY", "BOOLEAN", "MIRROR"):
         check(f"catálogo incluye {kind}", kind in types, str(types))
-    fail_reply("tipo inventado", client.command("modifier.add", {"type": "MIRROR"}), "bad_payload")
+    fail_reply("tipo inventado", client.command("modifier.add", {"type": "NO_EXISTE"}), "bad_payload")
+
+    mirror = ok_reply("add MIRROR", client.command("modifier.add", {"type": "MIRROR"}))
+    mirror_state = next(m for m in mirror["modifiers"] if m["type"] == "MIRROR")
+    check("mirror por defecto en X", mirror_state["parameters"]["use_axis_x"] is True, str(mirror_state))
+    mirror_name = mirror_state["name"]
+    changed = ok_reply("mirror activa Y", client.command("modifier.set", {
+        "name": mirror_name, "parameters": {"use_axis_y": True, "use_clip": True}}))
+    mirror_state = next(m for m in changed["modifiers"] if m["name"] == mirror_name)
+    check("set parcial conserva X", mirror_state["parameters"]["use_axis_x"] is True, str(mirror_state))
+    check("mirror activa Y y clipping", mirror_state["parameters"]["use_axis_y"] is True
+          and mirror_state["parameters"]["use_clip"] is True, str(mirror_state))
+    fail_reply("mirror consigo mismo", client.command("modifier.set", {
+        "name": mirror_name, "parameters": {"mirror_object": "Cube"}}), "bad_payload")
+    ok_reply("quitar mirror", client.command("modifier.remove", {"name": mirror_name}))
 
     sub = ok_reply("add SUBSURF", client.command("modifier.add", {"type": "SUBSURF"}))
     check("subsurf en la pila", any(m["type"] == "SUBSURF" for m in sub.get("modifiers", [])), str(sub))

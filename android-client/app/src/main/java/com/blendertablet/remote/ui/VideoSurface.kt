@@ -15,7 +15,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 internal fun VideoSurface(
     modifier: Modifier = Modifier,
     onSurfaceAvailable: (Surface) -> Unit,
-    onSurfaceDestroyed: () -> Unit,
+    onSurfaceChanged: (Surface, Int, Int) -> Unit,
+    onSurfaceDestroyed: (Surface) -> Unit,
 ) {
     AndroidView(
         modifier = modifier,
@@ -25,8 +26,9 @@ internal fun VideoSurface(
                 isFocusable = false
                 holder.addCallback(object : SurfaceHolder.Callback {
                     override fun surfaceCreated(holder: SurfaceHolder) = onSurfaceAvailable(holder.surface)
-                    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) = Unit
-                    override fun surfaceDestroyed(holder: SurfaceHolder) = onSurfaceDestroyed()
+                    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) =
+                        onSurfaceChanged(holder.surface, width, height)
+                    override fun surfaceDestroyed(holder: SurfaceHolder) = onSurfaceDestroyed(holder.surface)
                 })
             }
         },

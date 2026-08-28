@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -14,6 +15,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.LinearScale
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.RoundedCorner
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -81,6 +83,14 @@ private fun FamilyToolButton(family: EditToolbarFamily, toolSession: ToolSession
             contentAlignment = Alignment.Center,
         ) {
             Icon(familyIcon(family), description, tint = if (selected) Ink.Accent else Ink.OnPanel)
+            if (hasLongClickMenu(family)) {
+                Icon(
+                    Icons.Default.KeyboardArrowDown,
+                    "Mantén pulsado para ver variantes",
+                    Modifier.align(Alignment.BottomEnd).padding(2.dp).size(13.dp),
+                    tint = if (selected) Ink.Accent else Ink.Faint,
+                )
+            }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             for (variant in enabledVariants) {
@@ -98,6 +108,9 @@ private fun FamilyToolButton(family: EditToolbarFamily, toolSession: ToolSession
         }
     }
 }
+
+internal fun hasLongClickMenu(family: EditToolbarFamily): Boolean =
+    family.variants.count { it.enabled } > 1
 
 /**
  * Qué variante de esta familia está armada/activa ahora mismo, si alguna.

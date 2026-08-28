@@ -164,14 +164,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // configura el de control y el vídeo se engancha solo (§63).
         viewModelScope.launch {
             client.toolSession.collect { session ->
-                // Reconciliar el overlay del Knife contra el servidor: si un toque
-                // falló (miss) o se quitó un punto, el contador no crece y se recorta
-                // la lista optimista.
-                val count = if (session.tool == EditTool.KNIFE) session.points.size else 0
                 if (session.tool != EditTool.KNIFE) {
                     if (_knifeScreenPoints.value.isNotEmpty()) _knifeScreenPoints.value = emptyList()
-                } else if (_knifeScreenPoints.value.size > count) {
-                    _knifeScreenPoints.value = _knifeScreenPoints.value.take(count)
+                } else {
+                    _knifeScreenPoints.value = session.projectedPoints.mapNotNull { point ->
+                        if (point.size >= 2) point[0].toFloat() to point[1].toFloat() else null
+                    }
                 }
                 // Bisect arma el mismo mecanismo de "un dedo dibuja" que B/C (F4): un
                 // dedo traza la línea de corte en vez de orbitar, mientras la tool
@@ -235,7 +233,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * detrás, esto lo recupera sin que el usuario se entere; si sigue viva, no hace
      * nada.
      */
-    fun onForeground() = client.retryNow()
+    fun onForeground() {
+        h264Stream.resume()
+        client.retryNow()
+    }
+
+    /** Detiene MediaCodec antes de que Android invalide los buffers de la Surface. */
+    fun onBackground() = h264Stream.pause()
 
     fun disconnect() {
         h264Stream.stopTransport()
@@ -247,7 +251,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearError() = client.clearError()
 
     fun attachVideoSurface(surface: Surface) = h264Stream.attachSurface(surface)
-    fun detachVideoSurface() = h264Stream.detachSurface()
+    fun changeVideoSurface(surface: Surface, width: Int, height: Int) =
+        h264Stream.surfaceChanged(surface, width, height)
+    fun detachVideoSurface(surface: Surface) = h264Stream.detachSurface(surface)
 
     /**
      * H.264 se rindió tras varios reintentos (§ "el vídeo pierde calidad al hacer
@@ -397,7 +403,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun scaleProportionalRadius(factor: Double) {
-        val radius = (client.state.value.editSettings.radius * factor).coerceIn(0.0001, 1_000.0)
+        setProportionalRadius(client.state.value.editSettings.radius * factor)
+    }
+
+    fun setProportionalRadius(value: Double) {
+        val radius = value.coerceIn(0.0001, 1_000.0)
         client.editSettings(mapOf("radius" to radius))
         client.transformSession.value.takeIf { it.active }?.let { transformBegin(it.mode) }
     }
@@ -643,11 +653,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun loopCutPop() = client.toolLoopPop()
     fun knifeClose() = client.toolKnifeClose()
 
-    /** Knife: un toque añade un punto (optimista; se recorta si el servidor lo rechaza). */
+    /** Compatibilidad con servidores antiguos que aún colocan Knife por toque. */
     fun knifeTap(u: Float, v: Float) {
         _knifeScreenPoints.value = _knifeScreenPoints.value + (u to v)
         client.toolKnifePoint(u.toDouble(), v.toDouble())
     }
+
+    fun knifeDrag(phase: GesturePhase, u: Float, v: Float) =
+        client.toolKnifeDrag(phase, u.toDouble(), v.toDouble())
 
     /** Knife: conmuta el snap a vértice/arista. */
     fun knifeSnap(enabled: Boolean) {
@@ -868,8 +881,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         client.setScale(x.toDouble(), y.toDouble(), z.toDouble())
 
     /** Gestos de navegación: orbit, pan y zoom van tal cual al servidor. */
-    fun viewGesture(gesture: Gesture, phase: GesturePhase, dx: Float, dy: Float, factor: Float) =
+    fun viewGesture(gesture: Gesture, phase: GesturePhase, dx: Float, dy: Float, factor: Float) {
         client.gesture(gesture, phase, dx.toDouble(), dy.toDouble(), factor.toDouble())
+        if ((phase == GesturePhase.END || phase == GesturePhase.CANCEL) &&
+            client.toolSession.value.tool == EditTool.KNIFE
+        ) client.requestToolStatus()
+    }
 
     /**
      * Arrastre de un dedo/stylus: se traduce al gesto de la herramienta activa.

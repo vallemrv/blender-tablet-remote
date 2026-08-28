@@ -470,6 +470,14 @@ La feature `edit_tools.loop_cut` anuncia `pick`, `probe`, `falloff`, `even`, `fl
 `clamp`; un cliente debe usar el flujo de colocación por toque solo si `pick` está
 anunciado.
 
+Knife se dibuja por segmentos con `tool.knife_drag` (`phase` `BEGIN|UPDATE|END|CANCEL`,
+`u`,`v`). BEGIN fija el origen provisional; UPDATE devuelve el candidato sin mutar la
+malla; END añade el extremo mostrado y reconstruye la preview desde el backup. La cara
+visible es un destino exacto y vértice/arista solo sustituyen ese punto dentro de sus
+umbrales. `tool.status` publica `projected_points` y `snap_candidate` reproyectados con
+la cámara actual. `tool.knife_point` permanece como compatibilidad para clientes v2
+anteriores.
+
 `BISECT` corta con un plano infinito cuya traza en pantalla es la línea que arrastra
 el dedo (`tool.drag_line`, `start`/`end`: `[u, v]` normalizados). El plano contiene la
 dirección de ese arrastre y la de visión (profundidad), así que se ve como una línea
@@ -582,8 +590,8 @@ Cada familia tiene esta forma:
 - `default_variant` es la variante que arma un tap sin variante recordada.
 - `input` describe qué alimenta la sesión una vez armada: `PARAMETRIC` (los
   parámetros ya bastan, como Extrude/Inset), `VIEWPORT_TAP` (Loop Cut: el primer
-  toque en el viewport la activa vía `tool.loop_pick`), `VIEWPORT_POLYLINE` (Knife:
-  `tool.knife_point` repetido) o `VIEWPORT_DRAG_LINE` (Bisect: un arrastre completo
+  toque en el viewport la activa vía `tool.loop_pick`), `VIEWPORT_DRAG_SEGMENTS` (Knife:
+  `tool.knife_drag` por fases) o `VIEWPORT_DRAG_LINE` (Bisect: un arrastre completo
   vía `tool.drag_line`). Puede repetirse por variante si difiere del de la familia
   (es el caso de `CUT`).
 - `payload` son los campos fijos que hay que enviar junto a `parameters` al invocar
@@ -614,7 +622,7 @@ Pila no destructiva del objeto activo. No confundir `modifier.add type=BEVEL` co
 | Comando | Payload |
 |---|---|
 | `modifier.add_options` | `object?` — catálogo con descriptores tipados |
-| `modifier.add` | `object?`, `type`: `SUBSURF`\|`ARRAY`\|`BEVEL`\|`SOLIDIFY`\|`BOOLEAN`, `name?`, `parameters?` |
+| `modifier.add` | `object?`, `type`: `SUBSURF`\|`ARRAY`\|`BEVEL`\|`SOLIDIFY`\|`BOOLEAN`\|`MIRROR`, `name?`, `parameters?` |
 | `modifier.remove` | `object?`, `name` |
 | `modifier.move` | `object?`, `name`, `index` |
 | `modifier.set` | `object?`, `name`, `parameters{}` |
@@ -630,10 +638,15 @@ Tipos y parámetros:
 | `BEVEL` | `width`, `segments`, `affect` (`EDGES`\|`VERTICES`), `limit_method` (`NONE`\|`ANGLE`), `angle_limit` (grados), `profile` | 0.1, 1, `EDGES`, `ANGLE`, 30, 0.5 |
 | `SOLIDIFY` | `thickness`, `offset`, `use_even_offset`, `use_rim` | 0.1, −1, true, true |
 | `BOOLEAN` | `operation` (`DIFFERENCE`\|`UNION`\|`INTERSECT`), `object` (nombre), `solver` (`EXACT`\|`FAST`) | `DIFFERENCE`, ninguno, `EXACT` |
+| `MIRROR` | `use_axis_x/y/z`, `use_bisect_x/y/z`, `use_bisect_flip_x/y/z`, `use_clip`, `use_merge`, `merge_threshold`, `mirror_object` | X, sin bisect/flip, false, true, 0.001, ninguno |
 
 Boolean apunta a otro objeto. Sin operando se añade vacío. Operando inexistente →
 `not_found`. Operando = el propio objeto o no-malla → `bad_payload`. Si el cortador
 desaparece, el estado lleva `"object": null`.
+
+Mirror usa el origen del propio objeto mientras `mirror_object` sea nulo. El objeto
+espejo puede ser de cualquier tipo, pero no puede ser el objeto modificado. Los cambios
+de un único eje son parciales y conservan el resto de parámetros del modificador.
 
 `object_info` incluye `modifiers[]`:
 

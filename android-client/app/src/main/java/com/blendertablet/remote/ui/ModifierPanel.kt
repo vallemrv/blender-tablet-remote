@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Deblur
 import androidx.compose.material.icons.filled.JoinFull
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Flip
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.RoundedCorner
 import androidx.compose.material.icons.filled.Tune
@@ -346,6 +347,7 @@ private fun iconOf(type: String): ImageVector = when (type) {
     "BEVEL" -> Icons.Default.RoundedCorner
     "SOLIDIFY" -> Icons.Default.Layers
     "BOOLEAN" -> Icons.Default.JoinFull
+    "MIRROR" -> Icons.Default.Flip
     else -> Icons.Default.Tune
 }
 
@@ -355,6 +357,7 @@ private fun labelOf(type: String): String = when (type) {
     "BEVEL" -> "Bisel"
     "SOLIDIFY" -> "Solidificar"
     "BOOLEAN" -> "Booleano"
+    "MIRROR" -> "Espejo"
     else -> type
 }
 

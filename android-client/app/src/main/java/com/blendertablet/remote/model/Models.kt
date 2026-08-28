@@ -58,6 +58,8 @@ data class ServerFeatures(
     val loopCutPick: Boolean = false,
     /** Mayús+toque acumula cortes y permite volver al anterior. */
     val loopCutMultiple: Boolean = false,
+    /** Knife por segmentos de arrastre con candidato proyectado por el servidor. */
+    val knifeDrag: Boolean = false,
     val fileBrowse: Boolean = false,
     val editSettings: Boolean = false,
     /** Catálogo contextual de Edit; vacío conserva por completo la interfaz legacy. */

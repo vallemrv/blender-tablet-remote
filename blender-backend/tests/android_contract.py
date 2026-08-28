@@ -41,6 +41,7 @@ MENU_COMMANDS = [
     "object.shade",
     "transform.apply",
     "modifier.add_options",
+    "tool.knife_drag",
     "modifier.add",
     "modifier.remove",
     "modifier.move",
@@ -256,8 +257,9 @@ def main() -> int:
           and [parameter.get("id") for parameter in knife.get("parameters", [])] == ["snap"],
           str(knife))
     knife_feature = ((actual_caps.get("features") or {}).get("edit_tools") or {}).get("knife") or {}
-    check("feature de Knife publica snap/close/pop", knife_feature == {
-        "snap": True, "close": True, "pop": True, "cut_through": False, "threshold": 0.045}, str(knife_feature))
+    check("feature de Knife publica arrastre, proyección y snap", _contains(knife_feature, {
+        "snap": True, "close": True, "pop": True, "cut_through": False, "threshold": 0.045,
+        "drag": True, "projection": True, "snap_types": ["VERTEX", "EDGE", "FACE"]}), str(knife_feature))
 
     print("\n[0b] edit_toolbar: barra izquierda de tools activas")
     toolbar = ((actual_caps.get("features") or {}).get("edit_toolbar") or {})
@@ -288,7 +290,7 @@ def main() -> int:
     cut_family = families.get("CUT", {})
     cut_variants = {v["id"]: v for v in cut_family.get("variants", [])}
     check("Cut agrupa Knife y Bisect", set(cut_variants) == {"KNIFE", "BISECT"}, str(cut_variants))
-    check("Knife usa polilínea de viewport", cut_variants.get("KNIFE", {}).get("input") == "VIEWPORT_POLYLINE",
+    check("Knife usa segmentos de arrastre", cut_variants.get("KNIFE", {}).get("input") == "VIEWPORT_DRAG_SEGMENTS",
           str(cut_variants.get("KNIFE")))
     check("Bisect usa arrastre de línea de viewport",
           cut_variants.get("BISECT", {}).get("input") == "VIEWPORT_DRAG_LINE", str(cut_variants.get("BISECT")))
@@ -303,6 +305,10 @@ def main() -> int:
     options_fixture = json.loads((fixtures / "modifier.add_options.json").read_text())
     check("modifier.add_options coincide con fixture",
           app.command("modifier.add_options").get("result") == options_fixture)
+    knife_fixture = json.loads((fixtures / "tool.knife_drag.json").read_text())
+    check("fixture Knife contiene anclas 3D y proyección 2D",
+          len(knife_fixture.get("points", [])) == len(knife_fixture.get("projected_points", []))
+          and (knife_fixture.get("snap_candidate") or {}).get("snap_type") == "EDGE")
 
     print("\n[1] Conexión tal como la hace la app (token en cada mensaje, sin type=auth)")
     check("el servidor saluda con hello", hello.get("type") is None or "server" in hello, str(hello))
@@ -570,8 +576,17 @@ def main() -> int:
     app.command("mode.object")
     app.command("object.select", {"names": ["Cube"]})
     catalog = (app.command("modifier.add_options").get("result") or {}).get("types", {})
-    for kind in ("SUBSURF", "ARRAY", "BEVEL", "SOLIDIFY", "BOOLEAN"):
+    for kind in ("SUBSURF", "ARRAY", "BEVEL", "SOLIDIFY", "BOOLEAN", "MIRROR"):
         check(f"add_options incluye {kind}", kind in catalog, str(catalog))
+    mirror = app.command("modifier.add", {"type": "MIRROR"})
+    check("modifier.add MIRROR", mirror.get("ok"), str(mirror))
+    mirror_mods = (mirror.get("result") or {}).get("modifiers") or []
+    mirror_state = next((item for item in mirror_mods if item.get("type") == "MIRROR"), {})
+    check("Mirror usa X y merge por defecto",
+          mirror_state.get("parameters", {}).get("use_axis_x") is True
+          and mirror_state.get("parameters", {}).get("use_merge") is True, str(mirror_state))
+    if mirror_state:
+        app.command("modifier.remove", {"name": mirror_state["name"]})
     added = app.command("modifier.add", {"type": "SUBSURF"})
     check("modifier.add SUBSURF", added.get("ok"), str(added))
     mods = (added.get("result") or {}).get("modifiers") or []

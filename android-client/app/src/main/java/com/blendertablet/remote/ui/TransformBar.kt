@@ -90,6 +90,7 @@ fun TransformBar(
     onValueMode: (ValueMode) -> Unit,
     onValue: (List<Double>?, Double?) -> Unit,
     onProportionalRadius: (Double) -> Unit,
+    onProportionalRadiusValue: (Double) -> Unit,
     onProportionalFalloff: () -> Unit,
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
@@ -114,7 +115,7 @@ fun TransformBar(
                 Readout(session)
                 if (session.proportional) {
                     PillButton("Radio −") { onProportionalRadius(0.5) }
-                    Text("${"%.3g".format(editSettings.radius)}", color = Ink.OnPanel, fontSize = 11.sp)
+                    ProportionalRadiusInput(editSettings.radius, onProportionalRadiusValue)
                     PillButton("Radio +") { onProportionalRadius(2.0) }
                     PillButton("Perfil: ${falloffLabel(editSettings.falloff)}") {
                         onProportionalFalloff()
@@ -149,6 +150,24 @@ fun TransformBar(
             RoundAction(Icons.Default.Check, "Confirmar", Ink.Ok, onConfirm)
         }
     }
+}
+
+@Composable
+private fun ProportionalRadiusInput(radius: Double, onRadius: (Double) -> Unit) {
+    var text by remember(radius) { mutableStateOf(format(radius, 3)) }
+    fun commit() {
+        val parsed = ValueParser.parse(text, TransformMode.MOVE)
+        if (parsed != null && parsed > 0.0) onRadius(parsed)
+        else text = format(radius, 3)
+    }
+    CompactNumericField(
+        value = text,
+        onValueChange = { text = it },
+        placeholder = "25cm",
+        textAlign = TextAlign.End,
+        onDone = ::commit,
+        modifier = Modifier.width(64.dp),
+    )
 }
 
 private fun falloffLabel(value: String) = when (value) {

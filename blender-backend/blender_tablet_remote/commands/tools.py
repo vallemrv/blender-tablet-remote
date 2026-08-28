@@ -41,6 +41,7 @@ class ToolSession:
         self.loop_history = []  # [(base anterior, parámetros del corte anterior)]
         self.result = None
         self.points = []  # anclas del Knife, en coordenadas locales
+        self.knife_start = None
         self.closed = False
         self.line = None  # {"start": [u, v], "end": [u, v]} de la sesión Bisect
         self.snap_candidate = None
@@ -92,6 +93,7 @@ class ToolSession:
         if tool == "LOOP_CUT":
             self.original_backup = backup
         self.points = []
+        self.knife_start = None
         self.closed = False
         self.line = None
         try:
@@ -211,6 +213,15 @@ class ToolSession:
             if self.tool == "KNIFE":
                 state["points"] = [list(p) for p in self.points]
                 state["closed"] = self.closed
+                found = find_view3d()
+                if found is not None:
+                    rv3d = found[3]
+                    camera.sync_from_region(rv3d)
+                    matrix = self.obj.matrix_world
+                    state["projected_points"] = [
+                        list(screen) for point in self.points
+                        if (screen := camera.project(matrix @ Vector(point), rv3d)) is not None
+                    ]
             if self.tool == "BISECT":
                 state["line"] = self.line
             if self.tool == "LOOP_CUT":
@@ -394,6 +405,95 @@ def knife_point(payload):
     tool_session.points.append(list(local))
     tool_session.preview()
     return dict(tool_session.status(), hit=True, snap=snap_class, point=list(local))
+
+
+@command("tool.knife_drag", mutating=True)
+def knife_drag(payload):
+    """Sondea o confirma un tramo de Knife mediante pulsar, arrastrar y soltar."""
+    tool_session.require(payload.get("_client_id"))
+    if tool_session.tool != "KNIFE":
+        raise CommandError("knife_drag requires a KNIFE session", code="wrong_tool")
+    phase = str(payload.get("phase", "UPDATE")).upper()
+    if phase not in {"BEGIN", "UPDATE", "END", "CANCEL"}:
+        raise BadPayload("'phase' must be BEGIN, UPDATE, END or CANCEL")
+    if phase == "CANCEL":
+        tool_session.knife_start = None
+        tool_session.snap_candidate = None
+        return tool_session.status()
+
+    candidate = _knife_candidate(tool_session.obj, float(payload.get("u", 0.5)),
+                                  float(payload.get("v", 0.5)),
+                                  bool(tool_session.params.get("snap", True)))
+    tool_session.snap_candidate = candidate if candidate.get("hit") else None
+    if phase == "BEGIN":
+        tool_session.knife_start = candidate if candidate.get("hit") else None
+    elif phase == "END" and candidate.get("hit"):
+        if not tool_session.points:
+            start = tool_session.knife_start
+            if start is None or not start.get("hit"):
+                return dict(tool_session.status(), hit=False)
+            tool_session.points.append(list(start["local_position"]))
+        endpoint = list(candidate["local_position"])
+        if not tool_session.points or (Vector(endpoint) - Vector(tool_session.points[-1])).length_squared > 1e-12:
+            tool_session.points.append(endpoint)
+            tool_session.closed = False
+            tool_session.preview()
+        tool_session.knife_start = None
+    return dict(tool_session.status(), hit=bool(candidate.get("hit")), candidate=candidate)
+
+
+def _knife_candidate(obj, u, v, snap_enabled):
+    """Punto visible de cara con snap deliberado solo a sus vértices/aristas."""
+    found = find_view3d()
+    if found is None:
+        raise CommandError("No 3D viewport available", code="no_viewport")
+    rv3d = found[3]
+    camera.sync_from_region(rv3d)
+    origin, direction = camera.ray(u, v, rv3d)
+    hit, location, _normal, _face_index, hit_obj, _matrix = bpy.context.scene.ray_cast(
+        bpy.context.evaluated_depsgraph_get(), origin, direction)
+    if not hit or hit_obj != obj:
+        return {"hit": False, "snap_type": "NONE", "screen": [u, v]}
+    world = Vector(location)
+    local = obj.matrix_world.inverted() @ world
+    bm = bmesh.from_edit_mesh(obj.data)
+    face = min((f for f in bm.faces if not f.hide),
+               key=lambda f: knife_commands._point_face_distance(f, local), default=None)
+    snap_type, snapped = "FACE", local
+    touch = Vector((u, v))
+    if snap_enabled and face is not None:
+        ranked = []
+        for vert in face.verts:
+            screen = camera.project(obj.matrix_world @ vert.co, rv3d)
+            if screen is not None:
+                distance = (Vector(screen) - touch).length
+                if distance <= 0.025:
+                    ranked.append((distance, 0, "VERTEX", vert.co.copy(), screen, vert.index))
+        for edge in face.edges:
+            pa = camera.project(obj.matrix_world @ edge.verts[0].co, rv3d)
+            pb = camera.project(obj.matrix_world @ edge.verts[1].co, rv3d)
+            if pa is None or pb is None:
+                continue
+            a2, b2 = Vector(pa), Vector(pb)
+            span = b2 - a2
+            t = max(0.0, min(1.0, (touch - a2).dot(span) / span.length_squared)) if span.length_squared > 1e-12 else 0.5
+            screen = a2 + span * t
+            distance = (screen - touch).length
+            if distance <= 0.015:
+                ranked.append((distance, 1, "EDGE", edge.verts[0].co.lerp(edge.verts[1].co, t), screen, edge.index))
+        if ranked:
+            _distance, _priority, snap_type, snapped, _screen, element = min(
+                ranked, key=lambda item: (item[0], item[1]))
+        else:
+            element = face.index if face is not None else -1
+    else:
+        element = face.index if face is not None else -1
+    snapped_world = obj.matrix_world @ snapped
+    screen = camera.project(snapped_world, rv3d) or (u, v)
+    return {"hit": True, "snap_type": snap_type, "id": f"{obj.name}:{snap_type}:{element}",
+            "object": obj.name, "element": element, "position": list(snapped_world),
+            "local_position": list(snapped), "screen": list(screen),
+            "distance": float((Vector(screen) - touch).length)}
 
 
 def _geometry_snap(obj, rv3d, u, v):

@@ -271,6 +271,8 @@ interface RemoteBlenderClient {
 
     /** Knife: añade un punto a la polilínea. */
     fun toolKnifePoint(u: Double, v: Double)
+    fun toolKnifeDrag(phase: GesturePhase, u: Double, v: Double)
+    fun requestToolStatus()
     fun toolKnifePop()
     fun toolKnifeClose()
 

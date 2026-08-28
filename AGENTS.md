@@ -4,12 +4,12 @@ Este archivo es la fuente de verdad sobre arquitectura, estado realizado y regla
 trabajo. El 2026-08-27 el usuario dio por concluido el ciclo funcional anterior tras
 validarlo en tablet y abrió una nueva serie de reparaciones desde `000`. Esa serie
 (`000`–`003`) quedó implementada, probada y retirada por autorización del usuario el
-2026-08-28; su estado funcional relevante está consolidado en este archivo. El ciclo
-activo vuelve a empezar en `000` y añade el toggle Plano/Suave de Object Mode, descrito
-en `000_PLAN_BACKEND_SOMBREADO_OBJETO.md` y
-`000_PLAN_FRONTEND_SOMBREADO_OBJETO.md`. El `001` activo amplía Loop Cut para acumular
-cortes con Mayús+toque dentro de una única sesión reversible. El `002` sustituye las
-pestañas V/E del teclado de vistas por iconos inequívocos de Vista/Herramientas.
+2026-08-28; su estado funcional relevante está consolidado en este archivo. La serie
+siguiente (`000`–`007`) entregó Plano/Suave, Loop Cut múltiple, iconos del footer,
+Mirror, controles de edición proporcional, indicadores de pulsación larga, el Knife
+por arrastre y la recuperación del viewport H.264. El usuario validó el conjunto en
+tablet y autorizó su cierre. Sus planes se retiraron y la próxima escalada funcional
+debe abrir una serie nueva desde `000`.
 
 La primera reparación de esta serie corrige tres defectos Android: el radial resuelve
 todos sus sectores con un único hit-test geométrico y `QuickAction.onClick` es el último
@@ -163,6 +163,10 @@ README.md                           entrada para humanos
   (`tool.knife_point/pop/close`, motor geométrico en `commands/knife.py` sin
   `knife_tool` ni `bisect_plane`). `mesh.dissolve` está habilitado para
   VERTS/EDGES/FACES y se mantiene separado de Delete.
+- Knife admite `tool.knife_drag` por fases BEGIN/UPDATE/END/CANCEL: mover solo sondea,
+  soltar fija el candidato mostrado y reconstruye desde el backup. La cara visible es
+  un destino exacto; vértice y arista usan umbrales separados sobre esa misma cara.
+  `tool.status` reproyecta las anclas 3D mediante `projected_points` tras mover cámara.
 - Snap incremental, rejilla, cursor y candidatos Vertex/Edge/Face bloqueables. En la
   sesión modal, `INCREMENT` cuadra el delta a múltiplos relativos del punto de partida y
   `GRID` clava la posición resultante a la rejilla mundial absoluta (un objeto que nace
@@ -201,9 +205,11 @@ README.md                           entrada para humanos
   al parar. Con un latido de 30 s por si el gestor de energía del escritorio la apaga por
   detrás. No es cosmético: con la pantalla apagada Blender se bloquea al redibujar y el
   add-on baja a 1,2 fps (ver Trampas conocidas). Sin `DISPLAY`/`xset` no hace nada.
-- `commands/modifiers.py`: pila no destructiva SUBSURF, ARRAY, BEVEL, SOLIDIFY y
-  BOOLEAN sobre datablock API (`add/remove/move/set/toggle/apply`), con
+- `commands/modifiers.py`: pila no destructiva SUBSURF, ARRAY, BEVEL, SOLIDIFY,
+  BOOLEAN y MIRROR sobre datablock API (`add/remove/move/set/toggle/apply`), con
   `modifier.add_options` describiendo cada parámetro por tipo/rango/enum/filtro.
+  Mirror expone ejes, bisect/flip por eje, clipping, merge/umbral y objeto espejo
+  opcional; los `modifier.set` parciales conservan los parámetros no enviados.
 - `object.hide` / `object.reveal` (H / Alt+H de objetos vía `hide_set/hide_get`,
   distintos de `selection.hide/reveal` en Edit) y `transform.apply` (hornea T/R/S sin
   confundirse con `transform.reset`, con `shared_data` para mallas Alt+D).
@@ -246,11 +252,14 @@ README.md                           entrada para humanos
 - Transformación modal con restricciones, orientación (desplegable de tipos de snap
   válidos por modo), unidades y confirm/cancel.
 - En Edit Mode, `Prop` y `Merge` viven junto a Wireframe. La bandeja de transformación
-  expone radio y perfil cuando la edición proporcional está activa; el estado procede
+  los representa mediante iconos de influencia y unión. La bandeja de transformación
+  expone radio editable (incluidas unidades), ajustes −/+ y perfil cuando la edición proporcional está activa; el estado procede
   del servidor y se conserva globalmente entre movimientos.
 - Bandeja paramétrica para Extrude/Bevel/Inset/Subdivide/Loop Cut (`EditToolTray`), en
   una franja horizontal desplazable (no apilada en vertical): rótulo a la izquierda,
   parámetros en fila y descartar/confirmar fijos a la derecha.
+- Las familias del rail con más de una variante habilitada muestran un chevrón en la
+  esquina para anunciar su menú de pulsación larga; las herramientas simples no.
 - Loop Cut táctil: sin arista elegida, el rail arma `loopCutAwaitingTap` y el PRÓXIMO
   toque en la malla coloca el corte (`mesh.loop_probe` → `tool.begin` con `edge`+`factor`),
   y con sesión abierta el toque re-ubica (`tool.loop_pick`). La bandeja ofrece un
@@ -275,14 +284,14 @@ README.md                           entrada para humanos
   iconos de Vista y Herramientas, no con las letras V/E que se confundían con teclas.
 - Círculo de navegación derecho (`NavigationOrbitLayout`): visible solo con sesión activa;
   un `DOWN` dentro captura ORBIT sin alimentar la tool, y fuera conserva el nudge.
-- Knife táctil: sesión `tool.knife_point/pop/close` con puntos por toque, overlay de la
-  polilínea sobre el vídeo (reconciliado contra `tool.status`) y bandeja `KnifeTray`
-  (contador, Deshacer punto, Cerrar, Snap, Descartar/Confirmar). El tap enruta a
-  `tool.knife_point` cuando la sesión KNIFE está activa; `ToolSession` expone `points`
-  y `closed`.
+- Knife táctil: sesión `tool.knife_drag/pop/close` por segmentos de arrastre, overlay de la
+  polilínea reproyectado desde anclas 3D por `tool.status` y bandeja `KnifeTray`
+  (contador, Deshacer punto, Cerrar, Snap, Descartar/Confirmar). `tool.knife_point`
+  permanece en backend solo para clientes antiguos; `ToolSession` expone `points`,
+  `projectedPoints`, candidato y `closed`. Los UPDATE se coalescen latest-wins.
 - `ui/ModifierPanel.kt`: inspector schema-driven desde `modifier.add_options` (add,
   parámetros tipados, viewport/render, reorder, apply, remove; Boolean con picker de
-  objeto MESH excluyendo el activo). La lista de objetos para el operando viene de
+  objeto MESH y Mirror con objeto de cualquier tipo, ambos excluyendo el activo). La lista de objetos para el operando viene de
   `scene.list_objects`, que `openModifiers()` pide al abrir el inspector: el snapshot
   de 10 Hz no la lleva para no engordarlo.
 - Menú `Ocultos` dinámico en `MenuBar.kt` (top, tras Objeto): una fila por objeto
@@ -311,6 +320,10 @@ README.md                           entrada para humanos
   del stream H.264 anunciado en `hello.stream`, `MediaCodec` sobre `Surface`
   (`VideoSurface`), descarte de access units obsoletas y resincronización en keyframe
   tras reconexión/error; cae a MJPEG si el servidor o el decoder no lo soportan.
+  En `onStop` se detienen transporte y codec conservando el endpoint; `onResume` y
+  `surfaceChanged` crean una sesión limpia que espera un keyframe. Los callbacks de
+  destrucción identifican su Surface y una generación impide que el transporte viejo
+  entregue access units a la nueva.
 - Ronda de eficiencia: `BitmapPool` RGB_565 + `inBitmap` en el decodificador MJPEG (sin
   `recycle()` de un bitmap en uso), `InputDebug` fuera de `AppUiState` para que un toque
   no recomponga todo `Workspace`, `ViewportLayer` sin parámetros que no usa en su rama
