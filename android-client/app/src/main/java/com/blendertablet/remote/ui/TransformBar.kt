@@ -76,6 +76,7 @@ private val AxisColors = mapOf(
 @Composable
 fun TransformBar(
     session: TransformSession,
+    unitScaleLength: Double,
     editSettings: EditSettings,
     stepIndex: Int,
     snapType: SnapType,
@@ -115,7 +116,11 @@ fun TransformBar(
                 Readout(session)
                 if (session.proportional) {
                     PillButton("Radio −") { onProportionalRadius(0.5) }
-                    ProportionalRadiusInput(editSettings.radius, onProportionalRadiusValue)
+                    ProportionalRadiusInput(
+                        editSettings.radius,
+                        unitScaleLength,
+                        onProportionalRadiusValue,
+                    )
                     PillButton("Radio +") { onProportionalRadius(2.0) }
                     PillButton("Perfil: ${falloffLabel(editSettings.falloff)}") {
                         onProportionalFalloff()
@@ -140,7 +145,7 @@ fun TransformBar(
                 }
                 Divider()
                 ValueModePicker(valueMode, onValueMode)
-                ValueInput(session, onValue)
+                ValueInput(session, unitScaleLength, onValue)
             }
             Spacer(Modifier.width(10.dp))
             // Confirmar y descartar, fijos a la derecha: son las dos únicas salidas
@@ -153,12 +158,17 @@ fun TransformBar(
 }
 
 @Composable
-private fun ProportionalRadiusInput(radius: Double, onRadius: (Double) -> Unit) {
-    var text by remember(radius) { mutableStateOf(format(radius, 3)) }
+private fun ProportionalRadiusInput(
+    radius: Double,
+    unitScaleLength: Double,
+    onRadius: (Double) -> Unit,
+) {
+    val physicalRadius = radius * unitScaleLength
+    var text by remember(radius, unitScaleLength) { mutableStateOf(format(physicalRadius, 3)) }
     fun commit() {
         val parsed = ValueParser.parse(text, TransformMode.MOVE)
-        if (parsed != null && parsed > 0.0) onRadius(parsed)
-        else text = format(radius, 3)
+        if (parsed != null && parsed > 0.0) onRadius(parsed / unitScaleLength)
+        else text = format(physicalRadius, 3)
     }
     CompactNumericField(
         value = text,
@@ -371,13 +381,18 @@ private fun StepPicker(mode: TransformMode, index: Int, onStep: (Int) -> Unit) {
  * el número se aplica a los tres ejes; con un eje o plano, solo a los elegidos.
  */
 @Composable
-private fun ValueInput(session: TransformSession, onValue: (List<Double>?, Double?) -> Unit) {
+private fun ValueInput(
+    session: TransformSession,
+    unitScaleLength: Double,
+    onValue: (List<Double>?, Double?) -> Unit,
+) {
     var text by remember(session.mode) { mutableStateOf("") }
     // Al cerrar y reabrir la sesión el campo debe quedar limpio, no con lo anterior.
     LaunchedEffect(session.active) { if (!session.active) text = "" }
 
     fun commit() {
-        val parsed = ValueParser.parse(text, session.mode) ?: return
+        val physical = ValueParser.parse(text, session.mode) ?: return
+        val parsed = if (session.mode == TransformMode.MOVE) physical / unitScaleLength else physical
         if (session.mode == TransformMode.ROTATE) {
             onValue(null, parsed)
         } else {

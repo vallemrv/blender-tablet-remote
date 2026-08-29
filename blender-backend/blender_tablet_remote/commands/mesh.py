@@ -221,12 +221,14 @@ def inset(payload: dict) -> dict:
     if variant and variant not in {"REGION", "INDIVIDUAL"}:
         raise BadPayload("'variant' must be REGION or INDIVIDUAL")
     individual = bool(payload.get("individual", False)) or variant == "INDIVIDUAL"
+    boundary = bool(payload.get("boundary", True))
 
     if individual:
         ret = bmesh.ops.inset_individual(bm, faces=faces, thickness=thickness, depth=depth, use_even_offset=True)
     else:
         ret = bmesh.ops.inset_region(
-            bm, faces=faces, thickness=thickness, depth=depth, use_even_offset=True, use_boundary=True
+            bm, faces=faces, thickness=thickness, depth=depth,
+            use_even_offset=True, use_boundary=boundary,
         )
 
     _deselect_all(bm)
@@ -234,7 +236,7 @@ def inset(payload: dict) -> dict:
     flush_bmesh(obj, bm)
     _undo(payload, "Remote inset")
     return {"thickness": thickness, "depth": depth, "new_faces": len(ret.get("faces", [])),
-            "variant": "INDIVIDUAL" if individual else "REGION"}
+            "variant": "INDIVIDUAL" if individual else "REGION", "boundary": boundary}
 
 
 @command("mesh.bevel", mutating=True)
@@ -520,6 +522,38 @@ def delete(payload: dict) -> dict:
     return {"deleted": what, "count": len(geom)}
 
 
+@command("mesh.duplicate", mutating=True)
+def duplicate(payload: dict) -> dict:
+    """Duplica sólo la geometría seleccionada en Edit Mode (Shift+D sin mover).
+
+    La selección de BMesh ya contiene la geometría implícita del submodo: una cara
+    seleccionada incluye sus aristas y vértices, y una arista incluye sus extremos.
+    Pasar el conjunto completo conserva esa conectividad y evita duplicar una cara como
+    cuatro piezas inconexas.
+    """
+    from .sessions import cancel_all
+    cancel_all(restore=True)
+    obj, bm = _bm_and_obj()
+    geom = [elem for elem in _selected_geometry(bm) if not elem.hide]
+    if not geom:
+        raise CommandError("Nothing selected to duplicate", code="empty_selection")
+    try:
+        result = bmesh.ops.duplicate(bm, geom=geom)
+    except (ValueError, RuntimeError) as exc:
+        raise CommandError("Cannot duplicate this selection", code="topology_incompatible") from exc
+    duplicated = result.get("geom", [])
+    _deselect_all(bm)
+    _select_geom(bm, duplicated)
+    counts = {
+        "verts": sum(isinstance(elem, bmesh.types.BMVert) for elem in duplicated),
+        "edges": sum(isinstance(elem, bmesh.types.BMEdge) for elem in duplicated),
+        "faces": sum(isinstance(elem, bmesh.types.BMFace) for elem in duplicated),
+    }
+    flush_bmesh(obj, bm)
+    _undo(payload, "Remote duplicate selection")
+    return {"object": obj.name, "duplicated": counts}
+
+
 @command("mesh.dissolve", mutating=True)
 def dissolve(payload: dict) -> dict:
     """Disuelve la selección conservando la superficie circundante."""
@@ -744,6 +778,36 @@ def split(payload: dict) -> dict:
     # El operador actualiza la malla de edición y crea su propio undo: no añadir
     # otro undo_push aquí, para que Y siga siendo una sola acción reversible.
     return {"object": obj.name, "created_objects": []}
+
+
+@command("mesh.looptools_circle", mutating=True)
+def looptools_circle(payload: dict) -> dict:
+    """Ejecuta Circle del add-on LoopTools; nunca lo sustituye por una copia local."""
+    obj, bm = _bm_and_obj()
+    vert_mode, edge_mode, face_mode = _select_mode()
+    if face_mode or not (vert_mode or edge_mode):
+        raise CommandError("LoopTools Circle requires Vertex or Edge select mode",
+                           code="incompatible_selection")
+    selected_verts = [vert for vert in bm.verts if vert.select and not vert.hide]
+    if len(selected_verts) < 3:
+        raise CommandError("Select at least three vertices for LoopTools Circle",
+                           code="empty_selection")
+    try:
+        operator = bpy.ops.mesh.looptools_circle
+        operator.get_rna_type()
+    except (AttributeError, KeyError, RuntimeError) as exc:
+        raise CommandError("LoopTools is not installed and enabled",
+                           code="dependency_unavailable") from exc
+    try:
+        result = operator()
+    except RuntimeError as exc:
+        raise CommandError("LoopTools Circle cannot process this selection",
+                           code="topology_incompatible") from exc
+    if "FINISHED" not in result:
+        raise CommandError("LoopTools Circle did not finish",
+                           code="topology_incompatible")
+    # El operador de LoopTools crea su propio paso de undo, igual que Split/Separate.
+    return {"object": obj.name, "vertices": len(selected_verts)}
 
 
 @command("mesh.separate", mutating=True)

@@ -16,6 +16,7 @@ y luego:
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import sys
 import time
@@ -34,6 +35,7 @@ MENU_COMMANDS = [
     "object.select",
     "object.select_all",
     "object.duplicate",
+    "mesh.duplicate",
     "object.delete",
     "object.rename",
     "object.hide",
@@ -103,6 +105,8 @@ MENU_COMMANDS = [
     "selection.circle",
     "selection.loop",
     "selection.ring",
+    "selection.shortest_path",
+    "selection.tweak",
     "snap.query",
     "mesh.delete",
     "mesh.dissolve",
@@ -178,7 +182,22 @@ def main() -> int:
     fixtures = Path(__file__).resolve().parent.parent / "fixtures" / "v2"
     expected_caps = json.loads((fixtures / "capabilities.json").read_text())
     actual_caps = app.command("server.capabilities").get("result") or {}
-    check("capabilities coincide con fixture", _contains(actual_caps, expected_caps), str(actual_caps.get("features")))
+    comparable_caps = copy.deepcopy(actual_caps)
+    comparable_catalog = ((comparable_caps.get("features") or {}).get("edit_catalog") or {})
+    conditional_ids = {item.get("id") for item in comparable_catalog.get("conditional_actions", [])}
+    for entries in (comparable_catalog.get("groups") or {}).values():
+        entries[:] = [entry for entry in entries if entry.get("id") not in conditional_ids]
+    check("capabilities coincide con fixture", _contains(comparable_caps, expected_caps), str(actual_caps.get("features")))
+    selection_feature = ((actual_caps.get("features") or {}).get("selection") or {})
+    check("selection anuncia Ctrl+toque como camino más corto",
+          selection_feature.get("shortest_path") is True, str(selection_feature))
+    check("selection anuncia Tweak por fases",
+          (selection_feature.get("tweak") or {}).get("phases")
+          == ["BEGIN", "UPDATE", "END", "CANCEL"]
+          and (selection_feature.get("tweak") or {}).get("selection_modes")
+          == ["VERTEX", "EDGE"]
+          and (selection_feature.get("tweak") or {}).get("miss_behavior") == "ORBIT",
+          str(selection_feature))
     check("snap anuncia centros de arista y cara",
           {"EDGE_CENTER", "FACE_CENTER"} <= set((actual_caps.get("enums") or {}).get("snap_type", [])),
           str((actual_caps.get("enums") or {}).get("snap_type")))
@@ -193,6 +212,22 @@ def main() -> int:
     edit_catalog = ((actual_caps.get("features") or {}).get("edit_catalog") or {})
     groups = edit_catalog.get("groups") or {}
     check("catálogo Edit anuncia los tres submodos", set(groups) >= {"VERTEX", "EDGE", "FACE"}, str(groups))
+    conditional = {item.get("id"): item for item in edit_catalog.get("conditional_actions", [])}
+    circle_contract = conditional.get("LOOPTOOLS_CIRCLE") or {}
+    check("catálogo documenta Circle como integración condicional de LoopTools",
+          circle_contract.get("command") == "mesh.looptools_circle"
+          and circle_contract.get("operator") == "mesh.looptools_circle"
+          and circle_contract.get("availability") == "OPERATOR_REGISTERED"
+          and circle_contract.get("selection_modes") == ["VERTEX", "EDGE"], str(circle_contract))
+    circle_entries = [next((entry for entry in groups.get(mode, [])
+                            if entry.get("id") == "LOOPTOOLS_CIRCLE"), None)
+                      for mode in ("VERTEX", "EDGE")]
+    check("Circle aparece a la vez en Vértice y Arista o se oculta por completo",
+          (circle_entries[0] is None) == (circle_entries[1] is None), str(circle_entries))
+    if circle_entries[0] is not None:
+        check("Circle vivo enruta al operador oficial",
+              all(entry.get("command") == "mesh.looptools_circle"
+                  for entry in circle_entries), str(circle_entries))
     required_edit_ids = {
         "VERTEX": {"MAKE_EDGE_FACE", "KNIFE", "SEPARATE", "SPLIT", "EXTRUDE"},
         "EDGE": {"BRIDGE_EDGE_LOOPS", "MAKE_EDGE_FACE", "KNIFE", "SEPARATE", "SPLIT", "EXTRUDE"},
@@ -259,7 +294,8 @@ def main() -> int:
     knife_feature = ((actual_caps.get("features") or {}).get("edit_tools") or {}).get("knife") or {}
     check("feature de Knife publica arrastre, proyección y snap", _contains(knife_feature, {
         "snap": True, "close": True, "pop": True, "cut_through": False, "threshold": 0.045,
-        "drag": True, "projection": True, "snap_types": ["VERTEX", "EDGE", "FACE"]}), str(knife_feature))
+        "drag": True, "first_point_drag": True, "projection": True,
+        "snap_types": ["VERTEX", "EDGE_CENTER", "EDGE", "FACE"]}), str(knife_feature))
 
     print("\n[0b] edit_toolbar: barra izquierda de tools activas")
     toolbar = ((actual_caps.get("features") or {}).get("edit_toolbar") or {})
@@ -277,6 +313,10 @@ def main() -> int:
     inset_family = families.get("INSET", {})
     check("Inset anuncia REGION e INDIVIDUAL", {v["id"] for v in inset_family.get("variants", [])}
           == {"REGION", "INDIVIDUAL"}, str(inset_family))
+    boundary = next((p for p in inset_family.get("parameters", []) if p.get("id") == "boundary"), {})
+    check("Inset anuncia costura abierta conservable",
+          boundary.get("default") is True and boundary.get("applies_to") == ["REGION"],
+          str(boundary))
     loop_family = families.get("LOOP_CUT", {})
     check("Loop Cut es de entrada VIEWPORT_TAP", loop_family.get("input") == "VIEWPORT_TAP", str(loop_family))
     loop_feature = ((actual_caps.get("features") or {}).get("edit_tools") or {}).get("loop_cut") or {}
@@ -342,6 +382,14 @@ def main() -> int:
     check("mode.object", app.command("mode.object").get("ok"))
     check("object.duplicate", app.command("object.duplicate").get("ok"))
     check("object.delete", app.command("object.delete").get("ok"))
+    check("seleccionar Cube para duplicar geometría",
+          app.command("object.select", {"names": ["Cube"]}).get("ok"))
+    check("mode.edit para duplicar selección", app.command("mode.edit").get("ok"))
+    check("selection.vertex para duplicar selección", app.command("selection.vertex").get("ok"))
+    check("selection.elements para duplicar selección",
+          app.command("selection.elements", {"verts": [0], "mode": "SET"}).get("ok"))
+    check("mesh.duplicate duplica la selección Edit", app.command("mesh.duplicate").get("ok"))
+    check("mode.object tras duplicar selección", app.command("mode.object").get("ok"))
 
     print("\n[4] Toque = selección por raycast")
     app.command("object.select", {"names": ["Cube"]})

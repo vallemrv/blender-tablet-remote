@@ -426,13 +426,10 @@ def knife_drag(payload):
                                   bool(tool_session.params.get("snap", True)))
     tool_session.snap_candidate = candidate if candidate.get("hit") else None
     if phase == "BEGIN":
+        # Solo es una referencia transitoria para diagnóstico/cancel. El primer
+        # ancla se toma siempre del END, para que también pueda arrastrarse.
         tool_session.knife_start = candidate if candidate.get("hit") else None
     elif phase == "END" and candidate.get("hit"):
-        if not tool_session.points:
-            start = tool_session.knife_start
-            if start is None or not start.get("hit"):
-                return dict(tool_session.status(), hit=False)
-            tool_session.points.append(list(start["local_position"]))
         endpoint = list(candidate["local_position"])
         if not tool_session.points or (Vector(endpoint) - Vector(tool_session.points[-1])).length_squared > 1e-12:
             tool_session.points.append(endpoint)
@@ -476,14 +473,27 @@ def _knife_candidate(obj, u, v, snap_enabled):
                 continue
             a2, b2 = Vector(pa), Vector(pb)
             span = b2 - a2
+            center_screen = (a2 + b2) * 0.5
+            center_distance = (center_screen - touch).length
+            if center_distance <= 0.02:
+                ranked.append((center_distance, 1, "EDGE_CENTER",
+                               (edge.verts[0].co + edge.verts[1].co) * 0.5,
+                               center_screen, edge.index))
             t = max(0.0, min(1.0, (touch - a2).dot(span) / span.length_squared)) if span.length_squared > 1e-12 else 0.5
             screen = a2 + span * t
             distance = (screen - touch).length
             if distance <= 0.015:
-                ranked.append((distance, 1, "EDGE", edge.verts[0].co.lerp(edge.verts[1].co, t), screen, edge.index))
+                ranked.append((distance, 2, "EDGE", edge.verts[0].co.lerp(edge.verts[1].co, t), screen, edge.index))
         if ranked:
+            # El punto más cercano de una arista coincide con su centro cuando el
+            # toque entra perpendicular, y entonces las dos distancias solo se
+            # separan por el ruido del flotante. En ese empate práctico debe ganar
+            # el snap más específico (vértice, luego centro), no el que se lleve el
+            # epsilon; si algo está de verdad más cerca, sigue ganando por distancia.
+            closest = min(item[0] for item in ranked)
             _distance, _priority, snap_type, snapped, _screen, element = min(
-                ranked, key=lambda item: (item[0], item[1]))
+                (item for item in ranked if item[0] <= closest + 1e-3),
+                key=lambda item: (item[1], item[0]))
         else:
             element = face.index if face is not None else -1
     else:

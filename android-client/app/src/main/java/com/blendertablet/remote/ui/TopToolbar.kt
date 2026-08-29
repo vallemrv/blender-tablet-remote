@@ -83,8 +83,10 @@ fun TopToolbar(
                             vm.toggleAutoMerge()
                         }
                     }
-                    PillButton("Mayús", selected = state.selectionOp == SelectionOp.TOGGLE) { vm.toggleSelectionOp(SelectionOp.TOGGLE) }
-                    PillButton("Ctrl", selected = state.selectionOp == SelectionOp.ADD) { vm.toggleSelectionOp(SelectionOp.ADD) }
+                    PillButton("Mayús", selected = state.selectionOp == SelectionOp.TOGGLE && !state.shortestPathActive) { vm.toggleSelectionOp(SelectionOp.TOGGLE) }
+                    if (inEdit && blender.features.selectionShortestPath) {
+                        PillButton("Ctrl", selected = state.shortestPathActive) { vm.toggleShortestPath() }
+                    }
                     PillButton("Alt", selected = state.selectionOp == SelectionOp.REMOVE) { vm.toggleSelectionOp(SelectionOp.REMOVE) }
                     IconAction(Icons.AutoMirrored.Filled.Undo, "Deshacer") { vm.undo() }
                     IconAction(Icons.AutoMirrored.Filled.Redo, "Rehacer") { vm.redo() }

@@ -104,6 +104,8 @@ _TOOL_PARAMETERS = {
         {"id": "thickness", "label": "Grosor", "type": "float", "default": 0.1},
         {"id": "depth", "label": "Profundidad", "type": "float", "default": 0.0},
         {"id": "individual", "label": "Individual", "type": "bool", "default": False},
+        {"id": "boundary", "label": "Incluir borde", "type": "bool", "default": True,
+         "applies_to": ["REGION"]},
         *_scalar_snap(["thickness"], 0.1),
     ],
     "SUBDIVIDE": [{"id": "cuts", "label": "Cortes", "type": "int", "default": 1, "min": 1}],
@@ -230,8 +232,35 @@ EDIT_TOOLBAR = {
 }
 
 
+LOOPTOOLS_CIRCLE_ACTION = {
+    "id": "LOOPTOOLS_CIRCLE",
+    "label": "Hacer círculo",
+    "enabled": True,
+    "execution": "DISCRETE",
+    "command": "mesh.looptools_circle",
+    "requirements": {
+        "mode": "EDIT",
+        "selection_modes": ["VERTEX", "EDGE"],
+        "selection": {"verts": {"min": 3}},
+    },
+    "variants": [],
+    "parameters": [],
+}
+
+
 EDIT_CATALOG = {
     "version": 1,
+    "conditional_actions": [
+        {
+            "id": LOOPTOOLS_CIRCLE_ACTION["id"],
+            "label": LOOPTOOLS_CIRCLE_ACTION["label"],
+            "command": LOOPTOOLS_CIRCLE_ACTION["command"],
+            "execution": LOOPTOOLS_CIRCLE_ACTION["execution"],
+            "selection_modes": ["VERTEX", "EDGE"],
+            "availability": "OPERATOR_REGISTERED",
+            "operator": "mesh.looptools_circle",
+        },
+    ],
     "groups": {
         "VERTEX": [
             _edit_action("SELECT_LINKED", "Seleccionar enlazado", command="selection.linked",
@@ -322,10 +351,13 @@ FEATURES = {
     "edit_settings": {"version": 1, "proportional": True,
                       "falloffs": ENUMS["proportional_falloff"],
                       "radius": True, "auto_merge": True, "merge_threshold": True},
-    "selection": {"version": 4, "operations": ["SET", "ADD", "REMOVE", "TOGGLE"],
+    "selection": {"version": 7, "operations": ["SET", "ADD", "REMOVE", "TOGGLE"],
                   "pick": True, "touch_threshold": True, "grow": True,
                   "shapes": ["BOX", "CIRCLE"], "topology": ["LOOP", "RING"],
-                  "linked": True},
+                  "linked": True, "shortest_path": True,
+                  "tweak": {"phases": ["BEGIN", "UPDATE", "END", "CANCEL"],
+                            "selection_modes": ["VERTEX", "EDGE"],
+                            "miss_behavior": "ORBIT"}},
     "view": {"version": 4, "axis_views": ["FRONT", "BACK", "LEFT", "RIGHT", "TOP", "BOTTOM"],
              "projections": ["PERSP", "ORTHO"], "independent_camera": True,
              "shading": ENUMS["shading"], "local_view": True, "overlays": True},
@@ -337,15 +369,16 @@ FEATURES = {
     "visibility": {"version": 1, "object_hide": True, "hide_set": True},
     "transform_apply": {"version": 1, "components": ["location", "rotation", "scale"]},
     "object_shading": {"version": 1, "modes": ["TOGGLE", "FLAT", "SMOOTH"]},
-    "edit_tools": {"version": 6,
+    "edit_tools": {"version": 7,
                    "tools": ["EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS",
                              "KNIFE", "BISECT"],
                    "loop_cut": {"pick": True, "probe": True, "falloff": ENUMS["loop_falloff"],
                                 "even": True, "flip": True, "clamp": True,
                                 "multiple": True, "pop": True},
                    "knife": {"snap": True, "close": True, "pop": True, "cut_through": False,
-                             "threshold": 0.045, "drag": True, "projection": True,
-                             "snap_types": ["VERTEX", "EDGE", "FACE"]},
+                             "threshold": 0.045, "drag": True, "first_point_drag": True,
+                             "projection": True,
+                             "snap_types": ["VERTEX", "EDGE_CENTER", "EDGE", "FACE"]},
                    "bisect": {"drag_line": True, "snap": True, "clear_inner": True,
                               "clear_outer": True, "fill": True},
                    "snap": {"scalar": ["INCREMENT", "GRID"],

@@ -39,6 +39,10 @@ import com.blendertablet.remote.model.*
  */
 object StateParser {
 
+    fun unitScaleLength(json: JSONObject?): Double =
+        json?.optJSONObject("units")?.optDouble("scale_length", 1.0)
+            ?.takeIf { it.isFinite() && it > 0.0 } ?: 1.0
+
     fun state(json: JSONObject): BlenderState {
         val selected = json.optJSONArray("selected_objects") ?: JSONArray()
         return BlenderState(
@@ -51,6 +55,8 @@ object StateParser {
             context = context(json),
             view = view(json.optJSONObject("view"), json.optString("shading")),
             activeObjectType = json.optJSONObject("active")?.optString("type")?.takeIf(String::isNotBlank),
+            activeShadeSmooth = json.optJSONObject("active")
+                ?.optJSONObject("mesh")?.optBoolean("shade_smooth") == true,
             objects = objects(json.optJSONArray("objects")),
             hiddenObjects = hiddenObjects(json.optJSONArray("hidden_objects")),
             modifiers = modifiers(json.optJSONObject("active")?.optJSONArray("modifiers")),
@@ -109,6 +115,8 @@ object StateParser {
             view?.optBoolean("overlays", false) == true,
             selection?.optBoolean("grow", false) == true,
             selection?.has("shapes") == true,
+            selection?.optBoolean("shortest_path", false) == true,
+            selection?.optJSONObject("tweak") != null,
             f.optJSONObject("edit_tools")?.optJSONObject("loop_cut")
                 ?.optBoolean("pick", false) == true,
             f.optJSONObject("edit_tools")?.optJSONObject("loop_cut")

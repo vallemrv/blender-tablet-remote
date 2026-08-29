@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import bpy
 import bmesh
+import heapq
+import itertools
 from mathutils import Vector
+from mathutils.bvhtree import BVHTree
 
 from .. import state
 from ..bpy_utils import active_object, edit_bmesh, find_view3d, flush_bmesh, get_float
@@ -151,13 +154,25 @@ def pick(payload: dict) -> dict:
     v = get_float(payload, "v", 0.5)
     origin, direction = camera.ray(u, v, rv3d)
 
-    depsgraph = bpy.context.evaluated_depsgraph_get()
-    hit, location, _normal, face_index, obj, _matrix = bpy.context.scene.ray_cast(
-        depsgraph, origin, direction
-    )
-
     mode = _selection_op(payload)
     active = bpy.context.view_layer.objects.active
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+
+    # En Edit Mode los índices de ``scene.ray_cast`` pertenecen a la geometría
+    # evaluada. Con Subdivision no corresponden al BMesh editable. Raycast sobre la
+    # jaula original para que cara/vértice/arista tocados sean los que se seleccionan.
+    if (active is not None and active.mode == "EDIT" and active.type == "MESH"
+            and any(modifier.show_viewport for modifier in active.modifiers)):
+        edit_hit = _edit_cage_raycast(active, origin, direction)
+        if edit_hit is None:
+            hit, location, face_index, obj = False, None, -1, active
+        else:
+            location, face_index = edit_hit
+            hit, obj = True, active
+    else:
+        hit, location, _normal, face_index, obj, _matrix = bpy.context.scene.ray_cast(
+            depsgraph, origin, direction
+        )
 
     if not hit:
         if mode == "SET":
@@ -176,7 +191,7 @@ def pick(payload: dict) -> dict:
     # y poder elegir solo el frente sería frustrante.
     from .view import is_xray_wireframe
 
-    if is_xray_wireframe() and mode in ("ADD", "TOGGLE") and obj.select_get():
+    if is_xray_wireframe() and mode in ("SET", "ADD", "TOGGLE") and obj.select_get():
         origin, location, obj = _cycle_behind(depsgraph, origin, direction, location, obj)
 
     if mode == "SET":
@@ -185,6 +200,184 @@ def pick(payload: dict) -> dict:
     obj.select_set(False if mode == "REMOVE" else (not obj.select_get() if mode == "TOGGLE" else True))
     bpy.context.view_layer.objects.active = obj
     return _with_state({"hit": True, "object": obj.name, "location": list(location)})
+
+
+def _edit_cage_raycast(obj, world_origin: Vector, world_direction: Vector):
+    bm = edit_bmesh(obj)
+    inverse = obj.matrix_world.inverted_safe()
+    local_origin = inverse @ world_origin
+    local_direction = (inverse.to_3x3() @ world_direction).normalized()
+    location, _normal, face_index, _distance = BVHTree.FromBMesh(bm).ray_cast(
+        local_origin, local_direction)
+    if location is None or face_index is None:
+        return None
+    return obj.matrix_world @ location, int(face_index)
+
+
+_tweak_owner = None
+_tweak_missed = False
+
+
+@command("selection.tweak", mutating=True)
+def tweak(payload: dict) -> dict:
+    """Selecciona bajo el apoyo y mueve directamente hasta soltar el gesto."""
+    from . import modal
+    global _tweak_owner, _tweak_missed
+
+    phase = str(payload.get("phase", "")).upper()
+    if phase not in {"BEGIN", "UPDATE", "END", "CANCEL"}:
+        raise BadPayload("'phase' must be BEGIN, UPDATE, END or CANCEL")
+    owner = payload.get("_client_id")
+
+    if phase == "BEGIN":
+        obj = active_object()
+        if obj.mode != "EDIT":
+            raise CommandError("Tweak requires Edit Mode", code="wrong_mode")
+        selection_mode = tuple(bpy.context.scene.tool_settings.mesh_select_mode)
+        if not (selection_mode[0] or selection_mode[1]) or selection_mode[2]:
+            raise CommandError("Tweak requires Vertex or Edge selection mode", code="wrong_selection")
+        if modal.session.active:
+            modal.session.restore_safely()
+            modal.session.reset()
+        # ADD sirve aquí como sondeo no destructivo: un miss no borra la selección
+        # existente. Solo cuando hay impacto repetimos con SET para conservar la
+        # semántica de Tweak de trabajar sobre un único elemento.
+        picked = pick(dict(payload, mode="ADD"))
+        if picked.get("hit"):
+            picked = pick(dict(payload, mode="SET"))
+        _tweak_owner = owner
+        _tweak_missed = not picked.get("hit")
+        if not picked.get("hit"):
+            return picked
+        modal.session.begin("MOVE", [], False, None, owner_id=owner,
+                            orientation="GLOBAL", value_mode="RELATIVE", snap_type="NONE")
+        return dict(picked, tweak=True, session_id=modal.session.session_id)
+
+    if _tweak_missed:
+        if owner != _tweak_owner:
+            raise CommandError("Tweak gesture belongs to another client", code="session_owned")
+        if phase == "UPDATE":
+            # Tweak es también la herramienta de navegación de un dedo: si BEGIN no
+            # encontró geometría, el mismo flujo de deltas orbita sin esperar una
+            # respuesta asíncrona que obligaría a cambiar de gesto a mitad del drag.
+            from .view import orbit_delta
+            dx = get_float(payload, "dx", 0.0)
+            dy = get_float(payload, "dy", 0.0)
+            orbit_delta(dx, dy)
+            return {"hit": False, "tweak": True, "orbit": True, "moved": bool(dx or dy)}
+        if phase in {"END", "CANCEL"}:
+            _tweak_owner = None
+            _tweak_missed = False
+        return {"hit": False, "tweak": True, "orbit": True, "moved": False}
+
+    modal.session.require(owner)
+    if modal.session.mode != "MOVE" or modal.session.edit_object is None:
+        raise CommandError("Tweak session is not an Edit MOVE", code="wrong_tool")
+    if phase == "UPDATE":
+        modal.session.nudge(get_float(payload, "dx", 0.0), get_float(payload, "dy", 0.0))
+        modal.session.apply()
+        return dict(modal.session.status(), tweak=True)
+    moved = modal.session.values.length > 1e-12
+    if phase == "CANCEL" or not moved:
+        result = modal.cancel(payload)
+    else:
+        result = modal.confirm(payload)
+    _tweak_owner = None
+    _tweak_missed = False
+    return dict(result, tweak=True, moved=moved and phase == "END")
+
+
+@command("selection.shortest_path", mutating=True)
+def shortest_path(payload: dict) -> dict:
+    """Ctrl+toque de Blender: camino topológico entre el activo y lo tocado.
+
+    El destino se resuelve con el mismo raycast, oclusión y umbral que
+    ``selection.pick``. El cálculo se hace sobre BMesh porque la cámara de la tablet
+    no coincide con las coordenadas de ventana que exige ``bpy.ops.mesh.shortest_path_pick``.
+    """
+    obj = active_object()
+    if obj.mode != "EDIT":
+        raise CommandError("Shortest path requires Edit Mode", code="wrong_mode")
+    bm = edit_bmesh(obj)
+    seq = _active_elements(bm)
+    source = bm.select_history.active
+    if source not in seq or not source.select or source.hide:
+        selected = [elem for elem in seq if elem.select and not elem.hide]
+        source = selected[0] if len(selected) == 1 else None
+
+    # ADD conserva el origen mientras reutilizamos exactamente el picking táctil.
+    picked = pick(dict(payload, mode="ADD"))
+    if not picked.get("hit"):
+        return picked
+    target = bm.select_history.active
+    if target not in seq:
+        raise CommandError("Touched element does not match selection mode", code="wrong_selection")
+    if source is None:
+        # Igual que Blender, el primer toque solo establece el origen del próximo
+        # camino. Ya quedó seleccionado y activo por ``pick``.
+        return _with_state({"hit": True, "object": obj.name, "element": picked.get("element"),
+                            "index": target.index, "path": [target.index], "path_length": 1})
+
+    path = _shortest_element_path(source, target)
+    if not path:
+        raise CommandError("No connected path to touched element", code="no_selection_path")
+    if not bool(payload.get("extend", False)):
+        for collection in (bm.verts, bm.edges, bm.faces):
+            for elem in collection:
+                elem.select = False
+        bm.select_history.clear()
+    for elem in path:
+        elem.select = True
+    bm.select_history.add(target)
+    bm.select_flush_mode()
+    flush_bmesh(obj, bm, destructive=False)
+    return _with_state({"hit": True, "object": obj.name, "element": picked.get("element"),
+                        "index": target.index, "path": [elem.index for elem in path],
+                        "path_length": len(path)})
+
+
+def _shortest_element_path(source, target):
+    """Dijkstra geométrico para vértices, aristas o caras de un mismo BMesh."""
+    if source is target:
+        return [source]
+    distances = {source: 0.0}
+    previous = {}
+    serial = itertools.count()
+    queue = [(0.0, next(serial), source)]
+    while queue:
+        distance, _order, current = heapq.heappop(queue)
+        if distance != distances.get(current):
+            continue
+        if current is target:
+            break
+        for neighbor, weight in _path_neighbors(current):
+            if neighbor.hide:
+                continue
+            candidate = distance + max(weight, 1e-12)
+            if candidate < distances.get(neighbor, float("inf")):
+                distances[neighbor] = candidate
+                previous[neighbor] = current
+                heapq.heappush(queue, (candidate, next(serial), neighbor))
+    if target not in distances:
+        return []
+    result = [target]
+    while result[-1] is not source:
+        result.append(previous[result[-1]])
+    result.reverse()
+    return result
+
+
+def _path_neighbors(elem):
+    if isinstance(elem, bmesh.types.BMVert):
+        return [(edge.other_vert(elem), edge.calc_length()) for edge in elem.link_edges]
+    if isinstance(elem, bmesh.types.BMEdge):
+        center = (elem.verts[0].co + elem.verts[1].co) * 0.5
+        neighbors = {other for vert in elem.verts for other in vert.link_edges if other is not elem}
+        return [(other, ((other.verts[0].co + other.verts[1].co) * 0.5 - center).length)
+                for other in neighbors]
+    center = elem.calc_center_median()
+    neighbors = {other for edge in elem.edges for other in edge.link_faces if other is not elem}
+    return [(other, (other.calc_center_median() - center).length) for other in neighbors]
 
 
 def _cycle_behind(depsgraph, origin, direction, location, obj):
@@ -315,13 +508,19 @@ def _pick_through(obj, bm, rv3d, touch: Vector, threshold: float, mode: str, sel
     if not scored:
         return None
 
+    # Un segundo toque sobre el elemento ya seleccionado avanza al candidato que
+    # queda detrás. Hay que decidirlo antes de limpiar SET o se pierde esa memoria.
+    nearest = min(scored, key=lambda item: item[0])
+    selectable = [item for item in scored if not item[1].select]
+    chosen = min(selectable, key=lambda item: item[0]) if nearest[1].select and selectable else nearest
+
     if mode == "SET":
         bm.select_history.clear()
         for collection in (bm.verts, bm.edges, bm.faces):
             for elem in collection:
                 elem.select = False
 
-    distance, target = min(scored, key=lambda item: item[0])
+    distance, target = chosen
 
     _apply_op(target, mode)
     if target.select:

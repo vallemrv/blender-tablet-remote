@@ -36,10 +36,12 @@ import androidx.compose.material.icons.filled.Deselect
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Flip
 import androidx.compose.material.icons.filled.Grid4x4
+import androidx.compose.material.icons.filled.Hexagon
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.JoinFull
 import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.ContentCut
+import androidx.compose.material.icons.filled.Lens
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.LinearScale
 import androidx.compose.material.icons.filled.Mouse
@@ -63,6 +65,7 @@ import androidx.compose.material.icons.filled.Transform
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Waves
 import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -184,6 +187,14 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
         }
     }
 
+    // El aviso de confirmación se va antes: se lee de un vistazo y estorba menos.
+    LaunchedEffect(state.notice) {
+        if (state.notice != null) {
+            delay(3000)
+            vm.clearNotice()
+        }
+    }
+
     /** Nuevo y Abrir se tragan lo no guardado: se confirma solo si hay algo que perder. */
     fun guardDiscard(pending: PendingDiscard) {
         if (state.file.dirty) pendingDiscard = pending else pending.run()
@@ -196,7 +207,6 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             fileBrowserMode = FileBrowserMode.OPEN
             vm.openFileBrowser()
         },
-        onOpen = { path -> guardDiscard(PendingDiscard.Open(path) { vm.fileOpen(path) }) },
         onSave = vm::fileSave,
         onSaveAs = {
             fileBrowserMode = FileBrowserMode.SAVE
@@ -253,6 +263,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             onToolGesture = vm::toolGesture,
             onToolPointer = vm::toolPointer,
             onKnifeDrag = vm::knifeDrag,
+            onTweakDrag = vm::tweakGesture,
             onViewGestureLive = { g, phase, dx, dy, factor ->
                 vm.viewGesture(g, phase, dx, dy, factor)
                 if (phase != GesturePhase.BEGIN && phase != GesturePhase.UPDATE) vm.requestState()
@@ -276,6 +287,9 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             knifePoints = knifeScreenPoints,
             knifeActive = toolSession.active && toolSession.tool == EditTool.KNIFE &&
                 state.blender.features.knifeDrag,
+            tweakActive = state.activeTool == ActiveTool.TWEAK &&
+                state.blender.mode == BlenderMode.EDIT &&
+                state.blender.selectionMode != SelectionMode.FACE,
             snapCandidate = toolSession.snapCandidate ?: session.snapCandidate,
             navigationOrbitEnabled = (session.active || toolSession.active) &&
                 quickMenuAt == null && !modifiersOpen,
@@ -360,8 +374,9 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     modifier = Modifier.align(Alignment.CenterStart).padding(start = Metrics.EdgeMargin),
                 ) { RailContent(state, session, toolSession, vm) { railOpen = false } }
 
-                TransformBar(
+                if (state.activeTool != ActiveTool.TWEAK) TransformBar(
                     session = session,
+                    unitScaleLength = state.blender.unitScaleLength,
                     editSettings = state.blender.editSettings,
                     stepIndex = vm.stepIndex(session.mode),
                     snapType = snapType,
@@ -388,6 +403,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
 
                 EditToolTray(
                     session = toolSession,
+                    unitScaleLength = state.blender.unitScaleLength,
                     onParameter = vm::setToolParameter,
                     onConfirm = vm::confirmTool,
                     onCancel = vm::cancelTool,
@@ -465,6 +481,13 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
 
         state.error?.let { message ->
             ErrorToast(message, Modifier.align(Alignment.TopCenter).padding(top = 64.dp))
+        }
+
+        // Un error tapa al aviso: si algo ha fallado, esa es la noticia.
+        if (state.error == null) {
+            state.notice?.let { message ->
+                NoticeToast(message, Modifier.align(Alignment.TopCenter).padding(top = 64.dp))
+            }
         }
 
         quickMenuAt?.let { (x, y) ->
@@ -598,6 +621,7 @@ class ViewportInput(
     val onToolGesture: (GesturePhase, Float, Float) -> Unit,
     val onToolPointer: (Float, Float) -> Unit,
     val onKnifeDrag: (GesturePhase, Float, Float) -> Unit,
+    val onTweakDrag: (GesturePhase, Float, Float, Float, Float) -> Unit,
     /** Con vídeo activo: al soltar el gesto se refresca el estado. */
     val onViewGestureLive: (Gesture, GesturePhase, Float, Float, Float) -> Unit,
     /** Sin vídeo: solo navega, no hay nada que refrescar aún. */
@@ -625,6 +649,7 @@ private fun ViewportLayer(
     input: ViewportInput,
     shapeTool: ShapeTool,
     knifeActive: Boolean,
+    tweakActive: Boolean,
     knifePoints: List<Pair<Float, Float>>,
     snapCandidate: com.blendertablet.remote.model.SnapCandidate?,
     navigationOrbitEnabled: Boolean,
@@ -653,6 +678,8 @@ private fun ViewportLayer(
                     onDoubleTap = input.onDoubleTap,
                     knifeActive = knifeActive,
                     onKnifeDrag = input.onKnifeDrag,
+                    tweakActive = tweakActive,
+                    onTweakDrag = input.onTweakDrag,
                     onLongPress = onLongPress,
                     shapeTool = shapeTool,
                     navigationOrbitEnabled = navigationOrbitEnabled,
@@ -675,6 +702,8 @@ private fun ViewportLayer(
                 onDoubleTap = input.onDoubleTap,
                 knifeActive = knifeActive,
                 onKnifeDrag = input.onKnifeDrag,
+                tweakActive = tweakActive,
+                onTweakDrag = input.onTweakDrag,
                 onLongPress = onLongPress,
                 shapeTool = shapeTool,
                 knifePoints = knifePoints,
@@ -711,6 +740,8 @@ private fun ViewportLayer(
                 onDoubleTap = input.onDoubleTap,
                 knifeActive = knifeActive,
                 onKnifeDrag = input.onKnifeDrag,
+                tweakActive = tweakActive,
+                onTweakDrag = input.onTweakDrag,
                 onLongPress = onLongPress,
                 shapeTool = shapeTool,
                 knifePoints = knifePoints,
@@ -757,6 +788,14 @@ private fun RailContent(
         selected = state.activeTool == ActiveTool.SELECT && !session.active && !toolSession.active,
         onClick = vm::selectTool,
     )
+    if (inEdit && state.blender.features.selectionTweak) {
+        IconAction(
+            Icons.Default.TouchApp, "Tweak · seleccionar y arrastrar",
+            selected = state.activeTool == ActiveTool.TWEAK,
+            enabled = state.blender.selectionMode != SelectionMode.FACE,
+            onClick = vm::activateTweak,
+        )
+    }
     IconAction(
         Icons.Default.OpenWith, "Mover",
         selected = session.active && session.mode == TransformMode.MOVE,
@@ -782,7 +821,7 @@ private fun RailContent(
     if (inEdit && state.blender.features.editToolbar.available) {
         RailDivider()
         RailLabel("EDITAR")
-        ToolbarFamilyButtons(state.blender.features.editToolbar.families, toolSession, vm)
+        ToolbarFamilyButtons(state.blender.features.editToolbar.families, toolSession, state.toolbarVariant, vm)
     }
 
     // El catálogo contextual toma propiedad de las operaciones topológicas. En un
@@ -820,7 +859,12 @@ private fun RailContent(
     }
 
     RailDivider()
-    IconAction(Icons.Default.ContentCopy, "Duplicar", enabled = editable, onClick = vm::duplicate)
+    DuplicateFamilyButton(
+        inEdit = inEdit,
+        linked = state.duplicateLinked,
+        enabled = editable,
+        vm = vm,
+    )
 
     RailDivider()
     IconAction(Icons.Default.BugReport, "Diagnóstico", selected = state.debugVisible, onClick = vm::toggleDebug)
@@ -874,7 +918,7 @@ private fun quickActions(
     // Sin catálogo del servidor (edit_catalog no disponible) no hay nada que abrir.
     .filter { it != ActionId.EDIT_MESH_TOOLS || meshToolsChildren.isNotEmpty() }
     .map { id ->
-    val label = SurfaceCatalog.labelOf(id)
+    val label = SurfaceCatalog.labelOf(id, context)
     when (id) {
         // El catálogo Add completo, antes en el menú Objeto del top: en el vacío del
         // long-click está donde se le necesita, y el panel flotante lo ordena por
@@ -919,12 +963,18 @@ private fun quickActions(
         ActionId.SELECT_RING -> QuickAction(label, Icons.Default.Rowing) { vm.selectRing() }
         ActionId.SELECT_LINKED -> QuickAction(label, Icons.Default.Hub) { vm.selectLinked() }
         ActionId.HIDE_OBJECT -> QuickAction(label, Icons.Default.VisibilityOff) { vm.hideObject(context.objectName) }
-        ActionId.SHADE_OBJECT -> QuickAction(label, Icons.Default.WbSunny) {
-            vm.toggleObjectShading(context.objectName)
-        }
-        ActionId.VIEW_LOCAL -> QuickAction(label, Icons.Default.CenterFocusStrong) { vm.toggleLocalView() }
+        // Iconos por cara del interruptor: el rótulo dice qué hará y el icono lo repite
+        // sin leer. Suave = esfera, plano = facetas; aislar = enfocar, ver todo = salir.
+        ActionId.SHADE_OBJECT -> QuickAction(
+            label,
+            if (context.shadeSmooth) Icons.Default.Hexagon else Icons.Default.Lens,
+        ) { vm.toggleObjectShading(context.objectName) }
+        ActionId.VIEW_LOCAL -> QuickAction(
+            label,
+            if (context.localView) Icons.Default.ZoomOutMap else Icons.Default.CenterFocusStrong,
+        ) { vm.toggleLocalView() }
         ActionId.HIDE_GEOMETRY -> QuickAction(label, Icons.Default.VisibilityOff) { vm.hideSelection() }
-        ActionId.DUPLICATE_LINKED -> QuickAction(label, Icons.Default.ContentCopy) { vm.duplicateLinked() }
+        ActionId.DUPLICATE_LINKED -> QuickAction(label, Icons.Default.ContentCopy, enabled = false)
         ActionId.RENAME -> QuickAction(label, Icons.Default.Edit, onClick = onRename)
         ActionId.DISSOLVE -> QuickAction(label, Icons.Default.DeleteSweep) {
             vm.meshDissolve(deleteWhat(context.selectionMode))
@@ -979,6 +1029,13 @@ private fun quickContextLabel(context: TouchContext): String = when {
 private fun ErrorToast(message: String, modifier: Modifier = Modifier) {
     FloatingPanel(modifier) {
         Text(message, color = Ink.Bad, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
+    }
+}
+
+@Composable
+private fun NoticeToast(message: String, modifier: Modifier = Modifier) {
+    FloatingPanel(modifier) {
+        Text(message, color = Ink.Accent, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
     }
 }
 

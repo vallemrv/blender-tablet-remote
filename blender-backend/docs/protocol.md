@@ -126,6 +126,8 @@ existe sin comprobarlo.
 | `not_found` | Objeto o índice inexistente |
 | `wrong_mode` | El comando necesita otro modo (p. ej. `mesh.*` fuera de Edit) |
 | `empty_selection` | No hay nada seleccionado sobre lo que operar |
+| `wrong_selection` | El elemento tocado no pertenece al submodo de selección activo |
+| `no_selection_path` | No existe un camino topológico conectado hasta el elemento tocado |
 | `no_viewport` | No hay ningún VIEW_3D disponible |
 | `no_undo_stack` | Blender en background: no hay pila de undo |
 | `auth_required` / `auth_failed` | Ver §2 |
@@ -192,11 +194,17 @@ edición, no sobre el objeto.
     "name": "Cube", "type": "MESH",
     "location": [0,0,0], "rotation_euler": [0,0,0], "scale": [1,1,1],
     "dimensions": [2,2,2], "visible": true,
-    "mesh": {"vertices": 8, "edges": 12, "polygons": 6}
+    "mesh": {"vertices": 8, "edges": 12, "polygons": 6, "shade_smooth": false}
   },
   "view": {"location": [0,0,0], "rotation": [w,x,y,z], "distance": 10.0, "perspective": "PERSP"}
 }
 ```
+
+`mesh.shade_smooth` mira solo el primer polígono, porque este snapshot se pide a 10 Hz y
+censar la malla entera en cada uno saldría caro. Existe para que el cliente pueda rotular
+su interruptor de sombreado con la acción que ejecutará; en una malla con sombreado mixto
+es el estado de referencia, no una garantía sobre todas las caras. Quien necesite el
+valor exacto que use `object.shade`, que sí lo calcula sobre todos los polígonos.
 
 ### Objetos
 
@@ -217,6 +225,10 @@ edición, no sobre el objeto.
 confundir con `selection.hide` / `selection.reveal`, que ocultan geometría en Edit.
 `visible` en el estado es `not obj.hide_get()`, no el monitor del outliner.
 
+En Edit Mode, duplicar geometría no usa `object.duplicate`: `mesh.duplicate` copia
+únicamente la selección efectiva del submodo actual (vértices, aristas o caras) y deja
+seleccionada la copia, equivalente a `Shift+D` antes de moverla.
+
 ### Modos
 
 `mode.object`, `mode.edit`, `mode.sculpt`, `mode.toggle`, `mode.set` (`mode`).
@@ -231,6 +243,8 @@ confundir con `selection.hide` / `selection.reveal`, que ocultan geometría en E
 | `selection.info` | — devuelve índices seleccionados |
 | `selection.elements` | `verts[]`, `edges[]`, `faces[]`, `mode` |
 | `selection.pick` | `u`, `v` (0..1), `threshold`, `mode`: `SET`\|`ADD`\|`REMOVE`\|`TOGGLE` |
+| `selection.tweak` | `phase`: `BEGIN`\|`UPDATE`\|`END`\|`CANCEL`; BEGIN lleva `u`,`v`, UPDATE lleva `dx`,`dy` |
+| `selection.shortest_path` | `u`, `v` (0..1), `threshold`, `extend` (bool, por defecto false) — solo Edit |
 | `selection.box` | `u0`, `v0`, `u1`, `v1`, `mode` |
 | `selection.circle` | `u`, `v`, `radius`, `mode` |
 | `selection.more` / `selection.less` | — en Edit Mode |
@@ -245,6 +259,13 @@ En Object Mode selecciona el objeto tocado; en Edit Mode, con oclusión real (SO
 solo considera elementos de la cara visible impactada y exige que vértices/aristas
 estén dentro del umbral táctil normalizado (`threshold`, 0.035 por defecto). Devuelve
 `{"hit": false}` si el rayo no da con nada (y deselecciona si `mode` es `SET`).
+
+`selection.tweak` está disponible solo en Edit y submodos VERTEX/EDGE. BEGIN hace un
+pick SET bajo el punto inicial y abre una transformación MOVE reversible; UPDATE
+acumula deltas normalizados en el plano de la vista; END confirma un único undo y
+CANCEL restaura las coordenadas originales. Un BEGIN sin impacto no abre sesión MOVE:
+los UPDATE siguientes orbitan la cámara (`miss_behavior: ORBIT`) hasta END/CANCEL. Un
+toque sin desplazamiento conserva la selección pero no crea un undo de movimiento.
 
 Con shading `WIREFRAME` el pick ve a través en ambos modos. En Object Mode **cicla hacia
 detrás**: si el primer objeto impactado ya está seleccionado, se avanza el origen del
@@ -288,7 +309,7 @@ Ctrl+Plus / Ctrl+Minus del numpad). Solo Edit Mode (`wrong_mode` fuera).
 | Comando | Payload |
 |---|---|
 | `mesh.extrude` | `offset` (def. 0.0), `direction` [x,y,z] opcional, `variant`: `REGION`\|`ALONG_NORMALS`\|`INDIVIDUAL` |
-| `mesh.inset` | `thickness` (def. 0.1), `depth`, `individual` (bool) |
+| `mesh.inset` | `thickness` (def. 0.1), `depth`, `individual` (bool), `boundary` (bool, def. true; false conserva costuras abiertas/Mirror) |
 | `mesh.bevel` | `offset` (def. 0.1), `segments` (def. 1), `profile`, `affect`, `clamp` |
 | `mesh.subdivide` | `cuts` |
 | `mesh.loop_cut` | `edge` (opcional), `cuts` (def. 1), `smoothness`, `factor`, `falloff`, `even`, `flip`, `clamp` |
@@ -297,6 +318,7 @@ Ctrl+Plus / Ctrl+Minus del numpad). Solo Edit Mode (`wrong_mode` fuera).
 | `mesh.make_edge_face` | —; crea arista/cara en Vértice o rellena un borde cerrado en Arista |
 | `mesh.separate` | —; separa la selección en un objeto nuevo |
 | `mesh.split` | —; separa la selección dentro de la misma malla |
+| `mesh.looptools_circle` | —; ejecuta Circle del add-on LoopTools sobre la selección |
 | `mesh.normals_recalculate` | `inside` (bool, def. false) |
 | `mesh.normals_flip` | — |
 | `mesh.info` | — |
@@ -471,11 +493,15 @@ La feature `edit_tools.loop_cut` anuncia `pick`, `probe`, `falloff`, `even`, `fl
 anunciado.
 
 Knife se dibuja por segmentos con `tool.knife_drag` (`phase` `BEGIN|UPDATE|END|CANCEL`,
-`u`,`v`). BEGIN fija el origen provisional; UPDATE devuelve el candidato sin mutar la
-malla; END añade el extremo mostrado y reconstruye la preview desde el backup. La cara
-visible es un destino exacto y vértice/arista solo sustituyen ese punto dentro de sus
-umbrales. `tool.status` publica `projected_points` y `snap_candidate` reproyectados con
-la cámara actual. `tool.knife_point` permanece como compatibilidad para clientes v2
+`u`,`v`). BEGIN inicia un sondeo provisional y UPDATE mueve el candidato sin mutar la
+malla. Si aún no había anclas, END fija **un único primer punto en la posición final**:
+el apoyo inicial nunca se conserva, de modo que ese primer punto también puede
+arrastrarse hasta el snap deseado. Desde el segundo gesto, END añade el extremo mostrado
+y reconstruye la preview desde el backup. La cara visible es un destino exacto y el snap
+puede resolver `VERTEX`, `EDGE_CENTER` o `EDGE` (punto más cercano de la arista) dentro
+de sus umbrales. `tool.status` publica `projected_points` y `snap_candidate`
+reproyectados con la cámara actual. La feature `edit_tools.knife` anuncia
+`first_point_drag`; `tool.knife_point` permanece como compatibilidad para clientes v2
 anteriores.
 
 `BISECT` corta con un plano infinito cuya traza en pantalla es la línea que arrastra
@@ -503,6 +529,10 @@ para Extrude) como parámetro de sesión — cambiarlo reconstruye desde el back
 acumula. Los pasos de Extrude/Bevel/Inset son distancias en Blender Units (la UI los
 presenta en cm/m usando `units.scale_length`); Loop Cut y merge son factores
 adimensionales. En escalares `GRID` equivale a `INCREMENT`.
+
+Inset REGION acepta además `boundary` (def. `true`), equivalente a Boundary de
+Blender. Con `false`, los bordes abiertos no se desplazan: una costura sobre el plano
+de un modificador Mirror permanece pegada al espejo durante el inset.
 
 Extrude `REGION` admite snap geométrico. Durante el arrastre el cliente llama
 `tool.snap_candidate` con `u`, `v`, `snap_type` (`VERTEX|EDGE|EDGE_CENTER|FACE|FACE_CENTER|CURSOR`),
@@ -558,6 +588,15 @@ backup igual que las demás sesiones y el catálogo fija el mínimo rápido de s
 el backend valida la topología completa.
 Extrude anuncia `REGION` en los tres grupos; `ALONG_NORMALS` e `INDIVIDUAL` sólo se
 habilitan en Cara. El cliente debe respetar `enabled` y no deducir compatibilidades.
+
+`LOOPTOOLS_CIRCLE` es una entrada condicional de los grupos VERTEX y EDGE. El servidor
+la añade al `edit_catalog.groups` vivo únicamente cuando el operador oficial
+`mesh.looptools_circle` está registrado (LoopTools instalado y habilitado). Si el
+operador no existe, la entrada no se envía y el cliente no la muestra. Requiere al
+menos tres vértices seleccionados y no tiene una aproximación geométrica propia del
+servidor. La regla estable se declara en `edit_catalog.conditional_actions` con
+`availability: "OPERATOR_REGISTERED"`; Android solo representa las acciones que estén
+materializadas en `groups`.
 
 ### Barra de tools activas de Edit (`edit_toolbar`)
 
@@ -984,3 +1023,8 @@ con Blender a 53 Hz.
 
 MJPEG permanece como fallback. H.264/libx264 es la ruta preferida por su menor ancho
 de banda y configuración de latencia interactiva.
+`selection.tweak` está disponible solo en Edit y submodos VERTEX/EDGE. BEGIN hace un
+pick SET bajo el punto inicial y abre una transformación MOVE reversible; UPDATE
+acumula deltas normalizados en el plano de la vista; END confirma un único undo y
+CANCEL restaura las coordenadas originales. Un BEGIN sin impacto no abre sesión. Un
+toque sin desplazamiento conserva la selección pero no crea un undo de movimiento.

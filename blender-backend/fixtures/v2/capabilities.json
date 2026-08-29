@@ -59,7 +59,7 @@
       "merge_threshold": true
     },
     "selection": {
-      "version": 4,
+      "version": 7,
       "operations": [
         "SET",
         "ADD",
@@ -77,7 +77,21 @@
         "LOOP",
         "RING"
       ],
-      "linked": true
+      "linked": true,
+      "shortest_path": true,
+      "tweak": {
+        "phases": [
+          "BEGIN",
+          "UPDATE",
+          "END",
+          "CANCEL"
+        ],
+        "selection_modes": [
+          "VERTEX",
+          "EDGE"
+        ],
+        "miss_behavior": "ORBIT"
+      }
     },
     "view": {
       "version": 4,
@@ -153,7 +167,7 @@
       ]
     },
     "edit_tools": {
-      "version": 6,
+      "version": 7,
       "tools": [
         "EXTRUDE",
         "BEVEL",
@@ -188,8 +202,9 @@
         "cut_through": false,
         "threshold": 0.045,
         "drag": true,
+        "first_point_drag": true,
         "projection": true,
-        "snap_types": ["VERTEX", "EDGE", "FACE"]
+        "snap_types": ["VERTEX", "EDGE_CENTER", "EDGE", "FACE"]
       },
       "bisect": {
         "drag_line": true,
@@ -220,6 +235,20 @@
     },
     "edit_catalog": {
       "version": 1,
+      "conditional_actions": [
+        {
+          "id": "LOOPTOOLS_CIRCLE",
+          "label": "Hacer círculo",
+          "command": "mesh.looptools_circle",
+          "execution": "DISCRETE",
+          "selection_modes": [
+            "VERTEX",
+            "EDGE"
+          ],
+          "availability": "OPERATOR_REGISTERED",
+          "operator": "mesh.looptools_circle"
+        }
+      ],
       "groups": {
         "VERTEX": [
           {
@@ -1351,6 +1380,15 @@
                 "default": false
               },
               {
+                "id": "boundary",
+                "label": "Incluir borde",
+                "type": "bool",
+                "default": true,
+                "applies_to": [
+                  "REGION"
+                ]
+              },
+              {
                 "id": "snap_type",
                 "label": "Snap",
                 "type": "enum",
@@ -1932,6 +1970,15 @@
               "default": false
             },
             {
+              "id": "boundary",
+              "label": "Incluir borde",
+              "type": "bool",
+              "default": true,
+              "applies_to": [
+                "REGION"
+              ]
+            },
+            {
               "id": "snap_type",
               "label": "Snap",
               "type": "enum",
@@ -2349,11 +2396,13 @@
     "mesh.bevel",
     "mesh.delete",
     "mesh.dissolve",
+    "mesh.duplicate",
     "mesh.extrude",
     "mesh.info",
     "mesh.inset",
     "mesh.loop_cut",
     "mesh.loop_probe",
+    "mesh.looptools_circle",
     "mesh.make_edge_face",
     "mesh.normals_flip",
     "mesh.normals_recalculate",
@@ -2404,6 +2453,8 @@
     "selection.reveal",
     "selection.ring",
     "selection.set_mode",
+    "selection.shortest_path",
+    "selection.tweak",
     "selection.vertex",
     "server.capabilities",
     "server.ping",

@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Deblur
 import androidx.compose.material.icons.filled.JoinFull
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Flip
 import androidx.compose.material.icons.filled.PhotoCamera
@@ -175,6 +177,7 @@ private fun ModifierCard(
     actions: ModifierActions,
 ) {
     val specs = state.modifierOptions.firstOrNull { it.type == item.type }?.parameters.orEmpty()
+    var expanded by remember(item.name) { mutableStateOf(true) }
 
     Box(
         Modifier
@@ -185,8 +188,12 @@ private fun ModifierCard(
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                ModifierHeaderButton(
+                    if (expanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    if (expanded) "Plegar ${item.name}" else "Desplegar ${item.name}",
+                ) { expanded = !expanded }
                 Icon(iconOf(item.type), item.type, Modifier.size(16.dp), tint = Ink.Accent)
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(4.dp))
                 Text(
                     item.name,
                     color = Ink.OnPanel,
@@ -194,40 +201,68 @@ private fun ModifierCard(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
-                // Visibilidad en viewport y en render: dos estados independientes que
-                // se apagan en gris en vez de desaparecer.
-                IconAction(
-                    Icons.Default.Visibility,
-                    if (item.showViewport) "Visible en el viewport" else "Oculto en el viewport",
-                    selected = item.showViewport,
-                    tint = Ink.Faint,
-                ) { actions.toggle(item.name, !item.showViewport, null) }
-                IconAction(
-                    Icons.Default.PhotoCamera,
-                    if (item.showRender) "Visible en el render" else "Oculto en el render",
-                    selected = item.showRender,
-                    tint = Ink.Faint,
-                ) { actions.toggle(item.name, null, !item.showRender) }
-            }
-
-            for (spec in specs) {
-                ModifierParameter(item, spec, state, actions.set)
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                IconAction(
+                ModifierHeaderButton(
                     Icons.Default.ArrowUpward, "Subir en la pila",
                     enabled = index > 0,
                 ) { actions.move(item.name, index - 1) }
-                IconAction(
+                ModifierHeaderButton(
                     Icons.Default.ArrowDownward, "Bajar en la pila",
                     enabled = index < state.modifiers.lastIndex,
                 ) { actions.move(item.name, index + 1) }
-                Spacer(Modifier.weight(1f))
-                IconAction(Icons.Default.Check, "Aplicar", tint = Ink.Ok) { actions.apply(item.name) }
-                IconAction(Icons.Default.Delete, "Eliminar", tint = Ink.Bad) { actions.remove(item.name) }
+                ModifierHeaderButton(
+                    Icons.Default.Visibility,
+                    if (item.showViewport) "Visible en el viewport" else "Oculto en el viewport",
+                    selected = item.showViewport,
+                ) { actions.toggle(item.name, !item.showViewport, null) }
+                ModifierHeaderButton(
+                    Icons.Default.PhotoCamera,
+                    if (item.showRender) "Visible en el render" else "Oculto en el render",
+                    selected = item.showRender,
+                ) { actions.toggle(item.name, null, !item.showRender) }
+            }
+
+            if (expanded) {
+                for (spec in specs) {
+                    ModifierParameter(item, spec, state, actions.set)
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Spacer(Modifier.weight(1f))
+                    IconAction(Icons.Default.Check, "Aplicar", tint = Ink.Ok) { actions.apply(item.name) }
+                    IconAction(Icons.Default.Delete, "Eliminar", tint = Ink.Bad) { actions.remove(item.name) }
+                }
             }
         }
+    }
+}
+
+/** Botón compacto de cabecera: la pila completa debe caber en una sola línea. */
+@Composable
+private fun ModifierHeaderButton(
+    icon: ImageVector,
+    description: String,
+    enabled: Boolean = true,
+    selected: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Box(
+        Modifier
+            .size(28.dp)
+            .clip(RoundedCornerShape(7.dp))
+            .background(if (selected) Ink.Accent.copy(alpha = .18f) else Color.Transparent)
+            .then(if (enabled) Modifier.clickableNoRipple(onClick) else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon,
+            description,
+            Modifier.size(17.dp),
+            tint = when {
+                !enabled -> Ink.Faint.copy(alpha = .35f)
+                selected -> Ink.Accent
+                else -> Ink.Faint
+            },
+        )
     }
 }
 

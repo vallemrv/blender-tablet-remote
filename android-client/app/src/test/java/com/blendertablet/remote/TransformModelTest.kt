@@ -7,6 +7,8 @@ import com.blendertablet.remote.model.SnapAction
 import com.blendertablet.remote.model.SnapGroup
 import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.stepsFor
+import com.blendertablet.remote.model.stepInBlenderUnits
+import com.blendertablet.remote.model.defaultStepIndex
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -17,6 +19,13 @@ import org.junit.Test
  */
 class TransformModelTest {
     @Test
+    fun `los pasos iniciales son finos y explícitos`() {
+        assertEquals("1 mm", stepsFor(TransformMode.MOVE)[defaultStepIndex(TransformMode.MOVE)].label)
+        assertEquals("5°", stepsFor(TransformMode.ROTATE)[defaultStepIndex(TransformMode.ROTATE)].label)
+        assertEquals("5%", stepsFor(TransformMode.SCALE)[defaultStepIndex(TransformMode.SCALE)].label)
+    }
+
+    @Test
     fun `todos los modos tienen incrementos`() {
         for (mode in TransformMode.entries) {
             assertTrue("$mode sin incrementos", stepsFor(mode).isNotEmpty())
@@ -25,11 +34,14 @@ class TransformModelTest {
     }
 
     @Test
-    fun `los incrementos de mover están en metros`() {
-        // La etiqueta se lee en mm/cm/m pero por el cable van metros, que es la
-        // unidad de Blender. Confundirlos movería mil veces de más.
+    fun `los incrementos de mover se convierten a unidades Blender`() {
+        // El preset expresa una distancia física. En una escena milimétrica
+        // (scale_length=.001), 1 BU es 1 mm y por el cable debe viajar 1.0.
         assertEquals(0.001, MoveSteps.first { it.label == "1 mm" }.step, 1e-12)
         assertEquals(1.0, MoveSteps.first { it.label == "1 m" }.step, 1e-12)
+        val millimeter = MoveSteps.first { it.label == "1 mm" }
+        assertEquals(1.0, stepInBlenderUnits(millimeter, TransformMode.MOVE, 0.001), 1e-12)
+        assertEquals(0.001, stepInBlenderUnits(millimeter, TransformMode.MOVE, 1.0), 1e-12)
     }
 
     @Test

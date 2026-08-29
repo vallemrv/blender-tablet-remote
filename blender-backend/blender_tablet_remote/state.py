@@ -165,6 +165,11 @@ def object_info(obj) -> dict:
             "vertices": len(mesh.vertices),
             "edges": len(mesh.edges),
             "polygons": len(mesh.polygons),
+            # Solo el primer polígono: este snapshot se pide a 10 Hz y preguntar
+            # `all(p.use_smooth ...)` recorrería la malla entera en cada uno. Sirve
+            # para rotular el interruptor de la tablet; en una malla con sombreado
+            # mixto es el estado de referencia, no un censo.
+            "shade_smooth": bool(mesh.polygons[0].use_smooth) if mesh.polygons else False,
         }
     return info
 

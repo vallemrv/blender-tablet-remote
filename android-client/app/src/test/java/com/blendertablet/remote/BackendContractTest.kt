@@ -128,6 +128,13 @@ class BackendContractTest {
         // snap geométrico y proyección conmutable.
         assertTrue(features.getJSONObject("context").getBoolean("selection_counts"))
         assertTrue(features.getJSONObject("transform_modal").getBoolean("geometric_snap"))
+        assertTrue(StateParser.features(capabilities).selectionShortestPath)
+        assertTrue(StateParser.features(capabilities).selectionTweak)
+        assertEquals(
+            capabilities.getJSONObject("units").getDouble("scale_length"),
+            StateParser.unitScaleLength(capabilities),
+            1e-12,
+        )
         val modes = features.getJSONObject("transform_modal").getJSONArray("modes")
         assertTrue((0 until modes.length()).map { modes.getString(it) }.contains("EDIT"))
         val projections = features.getJSONObject("view").getJSONArray("projections")

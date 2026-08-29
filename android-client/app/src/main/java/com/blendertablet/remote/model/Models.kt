@@ -9,7 +9,7 @@ enum class BlenderMode { OBJECT, EDIT }
 enum class SelectionMode { VERTEX, EDGE, FACE }
 /** Atajos de la página Edit; su adaptador wire vive en MainViewModel. */
 enum class EditFooterAction { MAKE_EDGE_FACE, KNIFE, SEPARATE, SPLIT, NORMALS, NORMALS_OUTSIDE, NORMALS_INSIDE, NORMALS_FLIP }
-enum class ActiveTool { SELECT, MOVE, ROTATE, SCALE, EXTRUDE, BEVEL, INSET, SUBDIVIDE, LOOP_CUT, BRIDGE_EDGE_LOOPS, KNIFE, BISECT }
+enum class ActiveTool { SELECT, TWEAK, MOVE, ROTATE, SCALE, EXTRUDE, BEVEL, INSET, SUBDIVIDE, LOOP_CUT, BRIDGE_EDGE_LOOPS, KNIFE, BISECT }
 
 /**
  * Operación de selección que aplican el tap, la caja y el círculo. Mayús/Ctrl/Alt
@@ -54,6 +54,10 @@ data class ServerFeatures(
     /** `view.overlays`: el ojo puede apagar rejilla y overlays del viewport. */
     val overlays: Boolean = false,
     val selectionGrow: Boolean = false, val selectionShapes: Boolean = false,
+    /** `selection.shortest_path`: Ctrl+toque real en Edit Mode. */
+    val selectionShortestPath: Boolean = false,
+    /** `selection.tweak`: seleccionar y mover en un único arrastre. */
+    val selectionTweak: Boolean = false,
     /** Colocación del loop cut tocando la malla (`edit_tools.loop_cut.pick`). */
     val loopCutPick: Boolean = false,
     /** Mayús+toque acumula cortes y permite volver al anterior. */
@@ -163,6 +167,15 @@ fun stepsFor(mode: TransformMode) = when (mode) {
     TransformMode.ROTATE -> RotateSteps
     TransformMode.SCALE -> ScaleSteps
 }
+
+fun defaultStepIndex(mode: TransformMode): Int = when (mode) {
+    TransformMode.MOVE -> 0   // 1 mm
+    TransformMode.ROTATE -> 1 // 5°
+    TransformMode.SCALE -> 1  // 5 %
+}
+
+fun stepInBlenderUnits(preset: StepPreset, mode: TransformMode, scaleLength: Double): Double =
+    if (mode == TransformMode.MOVE) preset.step / scaleLength.coerceAtLeast(1e-12) else preset.step
 
 /**
  * La transformación en curso, tal como la cuenta el servidor.
@@ -308,15 +321,6 @@ data class FileInfo(
     val dirty: Boolean = false,
 )
 
-/** Una entrada de la lista de recientes de Blender. */
-data class RecentFile(
-    val name: String,
-    val path: String,
-    val folder: String,
-    /** Un reciente puede haberse movido o borrado; se muestra en gris. */
-    val exists: Boolean = true,
-)
-
 enum class RemoteFileType { DIRECTORY, BLEND }
 
 data class RemoteFileEntry(
@@ -378,12 +382,16 @@ data class BlenderState(
     val context: SceneContext = SceneContext(),
     val view: ViewState = ViewState(),
     val activeObjectType: String? = null,
+    /** El objeto activo está sombreado suave: rotula el interruptor Plano/Suave. */
+    val activeShadeSmooth: Boolean = false,
     val objects: List<Pair<String, String>> = emptyList(),
     val hiddenObjects: List<HiddenObject> = emptyList(),
     val modifiers: List<ModifierState> = emptyList(),
     val modifierOptions: List<ModifierTypeDescriptor> = emptyList(),
     val features: ServerFeatures = ServerFeatures(),
     val editSettings: EditSettings = EditSettings(),
+    /** Metros físicos representados por una Blender Unit. */
+    val unitScaleLength: Double = 1.0,
 )
 
 data class InputDebug(
@@ -406,8 +414,9 @@ data class AppUiState(
     val controlsVisible: Boolean = true,
     val debugVisible: Boolean = false,
     val error: String? = null,
+    /** Confirmación efímera de una acción cuyo efecto no se ve en el viewport. */
+    val notice: String? = null,
     val file: FileInfo = FileInfo(),
-    val recentFiles: List<RecentFile> = emptyList(),
     /** Preferencias de la barra de transformación; sobreviven a cerrar la sesión. */
     val snapType: SnapType = SnapType.NONE,
     /** Último paso elegido para las herramientas paramétricas con snap escalar. */
@@ -417,8 +426,10 @@ data class AppUiState(
     val constraint: Constraint = Constraint.FREE,
     val orientation: Orientation = Orientation.GLOBAL,
     val valueMode: ValueMode = ValueMode.RELATIVE,
-    /** Modificador de selección (Ctrl/Alt) fijado en la barra superior. */
+    /** Operación acumulativa de Mayús o sustractiva de Alt. */
     val selectionOp: SelectionOp = SelectionOp.SET,
+    /** Ctrl armado para que el siguiente toque seleccione el camino más corto. */
+    val shortestPathActive: Boolean = false,
     /** Herramienta de forma (B/C) armada en la barra superior. */
     val shapeTool: ShapeTool = ShapeTool.NONE,
     /** `view.local` activo: aislar la selección (el `/` del footer de vistas). */
@@ -427,6 +438,8 @@ data class AppUiState(
     val loopCutAwaitingTap: Boolean = false,
     /** Última variante usada por familia de `edit_toolbar` (id de familia -> id de variante). */
     val toolbarVariant: Map<String, String> = emptyMap(),
+    /** Variante discreta recordada por la familia Duplicar del rail (Object Mode). */
+    val duplicateLinked: Boolean = false,
 )
 
 /**
@@ -443,6 +456,6 @@ fun bottomTrayVisible(
     loopCutAwaitingTap: Boolean,
     /** Bisect armado (edit_toolbar) esperando el arrastre de línea que activa la sesión. */
     toolSessionArmed: Boolean = false,
-): Boolean = sessionActive || toolSessionActive ||
+): Boolean = (sessionActive && activeTool != ActiveTool.TWEAK) || toolSessionActive ||
     (activeTool == ActiveTool.LOOP_CUT && !toolSessionActive && loopCutAwaitingTap) ||
     (activeTool == ActiveTool.BISECT && !toolSessionActive && toolSessionArmed)

@@ -110,7 +110,9 @@ def _bounds(objects):
     lo = Vector((min(c.x for c in corners), min(c.y for c in corners), min(c.z for c in corners)))
     hi = Vector((max(c.x for c in corners), max(c.y for c in corners), max(c.z for c in corners)))
     center = (lo + hi) * 0.5
-    radius = max((hi - lo).length * 0.5, 0.25)
+    # Nada de mínimos macroscópicos: en una escena donde 1 BU = 1 mm, imponer 25 cm
+    # convierte una pieza de 5 cm en un punto al encuadrarla.
+    radius = max((hi - lo).length * 0.5, 1e-6)
     return center, radius
 
 
@@ -239,9 +241,10 @@ def shading(payload: dict) -> dict:
 
     space.shading.type = mode
     if mode == "WIREFRAME":
-        # Alpha 1.0 muestra también las aristas traseras: todo el armazón visible.
+        # Con 1.0 el xray es opaco y vuelve a ocultar lo que hay dentro. Un valor
+        # moderado conserva legibles frente e interior, como el xray de Blender.
         space.shading.show_xray_wireframe = True
-        space.shading.xray_alpha_wireframe = 1.0
+        space.shading.xray_alpha_wireframe = 0.35
     return {"shading": shading_state()}
 
 

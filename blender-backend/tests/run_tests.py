@@ -59,7 +59,7 @@ def fail_reply(name: str, reply: dict, expect_code: str = "") -> None:
 
 
 def scenario(client: WSClient) -> None:
-    from blender_tablet_remote.commands.selection import _edge_loop, _seed_edge
+    from blender_tablet_remote.commands.selection import _edge_loop, _seed_edge, _shortest_element_path
 
     loop_bm = bmesh.new()
     bmesh.ops.create_cube(loop_bm, size=2.0)
@@ -87,6 +87,15 @@ def scenario(client: WSClient) -> None:
     check(
         "selection.loop usa como semilla la última arista tocada",
         _seed_edge(loop_bm, {}) is last_seed,
+    )
+    loop_bm.verts.ensure_lookup_table()
+    vertex_path = _shortest_element_path(loop_bm.verts[0], loop_bm.verts[6])
+    check(
+        "selection.shortest_path recorre una ruta conectada",
+        vertex_path[0] is loop_bm.verts[0] and vertex_path[-1] is loop_bm.verts[6]
+        and all(any(a in edge.verts and b in edge.verts for edge in loop_bm.edges)
+                for a, b in zip(vertex_path, vertex_path[1:])),
+        str([vertex.index for vertex in vertex_path]),
     )
     loop_bm.free()
 
@@ -205,6 +214,23 @@ def scenario(client: WSClient) -> None:
           caps.get("features", {}).get("stream", {}).get("transports") == ["H264", "MJPEG"])
     check("enums canónicos", caps.get("enums", {}).get("constraint") == ["FREE", "X", "Y", "Z", "XY", "XZ", "YZ", "NORMAL", "VIEW"])
     check("unidades explícitas", caps.get("units", {}).get("rotation") == "DEGREE")
+    edit_catalog = caps.get("features", {}).get("edit_catalog", {})
+    conditional = {item.get("id"): item for item in edit_catalog.get("conditional_actions", [])}
+    check("Circle declara dependencia condicional de LoopTools",
+          conditional.get("LOOPTOOLS_CIRCLE", {}).get("operator") == "mesh.looptools_circle",
+          str(conditional.get("LOOPTOOLS_CIRCLE")))
+    circle_by_mode = [next((entry for entry in edit_catalog.get("groups", {}).get(mode, [])
+                            if entry.get("id") == "LOOPTOOLS_CIRCLE"), None)
+                      for mode in ("VERTEX", "EDGE")]
+    try:
+        bpy.ops.mesh.looptools_circle.get_rna_type()
+        circle_available = True
+    except (AttributeError, KeyError, RuntimeError):
+        circle_available = False
+    check("Circle solo aparece si el operador de LoopTools está registrado",
+          all(entry is not None for entry in circle_by_mode) == circle_available
+          and (circle_by_mode[0] is None) == (circle_by_mode[1] is None),
+          f"available={circle_available} entries={circle_by_mode}")
 
     print("\n[2] Estado inicial")
     state = ok_reply("scene.get_state", client.command("scene.get_state"))
@@ -266,7 +292,11 @@ def scenario(client: WSClient) -> None:
     check("la extrusión añadió geometría", info["verts"] > verts_before, f"{verts_before} -> {info['verts']}")
 
     faces_before = info["faces"]
-    ok_reply("mesh.inset", client.command("mesh.inset", {"thickness": 0.1}))
+    inset_result = ok_reply("mesh.inset", client.command("mesh.inset", {
+        "thickness": 0.1, "boundary": False,
+    }))
+    check("Inset conserva la opción de costura fija", inset_result.get("boundary") is False,
+          str(inset_result))
     info = ok_reply("mesh.info tras inset", client.command("mesh.info"))
     check("el inset añadió caras", info["faces"] > faces_before, f"{faces_before} -> {info['faces']}")
 
@@ -294,6 +324,33 @@ def scenario(client: WSClient) -> None:
     check("se creó una copia", len(created) == 1 and created[0] in bpy.data.objects, str(created))
     ok_reply("object.delete", client.command("object.delete", {"objects": created}))
     check("la copia se borró", created[0] not in bpy.data.objects)
+
+    print("  duplicar selección Edit por submodo")
+    for selection_command, element_payload, expected_delta in (
+        ("selection.vertex", {"verts": [0], "mode": "SET"}, {"verts": 1, "edges": 0, "faces": 0}),
+        ("selection.edge", {"edges": [0], "mode": "SET"}, {"verts": 2, "edges": 1, "faces": 0}),
+        ("selection.face", {"faces": [0], "mode": "SET"}, {"verts": 4, "edges": 4, "faces": 1}),
+    ):
+        ok_reply("escena limpia para duplicate", client.command("file.new"))
+        fail_reply("mesh.duplicate exige Edit", client.command("mesh.duplicate"), "wrong_mode")
+        ok_reply("entrar en Edit para duplicate", client.command("mode.edit"))
+        ok_reply(selection_command, client.command(selection_command))
+        ok_reply("vaciar selección", client.command("selection.all", {"value": False}))
+        fail_reply("duplicate vacío", client.command("mesh.duplicate"), "empty_selection")
+        ok_reply("selección parcial", client.command("selection.elements", element_payload))
+        before = ok_reply("mesh.info antes de duplicate", client.command("mesh.info"))
+        duplicated = ok_reply("mesh.duplicate", client.command("mesh.duplicate"))
+        after = ok_reply("mesh.info tras duplicate", client.command("mesh.info"))
+        for key, delta in expected_delta.items():
+            check(f"duplicate añade {delta} {key}", after[key] - before[key] == delta,
+                  f"{before[key]} -> {after[key]}")
+        check("duplicate informa el subgrafo copiado", duplicated.get("duplicated") == expected_delta,
+              str(duplicated))
+
+    ok_reply("salir de Edit tras duplicate", client.command("mode.object"))
+    # Los file.new de los casos aislados reemplazan el RNA; el resto del escenario
+    # debe continuar con la instancia actual, no con la referencia del primer archivo.
+    cube = bpy.data.objects["Cube"]
 
     result = ok_reply("object.add SPHERE", client.command("object.add", {"primitive": "SPHERE"}))
     check("esfera añadida", any(o.type == "MESH" and "Sphere" in o.name for o in bpy.data.objects))
@@ -489,6 +546,23 @@ def modal_scenario(client: WSClient) -> None:
     status = ok_reply("status tras cancelar", client.command("transform.status"))
     check("la sesión queda cerrada", status.get("active") is False, str(status))
 
+    cube.location = (0.2, 0.3, 0.4)
+    bpy.context.view_layer.update()
+    ok_reply("GRID restringido a X", client.command("transform.begin", {
+        "mode": "MOVE", "axes": ["X"], "snap": True, "snap_type": "GRID", "step": 1.0,
+    }))
+    ok_reply("mover hacia siguiente línea X", client.command("transform.value", {
+        "values": [0.6, 0.0, 0.0],
+    }))
+    check("GRID no arrastra Y/Z hacia el origen",
+          abs(cube.location.x - 1.0) < 1e-6
+          and abs(cube.location.y - 0.3) < 1e-6
+          and abs(cube.location.z - 0.4) < 1e-6,
+          str(cube.location))
+    ok_reply("cancelar GRID restringido", client.command("transform.cancel"))
+    cube.location = (0.0, 0.0, 0.0)
+    bpy.context.view_layer.update()
+
     ok_reply("begin para confirmar", client.command("transform.begin", {"mode": "MOVE", "axes": ["Z"]}))
     ok_reply("valor exacto", client.command("transform.value", {"values": [0, 0, 3.0]}))
     ok_reply("transform.confirm", client.command("transform.confirm"))
@@ -547,6 +621,48 @@ def modal_scenario(client: WSClient) -> None:
     ok_reply("cancelar modal Edit", client.command("transform.cancel"))
     bm = bmesh.from_edit_mesh(cube.data)
     check("cancelar restaura BMesh", all((v.co - old).length < 1e-6 for v, old in zip(bm.verts, before_edit)))
+
+    # Mirror Clipping no se ejecuta solo cuando escribimos BMesh directamente:
+    # la sesión remota debe imponer el plano igual que G/R/S nativos de Blender.
+    mirror = cube.modifiers.new("Mirror clipping test", "MIRROR")
+    mirror.use_axis[0] = True
+    mirror.use_clip = True
+    mirror.merge_threshold = 0.001
+    bm = bmesh.from_edit_mesh(cube.data)
+    bm.verts.ensure_lookup_table()
+    clipped = max(bm.verts, key=lambda vert: vert.co.x)
+    clipped_index = clipped.index
+    original_clipped = clipped.co.copy()
+    ok_reply("vértice para clipping", client.command("selection.vertex"))
+    ok_reply("seleccionar vértice clipping", client.command("selection.elements", {
+        "verts": [clipped_index], "mode": "SET",
+    }))
+    ok_reply("begin Mirror Clipping", client.command("transform.begin", {"mode": "MOVE", "axes": ["X"]}))
+    crossing_delta = -abs(original_clipped.x) - 1.0
+    ok_reply("intentar cruzar plano Mirror", client.command("transform.value", {
+        "values": [crossing_delta, 0.0, 0.0],
+    }))
+    bm = bmesh.from_edit_mesh(cube.data)
+    check("Clipping detiene el vértice en el plano", abs(bm.verts[clipped_index].co.x) < 1e-6,
+          str(bm.verts[clipped_index].co.x))
+    ok_reply("cancelar clipping", client.command("transform.cancel"))
+    bm = bmesh.from_edit_mesh(cube.data)
+    check("cancelar clipping restaura el lado original",
+          (bm.verts[clipped_index].co - original_clipped).length < 1e-6,
+          str(bm.verts[clipped_index].co))
+
+    bm.verts[clipped_index].co.x = 0.0
+    bmesh.update_edit_mesh(cube.data)
+    ok_reply("begin costura pegada", client.command("transform.begin", {"mode": "MOVE", "axes": ["X"]}))
+    ok_reply("intentar despegar costura", client.command("transform.value", {"values": [1.0, 0.0, 0.0]}))
+    bm = bmesh.from_edit_mesh(cube.data)
+    check("Clipping mantiene la costura pegada", abs(bm.verts[clipped_index].co.x) < 1e-6,
+          str(bm.verts[clipped_index].co.x))
+    ok_reply("cancelar costura", client.command("transform.cancel"))
+    bm = bmesh.from_edit_mesh(cube.data)
+    bm.verts[clipped_index].co = original_clipped
+    cube.modifiers.remove(mirror)
+    bmesh.update_edit_mesh(cube.data)
     fail_reply("orientación inventada", client.command("transform.begin", {"orientation": "MARS"}), "bad_payload")
 
     ok_reply("modo cara para herramienta", client.command("selection.face"))
@@ -769,9 +885,19 @@ def modeling_scenario(client: WSClient) -> None:
     shaded = ok_reply("object.shade smooth", client.command(
         "object.shade", {"objects": ["Cube"], "mode": "SMOOTH"}))
     check("shade devuelve SMOOTH", shaded.get("shade") == "SMOOTH", str(shaded))
+    # El estado tiene que seguir al comando: la tablet rotula su interruptor con esto.
+    ok_reply("activar el cubo", client.command("object.set_active", {"name": "Cube"}))
+    smooth_state = ok_reply("estado tras SMOOTH", client.command("scene.get_state"))
+    check("el estado dice que está suave",
+          smooth_state["active"]["mesh"]["shade_smooth"] is True,
+          str(smooth_state["active"]["mesh"]))
     toggled = ok_reply("object.shade toggle", client.command(
         "object.shade", {"objects": ["Cube"], "mode": "TOGGLE"}))
     check("toggle vuelve a FLAT", toggled.get("shade") == "FLAT", str(toggled))
+    flat_state = ok_reply("estado tras TOGGLE", client.command("scene.get_state"))
+    check("el estado vuelve a plano",
+          flat_state["active"]["mesh"]["shade_smooth"] is False,
+          str(flat_state["active"]["mesh"]))
     fail_reply("shade inválido", client.command("object.shade", {"mode": "CURVED"}), "bad_payload")
 
     print("  transform.apply")

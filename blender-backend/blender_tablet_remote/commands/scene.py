@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 import bpy
 
 from .. import state
 from ..errors import CommandError
-from ..protocol import ENUMS, FEATURES, PROTOCOL_VERSION, UNITS
+from ..protocol import ENUMS, FEATURES, LOOPTOOLS_CIRCLE_ACTION, PROTOCOL_VERSION, UNITS
 from . import command, names
 
 
@@ -46,10 +48,23 @@ def ping(payload: dict) -> dict:
 def capabilities(payload: dict) -> dict:
     from .. import VERSION
 
+    features = deepcopy(FEATURES)
+    try:
+        bpy.ops.mesh.looptools_circle.get_rna_type()
+        circle_available = True
+    except (AttributeError, KeyError, RuntimeError):
+        circle_available = False
+    if circle_available:
+        catalog = features["edit_catalog"]["groups"]
+        for mode in ("VERTEX", "EDGE"):
+            action = deepcopy(LOOPTOOLS_CIRCLE_ACTION)
+            action["requirements"]["selection_modes"] = [mode]
+            catalog[mode].insert(1, action)
+
     return {
         "addon_version": ".".join(str(n) for n in VERSION),
         "protocol_version": PROTOCOL_VERSION,
-        "features": FEATURES,
+        "features": features,
         "enums": ENUMS,
         "units": dict(UNITS, scale_length=bpy.context.scene.unit_settings.scale_length,
                       unit_system=bpy.context.scene.unit_settings.system),

@@ -12,7 +12,6 @@ import com.blendertablet.remote.model.GesturePhase
 import com.blendertablet.remote.model.AddObject
 import com.blendertablet.remote.model.Orientation
 import com.blendertablet.remote.model.Projection
-import com.blendertablet.remote.model.RecentFile
 import com.blendertablet.remote.model.RemoteFiles
 import com.blendertablet.remote.model.SelectionMode
 import com.blendertablet.remote.model.SelectionOp
@@ -34,8 +33,11 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
@@ -63,9 +65,11 @@ class WebSocketRemoteBlenderClient(
     private val _connection = MutableStateFlow(ConnectionStatus.DISCONNECTED)
     private val _state = MutableStateFlow(BlenderState())
     private val _errors = MutableStateFlow<String?>(null)
+    private val _notices = MutableStateFlow<String?>(null)
+    // Un duplicado es un instante, no un estado: quien llegue tarde no debe encontrárselo.
+    private val _duplicates = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private val _retryAttempt = MutableStateFlow(0)
     private val _file = MutableStateFlow(FileInfo())
-    private val _recentFiles = MutableStateFlow<List<RecentFile>>(emptyList())
     private val _remoteFiles = MutableStateFlow(RemoteFiles())
     private val _transformSession = MutableStateFlow(TransformSession())
     private val _toolSession = MutableStateFlow(ToolSession())
@@ -74,9 +78,10 @@ class WebSocketRemoteBlenderClient(
     override val connection: StateFlow<ConnectionStatus> = _connection.asStateFlow()
     override val state: StateFlow<BlenderState> = _state.asStateFlow()
     override val errors: StateFlow<String?> = _errors.asStateFlow()
+    override val notices: StateFlow<String?> = _notices.asStateFlow()
+    override val duplicates: Flow<Unit> = _duplicates.asSharedFlow()
     override val retryAttempt: StateFlow<Int> = _retryAttempt.asStateFlow()
     override val file: StateFlow<FileInfo> = _file.asStateFlow()
-    override val recentFiles: StateFlow<List<RecentFile>> = _recentFiles.asStateFlow()
     override val remoteFiles: StateFlow<RemoteFiles> = _remoteFiles.asStateFlow()
     override val transformSession: StateFlow<TransformSession> = _transformSession.asStateFlow()
     override val toolSession: StateFlow<ToolSession> = _toolSession.asStateFlow()
@@ -155,6 +160,7 @@ class WebSocketRemoteBlenderClient(
         attempt = 0
         _retryAttempt.value = 0
         _errors.value = null
+        _notices.value = null
         rebuildTokenJson()
         open(next)
     }
@@ -182,6 +188,10 @@ class WebSocketRemoteBlenderClient(
         pendingNudge = 0.0
         nudgeInFlight = false
         _connection.value = ConnectionStatus.DISCONNECTED
+    }
+
+    override fun clearNotice() {
+        _notices.value = null
     }
 
     override fun clearError() {
@@ -252,8 +262,8 @@ class WebSocketRemoteBlenderClient(
         pending[id] = name
         sentAtNs[id] = System.nanoTime()
         return if (socket?.send(message.toString()) == true) {
-            if (name == "selection.pick") pickInFlight.set(true)
-            if (name == "selection.pick" || name.startsWith("transform.")) {
+            if (name == "selection.pick" || name == "selection.shortest_path") pickInFlight.set(true)
+            if (name == "selection.pick" || name == "selection.shortest_path" || name.startsWith("transform.")) {
                 Log.d(LATENCY_TAG, "send command=$name id=$id")
             }
             true
@@ -315,8 +325,12 @@ class WebSocketRemoteBlenderClient(
         "selection.pick",
         JSONObject().put("u", u).put("v", v).put("threshold", threshold).put("mode", mode.name),
     )
+    override fun shortestPath(u: Double, v: Double, threshold: Double, extend: Boolean) = command(
+        "selection.shortest_path",
+        JSONObject().put("u", u).put("v", v).put("threshold", threshold).put("extend", extend),
+    )
     override fun delete() = command("object.delete")
-    override fun duplicate() = command("object.duplicate")
+    override fun duplicate() = command(duplicateCommand(state.value.mode))
     override fun duplicateLinked() = command("object.duplicate", JSONObject().put("linked", true))
     override fun rename(newName: String, target: String?) = command(
         "object.rename",
@@ -411,7 +425,6 @@ class WebSocketRemoteBlenderClient(
         "file.save_as",
         JSONObject().put("folder", folder).put("name", name),
     )
-    override fun requestRecentFiles() = command("file.recent", JSONObject().put("limit", 12))
     override fun fileLocations() {
         _remoteFiles.value = _remoteFiles.value.copy(loading = true)
         command("file.locations")
@@ -422,6 +435,12 @@ class WebSocketRemoteBlenderClient(
     }
     override fun fileDefaultFolder(path: String) =
         command("file.default_folder", JSONObject().put("path", path))
+
+    override fun selectionTweak(phase: GesturePhase, u: Double, v: Double, dx: Double, dy: Double) =
+        command("selection.tweak", JSONObject()
+            .put("phase", phase.name)
+            .put("u", u).put("v", v)
+            .put("dx", dx).put("dy", dy))
 
     override fun transformBegin(
         mode: TransformMode,
@@ -680,8 +699,8 @@ class WebSocketRemoteBlenderClient(
                 val id = message.optString("id")
                 val command = pending.remove(id)
                 val sent = sentAtNs.remove(id)
-                if (command == "selection.pick") pickInFlight.set(false)
-                if (sent != null && (command == "selection.pick" || command?.startsWith("transform.") == true)) {
+                if (command == "selection.pick" || command == "selection.shortest_path") pickInFlight.set(false)
+                if (sent != null && (command == "selection.pick" || command == "selection.shortest_path" || command?.startsWith("transform.") == true)) {
                     Log.d(LATENCY_TAG, "response command=$command ok=${message.optBoolean("ok", false)} rtt=${(System.nanoTime() - sent) / 1_000_000}ms")
                 }
                 if (command == "scene.get_state") stateRequestInFlight.set(false)
@@ -693,6 +712,17 @@ class WebSocketRemoteBlenderClient(
                 if (command == "tool.snap_candidate") toolSnapInFlight.set(false)
                 if (command == "tool.knife_drag") knifeDragInFlight.set(false)
                 if (command == "transform.snap_candidate") transformSnapInFlight.set(false)
+                // La copia nace pegada al original, así que el duplicado no se ve y el
+                // toque se repite creyendo que no funcionó. Se avisa aparte del `when`
+                // de abajo para no robarle el refresco de estado a la rama genérica.
+                if (command != null && message.optBoolean("ok", false)) {
+                    duplicateNotice(command, result)?.let {
+                        _notices.value = it
+                        // Solo cuando el servidor confirma que creó algo: armar el Mover
+                        // antes de eso agarraría el original, no la copia.
+                        _duplicates.tryEmit(Unit)
+                    }
+                }
                 when {
                     !message.optBoolean("ok", false) -> {
                         // Un sondeo fallido no es un error que enseñar: significa que
@@ -712,7 +742,10 @@ class WebSocketRemoteBlenderClient(
                     }
                     command == "scene.get_state" -> result?.let(::updateState)
                     command == "server.capabilities" -> result?.let { caps ->
-                        _state.value = _state.value.copy(features = StateParser.features(caps))
+                        _state.value = _state.value.copy(
+                            features = StateParser.features(caps),
+                            unitScaleLength = StateParser.unitScaleLength(caps),
+                        )
                     }
                     command == "modifier.add_options" -> result?.let { options ->
                         _state.value = _state.value.copy(modifierOptions = StateParser.modifierOptions(options))
@@ -733,7 +766,7 @@ class WebSocketRemoteBlenderClient(
                     // selection.pick ya incluye el snapshot: evita esperar el evento
                     // semántico y hacer un segundo viaje scene.get_state. Lo mismo
                     // box/circle/more/less, que vuelven con el estado completo.
-                    command == "selection.pick" ||
+                    command == "selection.pick" || command == "selection.shortest_path" ||
                         command == "selection.box" || command == "selection.circle" ||
                         command == "selection.more" || command == "selection.less" -> result?.let(::updateState)
                     // El toggle de wireframe responde con el shading nuevo: pintarlo ya,
@@ -743,7 +776,6 @@ class WebSocketRemoteBlenderClient(
                         _state.value = _state.value.copy(view = _state.value.view.copy(shading = shading))
                     }
                     command == "edit.settings_set" -> result?.let(::updateState)
-                    command == "file.recent" -> updateRecentFiles(result)
                     command == "file.locations" -> updateFileLocations(result)
                     command == "file.browse" -> updateFileBrowser(result)
                     command == "file.default_folder" -> {
@@ -868,20 +900,6 @@ class WebSocketRemoteBlenderClient(
         )
     }
 
-    private fun updateRecentFiles(json: JSONObject?) {
-        val files = json?.optJSONArray("files") ?: JSONArray()
-        _recentFiles.value = (0 until files.length()).mapNotNull { index ->
-            files.optJSONObject(index)?.let {
-                RecentFile(
-                    name = it.optString("name"),
-                    path = it.optString("path"),
-                    folder = it.optString("folder"),
-                    exists = it.optBoolean("exists", true),
-                )
-            }
-        }
-    }
-
     private fun updateFileLocations(json: JSONObject?) {
         val parsed = StateParser.fileLocations(json)
         _remoteFiles.value = _remoteFiles.value.copy(
@@ -914,6 +932,39 @@ class WebSocketRemoteBlenderClient(
             modifierOptions = old.modifierOptions,
             view = if (json.has("view") || json.has("shading")) parsed.view else old.view,
             gizmo = if (json.has("gizmo")) parsed.gizmo else old.gizmo,
+            unitScaleLength = old.unitScaleLength,
         )
     }
 }
+
+internal fun duplicateCommand(mode: BlenderMode): String =
+    if (mode == BlenderMode.EDIT) "mesh.duplicate" else "object.duplicate"
+
+/**
+ * Texto del aviso de duplicado, o null si la respuesta no dice que se creara nada.
+ *
+ * La copia aparece superpuesta al original, así que sin confirmación el toque parece
+ * perdido y se repite. Se nombra la unidad que el usuario cree estar duplicando —la de
+ * su submodo—, no las tres a la vez: duplicar una cara arrastra sus aristas y vértices,
+ * y decir "4 vértices, 4 aristas, 1 cara" describe la topología, no el gesto.
+ */
+internal fun duplicateNotice(command: String, result: JSONObject?): String? {
+    if (result == null || (command != "mesh.duplicate" && command != "object.duplicate")) return null
+    if (command == "object.duplicate") {
+        val created = result.optJSONArray("created")?.length() ?: 0
+        return if (created > 0) plural(created, "objeto duplicado", "objetos duplicados") else null
+    }
+    val counts = result.optJSONObject("duplicated") ?: return null
+    val faces = counts.optInt("faces")
+    val edges = counts.optInt("edges")
+    val verts = counts.optInt("verts")
+    return when {
+        faces > 0 -> plural(faces, "cara duplicada", "caras duplicadas")
+        edges > 0 -> plural(edges, "arista duplicada", "aristas duplicadas")
+        verts > 0 -> plural(verts, "vértice duplicado", "vértices duplicados")
+        else -> null
+    }
+}
+
+private fun plural(count: Int, singular: String, plural: String) =
+    if (count == 1) "1 $singular" else "$count $plural"

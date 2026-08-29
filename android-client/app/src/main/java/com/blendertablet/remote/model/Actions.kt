@@ -33,6 +33,7 @@ enum class ActionId {
 
     // Rail: elegir la herramienta activa y el submodo de selección.
     TOOL_SELECT,
+    TOOL_TWEAK,
     TOOL_MOVE,
     TOOL_ROTATE,
     TOOL_SCALE,
@@ -137,6 +138,7 @@ object SurfaceCatalog {
 
         // Rail
         ActionEntry(ActionId.TOOL_SELECT, ActionSurface.RAIL, "Seleccionar"),
+        ActionEntry(ActionId.TOOL_TWEAK, ActionSurface.RAIL, "Tweak"),
         ActionEntry(ActionId.TOOL_MOVE, ActionSurface.RAIL, "Mover"),
         ActionEntry(ActionId.TOOL_ROTATE, ActionSurface.RAIL, "Rotar"),
         ActionEntry(ActionId.TOOL_SCALE, ActionSurface.RAIL, "Escalar"),
@@ -180,7 +182,7 @@ object SurfaceCatalog {
         ActionEntry(ActionId.VIEW_BOTTOM, ActionSurface.FOOTER_VIEWS, "Bottom"),
         ActionEntry(ActionId.VIEW_PROJECTION, ActionSurface.FOOTER_VIEWS, "Persp/Ortho"),
         ActionEntry(ActionId.VIEW_FRAME_ALL, ActionSurface.FOOTER_VIEWS, "Encuadrar todo"),
-        ActionEntry(ActionId.VIEW_LOCAL, ActionSurface.RADIAL, "/ Aislar selección"),
+        ActionEntry(ActionId.VIEW_LOCAL, ActionSurface.RADIAL, "Aislar selección"),
         ActionEntry(ActionId.SELECT_MORE, ActionSurface.FOOTER_VIEWS, "Crecer selección"),
         ActionEntry(ActionId.SELECT_LESS, ActionSurface.FOOTER_VIEWS, "Decrecer selección"),
 
@@ -204,9 +206,9 @@ object SurfaceCatalog {
         ActionEntry(ActionId.SELECT_LINKED, ActionSurface.RADIAL, "Enlazado"),
         ActionEntry(ActionId.EDIT_MESH_TOOLS, ActionSurface.RADIAL, "Tools de malla"),
         ActionEntry(ActionId.HIDE_OBJECT, ActionSurface.RADIAL, "Ocultar objeto"),
-        ActionEntry(ActionId.SHADE_OBJECT, ActionSurface.RADIAL, "Plano / Suave"),
+        ActionEntry(ActionId.SHADE_OBJECT, ActionSurface.RADIAL, "Suave"),
         ActionEntry(ActionId.HIDE_GEOMETRY, ActionSurface.RADIAL, "Ocultar geometría"),
-        ActionEntry(ActionId.DUPLICATE_LINKED, ActionSurface.RADIAL, "Duplicar enlazado"),
+        ActionEntry(ActionId.DUPLICATE_LINKED, ActionSurface.RAIL, "Duplicar enlazado"),
         ActionEntry(ActionId.RENAME, ActionSurface.RADIAL, "Renombrar"),
         ActionEntry(ActionId.DELETE, ActionSurface.RADIAL, "Borrar"),
         ActionEntry(ActionId.DISSOLVE, ActionSurface.RADIAL, "Disolver"),
@@ -239,4 +241,17 @@ object SurfaceCatalog {
     }
 
     fun labelOf(id: ActionId): String = entries.first { it.id == id }.label
+
+    /**
+     * Rótulo de un interruptor: siempre la acción que ejecutará, nunca el estado.
+     *
+     * Antes ponían "Plano / Suave" y "/ Aislar selección". La barra hacía pensar en dos
+     * opciones donde hay un botón, y ninguno decía en qué estado estaba. Un botón es un
+     * verbo: si el objeto ya está suave, ofrece "Plano".
+     */
+    fun labelOf(id: ActionId, context: TouchContext): String = when (id) {
+        ActionId.SHADE_OBJECT -> if (context.shadeSmooth) "Plano" else "Suave"
+        ActionId.VIEW_LOCAL -> if (context.localView) "Ver todo" else "Aislar selección"
+        else -> labelOf(id)
+    }
 }

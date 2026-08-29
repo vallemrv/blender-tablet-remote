@@ -11,7 +11,6 @@ import com.blendertablet.remote.model.GesturePhase
 import com.blendertablet.remote.model.AddObject
 import com.blendertablet.remote.model.Orientation
 import com.blendertablet.remote.model.Projection
-import com.blendertablet.remote.model.RecentFile
 import com.blendertablet.remote.model.RemoteFiles
 import com.blendertablet.remote.model.SelectionMode
 import com.blendertablet.remote.model.SelectionOp
@@ -23,6 +22,7 @@ import com.blendertablet.remote.model.TouchProbe
 import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.TransformSession
 import com.blendertablet.remote.model.ValueMode
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import com.blendertablet.remote.model.ModifierDefault
 
@@ -39,14 +39,25 @@ interface RemoteBlenderClient {
     val state: StateFlow<BlenderState>
     val errors: StateFlow<String?>
 
+    /**
+     * Confirmación de una acción que salió bien pero no se ve en el viewport. Va por
+     * separado de [errors] porque un éxito no se pinta con los colores de un fallo.
+     */
+    val notices: StateFlow<String?>
+
+    /**
+     * El servidor acaba de confirmar un duplicado que creó geometría u objetos. Es un
+     * hecho, no una decisión: qué hacer después (encadenar un Mover) lo elige la capa
+     * que conoce las preferencias del usuario, no esta.
+     */
+    val duplicates: Flow<Unit>
+
     /** Reintentos encadenados sin éxito; vuelve a 0 en cuanto la conexión se abre. */
     val retryAttempt: StateFlow<Int>
 
     /** El .blend abierto en el PC. */
     val file: StateFlow<FileInfo>
 
-    /** Recientes de Blender. Se piden bajo demanda, al abrir el menú Archivo. */
-    val recentFiles: StateFlow<List<RecentFile>>
     val remoteFiles: StateFlow<RemoteFiles>
 
     /** La transformación modal en curso, según el servidor. */
@@ -76,6 +87,9 @@ interface RemoteBlenderClient {
     /** Borra el último error mostrado (el toast se auto-descarta a los ~5 s). */
     fun clearError()
 
+    /** Borra el último aviso mostrado (el toast se auto-descarta a los ~3 s). */
+    fun clearNotice()
+
     /**
      * Reintenta ya, sin esperar al backoff. Lo llaman los eventos que hacen probable
      * que ahora sí funcione: volver a primer plano o recuperar la red.
@@ -90,6 +104,7 @@ interface RemoteBlenderClient {
      * modificador Ctrl/Alt (ADD/REMOVE) o sustituye (SET).
      */
     fun pick(u: Double, v: Double, threshold: Double = 0.035, mode: SelectionOp = SelectionOp.SET)
+    fun shortestPath(u: Double, v: Double, threshold: Double = 0.035, extend: Boolean = false)
 
     /**
      * Pregunta qué hay en [u], [v] **sin seleccionarlo**: es lo que necesita el menú
@@ -138,6 +153,7 @@ interface RemoteBlenderClient {
 
     /** La `L` de Blender: extiende la selección a las islas conectadas. */
     fun selectLinked()
+    fun selectionTweak(phase: GesturePhase, u: Double = 0.0, v: Double = 0.0, dx: Double = 0.0, dy: Double = 0.0)
     fun meshDelete(what: String)
     fun undo()
     fun redo()
@@ -209,7 +225,6 @@ interface RemoteBlenderClient {
     fun fileSaveAs(path: String)
     /** Forma segura para paths opacos: el backend une y valida carpeta y nombre. */
     fun fileSaveAs(folder: String, name: String)
-    fun requestRecentFiles()
     fun fileLocations()
     fun fileBrowse(path: String? = null)
     fun fileDefaultFolder(path: String)

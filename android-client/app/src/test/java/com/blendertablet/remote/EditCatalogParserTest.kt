@@ -35,6 +35,26 @@ class EditCatalogParserTest {
         assertEquals(listOf("FLIP_NORMALS"), catalog.actionsFor(SelectionMode.FACE).map { it.id })
     }
 
+    @Test fun `Circle de LoopTools solo existe si viene materializado en el grupo`() {
+        val present = StateParser.editCatalog(JSONObject("""
+            {"conditional_actions":[{"id":"LOOPTOOLS_CIRCLE","availability":"OPERATOR_REGISTERED"}],
+             "groups":{"VERTEX":[{"id":"LOOPTOOLS_CIRCLE","label":"Hacer círculo",
+             "execution":"DISCRETE","command":"mesh.looptools_circle",
+             "requirements":{"mode":"EDIT","selection_modes":["VERTEX"],
+             "selection":{"verts":{"min":3}}}}],"EDGE":[]}}
+        """))
+        assertEquals("mesh.looptools_circle",
+            present.actionsFor(SelectionMode.VERTEX).single().command)
+        assertTrue(present.actionsFor(SelectionMode.EDGE).isEmpty())
+
+        val absent = StateParser.editCatalog(JSONObject("""
+            {"conditional_actions":[{"id":"LOOPTOOLS_CIRCLE"}],
+             "groups":{"VERTEX":[],"EDGE":[]}}
+        """))
+        assertTrue(absent.actionsFor(SelectionMode.VERTEX).isEmpty())
+        assertTrue(absent.actionsFor(SelectionMode.EDGE).isEmpty())
+    }
+
     @Test fun `edit_toolbar agrupa por familia y respeta el orden del servidor`() {
         val toolbar = StateParser.editToolbar(JSONObject("""
             {"families":[

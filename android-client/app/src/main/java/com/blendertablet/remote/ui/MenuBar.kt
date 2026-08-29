@@ -80,7 +80,6 @@ data class MenuActions(
     val onFileMenuOpened: () -> Unit,
     val onNew: () -> Unit,
     val onBrowseOpen: () -> Unit,
-    val onOpen: (String) -> Unit,
     val onSave: () -> Unit,
     val onSaveAs: () -> Unit,
     val onSnap: (SnapAction) -> Unit,
@@ -123,20 +122,6 @@ object MenuSeparator : MenuNode
 private fun fileMenu(state: AppUiState, actions: MenuActions, close: () -> Unit): List<MenuNode> = listOf(
     MenuLeaf("Nuevo") { close(); actions.onNew() },
     MenuLeaf("Abrir…", enabled = state.blender.features.fileBrowse) { close(); actions.onBrowseOpen() },
-    MenuGroup(
-        "Abrir reciente",
-        if (state.recentFiles.isEmpty()) {
-            listOf(MenuNote("Blender no tiene archivos recientes"))
-        } else {
-            state.recentFiles.map { recent ->
-                MenuLeaf(
-                    label = recent.name,
-                    enabled = recent.exists,
-                    hint = if (recent.exists) recent.folder else "ya no existe",
-                ) { close(); actions.onOpen(recent.path) }
-            }
-        },
-    ),
     MenuSeparator,
     // Una sola entrada "Guardar": sin ruta previa abre el diálogo de nombre por su
     // cuenta. Antes había dos entradas que hacían lo mismo en ese caso.

@@ -224,4 +224,44 @@ class SurfaceCatalogTest {
         assertFalse(ActionId.MODE_OBJECT in rail)
         assertFalse(ActionId.MODE_EDIT in rail)
     }
+
+    @Test
+    fun `las dos variantes de duplicar pertenecen solo al rail`() {
+        assertEquals(ActionSurface.RAIL, SurfaceCatalog.surfaceOf(ActionId.DUPLICATE))
+        assertEquals(ActionSurface.RAIL, SurfaceCatalog.surfaceOf(ActionId.DUPLICATE_LINKED))
+        for (context in everyContext()) {
+            assertFalse(ActionId.DUPLICATE_LINKED in RadialMenu.actionsFor(context))
+        }
+    }
+
+    @Test
+    fun `los interruptores rotulan la accion que ejecutaran`() {
+        val plano = TouchContext(shadeSmooth = false)
+        val suave = TouchContext(shadeSmooth = true)
+        assertEquals("Suave", SurfaceCatalog.labelOf(ActionId.SHADE_OBJECT, plano))
+        assertEquals("Plano", SurfaceCatalog.labelOf(ActionId.SHADE_OBJECT, suave))
+
+        val normal = TouchContext(localView = false)
+        val aislado = TouchContext(localView = true)
+        assertEquals("Aislar selección", SurfaceCatalog.labelOf(ActionId.VIEW_LOCAL, normal))
+        assertEquals("Ver todo", SurfaceCatalog.labelOf(ActionId.VIEW_LOCAL, aislado))
+    }
+
+    /**
+     * Un interruptor nunca ofrece sus dos caras a la vez: eso es lo que hacía "Plano /
+     * Suave" y lo que llevó a leer un botón como si fueran dos opciones.
+     *
+     * No se vigilan todas las etiquetas porque la barra es legítima fuera de un
+     * interruptor: "Crear arista/cara" es el nombre del operador de Blender (hace una u
+     * otra según la selección) y "Persp/Ortho" es el nombre de la proyección.
+     */
+    @Test
+    fun `los interruptores no ofrecen sus dos caras a la vez`() {
+        val interruptores = listOf(ActionId.SHADE_OBJECT, ActionId.VIEW_LOCAL)
+        for (id in interruptores) {
+            for (context in everyContext()) {
+                assertFalse(id.name, "/" in SurfaceCatalog.labelOf(id, context))
+            }
+        }
+    }
 }

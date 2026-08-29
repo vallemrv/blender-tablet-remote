@@ -262,8 +262,9 @@ fun RailLabel(text: String) {
     Text(
         text,
         color = Ink.Faint,
-        fontSize = 9.sp,
+        fontSize = 7.sp,
         fontWeight = FontWeight.SemiBold,
+        maxLines = 1,
         modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
     )
 }

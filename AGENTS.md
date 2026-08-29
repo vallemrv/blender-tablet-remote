@@ -19,6 +19,28 @@ el tap quedaba vacío); Borrar aparece directamente en Edit y elige
 compacto de 34 dp, pues el mínimo de 56 dp de Material3 recortaba el texto dentro de
 las bandejas horizontales.
 
+La serie `000` de esta tanda retira Recientes del menú Archivo y agrupa Duplicar/Duplicar
+enlazado en una única familia del rail con chevrón, pulsación larga, variante recordada
+e icono propio. Las familias multivariante de `edit_toolbar` también pintan el icono de
+la variante recordada aunque la sesión esté cerrada. En Edit, el mismo botón invoca
+`mesh.duplicate`: BMesh copia exclusivamente la selección efectiva de vértices,
+aristas o caras y deja seleccionada la copia; nunca duplica el objeto entero. El usuario
+validó esta serie en tablet el 2026-08-28 y autorizó su cierre; sus dos planes se
+retiraron y su estado queda consolidado aquí.
+
+La serie siguiente (`001`–`014`) quedó cerrada por autorización expresa del usuario el
+2026-08-29 tras contrastar planes, código y pruebas. Entregó el primer punto arrastrable
+de Knife con `EDGE_CENTER`; avisos de duplicado y encadenado posterior a Mover; estado
+de sombreado y toggles Suave/Plano y Aislar/Ver todo; selección de camino más corto con
+Ctrl; rail compacto e inspector de modificadores plegable; sondeo contextual sobre
+geometría evaluada; trabajo fiable a escala milimétrica, xray y picking Edit sobre la
+jaula original; unidades y steppers coherentes; Inset compatible con la costura de
+Mirror y clipping de Mirror en transformaciones remotas; GRID restringido; Tweak
+seleccionar/mover, con órbita cuando falla el pick y sin bandeja inferior; y Circle de
+LoopTools condicionado a la disponibilidad real del add-on. Las validaciones automáticas
+aplicables quedaron ejecutadas; la validación táctil pendiente se retiró del alcance al
+cerrar la serie. Sus planes se eliminaron y la próxima serie vuelve a empezar en `000`.
+
 La congelación observada después se diagnosticó en el servidor vivo: una sesión modal
 retenía un `Object` RNA eliminado, `session.status()` lanzaba `ReferenceError` durante
 el broadcast y la excepción desregistraba el timer `_pump`, dejando los sockets abiertos
@@ -617,16 +639,35 @@ cambio que se tocó, que fue el error inicial de esta sesión.
   `-dx` sin cambiar el eje local.
 - `view.gizmo` y su modelo Android no tienen consumidor visual actual, pero siguen en
   protocolo y tests: son compatibilidad deliberada, no código muerto.
+- El snap del Knife no puede desempatarse solo por distancia: cuando el toque entra
+  perpendicular a una arista, su punto más cercano **es** el centro y las dos distancias
+  solo se separan por ruido de coma flotante, así que `EDGE` ganaba siempre y
+  `EDGE_CENTER` no se anunciaba nunca. En `_knife_candidate` el empate práctico
+  (<= 1e-3 en pantalla) lo gana el snap más específico: vértice, centro, arista.
+- `file.recent` sigue en backend, protocolo y tests, pero Android ya no lo consume: al
+  retirar "Abrir reciente" del menú Archivo se eliminó todo su lado cliente
+  (`RecentFile`, `AppUiState.recentFiles`, `requestRecentFiles`, `updateRecentFiles`).
+  No volver a añadir ese estado sin una superficie que lo pinte.
 - `Modifiers.kt` Android contiene `clickableNoRipple`; no tiene relación con modifiers
   Blender y está ampliamente usado.
 - El add-on es 0.1.0 en manifest/fuente. La app Android es 0.1.2.
 
 ## Objetivos activos
 
-Ninguno. Esta versión se declaró finalizada el 2026-08-26 y sus planes se retiraron por
-decisión expresa del usuario. El siguiente trabajo partirá del feedback de uso real en
-tablet y abrirá una serie nueva desde `000`; no se arrastran automáticamente los
-objetivos descartados del ciclo parcial anterior.
+Ninguno. La serie `001`–`014` se cerró por decisión expresa del usuario el 2026-08-29;
+la siguiente tanda debe abrir planes nuevos desde `000`.
+
+La única incidencia no resuelta de la serie cerrada es el segfault OFFSCREEN observado
+el 2026-08-28 durante una prueba táctil de Knife. La traza fue `_pump` →
+`capture.tick` → `_grab_offscreen`/`draw_view3d`, con `libtbb` durante evaluación
+paralela. Blender informó `bpy.ops.object.editmode_toggle()`, operación que no usa el
+backend (`mode_set`), por lo que el cambio de modo vino de la ventana del usuario. No
+reprodujeron ni doce rondas de cambio de modo desde tablet con Knife y stream activos,
+ni un Tab externo desde timer seguido de arrastres: las sesiones inválidas respondieron
+con error limpio y no tocaron un BMesh muerto. Si reaparece, conservar el crash dump y
+comparar OFFSCREEN con POST_PIXEL; no cambiar el default sin una reproducción, porque
+esa mitigación todavía sería especulativa.
+
 El ciclo backend de la órbita invertida cerró: `camera.orbit` ahora hace el yaw sobre el
 eje vertical LOCAL de la cámara (no el Z global), de modo que el arrastre horizontal
 acompaña al dedo también desde debajo o desde atrás; ver las trampas conocidas.

@@ -81,6 +81,7 @@ class ModelTest {
     @Test fun `el teclado se eleva solo con una bandeja inferior`() {
         assertFalse(bottomTrayVisible(false, false, ActiveTool.SELECT, false))
         assertTrue(bottomTrayVisible(true, false, ActiveTool.SELECT, false))
+        assertFalse(bottomTrayVisible(true, false, ActiveTool.TWEAK, false))
         assertTrue(bottomTrayVisible(false, true, ActiveTool.EXTRUDE, false))
         assertTrue(bottomTrayVisible(false, false, ActiveTool.LOOP_CUT, true))
         assertFalse(bottomTrayVisible(false, false, ActiveTool.LOOP_CUT, false))

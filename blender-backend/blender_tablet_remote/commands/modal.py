@@ -78,6 +78,25 @@ def _falloff_weight(falloff: str, distance: float, radius: float) -> float:
     return x * x * (3.0 - 2.0 * x)  # SMOOTH
 
 
+def _mirror_clip_planes(obj, edit_coords: dict[int, Vector]):
+    """Congela los espacios de los Mirror visibles que tienen Clipping activo."""
+    clips = []
+    for modifier in obj.modifiers:
+        if modifier.type != "MIRROR" or not modifier.show_viewport or not modifier.use_clip:
+            continue
+        axes = tuple(index for index, enabled in enumerate(modifier.use_axis) if enabled)
+        if not axes:
+            continue
+        if modifier.mirror_object is None:
+            to_mirror = Matrix.Identity(4)
+        else:
+            to_mirror = modifier.mirror_object.matrix_world.inverted_safe() @ obj.matrix_world
+        from_mirror = to_mirror.inverted_safe()
+        originals = {index: to_mirror @ co for index, co in edit_coords.items()}
+        clips.append((to_mirror, from_mirror, axes, float(modifier.merge_threshold), originals))
+    return clips
+
+
 class _Session:
     """La transformación en curso. Una sola, global: la tablet es un único usuario."""
 
@@ -123,6 +142,9 @@ class _Session:
         self.proportional_radius = 1.0
         self.proportional_falloff = "SMOOTH"
         self.edit_weights: dict[int, float] = {}
+        # Planos de Mirror con Clipping. Cada entrada conserva la transformación
+        # local-malla -> espacio del espejo y el lado original de cada vértice.
+        self.mirror_clips: list[tuple[Matrix, Matrix, tuple[int, ...], float, dict[int, Vector]]] = []
 
     # ------------------------------------------------------------------ ciclo
 
@@ -188,6 +210,7 @@ class _Session:
                                      active.data.total_face_sel)
             self.edit_world = active.matrix_world.copy()
             self.edit_world_inv = self.edit_world.inverted()
+            self.mirror_clips = _mirror_clip_planes(active, self.edit_coords)
             local_center = sum((vert.co for vert in selected), Vector()) / len(selected)
             self.pivot = active.matrix_world @ local_center
             self.pivot_local = local_center
@@ -350,10 +373,14 @@ class _Session:
                     # que es lo que espera todo el que pide "rejilla".
                     offset = self.orientation_basis @ values
                     pivot = self.pivot
-                    snapped = Vector(
-                        round((pivot[i] + offset[i]) / self.step) * self.step - pivot[i]
-                        for i in range(3)
-                    )
+                    active_indices = ({AXIS_INDEX[name] for name in self.axes}
+                                      if self.axes else set(range(3)))
+                    snapped = offset.copy()
+                    for index in active_indices:
+                        snapped[index] = (
+                            round((pivot[index] + offset[index]) / self.step) * self.step
+                            - pivot[index]
+                        )
                     values = self.orientation_basis.inverted() @ snapped
                 elif self.snap_type == "INCREMENT":
                     values = Vector(round(v / self.step) * self.step for v in values)
@@ -428,7 +455,24 @@ class _Session:
             for index, original_local in self.edit_coords.items():
                 transformed = pivot_local + local_matrix @ (original_local - pivot_local)
                 verts[index].co = original_local.lerp(transformed, self.edit_weights.get(index, 1.0))
+        self._apply_mirror_clipping(verts)
         bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
+
+    def _apply_mirror_clipping(self, verts) -> None:
+        """Emula el límite que los operadores nativos aplican con Mirror Clipping."""
+        for to_mirror, from_mirror, axes, threshold, originals in self.mirror_clips:
+            for index, original_mirror in originals.items():
+                candidate = to_mirror @ verts[index].co
+                for axis in axes:
+                    original = original_mirror[axis]
+                    value = candidate[axis]
+                    if abs(original) <= threshold:
+                        candidate[axis] = 0.0
+                    elif original > 0.0 and value < 0.0:
+                        candidate[axis] = 0.0
+                    elif original < 0.0 and value > 0.0:
+                        candidate[axis] = 0.0
+                verts[index].co = from_mirror @ candidate
     def restore(self) -> None:
         if self.edit_object is not None and self.edit_object.name in bpy.data.objects and self.edit_object.mode == "EDIT":
             bm = bmesh.from_edit_mesh(self.edit_object.data)

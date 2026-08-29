@@ -67,11 +67,11 @@ private fun specsFor(tool: EditTool): List<ParamSpec> = when (tool) {
     // toggles del modal; aquí solo los steppers numéricos que comparte con el resto.
     EditTool.LOOP_CUT -> listOf(
         ParamSpec("cuts", "Cortes", 1.0, true, TransformMode.SCALE),
-        ParamSpec("smoothness", "Suavidad", 0.05, false, TransformMode.SCALE),
+        ParamSpec("smoothness", "Suavidad", 0.01, false, TransformMode.SCALE),
     )
     EditTool.BRIDGE_EDGE_LOOPS -> listOf(
         ParamSpec("twist_offset", "Desfase", 1.0, true, TransformMode.SCALE),
-        ParamSpec("merge_factor", "Fusión", 0.05, false, TransformMode.SCALE),
+        ParamSpec("merge_factor", "Fusión", 0.01, false, TransformMode.SCALE),
     )
     EditTool.KNIFE -> emptyList()
     EditTool.BISECT -> emptyList()
@@ -96,6 +96,7 @@ private fun defaultValue(spec: ParamSpec): Double = if (spec.isInt) 1.0 else 0.0
 @Composable
 fun EditToolTray(
     session: ToolSession,
+    unitScaleLength: Double,
     onParameter: (String, Any?) -> Unit,
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
@@ -143,20 +144,21 @@ fun EditToolTray(
                         color = Ink.Muted,
                         fontSize = 11.sp,
                     )
-                    LoopCutParams(session, onParameter)
+                    LoopCutParams(session, unitScaleLength, onParameter)
                 } else if (session.tool == EditTool.BRIDGE_EDGE_LOOPS) {
-                    BridgeParams(session, onParameter)
+                    BridgeParams(session, unitScaleLength, onParameter)
                 } else if (session.tool == EditTool.EXTRUDE) {
-                    ExtrudeParams(session, onParameter)
+                    ExtrudeParams(session, unitScaleLength, onParameter)
                 } else if (session.tool == EditTool.INSET) {
-                    InsetParams(session, onParameter)
+                    InsetParams(session, unitScaleLength, onParameter)
                 } else if (session.tool == EditTool.BEVEL) {
-                    BevelParams(session, onParameter)
+                    BevelParams(session, unitScaleLength, onParameter)
                 } else {
                     for (spec in specsFor(session.tool)) {
                         ParamStepper(
                             spec = spec,
                             value = session.double(spec.key) ?: defaultValue(spec),
+                            unitScaleLength = unitScaleLength,
                             onCommit = { onParameter(spec.key, it) },
                         )
                     }
@@ -176,7 +178,11 @@ fun EditToolTray(
 
 /** Parámetros de Loop Cut en una línea: posición, cortes, suavidad, perfil y toggles. */
 @Composable
-private fun LoopCutParams(session: ToolSession, onParameter: (String, Any?) -> Unit) {
+private fun LoopCutParams(
+    session: ToolSession,
+    unitScaleLength: Double,
+    onParameter: (String, Any?) -> Unit,
+) {
     PositionStepper(
         factor = session.double("factor") ?: 0.0,
         clamp = session.flag("clamp", true),
@@ -186,6 +192,7 @@ private fun LoopCutParams(session: ToolSession, onParameter: (String, Any?) -> U
         ParamStepper(
             spec = spec,
             value = session.double(spec.key) ?: defaultValue(spec),
+            unitScaleLength = unitScaleLength,
             onCommit = { onParameter(spec.key, it) },
         )
     }
@@ -252,11 +259,12 @@ private fun SnapToggle(session: ToolSession, onParameter: (String, Any?) -> Unit
  * eje: el backend lo rechaza y aquí se oculta.
  */
 @Composable
-private fun ExtrudeParams(session: ToolSession, onParameter: (String, Any?) -> Unit) {
+private fun ExtrudeParams(session: ToolSession, unitScaleLength: Double, onParameter: (String, Any?) -> Unit) {
     for (spec in specsFor(EditTool.EXTRUDE)) {
         ParamStepper(
             spec = spec,
             value = session.double(spec.key) ?: defaultValue(spec),
+            unitScaleLength = unitScaleLength,
             onCommit = { onParameter(spec.key, it) },
         )
     }
@@ -281,24 +289,32 @@ private fun ExtrudeParams(session: ToolSession, onParameter: (String, Any?) -> U
 
 /** Parámetros de Inset: grosor, profundidad y snap de incremento real (F2/F5). */
 @Composable
-private fun InsetParams(session: ToolSession, onParameter: (String, Any?) -> Unit) {
+private fun InsetParams(session: ToolSession, unitScaleLength: Double, onParameter: (String, Any?) -> Unit) {
     for (spec in specsFor(EditTool.INSET)) {
         ParamStepper(
             spec = spec,
             value = session.double(spec.key) ?: defaultValue(spec),
+            unitScaleLength = unitScaleLength,
             onCommit = { onParameter(spec.key, it) },
         )
+    }
+    val boundary = session.flag("boundary", true)
+    PillButton("Costura fija", selected = !boundary) {
+        onParameter("boundary", toggledInsetBoundary(boundary))
     }
     SnapToggle(session, onParameter)
 }
 
+internal fun toggledInsetBoundary(boundary: Boolean): Boolean = !boundary
+
 /** Parámetros de Bevel: ancho, segmentos y snap de incremento real. */
 @Composable
-private fun BevelParams(session: ToolSession, onParameter: (String, Any?) -> Unit) {
+private fun BevelParams(session: ToolSession, unitScaleLength: Double, onParameter: (String, Any?) -> Unit) {
     for (spec in specsFor(EditTool.BEVEL)) {
         ParamStepper(
             spec = spec,
             value = session.double(spec.key) ?: defaultValue(spec),
+            unitScaleLength = unitScaleLength,
             onCommit = { onParameter(spec.key, it) },
         )
     }
@@ -307,11 +323,12 @@ private fun BevelParams(session: ToolSession, onParameter: (String, Any?) -> Uni
 
 /** Parámetros de Bridge Edge Loops: desfase, fusión, su toggle de fundir y snap del factor. */
 @Composable
-private fun BridgeParams(session: ToolSession, onParameter: (String, Any?) -> Unit) {
+private fun BridgeParams(session: ToolSession, unitScaleLength: Double, onParameter: (String, Any?) -> Unit) {
     for (spec in specsFor(EditTool.BRIDGE_EDGE_LOOPS)) {
         ParamStepper(
             spec = spec,
             value = session.double(spec.key) ?: defaultValue(spec),
+            unitScaleLength = unitScaleLength,
             onCommit = { onParameter(spec.key, it) },
         )
     }
@@ -459,27 +476,33 @@ private fun PositionStepper(factor: Double, clamp: Boolean, onFactor: (Double) -
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("Posición", color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.padding(end = 4.dp))
-        StepperButton("−") { onFactor(percentToFactor((percent - 5).coerceAtLeast(min).toDouble())) }
+        StepperButton("−") { onFactor(percentToFactor((percent - 1).coerceAtLeast(min).toDouble())) }
         CompactNumericField(
             value = shown,
             onValueChange = { text = it },
             onDone = { commit() },
             modifier = Modifier.width(44.dp),
         )
-        StepperButton("+") { onFactor(percentToFactor((percent + 5).coerceAtMost(max).toDouble())) }
+        StepperButton("+") { onFactor(percentToFactor((percent + 1).coerceAtMost(max).toDouble())) }
         Text("%", color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.padding(start = 2.dp))
     }
 }
 
 /** Un parámetro con steppers (−/+) y valor exacto editable en el centro. */
 @Composable
-private fun ParamStepper(spec: ParamSpec, value: Double, onCommit: (Double) -> Unit) {
+private fun ParamStepper(
+    spec: ParamSpec,
+    value: Double,
+    unitScaleLength: Double,
+    onCommit: (Double) -> Unit,
+) {
     var text by remember { mutableStateOf("") }
     val formatted = format(value, spec.isInt)
 
     fun commit() {
         val parsed = ValueParser.parse(text, spec.mode) ?: return
-        val next = if (spec.isInt) maxOf(1.0, parsed.roundToInt().toDouble()) else parsed
+        val wire = if (spec.mode == TransformMode.MOVE) parsed / unitScaleLength else parsed
+        val next = if (spec.isInt) maxOf(1.0, wire.roundToInt().toDouble()) else wire
         onCommit(next)
         text = ""
     }
@@ -487,7 +510,8 @@ private fun ParamStepper(spec: ParamSpec, value: Double, onCommit: (Double) -> U
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(spec.label, color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.padding(end = 4.dp))
         StepperButton("−") {
-            val next = if (spec.isInt) maxOf(1.0, value - spec.step) else value - spec.step
+            val step = if (spec.mode == TransformMode.MOVE) 1.0 else spec.step
+            val next = if (spec.isInt) maxOf(1.0, value - step) else value - step
             onCommit(next)
         }
         CompactNumericField(
@@ -497,7 +521,8 @@ private fun ParamStepper(spec: ParamSpec, value: Double, onCommit: (Double) -> U
             modifier = Modifier.width(64.dp),
         )
         StepperButton("+") {
-            val next = if (spec.isInt) maxOf(1.0, value + spec.step) else value + spec.step
+            val step = if (spec.mode == TransformMode.MOVE) 1.0 else spec.step
+            val next = if (spec.isInt) maxOf(1.0, value + step) else value + step
             onCommit(next)
         }
     }

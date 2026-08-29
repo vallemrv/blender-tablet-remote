@@ -52,16 +52,22 @@ def query_candidate(payload: dict) -> dict:
         bpy.context.evaluated_depsgraph_get(), origin, direction)
     if not hit or obj is None or obj.type != "MESH":
         return {"hit": False, "snap_type": snap_type}
+    # ``scene.ray_cast`` golpea la geometría evaluada. Con Subdivision Surface el
+    # índice de cara puede no existir en ``obj.data`` (la malla original), pero para
+    # FACE el propio hit ya es la respuesta exacta que necesitamos. Además se devuelve
+    # el original seleccionable: Android compara este nombre con selected_objects.
+    original = getattr(obj, "original", obj)
+    object_name = original.name
+    if snap_type == "FACE":
+        return {"hit": True, "snap_type": snap_type, "id": f"{object_name}:FACE:{face_index}",
+                "object": object_name, "element": face_index, "position": list(location),
+                "screen": [u, v], "distance": 0.0}
     mesh = obj.data
     if not 0 <= face_index < len(mesh.polygons):
         return {"hit": False, "snap_type": snap_type}
     polygon = mesh.polygons[face_index]
     touch = Vector((u, v))
 
-    if snap_type == "FACE":
-        return {"hit": True, "snap_type": snap_type, "id": f"{obj.name}:FACE:{face_index}",
-                "object": obj.name, "element": face_index, "position": list(location),
-                "screen": [u, v], "distance": 0.0}
     if snap_type == "FACE_CENTER":
         position = obj.matrix_world @ polygon.center
         projected = camera.project(position, rv3d)

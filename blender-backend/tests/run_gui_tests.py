@@ -124,6 +124,19 @@ def scenario(client: WSClient) -> None:
     check("con seleccion, encuadra la seleccion", framed.get("framed") == "selected", str(framed.get("framed")))
     time.sleep(0.3)
 
+    # Una pieza pequeña no puede heredar el antiguo suelo de 25 cm. El doble toque
+    # debe acercar la cámara a su tamaño real y no perderla en el centro.
+    cube_obj = bpy.data.objects[cube]
+    old_scale = cube_obj.scale.copy()
+    cube_obj.scale = (0.025, 0.025, 0.025)
+    bpy.context.view_layer.update()
+    tiny = cmd(client, "view.frame_selected")
+    check("encuadrar una pieza de 5 cm no la aleja",
+          tiny.get("distance", 1.0) < 0.2, str(tiny.get("distance")))
+    cube_obj.scale = old_scale
+    bpy.context.view_layer.update()
+    cmd(client, "view.frame_selected")
+
     print("\n[4] Seleccionar objetos con el dedo", flush=True)
     cmd(client, "object.select_all", {"value": False})
     time.sleep(0.2)
@@ -220,6 +233,16 @@ def scenario(client: WSClient) -> None:
           edge_center.get("hit") and
           (SnapVector(edge_center.get("position")) - edge_center_world).length < 1e-5,
           str(edge_center))
+
+    subdivided = cmd(client, "modifier.add", {
+        "type": "SUBSURF", "parameters": {"levels": 2},
+    })
+    subsurf_name = next(m["name"] for m in subdivided["modifiers"] if m["type"] == "SUBSURF")
+    evaluated_face = cmd(client, "snap.query", {"u": 0.5, "v": 0.5, "snap_type": "FACE"})
+    check("snap FACE reconoce la superficie evaluada por Subdivision",
+          evaluated_face.get("hit") and evaluated_face.get("object") == cube,
+          str(evaluated_face))
+    cmd(client, "modifier.remove", {"name": subsurf_name})
 
     cmd(client, "transform.begin", {"mode": "MOVE", "snap_type": "FACE"})
     snapped = cmd(client, "transform.snap_candidate", {
@@ -425,6 +448,12 @@ def scenario(client: WSClient) -> None:
           off.get("shading") == "SOLID", str(off))
 
     cmd(client, "view.shading", {"mode": "WIREFRAME"})
+    wire_space = next(
+        (area.spaces.active for window in bpy.context.window_manager.windows
+         for area in window.screen.areas if area.type == "VIEW_3D"), None)
+    check("wireframe deja ver el interior",
+          wire_space is not None and wire_space.shading.xray_alpha_wireframe < 1.0,
+          str(None if wire_space is None else wire_space.shading.xray_alpha_wireframe))
 
     # Dos cubos en la misma línea de vista, a profundidad distinta: en wireframe
     # +xray, picar con ADD sobre el ya seleccionado debe dar el de detrás.
@@ -434,13 +463,36 @@ def scenario(client: WSClient) -> None:
     cmd(client, "object.select_all", {"value": False})
     cmd(client, "object.select", {"names": [behind]})
     cmd(client, "view.frame_selected")
+    cmd(client, "object.select_all", {"value": False})
     first_hit = cmd(client, "selection.pick", {"u": 0.5, "v": 0.5})
     check("SET coge el frente", first_hit.get("object") == behind, str(first_hit))
+    set_hit = cmd(client, "selection.pick", {"u": 0.5, "v": 0.5, "mode": "SET"})
+    check("SET repetido también pasa al objeto interior",
+          set_hit.get("object") == cube, f"{set_hit.get('object')} != {cube}")
+    cmd(client, "object.select", {"names": [behind]})
     add_hit = cmd(client, "selection.pick", {"u": 0.5, "v": 0.5, "mode": "ADD"})
     check("ADD sobre el seleccionado pasa al de detrás",
           add_hit.get("object") == cube, f"{add_hit.get('object')} != {cube}")
     cmd(client, "object.select", {"names": [behind]})
     cmd(client, "object.delete")
+
+    # Subdivision cambia la topología evaluada. El toque en Edit debe resolverse
+    # contra la jaula editable y devolver siempre un índice de cara original válido.
+    cmd(client, "object.select", {"name": cube})
+    subdivided = cmd(client, "modifier.add", {"type": "SUBSURF", "parameters": {"levels": 2}})
+    edit_subsurf_name = next(m["name"] for m in subdivided["modifiers"] if m["type"] == "SUBSURF")
+    cmd(client, "mode.edit")
+    cmd(client, "selection.face")
+    cmd(client, "selection.all", {"value": False})
+    cmd(client, "view.axis", {"axis": "FRONT"})
+    cmd(client, "view.frame_selected")
+    cage_face = cmd(client, "selection.pick", {"u": 0.5, "v": 0.5})
+    check("Edit con Subsurf selecciona una cara de la jaula",
+          cage_face.get("hit") is True and cage_face.get("element") == "face"
+          and 0 <= cage_face.get("index", -1) < len(bpy.data.objects[cube].data.polygons),
+          str(cage_face))
+    cmd(client, "mode.object")
+    cmd(client, "modifier.remove", {"name": edit_subsurf_name})
 
     # Edit Mode + wireframe/xray: el vértice de detrás se ve y se tiene que poder
     # picar. En PERSP+FRONT la esquina trasera proyecta dentro de la silueta de la
@@ -487,6 +539,81 @@ def scenario(client: WSClient) -> None:
     check("wireframe+xray pica el vertice de detras",
           through_hit.get("index") == back.index, str(through_hit))
 
+    # Tweak une el pick y el movimiento en un único gesto reversible.
+    cmd(client, "selection.all", {"value": False})
+    tweak_index = back.index
+    tweak_start = back.co.copy()
+    tweak_begin = cmd(client, "selection.tweak", {
+        "phase": "BEGIN", "u": p_back[0], "v": p_back[1], "threshold": tight,
+    })
+    check("Tweak selecciona el vértice bajo el apoyo",
+          tweak_begin.get("hit") is True and tweak_begin.get("index") == tweak_index,
+          str(tweak_begin))
+    cmd(client, "selection.tweak", {"phase": "UPDATE", "dx": 0.08, "dy": 0.0})
+    bm = bmesh.from_edit_mesh(bpy.data.objects[cube].data)
+    check("Tweak mueve durante el arrastre", (bm.verts[tweak_index].co - tweak_start).length > 1e-4,
+          str(bm.verts[tweak_index].co))
+    cmd(client, "selection.tweak", {"phase": "CANCEL"})
+    bm = bmesh.from_edit_mesh(bpy.data.objects[cube].data)
+    check("cancelar Tweak restaura", (bm.verts[tweak_index].co - tweak_start).length < 1e-6,
+          str(bm.verts[tweak_index].co))
+
+    cmd(client, "selection.tweak", {
+        "phase": "BEGIN", "u": p_back[0], "v": p_back[1], "threshold": tight,
+    })
+    cmd(client, "selection.tweak", {"phase": "UPDATE", "dx": 0.08, "dy": 0.0})
+    tweak_end = cmd(client, "selection.tweak", {"phase": "END"})
+    check("soltar Tweak confirma", tweak_end.get("moved") is True, str(tweak_end))
+    bm = bmesh.from_edit_mesh(bpy.data.objects[cube].data)
+    bm.verts[tweak_index].co = tweak_start
+    bmesh.update_edit_mesh(bpy.data.objects[cube].data, loop_triangles=False, destructive=False)
+    back = bm.verts[tweak_index]
+
+    cmd(client, "selection.edge")
+    tweak_edge = back.link_edges[0]
+    edge_midpoint = matrix @ ((tweak_edge.verts[0].co + tweak_edge.verts[1].co) * 0.5)
+    edge_screen = tablet_camera.project(edge_midpoint, rv3d)
+    edge_tweak = cmd(client, "selection.tweak", {
+        "phase": "BEGIN", "u": edge_screen[0], "v": edge_screen[1], "threshold": 0.045,
+    })
+    check("Tweak también captura una arista",
+          edge_tweak.get("hit") is True and edge_tweak.get("element") == "edge",
+          str(edge_tweak))
+    cmd(client, "selection.tweak", {"phase": "CANCEL"})
+    cmd(client, "selection.vertex")
+    bm = bmesh.from_edit_mesh(bpy.data.objects[cube].data)
+    back = bm.verts[tweak_index]
+
+    # En el vacío, Tweak se convierte en la navegación de un dedo y no abre MOVE.
+    view_before_tweak_miss = cmd(client, "view.get")
+    tweak_miss = cmd(client, "selection.tweak", {
+        "phase": "BEGIN", "u": 0.02, "v": 0.02, "threshold": 0.01,
+    })
+    tweak_orbit = cmd(client, "selection.tweak", {
+        "phase": "UPDATE", "dx": 0.08, "dy": 0.0,
+    })
+    cmd(client, "selection.tweak", {"phase": "END"})
+    view_after_tweak_miss = cmd(client, "view.get")
+    check("Tweak fuera de la malla orbita",
+          tweak_miss.get("hit") is False and tweak_orbit.get("orbit") is True
+          and view_before_tweak_miss.get("rotation") != view_after_tweak_miss.get("rotation"),
+          f"{tweak_miss} {tweak_orbit}")
+    cmd(client, "view.set", view_before_tweak_miss)
+
+    # ``through_hit`` deja el vértice trasero como activo. Elegimos uno de sus
+    # vecinos reales para probar un camino completo sin depender de cuál de las dos
+    # esquinas casi solapadas considera frontal esta vista.
+    destination = back.link_edges[0].other_vert(back)
+    p_destination = tablet_camera.project(matrix @ destination.co, rv3d)
+    check("destino vecino del camino está proyectado", p_destination is not None, str(p_destination))
+    path_hit = cmd(client, "selection.shortest_path", {
+        "u": p_destination[0], "v": p_destination[1], "threshold": 0.045,
+    })
+    check("Ctrl+toque selecciona el camino hasta el destino",
+          path_hit.get("index") == destination.index and path_hit.get("path_length", 0) >= 2,
+          str(path_hit))
+
+    cmd(client, "selection.all", {"value": False})
     cycle_hit = cmd(client, "selection.pick", {
         "u": p_back[0], "v": p_back[1], "threshold": wide, "mode": "ADD",
     })
@@ -662,15 +789,50 @@ def scenario(client: WSClient) -> None:
     before = cmd(client, "mesh.info")
     begun = cmd(client, "tool.begin", {"tool": "KNIFE"})
     check("sesión knife", begun.get("active") is True and begun.get("tool") == "KNIFE", str(begun))
-    first = cmd(client, "tool.knife_drag", {"phase": "BEGIN", "u": 0.5, "v": 0.35})
+    # El sondeo inicial se dirige al centro real de una arista de la cara que mira
+    # a la cámara: unas coordenadas fijas caen dentro de la cara y el candidato
+    # sería FACE, que es la respuesta correcta pero no la que se quiere medir.
+    # Como en [4], se entra un 3 % hacia el centro de la cara para que el raycast
+    # no se escape por la silueta.
+    import bmesh as knife_bmesh
+
+    knife_rv3d = snap_find_view3d()[3]
+    knife_bm = knife_bmesh.from_edit_mesh(snap_obj.data)
+    view_dir = snap_rv3d.view_rotation @ SnapVector((0.0, 0.0, -1.0))
+    normal_matrix = snap_obj.matrix_world.to_3x3()
+    facing = min(knife_bm.faces, key=lambda f: (normal_matrix @ f.normal).normalized().dot(view_dir))
+    knife_edge = facing.edges[0]
+    knife_edge_world = snap_obj.matrix_world @ (
+        (knife_edge.verts[0].co + knife_edge.verts[1].co) * 0.5)
+    knife_edge_screen = snap_camera.project(knife_edge_world, knife_rv3d)
+    knife_face_screen = snap_camera.project(
+        snap_obj.matrix_world @ facing.calc_center_median(), knife_rv3d)
+    knife_probe = (
+        knife_edge_screen[0] * .97 + knife_face_screen[0] * .03,
+        knife_edge_screen[1] * .97 + knife_face_screen[1] * .03,
+    )
+    first = cmd(client, "tool.knife_drag",
+                {"phase": "BEGIN", "u": knife_probe[0], "v": knife_probe[1]})
     check("inicio de arrastre acierta", first.get("hit") is True, str(first))
+    check("centro de arista es un snap propio",
+          (first.get("candidate") or {}).get("snap_type") == "EDGE_CENTER", str(first))
+    check("el centro de arista snapea a la posición exacta",
+          (SnapVector((first.get("candidate") or {}).get("position") or (0, 0, 0))
+           - knife_edge_world).length < 1e-5, str(first.get("candidate")))
     hover = cmd(client, "tool.knife_drag", {"phase": "UPDATE", "u": 0.5, "v": 0.5})
     check("hover publica candidato de cara", (hover.get("candidate") or {}).get("snap_type") in {"FACE", "EDGE", "VERTEX"}, str(hover))
     one = cmd(client, "mesh.info")
     check("mover sin soltar no corta", one["verts"] == before["verts"], f"{before} -> {one}")
-    second = cmd(client, "tool.knife_drag", {"phase": "END", "u": 0.5, "v": 0.65})
-    check("soltar confirma el tramo", second.get("hit") is True, str(second))
-    check("estado proyecta anclas", len(second.get("projected_points", [])) == 2, str(second))
+    first_end = cmd(client, "tool.knife_drag", {"phase": "END", "u": 0.5, "v": 0.65})
+    check("soltar fija un único primer punto final", first_end.get("hit") is True
+          and len(first_end.get("projected_points", [])) == 1, str(first_end))
+    one = cmd(client, "mesh.info")
+    check("un primer punto todavía no corta", one["verts"] == before["verts"], f"{before} -> {one}")
+    cmd(client, "tool.knife_drag", {"phase": "BEGIN", "u": 0.5, "v": 0.65})
+    cmd(client, "tool.knife_drag", {"phase": "UPDATE", "u": 0.5, "v": 0.5})
+    second = cmd(client, "tool.knife_drag", {"phase": "END", "u": 0.5, "v": 0.35})
+    check("segundo gesto confirma el primer tramo", second.get("hit") is True, str(second))
+    check("estado proyecta dos anclas", len(second.get("projected_points", [])) == 2, str(second))
     cut = cmd(client, "mesh.info")
     check("dos puntos cortan la cara", cut["verts"] > before["verts"], f"{before} -> {cut}")
     miss = cmd(client, "tool.knife_drag", {"phase": "UPDATE", "u": 0.01, "v": 0.01})

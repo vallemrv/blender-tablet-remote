@@ -39,6 +39,8 @@ import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.TransformSession
 import com.blendertablet.remote.model.ValueMode
 import com.blendertablet.remote.model.stepsFor
+import com.blendertablet.remote.model.stepInBlenderUnits
+import com.blendertablet.remote.model.defaultStepIndex
 import com.blendertablet.remote.network.RemoteBlenderClient
 import com.blendertablet.remote.network.StreamStats
 import com.blendertablet.remote.network.ViewportFrame
@@ -89,21 +91,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val streamStats: StateFlow<StreamStats> = stream.stats
 
     private val remote = combine(
-        client.connection, client.state, client.errors, client.retryAttempt,
-    ) { connection, blender, error, retryAttempt ->
-        AppUiState(connection = connection, blender = blender, error = error, retryAttempt = retryAttempt)
+        client.connection, client.state, client.errors, client.retryAttempt, client.notices,
+    ) { connection, blender, error, retryAttempt, notice ->
+        AppUiState(connection = connection, blender = blender, error = error,
+                   retryAttempt = retryAttempt, notice = notice)
     }
 
-    private val document = combine(client.file, client.recentFiles, ::Pair)
-
-    val uiState = combine(local, remote, document) { ui, net, (file, recent) ->
+    val uiState = combine(local, remote, client.file) { ui, net, file ->
         ui.copy(
             connection = net.connection,
             blender = net.blender,
             error = net.error,
+            notice = net.notice,
             retryAttempt = net.retryAttempt,
             file = file,
-            recentFiles = recent,
         )
     }
         // Dos emisiones con el mismo contenido no deben recomponer nada: el servidor
@@ -127,6 +128,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     client.toolBegin(EditTool.LOOP_CUT, toolDefaultParameters(EditTool.LOOP_CUT))
                 }
             }
+        }
+        // La copia nace encima del original y no se ve. Como el Shift+D de Blender, se
+        // entrega agarrada al gesto de mover: así se ve nacer y se coloca de una vez.
+        // Cancelar el Mover no deshace el duplicado, son pasos de undo distintos.
+        viewModelScope.launch {
+            client.duplicates.collect { transformBegin(TransformMode.MOVE) }
         }
         // Los overlays los apaga el ojo, pero viven en el servidor: si la conexión
         // se cae con la interfaz oculta, Blender se queda sin rejilla y el estado
@@ -250,6 +257,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** El toast de error se auto-descarta: la UI lo limpia a los ~5 s. */
     fun clearError() = client.clearError()
 
+    /** El aviso dura menos que el error: confirma, no reclama atención. */
+    fun clearNotice() = client.clearNotice()
+
     fun attachVideoSurface(surface: Surface) = h264Stream.attachSurface(surface)
     fun changeVideoSurface(surface: Surface, width: Int, height: Int) =
         h264Stream.surfaceChanged(surface, width, height)
@@ -281,7 +291,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun setMode(mode: BlenderMode) {
         closeSessions()
-        local.update { it.copy(shapeTool = ShapeTool.NONE) }
+        local.update { it.copy(
+            shapeTool = ShapeTool.NONE,
+            shortestPathActive = if (mode == BlenderMode.EDIT) it.shortestPathActive else false,
+        ) }
         client.setMode(mode)
     }
 
@@ -326,6 +339,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun redo() = client.redo()
     fun delete() = client.delete()
     fun duplicate() = client.duplicate()
+    fun runDuplicateVariant(linked: Boolean) {
+        local.update { it.copy(duplicateLinked = linked) }
+        if (linked) client.duplicateLinked() else client.duplicate()
+    }
     fun frameSelected() = client.frameSelected()
     /**
      * Un toque en el viewport. Normalmente selecciona, pero con una transformación
@@ -350,7 +367,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val blender = uiState.value.blender
             if (blender.mode == BlenderMode.EDIT) {
                 if (client.toolSession.value.active) {
-                    val add = blender.features.loopCutMultiple && local.value.selectionOp == SelectionOp.ADD
+                    val add = blender.features.loopCutMultiple && local.value.selectionOp == SelectionOp.TOGGLE
                     client.toolLoopPick(u.toDouble(), v.toDouble(), add = add)
                     return
                 }
@@ -368,7 +385,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (session.active) return
         // El pen apunta con precisión: un radio menor evita saltar al elemento vecino.
         // El dedo conserva una diana más grande y cómoda.
-        client.pick(u.toDouble(), v.toDouble(), if (stylus) 0.018 else 0.045, local.value.selectionOp)
+        val threshold = if (stylus) 0.018 else 0.045
+        if (local.value.shortestPathActive && uiState.value.blender.mode == BlenderMode.EDIT) {
+            client.shortestPath(u.toDouble(), v.toDouble(), threshold)
+        } else {
+            client.pick(u.toDouble(), v.toDouble(), threshold, local.value.selectionOp)
+        }
     }
     fun requestState() = client.requestState()
     fun addPrimitive(primitive: AddObject) = client.addPrimitive(primitive)
@@ -435,7 +457,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * Pulsar el mismo lo desarma; pulsar el otro cambia el modificador.
      */
     fun toggleSelectionOp(op: SelectionOp) {
-        local.update { it.copy(selectionOp = if (it.selectionOp == op) SelectionOp.SET else op) }
+        local.update { it.copy(
+            selectionOp = if (it.selectionOp == op && !it.shortestPathActive) SelectionOp.SET else op,
+            shortestPathActive = false,
+        ) }
+    }
+
+    fun toggleShortestPath() {
+        local.update { it.copy(
+            shortestPathActive = !it.shortestPathActive,
+            selectionOp = SelectionOp.SET,
+        ) }
     }
 
     /** B/C: arma/desarma la herramienta de arrastre por forma. */
@@ -446,7 +478,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** El menú radial siempre arma B/C; repetir el botón nunca debe desarmarla. */
     fun armShapeTool(tool: ShapeTool) {
         require(tool == ShapeTool.BOX || tool == ShapeTool.CIRCLE)
-        local.update { it.copy(shapeTool = tool) }
+        local.update { it.copy(shapeTool = tool, shortestPathActive = false) }
     }
 
     /**
@@ -518,7 +550,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun selectObject(name: String, add: Boolean) = client.selectObject(name, add)
     fun meshDelete(what: String) = client.meshDelete(what)
     fun meshDissolve(what: String) = client.meshDissolve(what)
-    fun duplicateLinked() = client.duplicateLinked()
     fun rename(newName: String, target: String? = null) = client.rename(newName, target)
 
     /**
@@ -556,6 +587,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             objectSelected = objectName != null && objectName in blender.selectedObjects,
             hasSelection = blender.context.hasSelection(blender.mode, blender.selectionMode),
             objectShadingAvailable = blender.features.objectShading,
+            shadeSmooth = blender.activeShadeSmooth,
+            localView = local.value.localViewActive,
         )
     }
 
@@ -676,7 +709,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun toolDefaultParameters(tool: EditTool): Map<String, Any?> = withGlobalSnap(tool, when (tool) {
         EditTool.EXTRUDE -> mapOf("offset" to 0.0, "snap_type" to "NONE")
         EditTool.BEVEL -> mapOf("offset" to 0.02, "segments" to 1.0, "snap_type" to "NONE")
-        EditTool.INSET -> mapOf("thickness" to 0.1, "depth" to 0.0, "snap_type" to "NONE")
+        EditTool.INSET -> mapOf(
+            "thickness" to 0.1,
+            "depth" to 0.0,
+            "boundary" to true,
+            "snap_type" to "NONE",
+        )
         EditTool.SUBDIVIDE -> mapOf("cuts" to 1.0)
         EditTool.LOOP_CUT -> mapOf("cuts" to 1.0, "smoothness" to 0.0, "factor" to 0.0, "snap_type" to "NONE")
         EditTool.BRIDGE_EDGE_LOOPS -> mapOf("twist_offset" to 0.0, "merge_factor" to 0.0, "snap_type" to "NONE")
@@ -744,10 +782,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun bisectDragLine(u0: Float, v0: Float, u1: Float, v1: Float) =
         client.toolDragLine(u0.toDouble(), v0.toDouble(), u1.toDouble(), v1.toDouble())
 
-    /** Al abrir el menú Archivo: refresca nombre, "sin guardar" y recientes. */
+    /** Al abrir Archivo refresca el estado del documento; Recientes ya no forma parte del menú. */
     fun refreshFileMenu() {
         client.fileInfo()
-        client.requestRecentFiles()
     }
 
     val transformSession: StateFlow<TransformSession> = client.transformSession
@@ -773,7 +810,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (client.toolSession.value.active) client.toolCancel()
         loopCutArmed = false
         local.update { it.copy(loopCutAwaitingTap = false) }
-        val step = stepsFor(mode)[localStepIndex(mode)].step
+        val preset = stepsFor(mode)[localStepIndex(mode)]
+        val step = stepInBlenderUnits(preset, mode, uiState.value.blender.unitScaleLength)
         val constraint = if (mode == TransformMode.ROTATE && local.value.constraint.axes.size > 1) {
             // Un giro es alrededor de UN eje: un plano elegido para mover no vale.
             Constraint.Z
@@ -786,6 +824,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             orientation = local.value.orientation,
             valueMode = local.value.valueMode,
         )
+    }
+
+    fun activateTweak() {
+        if (client.transformSession.value.active) client.transformCancel()
+        if (client.toolSession.value.active || client.toolSession.value.armed) client.toolCancel()
+        local.update { it.copy(activeTool = ActiveTool.TWEAK, loopCutAwaitingTap = false) }
+    }
+
+    fun tweakGesture(phase: GesturePhase, u: Float, v: Float, dx: Float, dy: Float) {
+        client.selectionTweak(phase, u.toDouble(), v.toDouble(), dx.toDouble(), dy.toDouble())
+        if (phase == GesturePhase.END || phase == GesturePhase.CANCEL) client.requestState()
     }
 
     /**
@@ -831,7 +880,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setStep(mode: TransformMode, index: Int) {
         local.update { it.copy(stepIndex = it.stepIndex + (mode to index)) }
         val session = client.transformSession.value
-        if (session.active) client.transformSnap(session.snapType, stepsFor(mode)[index].step)
+        if (session.active) {
+            val preset = stepsFor(mode)[index]
+            client.transformSnap(
+                session.snapType,
+                stepInBlenderUnits(preset, mode, uiState.value.blender.unitScaleLength),
+            )
+        }
     }
 
     /**
@@ -855,7 +910,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun stepIndex(mode: TransformMode) = localStepIndex(mode)
 
     private fun localStepIndex(mode: TransformMode) =
-        local.value.stepIndex[mode] ?: stepsFor(mode).indexOfFirst { it.step >= 0.01 }.coerceAtLeast(0)
+        local.value.stepIndex[mode] ?: defaultStepIndex(mode)
 
     fun transformValue(values: List<Double>?, angleDegrees: Double?) =
         client.transformValue(values, angleDegrees)

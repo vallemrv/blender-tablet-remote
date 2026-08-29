@@ -49,6 +49,8 @@ fun InputSurface(
     onDoubleTap: () -> Unit,
     knifeActive: Boolean = false,
     onKnifeDrag: (GesturePhase, Float, Float) -> Unit = { _, _, _ -> },
+    tweakActive: Boolean = false,
+    onTweakDrag: (GesturePhase, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> },
     /** Pulsación larga: abre el menú rápido en píxeles de esta vista. */
     onLongPress: (px: Float, py: Float, u: Float, v: Float) -> Unit = { _, _, _, _ -> },
     /** Herramienta de forma armada (B/C); NONE = gesto normal de un dedo. */
@@ -70,6 +72,8 @@ fun InputSurface(
             view.shapeTool = shapeTool
             view.knifeActive = knifeActive
             view.onKnifeDrag = onKnifeDrag
+            view.tweakActive = tweakActive
+            view.onTweakDrag = onTweakDrag
             view.navigationOrbitEnabled = navigationOrbitEnabled
             view.onShape = onShape
             view.knifePoints = knifePoints
@@ -150,6 +154,9 @@ private class GestureView(
     var shapeTool: ShapeTool = ShapeTool.NONE
     var knifeActive: Boolean = false
     var onKnifeDrag: (GesturePhase, Float, Float) -> Unit = { _, _, _ -> }
+    var tweakActive: Boolean = false
+    var onTweakDrag: (GesturePhase, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> }
+    private var tweakDrawing = false
     var navigationOrbitEnabled: Boolean = false
     var onShape: (ShapeTool, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> }
     /** Puntos del Knife (normalizados) para el overlay. */
@@ -233,6 +240,14 @@ private class GestureView(
                     invalidate()
                     return true
                 }
+                if (tweakActive) {
+                    tweakDrawing = true
+                    lastDispatchAt = event.eventTime
+                    pendingDx = 0f; pendingDy = 0f
+                    onTweakDrag(GesturePhase.BEGIN, nx(event.x), ny(event.y), 0f, 0f)
+                    invalidate()
+                    return true
+                }
                 // Con B/C armada, un dedo dibuja la forma: no orbita, no selecciona
                 // y no abre el menú. El tap simple no hace nada (se resuelve al soltar).
                 if (shapeTool != ShapeTool.NONE) {
@@ -268,6 +283,10 @@ private class GestureView(
                     knifeDrawing = false
                     invalidate()
                 }
+                if (tweakDrawing) {
+                    onTweakDrag(GesturePhase.CANCEL, nx(lastX), ny(lastY), 0f, 0f)
+                    tweakDrawing = false
+                }
                 endToolGesture()
                 endNavigationOrbit()
                 // La sesión de navegación NO se cierra: solo se reancla. Cerrarla
@@ -286,6 +305,8 @@ private class GestureView(
                         lastDispatchAt = event.eventTime
                     }
                     invalidate()
+                } else if (tweakDrawing) {
+                    handleTweak(event)
                 } else if (shapeDrawing) {
                     shapeCurrentX = event.x; shapeCurrentY = event.y
                     invalidate()
@@ -314,6 +335,13 @@ private class GestureView(
                     parent?.requestDisallowInterceptTouchEvent(false)
                     return true
                 }
+                if (tweakDrawing) {
+                    flushTweak(event)
+                    onTweakDrag(GesturePhase.END, nx(event.x), ny(event.y), 0f, 0f)
+                    tweakDrawing = false
+                    parent?.requestDisallowInterceptTouchEvent(false)
+                    return true
+                }
                 val wasNavigationOrbit = navigationOrbitActive
                 endToolGesture()
                 endNavigationOrbit()
@@ -327,12 +355,33 @@ private class GestureView(
                 shapeDrawing = false
                 if (knifeDrawing) onKnifeDrag(GesturePhase.CANCEL, nx(shapeCurrentX), ny(shapeCurrentY))
                 knifeDrawing = false
+                if (tweakDrawing) onTweakDrag(GesturePhase.CANCEL, nx(lastX), ny(lastY), 0f, 0f)
+                tweakDrawing = false
                 invalidate()
                 cancelGestures()
                 parent?.requestDisallowInterceptTouchEvent(false)
             }
         }
         return true
+    }
+
+    private fun handleTweak(e: MotionEvent) {
+        pendingDx += e.x - lastX
+        pendingDy += e.y - lastY
+        lastX = e.x; lastY = e.y
+        moved = moved || hypot(e.x - startX, e.y - startY) > systemTouchSlop
+        if (e.eventTime - lastDispatchAt >= DISPATCH_MS) flushTweak(e)
+    }
+
+    private fun flushTweak(e: MotionEvent) {
+        if (pendingDx != 0f || pendingDy != 0f) {
+            onTweakDrag(
+                GesturePhase.UPDATE, nx(e.x), ny(e.y),
+                nx(pendingDx), ny(pendingDy),
+            )
+            pendingDx = 0f; pendingDy = 0f
+            lastDispatchAt = e.eventTime
+        }
     }
 
     private fun handleSingle(e: MotionEvent) {

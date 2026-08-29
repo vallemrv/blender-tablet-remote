@@ -20,6 +20,10 @@ data class TouchContext(
     val hasSelection: Boolean = false,
     /** El servidor anuncia `object.shade`; servidores antiguos no ven el toggle. */
     val objectShadingAvailable: Boolean = false,
+    /** El objeto activo ya está suave: el interruptor ofrecerá volver a plano. */
+    val shadeSmooth: Boolean = false,
+    /** La vista está aislada: el interruptor ofrecerá volver a verlo todo. */
+    val localView: Boolean = false,
 )
 
 /**
@@ -72,7 +76,6 @@ object RadialMenu {
             }
             // Sobre lo ya seleccionado: operaciones cortas sobre eso mismo.
             context.hit -> {
-                add(ActionId.DUPLICATE_LINKED)
                 add(ActionId.RENAME)
                 add(ActionId.HIDE_OBJECT)
                 add(ActionId.VIEW_LOCAL)
