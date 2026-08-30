@@ -41,41 +41,41 @@ LoopTools condicionado a la disponibilidad real del add-on. Las validaciones aut
 aplicables quedaron ejecutadas; la validación táctil pendiente se retiró del alcance al
 cerrar la serie. Sus planes se eliminaron y la próxima serie vuelve a empezar en `000`.
 
-La serie activa `000` corrige Mirror Clipping durante las transformaciones remotas. El
+La serie `000` corrigió Mirror Clipping durante las transformaciones remotas. El
 `merge_threshold` del modificador ya no se usa para decidir qué vértices pertenecen a
 la costura: solo quedan fijados los que estaban numéricamente sobre el plano; un vecino
 dentro del umbral puede moverse y escalar con normalidad, y sigue sin poder cruzarlo.
 El inspector Android muestra floats con la precisión de su `step`, por lo que el umbral
 por defecto se ve como `0.001` y los botones −/+ cambian una milésima visible. Backend
-809/809 y tests JVM/`assembleDebug` están en verde; queda validarlo en tablet.
+809/809 y tests JVM/`assembleDebug` quedaron en verde.
 
-La serie activa `001` impide que el menú radial interrumpa movimientos lentos. Mientras
+La serie `001` impide que el menú radial interrumpa movimientos lentos. Mientras
 `transform.session` o `tool.session` está activa, `InputSurface` no programa ni dispara
 la pulsación larga; si la sesión se activa con el dedo apoyado, también cancela el timer
 pendiente. Sin sesión, el long-click continúa disponible. Tests JVM y `assembleDebug`
-están en verde; queda validarlo en tablet.
+quedaron en verde.
 
-La serie activa `002` retira el círculo derecho de órbita durante Tweak. Aunque Tweak
+La serie `002` retira el círculo derecho de órbita durante Tweak. Aunque Tweak
 usa internamente una `transform.session`, es un gesto directo que ya conserva la
 navegación con dos dedos; el círculo era redundante y ocupaba viewport. Las demás
-transformaciones y tools siguen mostrándolo. Tests JVM y `assembleDebug` están en verde;
-queda validarlo en tablet.
+transformaciones y tools siguen mostrándolo. Tests JVM y `assembleDebug` quedaron en
+verde.
 
-La serie activa `003` hace Knife atómico y directo. El crash real del 2026-08-30 ocurrió
+La serie `003` hace Knife atómico y directo. El crash real del 2026-08-30 ocurrió
 tras una ráfaga de `tool.knife_drag`, un `Anchor not on mesh surface` y el siguiente
 dibujo OFFSCREEN: una preview fallida podía dejar el BMesh parcialmente partido. Knife
 restaura ahora el backup ante cualquier error y retira las anclas tentativas. El primer
 BEGIN→END válido crea inicio y final, por lo que un solo arrastre ya corta; la bandeja
 lo explica y Android sondea a 15 Hz. Verificado con 811/811 headless y en vivo con
-OFFSCREEN/H.264 más 120 UPDATE consecutivos sin caída; queda validarlo en tablet.
+OFFSCREEN/H.264 más 120 UPDATE consecutivos sin caída.
 
-La serie activa `004` convierte Knife en una herramienta táctil multitrazo. BEGIN y
+La serie `004` convirtió Knife en una herramienta táctil multitrazo. BEGIN y
 UPDATE solo ajustan el candidato y END fija un único punto, de modo que apoyar el lápiz
 no decide una posición irreversible. «Nuevo corte» termina la línea actual y permite
 empezar otra independiente dentro de la misma sesión/undo; deshacer puede retroceder
 entre líneas y el estado publica trazos separados para que el overlay no los una. Esto
-habilita construcciones y reducciones topológicas 4→2 sin salir de Knife. Queda completar
-las pruebas y validarlo en tablet. Tras el primer feedback real se detectó que Android
+habilita construcciones y reducciones topológicas 4→2 sin salir de Knife. Tras el primer
+feedback real se detectó que Android
 confirmaba la muestra inestable de ACTION_UP y que los radios de snap eran demasiado
 pequeños; la corrección confirma la última muestra DOWN/MOVE visible y amplía los radios
 priorizados de vértice/centro/arista. El segundo feedback reveló que la distancia cero
@@ -90,14 +90,21 @@ nuevos se anclaran a sus vértices. «Nuevo corte» fija ahora el trazo terminad
 preview reversible; solo el activo queda como overlay. Confirmar reconstruye todo desde
 el backup, y un baseline explícito de undo mantiene Edit Mode al deshacer Knife.
 
-La serie activa `005` resolvió finalmente los cortes caóticos del Knife. La causa no era
+La serie `005` resolvió finalmente los cortes caóticos del Knife. La causa no era
 el snap: `_poke` integraba cada punto interior por separado, borraba la cara y generaba
 un abanico de triángulos hacia todas sus esquinas. El motor acumula ahora los puntos
 interiores hasta volver al contorno y `_split_face_with_chain` divide esa cara una sola
 vez en dos n-gons que comparten exactamente la cadena dibujada. Esta solución está
 validada por el usuario y no debe sustituirse por triangulación punto a punto. Su límite
 conocido son cadenas interiores que atraviesan caras distintas, que aún conservan el
-fallback antiguo. Ver `005_PLAN_BACKEND_KNIFE_NGONS.md`.
+fallback antiguo. La deuda de contrato detectada en ese ciclo era un fixture de
+capabilities anterior a los cambios ya presentes en el add-on y debe abrir su propia
+reparación si sigue reproduciéndose.
+
+El 2026-08-30 el usuario autorizó retirar los planes `000`–`005` y el diagnóstico de
+Knife, incluidas las validaciones pendientes que conservaban esos documentos. El estado
+funcional y las limitaciones relevantes quedan consolidados aquí. La próxima serie de
+refinado y escalado empieza de nuevo en `000`.
 
 El snap que condujo a esa solución es reutilizable: primero se restringen candidatos a
 la cara visible del raycast para excluir geometría posterior; después se clasifican en
@@ -721,19 +728,15 @@ cambio que se tocó, que fue el error inicial de esta sesión.
 
 ## Objetivos activos
 
-Series activas: `000`, validar en tablet el clipping de Mirror y el control preciso de
-`merge_threshold`; `001`, comprobar que los movimientos lentos de transformaciones y
-tools no abren el radial; `002`, comprobar Tweak sin círculo de órbita. Sus planes
-permanecen hasta esas validaciones. `003`: validar el Knife atómico y de primer trazo
-directo sobre la malla real.
+No hay una serie activa. El próximo trabajo de refinado y escalado debe abrir planes
+propietarios nuevos desde `000`.
 
 `005` (backend): el motor del Knife ya no trianguliza. Un punto puesto dentro de una cara
 la borraba y la sustituía por un abanico de triángulos hacia todas sus esquinas
 (`_poke`), que es de donde salían las diagonales que el usuario nunca dibujó. Ahora los
 puntos interiores se acumulan hasta que el trazo vuelve al contorno y la cara se parte en
 **dos n-gons** siguiendo la cadena. Solo aplica cuando entrada y salida caen en la misma
-cara; encadenar interiores de caras distintas sigue usando `_poke`. Ver
-`005_PLAN_BACKEND_KNIFE_NGONS.md`.
+cara; encadenar interiores de caras distintas sigue usando `_poke`.
 
 **Aviso de método:** el contrato se mide contra el add-on instalado, no contra el repo.
 Al reinstalar se destapó que el código anuncia `LOOPTOOLS_CIRCLE`, `snap_mode` y
