@@ -7,7 +7,9 @@
   "tool": "KNIFE",
   "parameters": {"snap": true},
   "points": [[-0.4, 0.0, 1.0], [0.4, 0.0, 1.0]],
+  "strokes": [[[-0.7, 0.0, 0.7], [-0.7, 0.0, -0.7]]],
   "projected_points": [[0.35, 0.5], [0.65, 0.5]],
+  "projected_strokes": [[[0.2, 0.35], [0.2, 0.65]]],
   "closed": false,
   "snap_candidate": {
     "hit": true,

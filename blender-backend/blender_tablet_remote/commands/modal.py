@@ -97,6 +97,12 @@ def _mirror_clip_planes(obj, edit_coords: dict[int, Vector]):
     return clips
 
 
+# `merge_threshold` decide cuándo Mirror fusiona dos lados al evaluar el modificador;
+# no convierte todo vértice cercano en parte de la costura durante una transformación.
+# Solo una coordenada que ya está numéricamente sobre el plano debe quedar inmóvil.
+MIRROR_SEAM_EPSILON = 1e-7
+
+
 class _Session:
     """La transformación en curso. Una sola, global: la tablet es un único usuario."""
 
@@ -460,13 +466,13 @@ class _Session:
 
     def _apply_mirror_clipping(self, verts) -> None:
         """Emula el límite que los operadores nativos aplican con Mirror Clipping."""
-        for to_mirror, from_mirror, axes, threshold, originals in self.mirror_clips:
+        for to_mirror, from_mirror, axes, _merge_threshold, originals in self.mirror_clips:
             for index, original_mirror in originals.items():
                 candidate = to_mirror @ verts[index].co
                 for axis in axes:
                     original = original_mirror[axis]
                     value = candidate[axis]
-                    if abs(original) <= threshold:
+                    if abs(original) <= MIRROR_SEAM_EPSILON:
                         candidate[axis] = 0.0
                     elif original > 0.0 and value < 0.0:
                         candidate[axis] = 0.0

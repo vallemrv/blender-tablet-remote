@@ -324,9 +324,23 @@ object StateParser {
             (0 until projectedArray.length()).mapNotNull { index ->
                 projectedArray.optJSONArray(index)?.let { point -> List(2) { i -> point.optDouble(i, 0.0) } }
             }
+        fun pointGroups(key: String, dimensions: Int): List<List<List<Double>>> {
+            val groups = json.optJSONArray(key) ?: return emptyList()
+            return (0 until groups.length()).mapNotNull { groupIndex ->
+                groups.optJSONArray(groupIndex)?.let { group ->
+                    (0 until group.length()).mapNotNull { pointIndex ->
+                        group.optJSONArray(pointIndex)?.let { point ->
+                            List(dimensions) { i -> point.optDouble(i, 0.0) }
+                        }
+                    }
+                }
+            }
+        }
         return ToolSession(
             active = active, armed = armed, tool = tool, parameters = values,
-            points = points, projectedPoints = projected, closed = json.optBoolean("closed"), line = line,
+            points = points, strokes = pointGroups("strokes", 3),
+            projectedPoints = projected, projectedStrokes = pointGroups("projected_strokes", 2),
+            closed = json.optBoolean("closed"), line = line,
             snapType = enum(json.optString("snap_type", params.optString("snap_type")), SnapType.NONE),
             snapStep = json.optDouble("snap_step", params.optDouble("snap_step", 0.1)),
             snapCandidate = candidate(json.optJSONObject("snap_candidate")),

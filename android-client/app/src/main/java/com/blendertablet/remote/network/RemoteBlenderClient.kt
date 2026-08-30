@@ -289,6 +289,7 @@ interface RemoteBlenderClient {
     fun toolKnifeDrag(phase: GesturePhase, u: Double, v: Double)
     fun requestToolStatus()
     fun toolKnifePop()
+    fun toolKnifeNewStroke()
     fun toolKnifeClose()
 
     /**

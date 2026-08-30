@@ -77,8 +77,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Debe inicializarse antes de `init`: StateFlow emite su valor actual en cuanto
     // empieza el collect y Main.immediate puede ejecutar esa emisión durante el
     // propio constructor del ViewModel.
-    private val _knifeScreenPoints = MutableStateFlow<List<Pair<Float, Float>>>(emptyList())
-    val knifeScreenPoints: StateFlow<List<Pair<Float, Float>>> = _knifeScreenPoints.asStateFlow()
+    private val _knifeScreenPoints = MutableStateFlow<List<List<Pair<Float, Float>>>>(emptyList())
+    val knifeScreenPoints: StateFlow<List<List<Pair<Float, Float>>>> = _knifeScreenPoints.asStateFlow()
     private val connectivity =
         application.getSystemService(ConnectivityManager::class.java)
 
@@ -174,9 +174,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (session.tool != EditTool.KNIFE) {
                     if (_knifeScreenPoints.value.isNotEmpty()) _knifeScreenPoints.value = emptyList()
                 } else {
-                    _knifeScreenPoints.value = session.projectedPoints.mapNotNull { point ->
+                    fun screen(points: List<List<Double>>) = points.mapNotNull { point ->
                         if (point.size >= 2) point[0].toFloat() to point[1].toFloat() else null
                     }
+                    _knifeScreenPoints.value = session.projectedStrokes.map(::screen) +
+                        listOf(screen(session.projectedPoints))
                 }
                 // Bisect arma el mismo mecanismo de "un dedo dibuja" que B/C (F4): un
                 // dedo traza la línea de corte en vez de orbitar, mientras la tool
@@ -683,12 +685,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Knife: quitar el último punto y cerrar la polilínea. */
     fun knifePop() = client.toolKnifePop()
+    fun knifeNewStroke() = client.toolKnifeNewStroke()
     fun loopCutPop() = client.toolLoopPop()
     fun knifeClose() = client.toolKnifeClose()
 
     /** Compatibilidad con servidores antiguos que aún colocan Knife por toque. */
     fun knifeTap(u: Float, v: Float) {
-        _knifeScreenPoints.value = _knifeScreenPoints.value + (u to v)
+        val strokes = _knifeScreenPoints.value.ifEmpty { listOf(emptyList()) }
+        _knifeScreenPoints.value = strokes.dropLast(1) + listOf(strokes.last() + (u to v))
         client.toolKnifePoint(u.toDouble(), v.toDouble())
     }
 
@@ -698,6 +702,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Knife: conmuta el snap a vértice/arista. */
     fun knifeSnap(enabled: Boolean) {
         if (client.toolSession.value.active) client.toolParameter(mapOf("snap" to enabled))
+    }
+
+    fun knifeSnapMode(mode: String) {
+        if (client.toolSession.value.active) client.toolParameter(mapOf("snap_mode" to mode))
     }
 
     /**

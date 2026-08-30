@@ -23,6 +23,20 @@ SUPPORTED = {"EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_
 VIEWPORT_ARMED = {"LOOP_CUT", "BISECT"}
 
 SNAP_THRESHOLD = 0.045
+KNIFE_VERTEX_THRESHOLD = 0.080
+KNIFE_EDGE_CENTER_THRESHOLD = 0.070
+KNIFE_EDGE_THRESHOLD = 0.042
+# AUTO necesita zonas de prioridad menores: los radios grandes se conservan cuando
+# el usuario fuerza Vértice o Medio, pero no deben cubrir una arista completa.
+KNIFE_AUTO_VERTEX_THRESHOLD = 0.035
+KNIFE_AUTO_EDGE_CENTER_THRESHOLD = 0.028
+
+
+def _knife_snap_thresholds(snap_mode):
+    """Radios (vértice, centro) equilibrados en AUTO y pegajosos al forzar."""
+    if str(snap_mode).upper() == "AUTO":
+        return KNIFE_AUTO_VERTEX_THRESHOLD, KNIFE_AUTO_EDGE_CENTER_THRESHOLD
+    return KNIFE_VERTEX_THRESHOLD, KNIFE_EDGE_CENTER_THRESHOLD
 
 
 class ToolSession:
@@ -41,6 +55,8 @@ class ToolSession:
         self.loop_history = []  # [(base anterior, parámetros del corte anterior)]
         self.result = None
         self.points = []  # anclas del Knife, en coordenadas locales
+        self.knife_strokes = []  # trazos terminados; `points` es el trazo activo
+        self.knife_stroke_closed = []
         self.knife_start = None
         self.closed = False
         self.line = None  # {"start": [u, v], "end": [u, v]} de la sesión Bisect
@@ -93,6 +109,8 @@ class ToolSession:
         if tool == "LOOP_CUT":
             self.original_backup = backup
         self.points = []
+        self.knife_strokes = []
+        self.knife_stroke_closed = []
         self.knife_start = None
         self.closed = False
         self.line = None
@@ -148,14 +166,21 @@ class ToolSession:
     def preview(self):
         self.restore_preview_base()
         if self.tool == "KNIFE":
+            # Solo los trazos que el usuario finalizó con «Nuevo corte» se aplican a
+            # la preview. Así el trazo activo sigue siendo overlay, pero el siguiente
+            # puede snapear contra vértices reales creados por los anteriores.
             bm = bmesh.from_edit_mesh(self.obj.data)
             try:
-                self.result = knife_commands.cut_polyline(bm, self.points, self.closed)
+                results = [knife_commands.cut_polyline(bm, points, closed)
+                           for points, closed in zip(self.knife_strokes, self.knife_stroke_closed)]
+                bmesh.update_edit_mesh(self.obj.data, loop_triangles=True, destructive=True)
+                self.result = {"strokes": results, "active_deferred": True}
             except CommandError:
+                self.restore_preview_base()
                 raise
             except Exception as exc:  # noqa: BLE001
+                self.restore_preview_base()
                 raise CommandError(f"Knife cut failed: {exc}", code="topology_incompatible") from exc
-            bmesh.update_edit_mesh(self.obj.data, loop_triangles=True, destructive=True)
             return
         payload = dict(self.params)
         if str(payload.get("snap_type", "NONE")).upper() in {"VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER", "CURSOR"}:
@@ -212,6 +237,7 @@ class ToolSession:
             state["snap_candidate"] = self.snap_candidate
             if self.tool == "KNIFE":
                 state["points"] = [list(p) for p in self.points]
+                state["strokes"] = [[list(p) for p in stroke] for stroke in self.knife_strokes]
                 state["closed"] = self.closed
                 found = find_view3d()
                 if found is not None:
@@ -221,6 +247,11 @@ class ToolSession:
                     state["projected_points"] = [
                         list(screen) for point in self.points
                         if (screen := camera.project(matrix @ Vector(point), rv3d)) is not None
+                    ]
+                    state["projected_strokes"] = [
+                        [list(screen) for point in stroke
+                         if (screen := camera.project(matrix @ Vector(point), rv3d)) is not None]
+                        for stroke in self.knife_strokes
                     ]
             if self.tool == "BISECT":
                 state["line"] = self.line
@@ -409,7 +440,7 @@ def knife_point(payload):
 
 @command("tool.knife_drag", mutating=True)
 def knife_drag(payload):
-    """Sondea o confirma un tramo de Knife mediante pulsar, arrastrar y soltar."""
+    """Sondea mientras se arrastra y fija exactamente un punto al soltar."""
     tool_session.require(payload.get("_client_id"))
     if tool_session.tool != "KNIFE":
         raise CommandError("knife_drag requires a KNIFE session", code="wrong_tool")
@@ -423,23 +454,29 @@ def knife_drag(payload):
 
     candidate = _knife_candidate(tool_session.obj, float(payload.get("u", 0.5)),
                                   float(payload.get("v", 0.5)),
-                                  bool(tool_session.params.get("snap", True)))
+                                  bool(tool_session.params.get("snap", True)),
+                                  str(tool_session.params.get("snap_mode", "AUTO")).upper())
     tool_session.snap_candidate = candidate if candidate.get("hit") else None
     if phase == "BEGIN":
-        # Solo es una referencia transitoria para diagnóstico/cancel. El primer
-        # ancla se toma siempre del END, para que también pueda arrastrarse.
         tool_session.knife_start = candidate if candidate.get("hit") else None
     elif phase == "END" and candidate.get("hit"):
         endpoint = list(candidate["local_position"])
-        if not tool_session.points or (Vector(endpoint) - Vector(tool_session.points[-1])).length_squared > 1e-12:
+        if tool_session.points and (Vector(endpoint) - Vector(tool_session.points[-1])).length_squared > 1e-12:
             tool_session.points.append(endpoint)
             tool_session.closed = False
-            tool_session.preview()
+            try:
+                tool_session.preview()
+            except Exception:
+                tool_session.points.pop()
+                tool_session.restore_preview_base()
+                raise
+        elif not tool_session.points:
+            tool_session.points.append(endpoint)
         tool_session.knife_start = None
     return dict(tool_session.status(), hit=bool(candidate.get("hit")), candidate=candidate)
 
 
-def _knife_candidate(obj, u, v, snap_enabled):
+def _knife_candidate(obj, u, v, snap_enabled, snap_mode="AUTO"):
     """Punto visible de cara con snap deliberado solo a sus vértices/aristas."""
     found = find_view3d()
     if found is None:
@@ -459,13 +496,16 @@ def _knife_candidate(obj, u, v, snap_enabled):
     snap_type, snapped = "FACE", local
     touch = Vector((u, v))
     if snap_enabled and face is not None:
-        ranked = []
+        vertices, centers, edges = [], [], []
+        vertex_threshold, center_threshold = _knife_snap_thresholds(snap_mode)
+        # Solo la cara alcanzada por el raycast es elegible. Incluir vecinas por
+        # conectividad llega enseguida a caras traseras (p.ej. todo un cubo).
         for vert in face.verts:
             screen = camera.project(obj.matrix_world @ vert.co, rv3d)
             if screen is not None:
                 distance = (Vector(screen) - touch).length
-                if distance <= 0.025:
-                    ranked.append((distance, 0, "VERTEX", vert.co.copy(), screen, vert.index))
+                if distance <= vertex_threshold:
+                    vertices.append((distance, "VERTEX", vert.co.copy(), screen, vert.index))
         for edge in face.edges:
             pa = camera.project(obj.matrix_world @ edge.verts[0].co, rv3d)
             pb = camera.project(obj.matrix_world @ edge.verts[1].co, rv3d)
@@ -475,25 +515,24 @@ def _knife_candidate(obj, u, v, snap_enabled):
             span = b2 - a2
             center_screen = (a2 + b2) * 0.5
             center_distance = (center_screen - touch).length
-            if center_distance <= 0.02:
-                ranked.append((center_distance, 1, "EDGE_CENTER",
-                               (edge.verts[0].co + edge.verts[1].co) * 0.5,
-                               center_screen, edge.index))
+            if center_distance <= center_threshold:
+                centers.append((center_distance, "EDGE_CENTER",
+                                (edge.verts[0].co + edge.verts[1].co) * 0.5,
+                                center_screen, edge.index))
             t = max(0.0, min(1.0, (touch - a2).dot(span) / span.length_squared)) if span.length_squared > 1e-12 else 0.5
             screen = a2 + span * t
             distance = (screen - touch).length
-            if distance <= 0.015:
-                ranked.append((distance, 2, "EDGE", edge.verts[0].co.lerp(edge.verts[1].co, t), screen, edge.index))
+            if distance <= KNIFE_EDGE_THRESHOLD:
+                edges.append((distance, "EDGE", edge.verts[0].co.lerp(edge.verts[1].co, t), screen, edge.index))
+        # Prioridad categórica, no por distancia global: una arista tiene siempre
+        # distancia ~0 bajo el lápiz y antes robaba el snap a sus propios vértices y
+        # centro. Dentro de su radio, VERTEX > EDGE_CENTER > EDGE.
+        groups = {"VERTEX": vertices, "EDGE_CENTER": centers, "EDGE": edges}
+        if snap_mode not in {"AUTO", *groups}:
+            snap_mode = "AUTO"
+        ranked = (vertices or centers or edges) if snap_mode == "AUTO" else groups[snap_mode]
         if ranked:
-            # El punto más cercano de una arista coincide con su centro cuando el
-            # toque entra perpendicular, y entonces las dos distancias solo se
-            # separan por el ruido del flotante. En ese empate práctico debe ganar
-            # el snap más específico (vértice, luego centro), no el que se lleve el
-            # epsilon; si algo está de verdad más cerca, sigue ganando por distancia.
-            closest = min(item[0] for item in ranked)
-            _distance, _priority, snap_type, snapped, _screen, element = min(
-                (item for item in ranked if item[0] <= closest + 1e-3),
-                key=lambda item: (item[1], item[0]))
+            _distance, snap_type, snapped, _screen, element = min(ranked, key=lambda item: item[0])
         else:
             element = face.index if face is not None else -1
     else:
@@ -614,8 +653,34 @@ def knife_pop(payload):
         raise CommandError("knife_pop requires a KNIFE session", code="wrong_tool")
     if tool_session.points:
         tool_session.points.pop()
+    elif tool_session.knife_strokes:
+        tool_session.points = tool_session.knife_strokes.pop()
+        tool_session.closed = tool_session.knife_stroke_closed.pop()
+        tool_session.points.pop()
     tool_session.closed = False
     tool_session.preview()
+    return tool_session.status()
+
+
+@command("tool.knife_new_stroke", mutating=True)
+def knife_new_stroke(payload):
+    """Termina la línea actual y abre otra dentro de la misma sesión atómica."""
+    tool_session.require(payload.get("_client_id"))
+    if tool_session.tool != "KNIFE":
+        raise CommandError("knife_new_stroke requires a KNIFE session", code="wrong_tool")
+    if len(tool_session.points) < 2:
+        raise CommandError("Current Knife stroke needs two points", code="insufficient_points")
+    tool_session.knife_strokes.append(tool_session.points)
+    tool_session.knife_stroke_closed.append(tool_session.closed)
+    tool_session.points = []
+    tool_session.closed = False
+    tool_session.snap_candidate = None
+    try:
+        tool_session.preview()
+    except Exception:
+        tool_session.points = tool_session.knife_strokes.pop()
+        tool_session.closed = tool_session.knife_stroke_closed.pop()
+        raise
     return tool_session.status()
 
 
@@ -742,8 +807,29 @@ def nudge(payload):
 @command("tool.confirm", mutating=True)
 def confirm(payload):
     tool_session.require(payload.get("_client_id"))
-    if tool_session.tool == "KNIFE" and len(tool_session.points) < 2:
+    if (tool_session.tool == "KNIFE" and len(tool_session.points) < 2
+            and not tool_session.knife_strokes):
         raise CommandError("Knife needs at least two points", code="empty_selection")
+    if tool_session.tool == "KNIFE":
+        # Dos estados explícitos garantizan que un único Undo vuelva a la malla
+        # previa conservando Edit Mode, en vez de saltar hasta el paso «entrar Edit».
+        undo_push("Remote knife baseline")
+        tool_session.restore_preview_base()
+        bm = bmesh.from_edit_mesh(tool_session.obj.data)
+        strokes = list(zip(tool_session.knife_strokes, tool_session.knife_stroke_closed))
+        if len(tool_session.points) >= 2:
+            strokes.append((tool_session.points, tool_session.closed))
+        try:
+            results = [knife_commands.cut_polyline(bm, points, closed)
+                       for points, closed in strokes]
+            bmesh.update_edit_mesh(tool_session.obj.data, loop_triangles=True, destructive=True)
+            tool_session.result = {"strokes": results, "deferred": False}
+        except CommandError:
+            tool_session.restore_preview_base()
+            raise
+        except Exception as exc:  # noqa: BLE001
+            tool_session.restore_preview_base()
+            raise CommandError(f"Knife cut failed: {exc}", code="topology_incompatible") from exc
     if tool_session.tool == "BISECT" and tool_session.line is None:
         raise CommandError("Bisect needs a drawn line", code="empty_selection")
     result = tool_session.status()

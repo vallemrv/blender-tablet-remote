@@ -56,6 +56,8 @@ import com.blendertablet.remote.model.ModifierDefault
 import com.blendertablet.remote.model.ModifierParameterDescriptor
 import com.blendertablet.remote.model.ModifierState
 import com.blendertablet.remote.model.ObjectChoiceFilter
+import java.math.BigDecimal
+import java.math.RoundingMode
 import kotlin.math.roundToInt
 
 data class ModifierActions(
@@ -311,7 +313,7 @@ private fun ModifierParameter(
             for (axis in 0..2) {
                 StepperRow(
                     label = "${spec.name} ${"XYZ"[axis]}",
-                    value = format(vector[axis], isInt = false),
+                    value = formatModifierValue(vector[axis], isInt = false, spec.step),
                     onMinus = { set(item.name, spec.name, vector.stepped(axis, -step(spec), spec)) },
                     onPlus = { set(item.name, spec.name, vector.stepped(axis, step(spec), spec)) },
                 )
@@ -322,12 +324,11 @@ private fun ModifierParameter(
             val isInt = spec.type == "int"
             val current = (value as? Number)?.toDouble() ?: 0.0
             fun apply(delta: Double) {
-                val next = clamp(current + delta, spec)
-                set(item.name, spec.name, if (isInt) next.roundToInt() else next)
+                set(item.name, spec.name, stepModifierScalar(current, isInt, delta, spec))
             }
             StepperRow(
                 label = spec.name,
-                value = format(current, isInt),
+                value = formatModifierValue(current, isInt, spec.step),
                 minusEnabled = spec.min == null || current > spec.min,
                 plusEnabled = spec.max == null || current < spec.max,
                 onMinus = { apply(-step(spec)) },
@@ -402,6 +403,16 @@ private fun step(spec: ModifierParameterDescriptor): Double =
 private fun clamp(value: Double, spec: ModifierParameterDescriptor): Double =
     value.coerceIn(spec.min ?: -Double.MAX_VALUE, spec.max ?: Double.MAX_VALUE)
 
+internal fun stepModifierScalar(
+    current: Double,
+    isInt: Boolean,
+    delta: Double,
+    spec: ModifierParameterDescriptor,
+): Number {
+    val next = clamp(current + delta, spec)
+    return if (isInt) next.roundToInt() else next
+}
+
 private fun vectorOf(value: Any?): List<Double> = when (value) {
     is org.json.JSONArray -> List(3) { value.optDouble(it) }
     is List<*> -> List(3) { (value.getOrNull(it) as? Number)?.toDouble() ?: 0.0 }
@@ -411,11 +422,14 @@ private fun vectorOf(value: Any?): List<Double> = when (value) {
 private fun List<Double>.stepped(axis: Int, delta: Double, spec: ModifierParameterDescriptor): List<Double> =
     toMutableList().also { it[axis] = clamp(it[axis] + delta, spec) }
 
-private fun format(value: Double, isInt: Boolean): String =
-    if (isInt) value.roundToInt().toString() else {
-        val rounded = (value * 100).roundToInt() / 100.0
-        if (rounded == 0.0) "0" else rounded.toString()
-    }
+internal fun formatModifierValue(value: Double, isInt: Boolean, step: Double?): String {
+    if (isInt) return value.roundToInt().toString()
+    val decimals = BigDecimal.valueOf(step ?: 0.1).stripTrailingZeros().scale().coerceIn(0, 8)
+    return BigDecimal.valueOf(value)
+        .setScale(decimals, RoundingMode.HALF_UP)
+        .stripTrailingZeros()
+        .toPlainString()
+}
 
 private fun ModifierDefault.wireValue(): Any? = when (this) {
     is ModifierDefault.Integer -> value

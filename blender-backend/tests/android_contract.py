@@ -56,6 +56,7 @@ MENU_COMMANDS = [
     "tool.loop_pop",
     "tool.knife_point",
     "tool.knife_pop",
+    "tool.knife_new_stroke",
     "tool.knife_close",
     "view.shading",
     "view.local",
@@ -289,12 +290,18 @@ def main() -> int:
           knife.get("enabled") is True and knife.get("execution") == "SESSION"
           and knife.get("command") == "tool.begin"
           and knife.get("payload") == {"tool": "KNIFE"}
-          and [parameter.get("id") for parameter in knife.get("parameters", [])] == ["snap"],
+          and [parameter.get("id") for parameter in knife.get("parameters", [])] == ["snap", "snap_mode"],
           str(knife))
     knife_feature = ((actual_caps.get("features") or {}).get("edit_tools") or {}).get("knife") or {}
     check("feature de Knife publica arrastre, proyección y snap", _contains(knife_feature, {
-        "snap": True, "close": True, "pop": True, "cut_through": False, "threshold": 0.045,
-        "drag": True, "first_point_drag": True, "projection": True,
+        "snap": True, "close": True, "pop": True, "cut_through": False, "threshold": 0.080,
+        "edge_threshold": 0.042, "edge_center_threshold": 0.070,
+        "auto_vertex_threshold": 0.035, "auto_edge_center_threshold": 0.028,
+        "snap_priority": ["VERTEX", "EDGE_CENTER", "EDGE"],
+        "snap_modes": ["AUTO", "VERTEX", "EDGE_CENTER", "EDGE"],
+        "deferred_commit": True, "staged_preview": True,
+        "drag": True, "point_on_release": True, "multiple_strokes": True,
+        "new_stroke": True, "projection": True,
         "snap_types": ["VERTEX", "EDGE_CENTER", "EDGE", "FACE"]}), str(knife_feature))
 
     print("\n[0b] edit_toolbar: barra izquierda de tools activas")
@@ -330,7 +337,7 @@ def main() -> int:
     cut_family = families.get("CUT", {})
     cut_variants = {v["id"]: v for v in cut_family.get("variants", [])}
     check("Cut agrupa Knife y Bisect", set(cut_variants) == {"KNIFE", "BISECT"}, str(cut_variants))
-    check("Knife usa segmentos de arrastre", cut_variants.get("KNIFE", {}).get("input") == "VIEWPORT_DRAG_SEGMENTS",
+    check("Knife usa puntos y trazos independientes", cut_variants.get("KNIFE", {}).get("input") == "VIEWPORT_POINT_STROKES",
           str(cut_variants.get("KNIFE")))
     check("Bisect usa arrastre de línea de viewport",
           cut_variants.get("BISECT", {}).get("input") == "VIEWPORT_DRAG_LINE", str(cut_variants.get("BISECT")))

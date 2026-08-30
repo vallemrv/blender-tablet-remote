@@ -23,23 +23,130 @@ _EPS2 = _EPS * _EPS
 
 
 def cut_polyline(bm, anchors, closed: bool) -> dict:
-    """Corta la polilínea de anclas en ``bm``. ``anchors``: lista de ``[x, y, z]`` locales."""
+    """Corta la polilínea de anclas en ``bm``. ``anchors``: lista de ``[x, y, z]`` locales.
+
+    Los puntos que caen dentro de una cara no se integran de uno en uno: se acumulan
+    hasta que el trazo vuelve a tocar el contorno, y entonces la cara se parte en dos
+    n-gons siguiendo la cadena. Integrarlos por separado obligaba a triangular la cara
+    en abanico, que es de donde salían las diagonales que nadie había dibujado.
+    """
     if len(anchors) < 2:
         return {"segments": 0, "new_verts": 0, "new_edges": 0}
-    pairs = [(anchors[i], anchors[i + 1]) for i in range(len(anchors) - 1)]
+    points = list(anchors)
     if closed and len(anchors) >= 3:
-        pairs.append((anchors[-1], anchors[0]))
+        points.append(anchors[0])
+    segments = len(points) - 1
 
     resolved: dict[int, object] = {}
     new_verts = 0
     new_edges = 0
-    for a, b in pairs:
-        va = _resolve(bm, a, resolved)
-        vb = _resolve(bm, b, resolved)
-        nv, ne = _cut_segment(bm, va, vb)
-        new_verts += nv
-        new_edges += ne
-    return {"segments": len(pairs), "new_verts": new_verts, "new_edges": new_edges}
+    # Cadena abierta dentro de una cara: (cara, vértice de entrada, interiores).
+    pending_face = None
+    pending_entry = None
+    pending_inside: list = []
+    previous = None
+
+    for raw in points:
+        face = _interior_face(bm, raw)
+        if face is not None and previous is not None:
+            # Punto dentro de una cara: aún no se sabe por dónde saldrá el trazo.
+            if pending_face is None:
+                pending_face, pending_entry = face, previous
+            pending_inside.append(Vector(raw))
+            continue
+
+        current = _resolve(bm, raw, resolved)
+        if pending_inside:
+            nv, ne = _apply_chain(
+                bm, pending_face, pending_entry, pending_inside, current, resolved)
+            new_verts += nv
+            new_edges += ne
+            pending_face, pending_entry, pending_inside = None, None, []
+        elif previous is not None:
+            nv, ne = _cut_segment(bm, previous, current)
+            new_verts += nv
+            new_edges += ne
+        previous = current
+
+    # El trazo se quedó dentro de una cara: un corte que no llega al contorno no la
+    # divide, igual que en Blender. Esos puntos no dejan geometría suelta.
+    return {"segments": segments, "new_verts": new_verts, "new_edges": new_edges}
+
+
+def _apply_chain(bm, face, entry, inside, exit_vert, resolved):
+    """Parte la cara con la cadena; si no se puede, corta punto a punto como antes.
+
+    La partición en n-gons solo vale cuando entrada y salida están en el contorno de la
+    misma cara, que es el caso corriente: se entra por un borde, se marcan puntos dentro
+    y se sale por otro. Los trazos que encadenan interiores de caras distintas caen al
+    camino antiguo, que trianguliza pero corta.
+    """
+    try:
+        return _split_face_with_chain(bm, face, [entry] + inside + [exit_vert])
+    except CommandError:
+        new_verts = 0
+        new_edges = 0
+        previous = entry
+        for point in inside:
+            current = _resolve(bm, point, resolved)
+            nv, ne = _cut_segment(bm, previous, current)
+            new_verts += nv
+            new_edges += ne
+            previous = current
+        nv, ne = _cut_segment(bm, previous, exit_vert)
+        return new_verts + nv, new_edges + ne
+
+
+def _interior_face(bm, local):
+    """Cara cuyo interior contiene ``local`` sin tocar su contorno, o None."""
+    point = Vector(local)
+    face = _find_face(bm, point)
+    if face is None:
+        return None
+    for v in face.verts:
+        if (v.co - point).length_squared < _EPS2:
+            return None
+    for edge in face.edges:
+        _t, dist = _closest_on_segment(point, edge)
+        if dist < _EPS2:
+            return None
+    return face if _point_in_face(face, point) else None
+
+
+def _split_face_with_chain(bm, face, chain):
+    """Parte ``face`` en dos n-gons siguiendo ``chain``.
+
+    ``chain`` empieza y acaba en vértices del contorno de la cara; los de en medio son
+    puntos interiores todavía sin crear. Es lo que hace el Knife de Blender: la cara
+    atravesada queda en dos trozos y el trazo es su frontera común, sin triangular.
+    """
+    entry, exit_vert = chain[0], chain[-1]
+    loop = list(face.verts)
+    if entry not in loop or exit_vert not in loop or entry == exit_vert:
+        raise CommandError("Cut does not cross the face", code="disconnected_surface")
+    inside = [bm.verts.new(co) for co in chain[1:-1]]
+    start, end = loop.index(entry), loop.index(exit_vert)
+    forward = _loop_slice(loop, start, end)
+    backward = _loop_slice(loop, end, start)
+    try:
+        bm.faces.new(forward + list(reversed(inside)), face)
+        bm.faces.new(backward + inside, face)
+    except ValueError as exc:
+        for vert in inside:
+            bm.verts.remove(vert)
+        raise CommandError("Cannot split this face", code="topology_incompatible") from exc
+    bm.faces.remove(face)
+    return len(inside), len(inside) + 1
+
+
+def _loop_slice(loop, start, end):
+    """Vértices del contorno de ``start`` a ``end``, siguiendo el orden del bucle."""
+    out = [loop[start]]
+    index = start
+    while index != end:
+        index = (index + 1) % len(loop)
+        out.append(loop[index])
+    return out
 
 
 def _split_edge_vert(edge, t):
@@ -69,13 +176,16 @@ def _resolve(bm, local, resolved):
             v = _split_edge_vert(edge, t)
             resolved[key] = v
             return v
-    # Interior: "poke" del vértice en la cara (abanico de triángulos).
+    # Último recurso para un punto interior que no forma cadena dentro de una sola cara
+    # (trazos que encadenan interiores de caras distintas). Trianguliza en abanico, que
+    # es justo lo que `_split_face_with_chain` evita: ver la limitación en el plan 005.
     v = _poke(bm, face, point)
     resolved[key] = v
     return v
 
 
 def _poke(bm, face, point):
+    """Integra un punto interior partiendo la cara en un abanico de triángulos."""
     v = bm.verts.new(point)
     corners = [c for c in face.verts]
     bm.faces.remove(face)

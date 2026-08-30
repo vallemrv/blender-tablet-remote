@@ -33,6 +33,8 @@ class BackendContractTest {
         val session = StateParser.toolSession(fixture("tool.knife_drag.json"))
         assertEquals(EditTool.KNIFE, session.tool)
         assertEquals(listOf(0.35, 0.5), session.projectedPoints.first())
+        assertEquals(1, session.strokes.size)
+        assertEquals(listOf(0.2, 0.35), session.projectedStrokes.first().first())
         assertEquals(SnapType.EDGE, session.snapCandidate?.type)
         assertEquals("Cube:EDGE:4", session.snapCandidate?.id)
     }

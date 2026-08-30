@@ -51,6 +51,8 @@ fun InputSurface(
     onKnifeDrag: (GesturePhase, Float, Float) -> Unit = { _, _, _ -> },
     tweakActive: Boolean = false,
     onTweakDrag: (GesturePhase, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> },
+    /** Una sesión modal/tool captura el dedo y excluye por completo el menú radial. */
+    longPressEnabled: Boolean = true,
     /** Pulsación larga: abre el menú rápido en píxeles de esta vista. */
     onLongPress: (px: Float, py: Float, u: Float, v: Float) -> Unit = { _, _, _, _ -> },
     /** Herramienta de forma armada (B/C); NONE = gesto normal de un dedo. */
@@ -60,7 +62,7 @@ fun InputSurface(
     /** Forma terminada: esquinas (box) o centro+borde (circle) normalizados. */
     onShape: (ShapeTool, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> },
     /** Puntos del Knife en pantalla, para dibujarlos sobre el vídeo. */
-    knifePoints: List<Pair<Float, Float>> = emptyList(),
+    knifePoints: List<List<Pair<Float, Float>>> = emptyList(),
     snapCandidate: SnapCandidate? = null,
 ) {
     AndroidView(
@@ -74,6 +76,7 @@ fun InputSurface(
             view.onKnifeDrag = onKnifeDrag
             view.tweakActive = tweakActive
             view.onTweakDrag = onTweakDrag
+            view.longPressEnabled = longPressEnabled
             view.navigationOrbitEnabled = navigationOrbitEnabled
             view.onShape = onShape
             view.knifePoints = knifePoints
@@ -86,6 +89,13 @@ fun InputSurface(
 // 30 Hz acompasa la entrada al vídeo sin llenar la cola mientras Blender recalcula
 // una malla. Los píxeles recorridos se acumulan, así no se pierde precisión.
 private const val DISPATCH_MS = 33L
+// Knife solo sondea el candidato durante UPDATE; 15 Hz basta visualmente y evita
+// reconstrucciones/estado innecesarios mientras Blender también codifica el viewport.
+internal const val KNIFE_DISPATCH_MS = 66L
+
+/** Knife ignora el jitter de ACTION_UP y confirma la última muestra DOWN/MOVE. */
+internal fun stableKnifeRelease(lastStableX: Float, lastStableY: Float) =
+    lastStableX to lastStableY
 private const val PINCH_SLOP_PX = 24f
 private const val DOUBLE_TAP_MS = 320L
 private const val FINGER_LONG_PRESS_MS = 420L
@@ -145,6 +155,11 @@ private class GestureView(
      * servidor qué hay debajo.
      */
     var onLongPress: (px: Float, py: Float, u: Float, v: Float) -> Unit = { _, _, _, _ -> }
+    var longPressEnabled: Boolean = true
+        set(value) {
+            field = value
+            if (!value) removeCallbacks(longPressRunnable)
+        }
     private var longPressFired = false
     private val longPressRunnable = Runnable {
         fireLongPress(startX, startY)
@@ -160,7 +175,7 @@ private class GestureView(
     var navigationOrbitEnabled: Boolean = false
     var onShape: (ShapeTool, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> }
     /** Puntos del Knife (normalizados) para el overlay. */
-    var knifePoints: List<Pair<Float, Float>> = emptyList()
+    var knifePoints: List<List<Pair<Float, Float>>> = emptyList()
     var snapCandidate: SnapCandidate? = null
     private val candidatePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = android.graphics.Color.parseColor("#66E3A4")
@@ -259,7 +274,9 @@ private class GestureView(
                     invalidate()
                     return true
                 }
-                if (isStylus(downToolType) &&
+                if (!longPressEnabled) {
+                    removeCallbacks(longPressRunnable)
+                } else if (isStylus(downToolType) &&
                     event.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY != 0
                 ) {
                     fireLongPress(startX, startY)
@@ -300,7 +317,7 @@ private class GestureView(
                 if (event.pointerCount >= 2) handlePair(event)
                 else if (knifeDrawing) {
                     shapeCurrentX = event.x; shapeCurrentY = event.y
-                    if (event.eventTime - lastDispatchAt >= DISPATCH_MS) {
+                    if (event.eventTime - lastDispatchAt >= KNIFE_DISPATCH_MS) {
                         onKnifeDrag(GesturePhase.UPDATE, nx(event.x), ny(event.y))
                         lastDispatchAt = event.eventTime
                     }
@@ -328,8 +345,10 @@ private class GestureView(
                     return true
                 }
                 if (knifeDrawing) {
-                    shapeCurrentX = event.x; shapeCurrentY = event.y
-                    onKnifeDrag(GesturePhase.END, nx(event.x), ny(event.y))
+                    // Al perder presión, ACTION_UP suele saltar unos píxeles. Se fija
+                    // la última posición estable que el usuario estaba viendo.
+                    val (releaseX, releaseY) = stableKnifeRelease(shapeCurrentX, shapeCurrentY)
+                    onKnifeDrag(GesturePhase.END, nx(releaseX), ny(releaseY))
                     knifeDrawing = false
                     invalidate()
                     parent?.requestDisallowInterceptTouchEvent(false)
@@ -627,20 +646,19 @@ private class GestureView(
                 canvas.drawLine(shapeStartX, shapeStartY, shapeCurrentX, shapeCurrentY, shapePaint)
             }
         }
-        if (knifePoints.isNotEmpty()) {
+        if (knifePoints.any { it.isNotEmpty() }) {
             val radius = 7f * resources.displayMetrics.density
-            knifePoints.forEach { (u, v) ->
-                canvas.drawCircle(u * width, v * height, radius, knifePaint)
-            }
-            // Polilínea entre puntos consecutivos.
-            for (index in 1 until knifePoints.size) {
-                val (u0, v0) = knifePoints[index - 1]
-                val (u1, v1) = knifePoints[index]
-                canvas.drawLine(u0 * width, v0 * height, u1 * width, v1 * height, knifePaint)
+            knifePoints.forEach { stroke ->
+                stroke.forEach { (u, v) -> canvas.drawCircle(u * width, v * height, radius, knifePaint) }
+                for (index in 1 until stroke.size) {
+                    val (u0, v0) = stroke[index - 1]
+                    val (u1, v1) = stroke[index]
+                    canvas.drawLine(u0 * width, v0 * height, u1 * width, v1 * height, knifePaint)
+                }
             }
         }
         if (knifeDrawing) {
-            val start = knifePoints.lastOrNull()?.let { (u, v) -> u * width to v * height }
+            val start = knifePoints.lastOrNull()?.lastOrNull()?.let { (u, v) -> u * width to v * height }
                 ?: (shapeStartX to shapeStartY)
             canvas.drawLine(start.first, start.second, shapeCurrentX, shapeCurrentY, candidatePaint)
         }
@@ -696,7 +714,7 @@ private class GestureView(
 
     private fun fireLongPress(x: Float, y: Float) {
         removeCallbacks(longPressRunnable)
-        if (longPressFired || moved) return
+        if (!longPressEnabled || longPressFired || moved) return
         longPressFired = true
         performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
         onLongPress(x, y, nx(x), ny(y))

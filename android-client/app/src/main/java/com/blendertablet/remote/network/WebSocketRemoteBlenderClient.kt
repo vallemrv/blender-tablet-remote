@@ -107,7 +107,8 @@ class WebSocketRemoteBlenderClient(
         /** Comandos cuya respuesta ES el estado de la sesión de herramienta. */
         val TOOL_COMMANDS = setOf(
             "tool.begin", "tool.parameter", "tool.nudge", "tool.status",
-            "tool.loop_pick", "tool.loop_pop", "tool.knife_drag", "tool.knife_point", "tool.knife_pop", "tool.knife_close",
+            "tool.loop_pick", "tool.loop_pop", "tool.knife_drag", "tool.knife_point", "tool.knife_pop",
+            "tool.knife_new_stroke", "tool.knife_close",
             "tool.drag_line", "tool.snap_candidate",
         )
     }
@@ -622,6 +623,8 @@ class WebSocketRemoteBlenderClient(
     override fun requestToolStatus() = command("tool.status")
 
     override fun toolKnifePop() = command("tool.knife_pop")
+
+    override fun toolKnifeNewStroke() = command("tool.knife_new_stroke")
 
     override fun toolKnifeClose() = command("tool.knife_close")
 

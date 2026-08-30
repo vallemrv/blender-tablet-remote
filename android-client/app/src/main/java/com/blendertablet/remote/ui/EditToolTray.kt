@@ -346,8 +346,10 @@ private fun BridgeParams(session: ToolSession, unitScaleLength: Double, onParame
 fun KnifeTray(
     session: ToolSession,
     onKnifePop: () -> Unit,
+    onKnifeNewStroke: () -> Unit,
     onKnifeClose: () -> Unit,
     onKnifeSnap: (Boolean) -> Unit,
+    onKnifeSnapMode: (String) -> Unit,
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
@@ -356,7 +358,7 @@ fun KnifeTray(
     FloatingPanel(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "${session.tool.label.uppercase()} · ${session.points.size}",
+                "${session.tool.label.uppercase()} · ${session.strokes.size + 1} cortes · ${session.points.size} puntos",
                 color = Ink.Accent,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -367,10 +369,31 @@ fun KnifeTray(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                PillButton("Deshacer punto", enabled = session.points.isNotEmpty(), onClick = onKnifePop)
+                Text(
+                    knifeInstruction(session.points.size),
+                    color = Ink.Muted,
+                    fontSize = 11.sp,
+                )
+                PillButton(
+                    "Deshacer punto",
+                    enabled = session.points.isNotEmpty() || session.strokes.isNotEmpty(),
+                    onClick = onKnifePop,
+                )
+                PillButton("Nuevo corte", enabled = session.points.size >= 2, onClick = onKnifeNewStroke)
                 PillButton("Cerrar", selected = session.closed, onClick = onKnifeClose)
                 PillButton("Snap", selected = session.flag("snap", true)) {
                     onKnifeSnap(!session.flag("snap", true))
+                }
+                val snapModes = listOf("AUTO", "VERTEX", "EDGE_CENTER", "EDGE")
+                val snapMode = (session.parameters["snap_mode"] as? String ?: "AUTO").uppercase()
+                val snapLabel = when (snapMode) {
+                    "VERTEX" -> "Vértice"
+                    "EDGE_CENTER" -> "Medio"
+                    "EDGE" -> "Arista"
+                    else -> "Auto"
+                }
+                PillButton("Destino: $snapLabel", enabled = session.flag("snap", true)) {
+                    onKnifeSnapMode(snapModes[(snapModes.indexOf(snapMode).coerceAtLeast(0) + 1) % snapModes.size])
                 }
             }
             Spacer(Modifier.width(10.dp))
@@ -379,12 +402,17 @@ fun KnifeTray(
             // Confirmar solo actúa con un segmento válido (el backend lo exige).
             RoundAction(
                 Icons.Default.Check, "Confirmar",
-                if (session.points.size >= 2) Ink.Ok else Ink.Faint,
-                onClick = { if (session.points.size >= 2) onConfirm() },
+                if (session.points.size >= 2 || session.strokes.isNotEmpty()) Ink.Ok else Ink.Faint,
+                onClick = { if (session.points.size >= 2 || session.strokes.isNotEmpty()) onConfirm() },
             )
         }
     }
 }
+
+internal fun knifeInstruction(pointCount: Int): String =
+    if (pointCount == 0) "Pulsa, ajusta y suelta el primer punto"
+    else if (pointCount == 1) "Coloca el segundo punto para cortar"
+    else "Añade puntos o pulsa Nuevo corte"
 
 /**
  * Bandeja de Bisect (F4). Armada (sin arrastre todavía) solo enseña el aviso de

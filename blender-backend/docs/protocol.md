@@ -492,17 +492,38 @@ La feature `edit_tools.loop_cut` anuncia `pick`, `probe`, `falloff`, `even`, `fl
 `clamp`; un cliente debe usar el flujo de colocación por toque solo si `pick` está
 anunciado.
 
-Knife se dibuja por segmentos con `tool.knife_drag` (`phase` `BEGIN|UPDATE|END|CANCEL`,
-`u`,`v`). BEGIN inicia un sondeo provisional y UPDATE mueve el candidato sin mutar la
-malla. Si aún no había anclas, END fija **un único primer punto en la posición final**:
-el apoyo inicial nunca se conserva, de modo que ese primer punto también puede
-arrastrarse hasta el snap deseado. Desde el segundo gesto, END añade el extremo mostrado
-y reconstruye la preview desde el backup. La cara visible es un destino exacto y el snap
+Knife coloca puntos con `tool.knife_drag` (`phase` `BEGIN|UPDATE|END|CANCEL`, `u`,`v`).
+BEGIN y UPDATE solo mueven el candidato sin mutar la malla; END fija exactamente un
+punto. Dos puntos forman el primer segmento y los siguientes continúan el trazo.
+`tool.knife_new_stroke` termina el trazo actual y abre otro independiente dentro de la
+misma sesión y del mismo undo, lo que permite conexiones convergentes como 4→2. El
+estado publica `strokes`/`projected_strokes` para los trazos terminados y conserva
+`points`/`projected_points` para el activo. Si una reconstrucción falla, la operación revierte tanto las
+anclas tentativas como cualquier mutación parcial del BMesh antes de responder el error.
+La cara visible es un destino exacto y el snap
 puede resolver `VERTEX`, `EDGE_CENTER` o `EDGE` (punto más cercano de la arista) dentro
-de sus umbrales. `tool.status` publica `projected_points` y `snap_candidate`
+de umbrales táctiles deliberadamente pegajosos (0,080/0,070/0,042 del viewport,
+respectivamente). La prioridad es categórica `VERTEX > EDGE_CENTER > EDGE`: una arista
+no puede robar el snap a su vértice o centro por quedar matemáticamente a distancia cero.
+En `AUTO`, las zonas prioritarias de vértice y centro se reducen a 0,035 y 0,028 para
+dejar accesible el cuerpo de la arista. Los radios grandes 0,080/0,070 se conservan al
+forzar `VERTEX` o `EDGE_CENTER`, donde la intención ya no es ambigua.
+La búsqueda se limita a la cara visible alcanzada por el raycast. El cliente confirma la
+última muestra estable anterior a ACTION_UP,
+evitando el salto que aparece al levantar el lápiz. `tool.status` publica
+`projected_points` y `snap_candidate`
 reproyectados con la cámara actual. La feature `edit_tools.knife` anuncia
-`first_point_drag`; `tool.knife_point` permanece como compatibilidad para clientes v2
+`point_on_release`, `multiple_strokes` y `new_stroke`; `tool.knife_point` permanece como compatibilidad para clientes v2
 anteriores.
+
+La sesión avanzada mantiene el trazo activo solo como overlay. «Nuevo corte» lo fija en
+una preview reversible, de modo que el siguiente trazo puede snapear contra los vértices
+que acaba de crear; Confirmar reconstruye todos los trazos desde el backup y los agrupa
+en un solo undo. Si cualquiera falla se revierte el backup completo. `snap_mode` permite elegir
+`AUTO`, `VERTEX`, `EDGE_CENTER` o `EDGE`; solo se consideran elementos pertenecientes a
+la cara visible alcanzada por el raycast, nunca vecinos ocultos por conectividad.
+Antes de aplicar Knife se crea un estado base explícito de undo en Edit Mode; así un
+único Deshacer elimina el conjunto sin expulsar al usuario a Object Mode.
 
 `BISECT` corta con un plano infinito cuya traza en pantalla es la línea que arrastra
 el dedo (`tool.drag_line`, `start`/`end`: `[u, v]` normalizados). El plano contiene la

@@ -651,6 +651,24 @@ def modal_scenario(client: WSClient) -> None:
           (bm.verts[clipped_index].co - original_clipped).length < 1e-6,
           str(bm.verts[clipped_index].co))
 
+    # El umbral fusiona la geometría evaluada, pero no debe capturar como costura un
+    # vértice original que todavía esté a un lado del plano.
+    near_seam = original_clipped.copy()
+    near_seam.x = mirror.merge_threshold * 0.5
+    bm.verts[clipped_index].co = near_seam
+    bmesh.update_edit_mesh(cube.data)
+    ok_reply("begin vértice contiguo a Mirror", client.command("transform.begin", {
+        "mode": "MOVE", "axes": ["X"],
+    }))
+    ok_reply("mover vértice contiguo sin capturarlo", client.command("transform.value", {
+        "values": [0.25, 0.0, 0.0],
+    }))
+    bm = bmesh.from_edit_mesh(cube.data)
+    check("Clipping no pega un vecino dentro del merge threshold",
+          abs(bm.verts[clipped_index].co.x - (near_seam.x + 0.25)) < 1e-6,
+          str(bm.verts[clipped_index].co.x))
+    ok_reply("cancelar vértice contiguo", client.command("transform.cancel"))
+
     bm.verts[clipped_index].co.x = 0.0
     bmesh.update_edit_mesh(cube.data)
     ok_reply("begin costura pegada", client.command("transform.begin", {"mode": "MOVE", "axes": ["X"]}))
@@ -1213,6 +1231,7 @@ def bridge_edge_loops_scenario(client: WSClient) -> None:
 def knife_scenario(client: WSClient) -> None:
     print("\n[21] Knife: motor geométrico y sesión")
     from blender_tablet_remote.commands import knife as knife_commands
+    from blender_tablet_remote.commands import tools as tool_commands
 
     # Geometría: rejilla 3x3 construida con subdivide_edges y cortada en línea recta.
     bm = bmesh.new()
@@ -1227,6 +1246,32 @@ def knife_scenario(client: WSClient) -> None:
     closed = knife_commands.cut_polyline(
         bm, [[-4.0, -4.0, 0.0], [4.0, -4.0, 0.0], [4.0, 4.0, 0.0], [-4.0, 4.0, 0.0]], True)
     check("knife cierra la polilínea", closed["segments"] == 4, str(closed))
+    auto_snap = tool_commands._knife_snap_thresholds("AUTO")
+    forced_snap = tool_commands._knife_snap_thresholds("VERTEX")
+    check("Knife AUTO deja accesible la arista",
+          auto_snap[0] < forced_snap[0] and auto_snap[1] < forced_snap[1],
+          f"auto={auto_snap} forced={forced_snap}")
+    bm.free()
+
+    # El corte de las capturas del usuario: esquina -> punto interior -> borde opuesto.
+    # Una cara atravesada se parte en DOS, y el punto interior queda en la frontera del
+    # corte. Si el motor triangula la cara en abanico (el viejo `_poke`), aquí salen
+    # cuatro triángulos y diagonales que nadie dibujó.
+    bm = bmesh.new()
+    quad = [bm.verts.new(co) for co in ((-1, -1, 0), (1, -1, 0), (1, 1, 0), (-1, 1, 0))]
+    bm.faces.new(quad)
+    knife_commands.cut_polyline(
+        bm, [[-1.0, 1.0, 0.0], [0.0, 0.0, 0.0], [1.0, 0.0, 0.0]], False)
+    caras = sorted(len(f.verts) for f in bm.faces)
+    check("un trazo por el interior parte la cara en dos", len(bm.faces) == 2, str(caras))
+    check("el corte no triangula la cara en abanico",
+          all(n >= 4 for n in caras), f"caras por número de vértices: {caras}")
+    interior = [v for v in bm.verts
+                if abs(v.co.x) < 1e-6 and abs(v.co.y) < 1e-6]
+    check("el punto interior existe una sola vez", len(interior) == 1, str([tuple(v.co) for v in interior]))
+    check("el punto interior solo une el trazo, no las esquinas",
+          bool(interior) and len(interior[0].link_edges) == 2,
+          str(len(interior[0].link_edges) if interior else "sin vértice"))
     bm.free()
 
     # Sesión: begin sin puntos, confirm falla, cancel restaura.
@@ -1235,6 +1280,28 @@ def knife_scenario(client: WSClient) -> None:
     ok_reply("entrar Edit knife", client.command("mode.edit"))
     begun = ok_reply("begin KNIFE", client.command("tool.begin", {"tool": "KNIFE"}))
     check("sesión KNIFE activa", begun.get("active") and begun.get("tool") == "KNIFE", str(begun))
+    obj = bpy.context.view_layer.objects.active
+    bm = bmesh.from_edit_mesh(obj.data)
+    topology_before = (len(bm.verts), len(bm.edges), len(bm.faces))
+    from blender_tablet_remote.errors import CommandError as KnifeCommandError
+    original_cut_polyline = knife_commands.cut_polyline
+
+    def partial_then_fail(bm, _points, _closed):
+        bm.verts.new((0.25, 0.25, 1.0))
+        raise KnifeCommandError("Anchor not on mesh surface", code="disconnected_surface")
+
+    knife_commands.cut_polyline = partial_then_fail
+    tool_commands.tool_session.points = [[-0.5, 0.0, 1.0], [0.5, 0.0, 1.0]]
+    try:
+        atomic_reply = client.command("tool.confirm")
+    finally:
+        knife_commands.cut_polyline = original_cut_polyline
+    bm = bmesh.from_edit_mesh(obj.data)
+    topology_after = (len(bm.verts), len(bm.edges), len(bm.faces))
+    check("confirm Knife inválido falla de forma controlada", atomic_reply.get("ok") is False, str(atomic_reply))
+    check("confirm Knife inválido restaura BMesh completo", topology_after == topology_before,
+          f"{topology_before} -> {topology_after}")
+    tool_commands.tool_session.points = []
     fail_reply("confirm sin puntos", client.command("tool.confirm"), "empty_selection")
     pop = ok_reply("pop vacío no rompe", client.command("tool.knife_pop"))
     check("pop sin puntos ok", pop.get("active"), str(pop))

@@ -290,9 +290,13 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             tweakActive = state.activeTool == ActiveTool.TWEAK &&
                 state.blender.mode == BlenderMode.EDIT &&
                 state.blender.selectionMode != SelectionMode.FACE,
+            longPressEnabled = viewportLongPressEnabled(session.active, toolSession.active),
             snapCandidate = toolSession.snapCandidate ?: session.snapCandidate,
-            navigationOrbitEnabled = (session.active || toolSession.active) &&
-                quickMenuAt == null && !modifiersOpen,
+            navigationOrbitEnabled = navigationOrbitVisible(
+                session.active,
+                toolSession.active,
+                state.activeTool,
+            ) && quickMenuAt == null && !modifiersOpen,
             onShape = vm::shapeSelect,
             onLongPress = { x, y, u, v ->
                 // El menú se abre ya, en el sitio donde está el dedo, y en paralelo
@@ -419,8 +423,10 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 KnifeTray(
                     session = toolSession,
                     onKnifePop = vm::knifePop,
+                    onKnifeNewStroke = vm::knifeNewStroke,
                     onKnifeClose = vm::knifeClose,
                     onKnifeSnap = vm::knifeSnap,
+                    onKnifeSnapMode = vm::knifeSnapMode,
                     onConfirm = vm::confirmTool,
                     onCancel = vm::cancelTool,
                     modifier = Modifier
@@ -650,7 +656,8 @@ private fun ViewportLayer(
     shapeTool: ShapeTool,
     knifeActive: Boolean,
     tweakActive: Boolean,
-    knifePoints: List<Pair<Float, Float>>,
+    longPressEnabled: Boolean,
+    knifePoints: List<List<Pair<Float, Float>>>,
     snapCandidate: com.blendertablet.remote.model.SnapCandidate?,
     navigationOrbitEnabled: Boolean,
     onShape: (ShapeTool, Float, Float, Float, Float) -> Unit,
@@ -680,6 +687,7 @@ private fun ViewportLayer(
                     onKnifeDrag = input.onKnifeDrag,
                     tweakActive = tweakActive,
                     onTweakDrag = input.onTweakDrag,
+                    longPressEnabled = longPressEnabled,
                     onLongPress = onLongPress,
                     shapeTool = shapeTool,
                     navigationOrbitEnabled = navigationOrbitEnabled,
@@ -704,6 +712,7 @@ private fun ViewportLayer(
                 onKnifeDrag = input.onKnifeDrag,
                 tweakActive = tweakActive,
                 onTweakDrag = input.onTweakDrag,
+                longPressEnabled = longPressEnabled,
                 onLongPress = onLongPress,
                 shapeTool = shapeTool,
                 knifePoints = knifePoints,
@@ -742,6 +751,7 @@ private fun ViewportLayer(
                 onKnifeDrag = input.onKnifeDrag,
                 tweakActive = tweakActive,
                 onTweakDrag = input.onTweakDrag,
+                longPressEnabled = longPressEnabled,
                 onLongPress = onLongPress,
                 shapeTool = shapeTool,
                 knifePoints = knifePoints,
@@ -751,6 +761,17 @@ private fun ViewportLayer(
         }
     }
 }
+
+/** Las sesiones propietarias del viewport tienen prioridad total sobre el long-click. */
+internal fun viewportLongPressEnabled(transformActive: Boolean, toolActive: Boolean): Boolean =
+    !transformActive && !toolActive
+
+/** Tweak navega con dos dedos y no debe perder viewport por un control redundante. */
+internal fun navigationOrbitVisible(
+    transformActive: Boolean,
+    toolActive: Boolean,
+    activeTool: ActiveTool,
+): Boolean = (transformActive || toolActive) && activeTool != ActiveTool.TWEAK
 
 @Composable
 private fun EmptyViewport() {

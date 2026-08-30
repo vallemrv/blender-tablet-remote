@@ -600,10 +600,32 @@ def scenario(client: WSClient) -> None:
           f"{tweak_miss} {tweak_orbit}")
     cmd(client, "view.set", view_before_tweak_miss)
 
-    # ``through_hit`` deja el vértice trasero como activo. Elegimos uno de sus
-    # vecinos reales para probar un camino completo sin depender de cuál de las dos
-    # esquinas casi solapadas considera frontal esta vista.
-    destination = back.link_edges[0].other_vert(back)
+    # El camino parte del vértice ACTIVO, y entre medias el escenario ha tocado la
+    # selección: se vuelve a fijar `back` como activo para no medir desde otro sitio.
+    p_back_again = tablet_camera.project(matrix @ back.co, rv3d)
+    cmd(client, "selection.pick", {
+        "u": p_back_again[0], "v": p_back_again[1], "threshold": wide, "mode": "SET",
+    })
+
+    # Se busca por anchura un vértice a distancia topológica exacta 2, en vez de fiarse
+    # de que un vecino cualquiera caiga lejos: con un vecino directo el camino mide 1 y
+    # no prueba nada, y antes colaba de casualidad porque la topología que dejaba el
+    # Knife viejo (abanico de triángulos) lo alejaba.
+    distancias = {back: 0}
+    cola = [back]
+    destination = None
+    while cola and destination is None:
+        actual = cola.pop(0)
+        for edge in actual.link_edges:
+            vecino = edge.other_vert(actual)
+            if vecino in distancias:
+                continue
+            distancias[vecino] = distancias[actual] + 1
+            if distancias[vecino] == 2:
+                destination = vecino
+                break
+            cola.append(vecino)
+    check("hay un vértice a dos saltos", destination is not None, str(len(distancias)))
     p_destination = tablet_camera.project(matrix @ destination.co, rv3d)
     check("destino vecino del camino está proyectado", p_destination is not None, str(p_destination))
     path_hit = cmd(client, "selection.shortest_path", {
@@ -823,18 +845,15 @@ def scenario(client: WSClient) -> None:
     check("hover publica candidato de cara", (hover.get("candidate") or {}).get("snap_type") in {"FACE", "EDGE", "VERTEX"}, str(hover))
     one = cmd(client, "mesh.info")
     check("mover sin soltar no corta", one["verts"] == before["verts"], f"{before} -> {one}")
-    first_end = cmd(client, "tool.knife_drag", {"phase": "END", "u": 0.5, "v": 0.65})
-    check("soltar fija un único primer punto final", first_end.get("hit") is True
+    first_end = cmd(client, "tool.knife_drag", {"phase": "END", "u": knife_probe[0], "v": knife_probe[1]})
+    check("primer gesto fija solo un punto", first_end.get("hit") is True
           and len(first_end.get("projected_points", [])) == 1, str(first_end))
-    one = cmd(client, "mesh.info")
-    check("un primer punto todavía no corta", one["verts"] == before["verts"], f"{before} -> {one}")
     cmd(client, "tool.knife_drag", {"phase": "BEGIN", "u": 0.5, "v": 0.65})
-    cmd(client, "tool.knife_drag", {"phase": "UPDATE", "u": 0.5, "v": 0.5})
-    second = cmd(client, "tool.knife_drag", {"phase": "END", "u": 0.5, "v": 0.35})
-    check("segundo gesto confirma el primer tramo", second.get("hit") is True, str(second))
-    check("estado proyecta dos anclas", len(second.get("projected_points", [])) == 2, str(second))
+    second_end = cmd(client, "tool.knife_drag", {"phase": "END", "u": 0.5, "v": 0.65})
+    check("segundo punto crea el primer segmento", second_end.get("hit") is True
+          and len(second_end.get("projected_points", [])) == 2, str(second_end))
     cut = cmd(client, "mesh.info")
-    check("dos puntos cortan la cara", cut["verts"] > before["verts"], f"{before} -> {cut}")
+    check("dos puntos solo cambian overlay antes de confirmar", cut["verts"] == before["verts"], f"{before} -> {cut}")
     miss = cmd(client, "tool.knife_drag", {"phase": "UPDATE", "u": 0.01, "v": 0.01})
     check("punto en el vacío no altera", miss.get("hit") is False, str(miss))
     cmd(client, "tool.knife_pop")

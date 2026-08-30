@@ -65,8 +65,10 @@ data class ToolSession(
     val parameters: Map<String, Any?> = emptyMap(),
     /** Knife: puntos confirmados por el servidor, en coordenadas locales. */
     val points: List<List<Double>> = emptyList(),
+    val strokes: List<List<List<Double>>> = emptyList(),
     /** Proyección vigente de las anclas 3D; cambia al navegar sin alterar el corte. */
     val projectedPoints: List<List<Double>> = emptyList(),
+    val projectedStrokes: List<List<List<Double>>> = emptyList(),
     /** Knife: la polilínea está cerrada. */
     val closed: Boolean = false,
     /** Bisect: última línea de arrastre resuelta por el servidor. */
@@ -139,7 +141,7 @@ data class EditToolbarFamily(
     /** Comando fijo (normalmente `tool.begin`) y su payload base (p. ej. `tool`). */
     val command: String?,
     val payload: Map<String, Any?> = emptyMap(),
-    /** `PARAMETRIC`, `VIEWPORT_TAP`, `VIEWPORT_DRAG_SEGMENTS` o `VIEWPORT_DRAG_LINE`. */
+    /** `PARAMETRIC`, `VIEWPORT_TAP`, `VIEWPORT_POINT_STROKES` o `VIEWPORT_DRAG_LINE`. */
     val input: String = "PARAMETRIC",
     val requirements: Map<String, Any?> = emptyMap(),
     val variants: List<EditToolbarVariant> = emptyList(),
