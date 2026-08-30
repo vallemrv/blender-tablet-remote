@@ -132,6 +132,11 @@ REL es ahora un ancla fuente de la selección: se sondea en verde, queda roja al
 fijarse y se reproyecta acompañando el movimiento. Con snap geométrico, el backend
 excluye los objetos móviles del destino y alinea exactamente ancla→destino, lo que
 permite colocar vértice contra vértice entre objetos sin usar el pivote.
+En esta bandeja el snap de posicionamiento deliberadamente solo expone destinos
+exactos: VERTEX, EDGE_CENTER y FACE_CENTER (además de NONE e INCREMENT). Tanto el
+sondeo del ancla fuente como el del destino comparten radios pegajosos de 0,080,
+0,070 y 0,065 respectivamente; no se ofrece arista o cara arbitraria porque produciría
+un punto impreciso y haría temblar la intención táctil.
 
 El snap que condujo a esa solución es reutilizable: primero se restringen candidatos a
 la cara visible del raycast para excluir geometría posterior; después se clasifican en

@@ -29,13 +29,13 @@ GEOMETRIC_TYPES = {"VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER"}
 
 
 def query_reference_candidate(payload: dict) -> dict:
-    """Referencia táctil automática: detalle primero y cara visible como fallback."""
-    thresholds = (("VERTEX", 0.065), ("EDGE_CENTER", 0.055), ("EDGE", 0.060))
+    """Referencia táctil automática: destinos exactos por prioridad."""
+    thresholds = (("VERTEX", 0.080), ("EDGE_CENTER", 0.070), ("FACE_CENTER", 0.065))
     for snap_type, threshold in thresholds:
         candidate = query_candidate(dict(payload, snap_type=snap_type, threshold=threshold))
         if candidate.get("hit"):
             return candidate
-    return query_candidate(dict(payload, snap_type="FACE"))
+    return {"hit": False, "snap_type": "NONE"}
 
 
 def query_candidate(payload: dict) -> dict:
@@ -54,9 +54,15 @@ def query_candidate(payload: dict) -> dict:
     rv3d = found[3]
     camera.sync_from_region(rv3d)
     u, v = get_float(payload, "u", 0.5), get_float(payload, "v", 0.5)
-    # El movimiento se usa a mano alzada con stylus. 0,06 sigue limitado a la cara
-    # visible pero evita que un pequeño temblor libere el vértice o la arista.
-    threshold = get_float(payload, "threshold", 0.06)
+    # Radios táctiles por categoría. Vértice es deliberadamente más pegajoso: con
+    # stylus el jitter alrededor de una esquina era suficiente para soltarlo.
+    default_threshold = {
+        "VERTEX": 0.080,
+        "EDGE_CENTER": 0.070,
+        "FACE_CENTER": 0.065,
+        "EDGE": 0.042,
+    }.get(snap_type, 0.060)
+    threshold = get_float(payload, "threshold", default_threshold)
     if not 0.0 < threshold <= 0.25:
         raise BadPayload("'threshold' must be in (0, 0.25]")
     origin, direction = camera.ray(u, v, rv3d)

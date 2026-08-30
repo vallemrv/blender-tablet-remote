@@ -17,6 +17,7 @@ exacto, construida sobre controles que puedan reutilizar Rotar y Escalar.
 - En Move, `%` mide una fracción de la distancia pivote→referencia REL y queda
   deshabilitado hasta que exista esa referencia.
 - Retirar Rejilla y Cursor del selector de snap de Move.
+- Ofrecer únicamente los destinos exactos Vértice, Punto medio y Centro de cara.
 - Añadir botón REL: armado, seguimiento bajo el lápiz, bloqueo al levantar y limpiar.
 - Reutilizar los marcadores existentes para vértice, arista y cara.
 - Dibujar el ancla REL verde mientras se sondea, roja al fijarla y reproyectada durante

@@ -182,9 +182,7 @@
         "NONE",
         "INCREMENT",
         "VERTEX",
-        "EDGE",
         "EDGE_CENTER",
-        "FACE",
         "FACE_CENTER"
       ],
       "reference": {
@@ -193,9 +191,13 @@
         "types": [
           "VERTEX",
           "EDGE_CENTER",
-          "EDGE",
-          "FACE"
+          "FACE_CENTER"
         ],
+        "thresholds": {
+          "VERTEX": 0.08,
+          "EDGE_CENTER": 0.07,
+          "FACE_CENTER": 0.065
+        },
         "attached": true,
         "source_target_snap": true,
         "exclude_moving_objects": true

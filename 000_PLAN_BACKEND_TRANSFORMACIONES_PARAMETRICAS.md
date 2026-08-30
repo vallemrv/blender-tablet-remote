@@ -15,6 +15,8 @@ geométrica independiente del pivote.
   sondeo los objetos móviles para permitir vértice contra vértice entre objetos.
 - Permitir que el incremento se ancle a la referencia, sin acumulación numérica.
 - Hacer más tolerante el sondeo geométrico usado durante el movimiento con lápiz.
+- Limitar el snap exacto de Move a Vértice/Punto medio/Centro de cara, con radios
+  táctiles respectivos 0,080/0,070/0,065 en fuente y destino.
 - Publicar candidato, referencia y origen de valores en `transform.session`.
 - Actualizar capabilities, protocolo, fixtures y pruebas.
 

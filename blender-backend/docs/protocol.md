@@ -410,6 +410,10 @@ transformación todavía viva.
 | `snap.query` | `u`, `v`, `snap_type`: `VERTEX`\|`EDGE`\|`EDGE_CENTER`\|`FACE`\|`FACE_CENTER`\|`CURSOR`, `threshold` |
 | `transform.snap_candidate` | igual que `snap.query`, `lock` (predeterminado true) |
 | `transform.reference_candidate` | `u`, `v`, `lock`; o `clear`. Fija un ancla REL a la selección; el ancla viaja con ella y el snap geométrico alinea ancla→destino excluyendo los objetos móviles |
+
+El snap exacto de Move ofrece `VERTEX`, `EDGE_CENTER` y `FACE_CENTER`. Sus radios
+táctiles predeterminados son respectivamente `0.080`, `0.070` y `0.065`, idénticos
+para elegir el ancla fuente y para seguir el destino.
 | `transform.nudge` | `dx`, `dy` — normalmente llega por el canal de gestos |
 | `transform.value` | `values`: [x,y,z], o `angle` en GRADOS si el modo es ROTATE |
 | `transform.confirm` | — cierra con un único paso de undo |

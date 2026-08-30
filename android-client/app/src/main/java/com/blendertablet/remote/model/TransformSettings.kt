@@ -76,7 +76,7 @@ enum class SnapType(val label: String, val geometric: Boolean = false) {
     companion object {
         fun forMode(mode: TransformMode): List<SnapType> =
             if (mode == TransformMode.MOVE)
-                listOf(NONE, INCREMENT, VERTEX, EDGE, EDGE_CENTER, FACE, FACE_CENTER)
+                listOf(NONE, INCREMENT, VERTEX, EDGE_CENTER, FACE_CENTER)
             else listOf(NONE, INCREMENT)
     }
 }
