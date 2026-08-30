@@ -111,9 +111,16 @@ modos de snap, el commit diferido, el Knife multitrazo, sus parámetros de catá
 toolbar y `tool.knife_new_stroke`. El fixture de `hello.stream` ya no fija `running` ni
 `port`, porque son estado y configuración de ejecución, no contrato estable. El test
 añade comprobaciones explícitas de versión y Knife para impedir otro verde falso. El
-contrato, headless y Android quedaron verdes; la suite GUI conserva únicamente el fallo
-previo y ajeno de POST_PIXEL «el fotograma cambia al orbitar». El usuario autorizó
-ejecutar y cerrar este saneamiento el 2026-08-30; la siguiente serie vuelve a `000`.
+contrato, headless y Android quedaron verdes. El usuario autorizó ejecutar y cerrar
+este saneamiento el 2026-08-30; la siguiente serie vuelve a `000`.
+
+La serie posterior `000` retiró por autorización del usuario toda la ruta descartada
+que leía el framebuffer del viewport del PC para intentar transmitir su interfaz
+nativa. Se eliminaron implementación, draw handlers, preferencias, métricas, fallback,
+pruebas y documentación. GPUOffScreen es la única fuente de vídeo y usa exclusivamente
+la cámara independiente de la tablet; H.264 preferido y MJPEG fallback permanecen como
+transportes. Backend, GUI, contrato y Android quedaron verdes contra el ZIP reinstalado.
+La próxima serie vuelve a `000`.
 
 El snap que condujo a esa solución es reutilizable: primero se restringen candidatos a
 la cara visible del raycast para excluir geometría posterior; después se clasifican en
@@ -185,8 +192,8 @@ La tablet Android es una interfaz táctil para Blender, no un escritorio remoto.
 Blender sigue siendo el motor 3D en el PC; Android muestra el viewport remoto, envía
 intención y ofrece controles adaptados a dedo y stylus.
 
-Alcance actual: Object Mode y Edit Mode. Sculpt, materiales, nodos, animación y un
-puente X11 de gizmos nativos no forman parte del ciclo activo.
+Alcance actual: Object Mode y Edit Mode. Sculpt, materiales, nodos y animación no
+forman parte del ciclo activo.
 
 ## Estructura real
 
@@ -217,8 +224,8 @@ README.md                           entrada para humanos
 - La tablet tiene una cámara orbital propia (`camera.py`). Nunca escribir en `rv3d`;
   solo se lee la región para proyección/contexto. Sus matrices se cachean una vez por
   frame (`camera.begin_frame`), no se recalculan en cada `project`/`ray`.
-- La captura OFFSCREEN es la ruta estable. POST_PIXEL existe y está probado, pero es
-  experimental y dependiente del compositor.
+- GPUOffScreen es la única fuente de captura. Usa la cámara independiente de la tablet
+  y no transmite el framebuffer ni la interfaz nativa del PC.
 - El hilo principal captura píxeles; ffmpeg (libx264 o mjpeg según la ruta) comprime
   fuera de Blender. Cada encoder arranca solo si su ruta tiene demanda.
 - Android tiene una sola capa de entrada: `ui/InputSurface.kt`. El vídeo H.264 se
@@ -294,7 +301,7 @@ README.md                           entrada para humanos
   y `selection.circle` operan en ambos modos: centros proyectados (object) o elementos
   del submodo (edit). El estado viaja como `shading` (top-level) y las capabilities
   anuncian `view.shading`, `view.local_view`, `selection.grow` y `selection.shapes`.
-- Streaming MJPEG OFFSCREEN y POST_PIXEL con fallback, métricas y configuración.
+- Streaming H.264 preferido y MJPEG fallback desde una única captura GPUOffScreen.
 - Captura forzada tras comandos discretos (`bridge.IMMEDIATE_FRAME_COMMANDS` +
   `capture.request_frame()`): selección, `object.select` y `transform.begin/confirm/
   cancel` no esperan al siguiente hueco de fps para reflejarse en el vídeo. Los gestos
@@ -469,7 +476,7 @@ README.md                           entrada para humanos
   ocupa su zona; la señal es la función pura `bottomTrayVisible`.
 - `SelectionOp`/`ShapeTool` en `AppUiState`; el parser lee `shading` (top-level) y las
   capabilities `view.shading`/`local_view`/`selection.grow`/`shapes`. `updateState`
-  conserva vista/shading/gizmo en los snapshots sin vista (pick/box/circle/more/less),
+  conserva vista/shading en los snapshots sin vista (pick/box/circle/more/less),
   que no traen ni `view` ni `shading`.
 
 ## Propiedad única de acciones
@@ -690,8 +697,7 @@ cambio que se tocó, que fue el error inicial de esta sesión.
   `undo_push` de `transform.confirm`) o un redibujo de la propia ventana de Blender, y
   ahí está el peligro: la frescura del vídeo acaba dependiendo de si el PC está
   redibujando, no del add-on. `ViewportCapture._grab_offscreen` lo sincroniza con
-  `bpy.context.evaluated_depsgraph_get()`; no quitar esa llamada. En POST_PIXEL no hace
-  falta: ahí dibuja Blender.
+  `bpy.context.evaluated_depsgraph_get()`; no quitar esa llamada.
   OJO con atribuirle a esto el retardo de 4 s: se le atribuyó el 2026-08-25 y era falso.
   Medido después, la captura cuesta 6-37 ms con o sin la llamada, y el retardo real venía
   de la pantalla apagada (entrada anterior). La sincronización sigue siendo correcta y se
@@ -700,12 +706,6 @@ cambio que se tocó, que fue el error inicial de esta sesión.
   la llamada desactivada y siguió en verde, porque con la ventana de Blender visible es
   Blender quien evalúa por su cuenta y enmascara el fallo. No hay prueba automática que
   lo distinga; solo se reproduce en el escenario real, con el PC sin redibujar.
-- La suite GUI no está al 100 %: `el fotograma cambia al orbitar` (bloque `[9]`,
-  POST_PIXEL) falla devolviendo dos fotogramas idénticos byte a byte. Reproducido en
-  tres ejecuciones seguidas, con y sin cambios en la captura, así que no es una
-  regresión del ciclo del depsgraph. Encaja con que POST_PIXEL publique el framebuffer
-  de la ventana del PC, que no se mueve cuando la cámara que orbita es la de la tablet.
-  Sin diagnosticar a fondo.
 - El sentido de giro de `camera.orbit` NO se puede medir sobre un punto proyectado
   desde una vista de eje: depende de la vista y ya causó inversiones erróneas. Se mide
   con el vector FORWARD de la cámara o la rotación RELATIVA. El yaw es sobre el eje
@@ -720,8 +720,6 @@ cambio que se tocó, que fue el error inicial de esta sesión.
   inicial conservaba la orientación al invertir la cámara, pero las pruebas en tablet
   real demostraron que el sentido era siempre el contrario; por eso se corrigió a
   `-dx` sin cambiar el eje local.
-- `view.gizmo` y su modelo Android no tienen consumidor visual actual, pero siguen en
-  protocolo y tests: son compatibilidad deliberada, no código muerto.
 - El snap del Knife no puede desempatarse solo por distancia: cuando el toque entra
   perpendicular a una arista, su punto más cercano **es** el centro y las dos distancias
   solo se separan por ruido de coma flotante, así que `EDGE` ganaba siempre y
@@ -768,8 +766,8 @@ backend (`mode_set`), por lo que el cambio de modo vino de la ventana del usuari
 reprodujeron ni doce rondas de cambio de modo desde tablet con Knife y stream activos,
 ni un Tab externo desde timer seguido de arrastres: las sesiones inválidas respondieron
 con error limpio y no tocaron un BMesh muerto. Si reaparece, conservar el crash dump y
-comparar OFFSCREEN con POST_PIXEL; no cambiar el default sin una reproducción, porque
-esa mitigación todavía sería especulativa.
+diagnosticar sobre GPUOffScreen sin sustituir la fuente de captura por el viewport del
+PC.
 
 El ciclo backend de la órbita invertida cerró: `camera.orbit` ahora hace el yaw sobre el
 eje vertical LOCAL de la cámara (no el Z global), de modo que el arrastre horizontal

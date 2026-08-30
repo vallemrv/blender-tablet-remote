@@ -6,7 +6,6 @@ import com.blendertablet.remote.model.BlenderMode
 import com.blendertablet.remote.model.BlenderState
 import com.blendertablet.remote.model.Constraint
 import com.blendertablet.remote.model.EditTool
-import com.blendertablet.remote.model.Gizmo
 import com.blendertablet.remote.model.Orientation
 import com.blendertablet.remote.model.Projection
 import com.blendertablet.remote.model.SceneContext
@@ -20,7 +19,6 @@ import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.TransformSession
 import com.blendertablet.remote.model.ValueMode
 import com.blendertablet.remote.model.ViewState
-import com.blendertablet.remote.model.ViewportPoint
 import org.json.JSONArray
 import org.json.JSONObject
 import com.blendertablet.remote.model.*
@@ -50,7 +48,6 @@ object StateParser {
             activeObject = json.optString("active_object").takeIf { it.isNotBlank() && it != "null" },
             selectedObjects = List(selected.length()) { selected.optString(it) },
             selectionMode = enum(json.optString("selection_mode"), SelectionMode.VERTEX),
-            gizmo = gizmo(json.optJSONObject("gizmo")),
             transform = json.optJSONObject("active")?.let(::transform),
             context = context(json),
             view = view(json.optJSONObject("view"), json.optString("shading")),
@@ -426,24 +423,6 @@ object StateParser {
         rotationEuler = floats(json.optJSONArray("rotation_euler"), 0f),
         scale = floats(json.optJSONArray("scale"), 1f),
     )
-
-    fun gizmo(json: JSONObject?): Gizmo {
-        if (json == null || !json.optBoolean("visible")) return Gizmo()
-        val axes = json.optJSONObject("axes") ?: JSONObject()
-        return Gizmo(
-            visible = json.optBoolean("visible"),
-            objectName = json.optString("object").takeIf { it.isNotBlank() && it != "null" },
-            origin = point(json.optJSONArray("origin")),
-            axes = Axis.entries.mapNotNull { axis ->
-                point(axes.optJSONArray(axis.name))?.let { axis to it }
-            }.toMap(),
-        )
-    }
-
-    private fun point(array: JSONArray?): ViewportPoint? {
-        if (array == null || array.length() < 2) return null
-        return ViewportPoint(array.optDouble(0, 0.0).toFloat(), array.optDouble(1, 0.0).toFloat())
-    }
 
     /** Tres componentes siempre: un vector a medias descuadraría el panel numérico. */
     private fun floats(array: JSONArray?, fallback: Float = 0f): List<Float> =

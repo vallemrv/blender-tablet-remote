@@ -161,7 +161,7 @@ def axis(payload: dict) -> dict:
 
 @command("view.perspective")
 def perspective(payload: dict) -> dict:
-    """Cambia realmente la proyección usada por captura, picking y gizmos."""
+    """Cambia realmente la proyección usada por captura y picking."""
     _region_view()
     mode = str(payload.get("mode", "TOGGLE")).upper()
     if mode == "TOGGLE":
@@ -260,9 +260,9 @@ def overlays_state() -> bool:
 def overlays(payload: dict) -> dict:
     """Enciende o apaga los overlays del viewport capturado.
 
-    `draw_view3d` sí pinta el motor de overlays (la rejilla del suelo, los ejes, el
-    cage de Edit Mode); lo que no pinta son los gizmos de la región, ver `view.gizmo`.
-    Así que apagar `space.overlay.show_overlays` deja el vídeo limpio, solo la
+    `draw_view3d` sí pinta el motor de overlays (la rejilla del suelo, los ejes y el
+    cage de Edit Mode), pero no la interfaz nativa de la región. Así que apagar
+    `space.overlay.show_overlays` deja el vídeo limpio, solo la
     escena. Es lo que pide el ojo de la tablet al ocultar la interfaz: sin controles
     encima y sin rejilla debajo.
 
@@ -359,53 +359,3 @@ def set_view(payload: dict) -> dict:
         perspective=str(projection).upper() if projection is not None else None,
     )
     return camera.as_dict()
-
-
-# Longitud de los ejes del manipulador, en fracción de la distancia de la vista. Así
-# el gizmo conserva más o menos el mismo tamaño en pantalla al acercarse o alejarse.
-GIZMO_AXIS_SCALE = 0.22
-
-
-@command("view.gizmo")
-def gizmo(payload: dict) -> dict:
-    """Dónde pintar el manipulador de la tablet, en coordenadas de pantalla.
-
-    Los gizmos nativos de Blender no aparecen en la captura: `draw_view3d` dibuja la
-    escena, no los overlays de la región (comprobado). Y aunque aparecieran serían
-    demasiado finos para un dedo. Así que el servidor solo proyecta los puntos y es
-    Android quien los dibuja al tamaño adecuado y decide qué eje se ha tocado (§18).
-
-    u/v normalizados 0..1 con origen arriba-izquierda, la misma convención que
-    `selection.pick`. Un eje puede venir a null si cae detrás de la cámara.
-    """
-    return gizmo_state()
-
-
-def gizmo_state() -> dict:
-    from ..bpy_utils import find_view3d
-
-    found = find_view3d()
-    if found is None:
-        return {"visible": False, "reason": "no_viewport"}
-    rv3d = found[3]
-    camera.sync_from_region(rv3d)
-
-    obj = bpy.context.view_layer.objects.active
-    if obj is None or not obj.select_get():
-        # Sin selección no hay nada que manipular: la tablet oculta el gizmo.
-        return {"visible": False, "reason": "no_selection"}
-
-    origin = obj.matrix_world.translation
-    length = max(1e-4, camera.distance * GIZMO_AXIS_SCALE)
-
-    axes = {}
-    for name, direction in (("X", Vector((1, 0, 0))), ("Y", Vector((0, 1, 0))), ("Z", Vector((0, 0, 1)))):
-        axes[name] = camera.project(origin + direction * length, rv3d)
-
-    return {
-        "visible": True,
-        "object": obj.name,
-        "origin": camera.project(origin, rv3d),
-        "axes": axes,
-        "mode": obj.mode,
-    }

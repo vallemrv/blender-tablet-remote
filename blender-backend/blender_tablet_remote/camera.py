@@ -40,7 +40,7 @@ class RemoteCamera:
         self.axis_view = None
         # Caché de matrices del frame en curso: (rv3d, window_matrix, perspectiva,
         # inversa). `project`/`ray` se llaman decenas de veces por frame (picking,
-        # box/circle, gizmo, captura) y reconstruir la cadena completa cada vez
+        # box/circle y captura) y reconstruir la cadena completa cada vez
         # dominaba el allocator del hilo principal. Se invalida con cualquier cambio
         # de cámara y si la ventana del PC cambia su window_matrix (redimensionado).
         self._frame_cache = None

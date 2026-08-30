@@ -17,7 +17,7 @@ def main() -> None:
     prefs = old.preferences if old else None
     keys = (
         "host", "port", "token", "verbose", "stream_enabled", "stream_port",
-        "stream_fps", "stream_max_width", "stream_quality", "stream_capture_mode",
+        "stream_fps", "stream_max_width", "stream_quality",
     )
     preserved = {key: getattr(prefs, key) for key in keys if prefs and hasattr(prefs, key)}
 

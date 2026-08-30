@@ -26,7 +26,7 @@ DEFAULT_STREAM_PORT = 8766
 TOKEN_ENV_VAR = "BLENDER_REMOTE_TOKEN"
 
 import bpy  # noqa: E402
-from bpy.props import BoolProperty, EnumProperty, IntProperty, StringProperty  # noqa: E402
+from bpy.props import BoolProperty, IntProperty, StringProperty  # noqa: E402
 
 from . import bridge, log  # noqa: E402
 
@@ -45,7 +45,6 @@ def _stream_config(prefs) -> dict:
         "fps": prefs.stream_fps,
         "max_width": prefs.stream_max_width,
         "quality": prefs.stream_quality,
-        "capture_mode": prefs.stream_capture_mode,
     }
 
 
@@ -118,16 +117,6 @@ class BTRPreferences(bpy.types.AddonPreferences):
         min=20,
         max=95,
     )
-    stream_capture_mode: EnumProperty(
-        name="Fuente de captura",
-        description="POST_PIXEL intenta incluir overlays y gizmos; Offscreen es el modo compatible",
-        items=(
-            ("POST_PIXEL", "Viewport real (experimental)", "Lee el framebuffer compuesto de la región"),
-            ("OFFSCREEN", "Offscreen compatible", "Captura estable sin gizmos de interfaz"),
-        ),
-        default="OFFSCREEN",
-    )
-
     def draw(self, context):
         layout = self.layout
         col = layout.column()
@@ -150,7 +139,6 @@ class BTRPreferences(bpy.types.AddonPreferences):
         sub.prop(self, "stream_fps")
         sub.prop(self, "stream_max_width")
         sub.prop(self, "stream_quality")
-        sub.prop(self, "stream_capture_mode")
         if self.stream_port == self.port:
             box.label(text="El puerto de vídeo debe ser distinto al de control", icon="ERROR")
 

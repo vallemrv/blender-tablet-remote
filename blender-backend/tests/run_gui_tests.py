@@ -177,23 +177,10 @@ def scenario(client: WSClient) -> None:
     check("y sigue sin haber nada seleccionado", not state.get("selected_objects"),
           str(state.get("selected_objects")))
 
-    print("\n[6] Manipulador (gizmo)", flush=True)
+    print("\n[6] Snap y transformaciones", flush=True)
     # El paso anterior acabó deseleccionando: volvemos a tocar el objeto.
     cmd(client, "selection.pick", {"u": 0.5, "v": 0.5})
     time.sleep(0.3)
-    gz = cmd(client, "view.gizmo")
-    check("con objeto seleccionado hay gizmo", gz.get("visible") is True, str(gz))
-    check("el gizmo es del objeto correcto", gz.get("object") == cube, str(gz.get("object")))
-    origin = gz.get("origin") or []
-    check("el origen cae dentro de la pantalla",
-          len(origin) == 2 and all(0.0 <= c <= 1.0 for c in origin), str(origin))
-    axes = gz.get("axes") or {}
-    check("vienen los tres ejes", sorted(axes) == ["X", "Y", "Z"], str(sorted(axes)))
-    check("los ejes no se solapan con el origen",
-          all(axes.get(k) and moved(axes[k], origin, tol=1e-3) for k in ("X", "Y", "Z")), str(axes))
-    check("los tres ejes apuntan a sitios distintos",
-          len({tuple(axes[k]) for k in ("X", "Y", "Z") if axes.get(k)}) == 3, str(axes))
-
     candidate = cmd(client, "snap.query", {"u": 0.5, "v": 0.5, "snap_type": "FACE"})
     check("snap encuentra la cara visible", bool(candidate.get("hit") and candidate.get("id")), str(candidate))
     from mathutils import Vector as SnapVector
@@ -276,8 +263,6 @@ def scenario(client: WSClient) -> None:
 
     cmd(client, "object.select_all", {"value": False})
     time.sleep(0.2)
-    gz = cmd(client, "view.gizmo")
-    check("sin seleccion no hay gizmo", gz.get("visible") is False, str(gz))
 
     # Lo dejamos otra vez seleccionado y centrado para los pasos siguientes.
     cmd(client, "object.select", {"name": cube})
@@ -328,42 +313,8 @@ def scenario(client: WSClient) -> None:
     state = cmd(client, "scene.get_state")
     check("vuelve a Object Mode", state.get("mode") == "OBJECT", str(state.get("mode")))
 
-    print("\n[9] El video refleja lo que pasa", flush=True)
-    # Fuerza el gizmo Move nativo: el startup puede recordar Select u otra herramienta.
-    for window in bpy.context.window_manager.windows:
-        area = next((candidate for candidate in window.screen.areas if candidate.type == "VIEW_3D"), None)
-        if area is None:
-            continue
-        region = next((candidate for candidate in area.regions if candidate.type == "WINDOW"), None)
-        if region is None:
-            continue
-        space = area.spaces.active
-        space.show_gizmo = True
-        space.show_gizmo_tool = True
-        space.show_gizmo_context = True
-        space.show_gizmo_object_translate = True
-        area.tag_redraw()
-        break
-
+    print("\n[9] El offscreen dibuja la escena al día", flush=True)
     url = f"http://127.0.0.1:{STREAM_PORT}/frame.jpg"
-    try:
-        first = urllib.request.urlopen(url, timeout=5).read()
-        Path("/tmp/blender_remote_post_pixel_test.jpg").write_bytes(first)
-        stream = bridge.stream_info()
-        check("la fuente activa es POST_PIXEL",
-              stream.get("capture_active") == "post_pixel", str(stream.get("capture_active")))
-        check("el draw handler entregó callbacks",
-              (stream.get("post_pixel") or {}).get("callbacks", 0) > 0, str(stream.get("post_pixel")))
-        drag(client, "orbit", dx=0.4)
-        time.sleep(0.5)
-        second = urllib.request.urlopen(url, timeout=5).read()
-        check("llegan fotogramas", len(first) > 1000, f"{len(first)} bytes")
-        check("el fotograma cambia al orbitar", first != second,
-              f"{len(first)} vs {len(second)} bytes")
-    except OSError as exc:
-        check("el servidor de video responde", False, str(exc))
-
-    print("\n[10] El offscreen dibuja la escena al día", flush=True)
     # El vídeo offscreen debe seguir una transformación viva, sin confirmar: es lo que
     # se mira mientras se arrastra, y `transform.confirm` no sirve para comprobarlo
     # porque su `undo_push` es un `bpy.ops` que arrastra evaluación y redibujo propios.
@@ -379,11 +330,8 @@ def scenario(client: WSClient) -> None:
     # y los tres checks siguen en verde, porque con la ventana de Blender visible es el
     # propio redibujo de Blender el que evalúa el depsgraph a tiempo. Cubre el contrato
     # visible ("el vídeo sigue la transformación"), no la causa interna.
-    bridge._capture.configure(enabled=True, fps=20, max_width=960, quality=70, mode="OFFSCREEN")
+    bridge._capture.configure(enabled=True, fps=20, max_width=960, quality=70)
     time.sleep(0.6)
-    check("la fuente activa es offscreen",
-          bridge.stream_info().get("capture_active") == "offscreen",
-          str(bridge.stream_info().get("capture_active")))
 
     def frame_size() -> int:
         return len(urllib.request.urlopen(url, timeout=5).read())
@@ -397,6 +345,8 @@ def scenario(client: WSClient) -> None:
 
     try:
         cmd(client, "object.select", {"name": cube})
+        cmd(client, "view.axis", {"axis": "FRONT"})
+        cmd(client, "view.frame_selected")
         time.sleep(0.4)
         visible = frame_size()
         gone = send_far()
@@ -923,7 +873,6 @@ def start() -> None:
             "fps": 20,
             "max_width": 960,
             "quality": 70,
-            "capture_mode": "POST_PIXEL",
         },
     )
     threading.Thread(target=run, name="gui-tests", daemon=True).start()

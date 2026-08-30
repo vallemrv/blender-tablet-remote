@@ -2543,7 +2543,6 @@
     "view.frame_all",
     "view.frame_selected",
     "view.get",
-    "view.gizmo",
     "view.local",
     "view.orbit",
     "view.overlays",

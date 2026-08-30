@@ -934,7 +934,6 @@ class WebSocketRemoteBlenderClient(
             features = old.features,
             modifierOptions = old.modifierOptions,
             view = if (json.has("view") || json.has("shading")) parsed.view else old.view,
-            gizmo = if (json.has("gizmo")) parsed.gizmo else old.gizmo,
             unitScaleLength = old.unitScaleLength,
         )
     }

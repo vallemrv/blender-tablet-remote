@@ -76,12 +76,6 @@ def snapshot(include_view: bool = True) -> dict:
         from .commands.view import overlays_state
 
         state["overlays"] = overlays_state()
-        # Va con el estado para que la tablet pueda pintar el manipulador en cuanto
-        # cambia la selección, sin una segunda petición.
-        from .commands.view import gizmo_state
-
-        state["gizmo"] = gizmo_state()
-
     return state
 
 

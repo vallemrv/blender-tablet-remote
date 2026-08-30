@@ -16,9 +16,9 @@ El ZIP se genera en `dist/`. Instálalo con **Edit > Preferences > Add-ons > Ins
 from Disk**. En sus preferencias se configuran host, puerto, token, captura y
 **Arrancar con Blender**. El panel operativo está en `View 3D > Sidebar (N) > Remote`.
 
-El servidor usa WebSocket 8765 para control y HTTP MJPEG 8766 para vídeo. La captura
-OFFSCREEN mantiene una cámara remota independiente; POST_PIXEL captura el viewport
-real y continúa siendo experimental. La codificación JPEG se delega a `ffmpeg`.
+El servidor usa WebSocket 8765 para control y HTTP 8766 para vídeo. La captura
+GPUOffScreen mantiene una cámara remota independiente y no transmite la pantalla ni la
+interfaz nativa del PC. La codificación se delega a `ffmpeg`.
 
 ## Reglas técnicas esenciales
 

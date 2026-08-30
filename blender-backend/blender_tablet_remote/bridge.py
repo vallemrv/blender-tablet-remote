@@ -120,7 +120,6 @@ def _start_stream(host: str, cfg: dict) -> None:
         fps=cfg.get("fps", 24),
         max_width=cfg.get("max_width", 1280),
         quality=cfg.get("quality", 70),
-        mode=cfg.get("capture_mode", "OFFSCREEN"),
     )
     if not _capture.enabled:
         return
@@ -211,7 +210,6 @@ def configure_stream(
         fps=_capture.fps if fps is None else fps,
         max_width=_capture.max_width if max_width is None else max_width,
         quality=_capture.quality if quality is None else quality,
-        mode=_capture.mode,
     )
     return stream_info()
 

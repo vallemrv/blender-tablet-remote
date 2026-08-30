@@ -6,12 +6,8 @@ un offscreen y leer los píxeles, unos 12 ms— y los bytes crudos se entregan a
 codificador, que trabaja aparte. El motivo está documentado en encoder.py: comprimir
 dentro de Blender lo dejaba a 1 Hz.
 
-Hay dos fuentes seleccionables:
-
-``POST_PIXEL`` lee el framebuffer de una región VIEW_3D real desde un draw handler.
-Es la única ruta Python que puede contener la composición de overlays y gizmos.
-``OFFSCREEN`` conserva la captura independiente original y es también el fallback si
-la ventana no dibuja o el callback deja de entregar frames.
+La única fuente es ``GPUOffScreen``: dibuja con la cámara independiente de la tablet.
+No captura el framebuffer de la ventana del PC ni su interfaz nativa.
 """
 
 from __future__ import annotations
@@ -29,8 +25,6 @@ from .frames import FrameBuffer
 # Tras varios fallos seguidos dejamos de intentarlo: si no hay GPU o no hay VIEW_3D,
 # reintentar 30 veces por segundo solo llena la consola de trazas idénticas.
 MAX_CONSECUTIVE_ERRORS = 10
-POST_PIXEL_TIMEOUT = 1.5
-CAPTURE_MODES = {"OFFSCREEN", "POST_PIXEL"}
 
 
 def _find_view3d_space():
@@ -61,19 +55,8 @@ class ViewportCapture:
         self.fps = 24.0
         self.max_width = 1280
         self.quality = 70
-        self.mode = "OFFSCREEN"
-
         self._offscreen = None
         self._offscreen_size = (0, 0)
-
-        self._draw_handler = None
-        self._target_region_ptr = 0
-        self._post_pixel_pending = False
-        self._post_pixel_requested_at = 0.0
-        self._last_post_pixel_at = 0.0
-        self._fallback_active = False
-        self._post_pixel_requests = 0
-        self._post_pixel_callbacks = 0
 
         self._last_capture = 0.0
         self._errors = 0
@@ -95,18 +78,11 @@ class ViewportCapture:
         fps: float,
         max_width: int,
         quality: int,
-        mode: str | None = None,
     ) -> None:
         self.enabled = bool(enabled)
         self.fps = max(1.0, min(float(fps), 60.0))
         self.max_width = max(320, min(int(max_width), 2560))
         self.quality = max(20, min(int(quality), 95))
-        if mode is not None:
-            normalized = str(mode).upper()
-            self.mode = normalized if normalized in CAPTURE_MODES else "OFFSCREEN"
-        if not self.enabled or self.mode != "POST_PIXEL":
-            self._remove_draw_handler()
-        self._fallback_active = False
         self._errors = 0
 
     def stats(self) -> dict:
@@ -116,22 +92,11 @@ class ViewportCapture:
             "fps_actual": round(self._measured_fps, 1),
             "max_width": self.max_width,
             "quality": self.quality,
-            "capture_mode": self.mode.lower(),
-            "capture_active": ("offscreen_fallback" if self._fallback_active else self.mode.lower()),
             "frames": self._frames_done,
             "last_bytes": len(self.frames.latest()[0]),
             "last_cost_ms": round(self._last_cost_ms, 1),
             "resolution": list(self._offscreen_size),
             "errors": self._errors,
-            "post_pixel": {
-                "requests": self._post_pixel_requests,
-                "callbacks": self._post_pixel_callbacks,
-                "last_callback_age_ms": (
-                    round((time.monotonic() - self._last_post_pixel_at) * 1000.0, 1)
-                    if self._last_post_pixel_at else None
-                ),
-                "fallback": self._fallback_active,
-            },
             "encoder": self.encoder.stats,
         }
 
@@ -162,10 +127,6 @@ class ViewportCapture:
             return
         self._force_capture = False
         self._last_capture = now
-
-        if self.mode == "POST_PIXEL" and not self._fallback_active and not bpy.app.background:
-            self._request_post_pixel(now)
-            return
 
         try:
             captured = self._grab_offscreen()
@@ -244,105 +205,6 @@ class ViewportCapture:
         self.encoder.submit(bytes(buffer))
         return True
 
-    # ----------------------------------------------------------- POST_PIXEL
-
-    def _ensure_draw_handler(self) -> None:
-        if self._draw_handler is None:
-            self._draw_handler = bpy.types.SpaceView3D.draw_handler_add(
-                self._draw_post_pixel, (), "WINDOW", "POST_PIXEL"
-            )
-            log.info("viewport POST_PIXEL capture registered")
-
-    def _remove_draw_handler(self) -> None:
-        handler, self._draw_handler = self._draw_handler, None
-        self._target_region_ptr = 0
-        self._post_pixel_pending = False
-        if handler is not None:
-            try:
-                bpy.types.SpaceView3D.draw_handler_remove(handler, "WINDOW")
-            except (ReferenceError, RuntimeError, ValueError):
-                pass
-
-    def _request_post_pixel(self, now: float) -> None:
-        found = _find_view3d_space()
-        if found is None:
-            self._enable_fallback("no drawable VIEW_3D")
-            return
-        area, region, _space, _rv3d = found
-        self._ensure_draw_handler()
-        self._target_region_ptr = region.as_pointer()
-
-        if self._post_pixel_pending:
-            if now - self._post_pixel_requested_at >= POST_PIXEL_TIMEOUT:
-                self._enable_fallback("draw callback timed out")
-            return
-
-        self._post_pixel_pending = True
-        self._post_pixel_requested_at = now
-        self._post_pixel_requests += 1
-        # El timer solicita el frame; la lectura GPU ocurre exclusivamente cuando
-        # Blender dibuja la región y ejecuta el callback.
-        region.tag_redraw()
-        area.tag_redraw()
-
-    def _draw_post_pixel(self) -> None:
-        """Copia el framebuffer mientras el contexto de la región sigue activo."""
-        if not self.enabled or self.mode != "POST_PIXEL" or self._fallback_active:
-            return
-        region = bpy.context.region
-        area = bpy.context.area
-        if (
-            not self._post_pixel_pending
-            or region is None
-            or area is None
-            or area.type != "VIEW_3D"
-            or region.type != "WINDOW"
-            or region.as_pointer() != self._target_region_ptr
-        ):
-            return
-
-        started = time.monotonic()
-        # Consumimos la petición antes de tocar GPU: si algo falla, el timer puede
-        # pedir otro frame en vez de quedar bloqueado para siempre.
-        self._post_pixel_pending = False
-        self._post_pixel_callbacks += 1
-        self._last_post_pixel_at = started
-        try:
-            framebuffer = gpu.state.active_framebuffer_get()
-            viewport = gpu.state.viewport_get()
-            x, y, width, height = (int(v) for v in viewport)
-            width &= ~1
-            height &= ~1
-            if width < 2 or height < 2:
-                raise RuntimeError(f"invalid active viewport {viewport}")
-
-            if not self.encoder.ensure(width, height, self.fps, self.quality, self.wanted_formats()):
-                raise RuntimeError("ffmpeg encoder unavailable")
-
-            pixels = framebuffer.read_color(x, y, width, height, 4, 0, "UBYTE")
-            # Copiar dentro del callback: ni el framebuffer ni gpu.types.Buffer son
-            # válidos como fuente asíncrona después de devolver el control a Blender.
-            self.encoder.submit(bytes(pixels))
-        except Exception as exc:  # noqa: BLE001 - un draw handler nunca debe romper la UI
-            self._errors += 1
-            log.error("POST_PIXEL capture failed (%d/%d): %s", self._errors, MAX_CONSECUTIVE_ERRORS, exc)
-            if self._errors >= MAX_CONSECUTIVE_ERRORS:
-                self._enable_fallback("repeated framebuffer errors")
-            return
-
-        self._errors = 0
-        self._offscreen_size = (width, height)  # nombre histórico: es la resolución publicada
-        self._frames_done += 1
-        self._last_cost_ms = (time.monotonic() - started) * 1000.0
-        self._tally_fps(started)
-
-    def _enable_fallback(self, reason: str) -> None:
-        if self._fallback_active:
-            return
-        self._fallback_active = True
-        self._remove_draw_handler()
-        log.warn("POST_PIXEL unavailable (%s); using GPUOffScreen fallback", reason)
-
     def _ensure_offscreen(self, width: int, height: int):
         if self._offscreen is not None and self._offscreen_size == (width, height):
             return self._offscreen
@@ -358,7 +220,6 @@ class ViewportCapture:
     def shutdown(self) -> None:
         """Libera recursos GPU. Debe llamarse desde el hilo principal."""
         self.enabled = False
-        self._remove_draw_handler()
         self.encoder.stop()
         if self._offscreen is not None:
             try:

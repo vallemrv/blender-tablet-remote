@@ -380,8 +380,7 @@ Requiere viewport (`no_viewport` en background).
 
 `view.overlays` enciende o apaga los overlays de ese mismo espacio
 (`space.overlay.show_overlays`): la rejilla del suelo, los ejes y el cage de Edit Mode,
-que `draw_view3d` **sí** dibuja (lo que no dibuja son los gizmos de la región, ver
-`view.gizmo`). Sin `show` alterna. Devuelve `{"overlays": bool}` y el estado viaja
+que `draw_view3d` dibuja. Sin `show` alterna. Devuelve `{"overlays": bool}` y el estado viaja
 también en `scene.get_state` como `overlays` (top-level). Requiere viewport
 (`no_viewport` en background). Lo usa el botón del ojo de la tablet: ocultar los
 controles deja el vídeo limpio, sin interfaz encima y sin rejilla debajo.
@@ -736,9 +735,9 @@ PERSP/ORTHO real y captura OFFSCREEN predeterminada.
 
 El snap geométrico usa primero el raycast visible, devuelve un identificador estable
 durante la escena y conserva el candidato bloqueado hasta confirmar o cancelar. Box,
-Circle, Loop y Ring forman parte del contrato estable. OFFSCREEN conserva la cámara
+Circle, Loop y Ring forman parte del contrato estable. GPUOffScreen conserva la cámara
 independiente y se ha validado con Blender cubierto, en otro escritorio y minimizado
-en X11/KDE. POST_PIXEL sigue siendo experimental y puede depender del compositor.
+en X11/KDE. No se captura el framebuffer de la ventana ni la interfaz nativa del PC.
 
 Todos menos `confirm`/`cancel` devuelven el estado de la sesión:
 
@@ -934,29 +933,7 @@ independiente del ping del propio WebSocket; útil para medir latencia).
 
 ---
 
-## 10. Manipulador (gizmo)
-
-`view.gizmo` devuelve dónde pintar el manipulador del objeto activo:
-
-```json
-{
-  "visible": true,
-  "object": "Cube",
-  "origin": [0.51, 0.48],
-  "axes": { "X": [0.63, 0.5], "Y": [0.44, 0.42], "Z": [0.51, 0.33] },
-  "mode": "OBJECT"
-}
-```
-
-u/v normalizados 0..1 con origen arriba-izquierda, igual que `selection.pick`. Un eje
-llega a `null` si cae detrás de la cámara. `visible: false` cuando no hay selección.
-
-Viene también dentro de `scene.get_state` (campo `gizmo`), así el cliente lo tiene en
-cuanto cambia la selección sin una segunda petición.
-
-**El cliente lo dibuja, el servidor solo proyecta.** Los gizmos nativos de Blender no
-aparecen en la captura: `draw_view3d` dibuja la escena, no los overlays de la región
-(comprobado). Y aunque aparecieran, serían demasiado finos para un dedo.
+## 10. Restricciones y valores exactos
 
 Para mover por un eje se usa el gesto normal con `axis`, que el servidor lee en la
 fase `begin`:

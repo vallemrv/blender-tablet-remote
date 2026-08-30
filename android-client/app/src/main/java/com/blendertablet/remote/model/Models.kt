@@ -348,23 +348,6 @@ data class RemoteFiles(
     val loading: Boolean = false,
 )
 
-/** Punto en coordenadas del viewport remoto: 0..1, origen arriba-izquierda. */
-data class ViewportPoint(val u: Float, val v: Float)
-
-/**
- * Manipulador proyectado por el servidor.
- *
- * Los gizmos nativos de Blender no salen en el vídeo (`draw_view3d` no dibuja los
- * overlays de la región), así que el servidor solo manda dónde cae el origen y la
- * punta de cada eje, y la app los dibuja a un tamaño usable con el dedo.
- */
-data class Gizmo(
-    val visible: Boolean = false,
-    val objectName: String? = null,
-    val origin: ViewportPoint? = null,
-    val axes: Map<Axis, ViewportPoint> = emptyMap(),
-)
-
 /** Transformación del objeto activo, para el panel numérico. */
 data class Transform(
     val location: List<Float> = listOf(0f, 0f, 0f),
@@ -377,7 +360,6 @@ data class BlenderState(
     val activeObject: String? = null,
     val selectedObjects: List<String> = emptyList(),
     val selectionMode: SelectionMode = SelectionMode.VERTEX,
-    val gizmo: Gizmo = Gizmo(),
     val transform: Transform? = null,
     val context: SceneContext = SceneContext(),
     val view: ViewState = ViewState(),
