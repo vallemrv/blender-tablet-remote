@@ -563,7 +563,13 @@ def modal_scenario(client: WSClient) -> None:
         "hit": True, "snap_type": "VERTEX", "id": "test:VERTEX:0",
         "position": [2.0, 0.0, 0.0], "screen": [0.5, 0.5],
     }
-    modal_session.reference_locked = True
+    locked_reference = ok_reply("soltar REL congela el hover verde", client.command(
+        "transform.reference_candidate", {"u": 0.01, "v": 0.01, "lock": True}))
+    check("ACTION_UP no recalcula la referencia",
+          locked_reference.get("reference_locked") is True
+          and locked_reference.get("reference_position") == [2.0, 0.0, 0.0]
+          and (locked_reference.get("reference_candidate") or {}).get("id") == "test:VERTEX:0",
+          str(locked_reference))
     relative = ok_reply("XYZ cero desde REL", client.command("transform.value", {
         "values": [0.0, 0.0, 0.0],
     }))

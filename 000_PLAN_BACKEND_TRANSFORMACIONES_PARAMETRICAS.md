@@ -17,6 +17,7 @@ geométrica independiente del pivote.
 - Hacer más tolerante el sondeo geométrico usado durante el movimiento con lápiz.
 - Limitar el snap exacto de Move a Vértice/Punto medio/Centro de cara, con radios
   táctiles respectivos 0,080/0,070/0,065 en fuente y destino.
+- Al fijar REL, congelar el último candidato verde sin repetir el raycast con ACTION_UP.
 - Publicar candidato, referencia y origen de valores en `transform.session`.
 - Actualizar capabilities, protocolo, fixtures y pruebas.
 

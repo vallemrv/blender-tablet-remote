@@ -249,10 +249,14 @@ def scenario(client: WSClient) -> None:
           (bpy.data.objects[cube].location - original_location).length < 1e-6,
           str(hovered))
     locked = cmd(client, "transform.reference_candidate", {
-        "u": face_center_screen[0], "v": face_center_screen[1], "lock": True,
+        # El UP puede saltar lejos: se congela el hover verde, no se recalcula.
+        "u": 0.01, "v": 0.01, "lock": True,
     })
     check("REL bloquea la referencia sin mover el objeto",
           locked.get("reference_locked") is True and
+          locked.get("reference_candidate") == hovered.get("reference_candidate") and
+          (SnapVector(locked["reference_position"]) -
+           SnapVector(hovered["reference_candidate"]["position"])).length < 1e-6 and
           (bpy.data.objects[cube].location - original_location).length < 1e-6,
           str(locked))
     zero = cmd(client, "transform.value", {"values": [0.0, 0.0, 0.0]})

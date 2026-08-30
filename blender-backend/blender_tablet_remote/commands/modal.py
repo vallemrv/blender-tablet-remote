@@ -714,12 +714,19 @@ def set_reference_candidate(payload: dict) -> dict:
         session.reference_position = None
         session.apply()
         return session.status()
+    lock = bool(payload.get("lock", False))
+    # END congela exactamente el marcador verde que el usuario estaba viendo. Un
+    # segundo raycast con el jitter de ACTION_UP puede elegir otra categoría exacta.
+    if lock and session.reference_candidate is not None:
+        session.reference_position = Vector(session.reference_candidate["position"])
+        session.reference_locked = True
+        return session.status()
     from .snap import query_reference_candidate
     query_payload = dict(payload)
     query_payload["include_objects"] = [o.name for o, _matrix in session.originals]
     candidate = query_reference_candidate(query_payload)
     session.reference_candidate = candidate if candidate.get("hit") else None
-    if candidate.get("hit") and bool(payload.get("lock", False)):
+    if candidate.get("hit") and lock:
         position = Vector(candidate["position"])
         session.reference_position = position
         session.reference_locked = True

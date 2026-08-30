@@ -137,6 +137,9 @@ exactos: VERTEX, EDGE_CENTER y FACE_CENTER (además de NONE e INCREMENT). Tanto 
 sondeo del ancla fuente como el del destino comparten radios pegajosos de 0,080,
 0,070 y 0,065 respectivamente; no se ofrece arista o cara arbitraria porque produciría
 un punto impreciso y haría temblar la intención táctil.
+Al soltar REL se congela literalmente el último candidato verde: no se repite el
+raycast con ACTION_UP, porque esa muestra inestable podía elegir otro punto exacto y
+hacer aparecer el ancla roja lejos del lugar señalado.
 
 El snap que condujo a esa solución es reutilizable: primero se restringen candidatos a
 la cara visible del raycast para excluir geometría posterior; después se clasifican en
