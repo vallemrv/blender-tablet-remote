@@ -564,21 +564,25 @@ def modal_scenario(client: WSClient) -> None:
         "position": [2.0, 0.0, 0.0], "screen": [0.5, 0.5],
     }
     modal_session.reference_locked = True
-    modal_session.values = modal_session.pivot.copy()
-    modal_session.values.x = -2.0  # mismo preview al cambiar origen
     relative = ok_reply("XYZ cero desde REL", client.command("transform.value", {
         "values": [0.0, 0.0, 0.0],
     }))
-    check("REL cero coloca el pivote en la referencia",
-          abs(cube.location.x - 2.0) < 1e-6, str(cube.location))
+    check("bloquear REL no altera el delta cero",
+          abs(cube.location.x) < 1e-6, str(cube.location))
     check("estado publica origen y distancia REL",
           relative.get("reference_locked") is True
           and abs(relative.get("reference_distance", 0.0) - 2.0) < 1e-6,
           str(relative))
+    moved = ok_reply("mover conserva REL unido", client.command("transform.value", {
+        "values": [1.0, 0.0, 0.0],
+    }))
+    check("REL acompaña al objeto",
+          abs(moved["reference_position"][0] - 3.0) < 1e-6,
+          str(moved.get("reference_position")))
     cleared = ok_reply("limpiar REL conserva preview", client.command(
         "transform.reference_candidate", {"clear": True}))
     check("limpiar REL no mueve el objeto",
-          abs(cube.location.x - 2.0) < 1e-6 and cleared.get("reference_locked") is False,
+          abs(cube.location.x - 1.0) < 1e-6 and cleared.get("reference_locked") is False,
           f"{cube.location} | {cleared}")
     ok_reply("cancelar referencia REL", client.command("transform.cancel"))
 

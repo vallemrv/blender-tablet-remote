@@ -128,6 +128,10 @@ X/Y/Z, añadirá valores exactos independientes, incremento editable con unidad 
 referencia geométrica REL que no depende del pivote. Los planes propietarios son
 `000_PLAN_BACKEND_TRANSFORMACIONES_PARAMETRICAS.md` y
 `000_PLAN_FRONTEND_TRANSFORMACIONES_PARAMETRICAS.md`.
+REL es ahora un ancla fuente de la selección: se sondea en verde, queda roja al
+fijarse y se reproyecta acompañando el movimiento. Con snap geométrico, el backend
+excluye los objetos móviles del destino y alinea exactamente ancla→destino, lo que
+permite colocar vértice contra vértice entre objetos sin usar el pivote.
 
 El snap que condujo a esa solución es reutilizable: primero se restringen candidatos a
 la cara visible del raycast para excluir geometría posterior; después se clasifican en

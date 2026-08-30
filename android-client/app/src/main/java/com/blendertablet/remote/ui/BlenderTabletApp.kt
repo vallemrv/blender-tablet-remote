@@ -291,7 +291,9 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 state.blender.mode == BlenderMode.EDIT &&
                 state.blender.selectionMode != SelectionMode.FACE,
             longPressEnabled = viewportLongPressEnabled(session.active, toolSession.active),
-            snapCandidate = toolSession.snapCandidate ?: session.referenceCandidate ?: session.snapCandidate,
+            snapCandidate = toolSession.snapCandidate ?: session.snapCandidate,
+            referenceCandidate = session.referenceCandidate,
+            referenceLocked = session.referenceLocked,
             navigationOrbitEnabled = navigationOrbitVisible(
                 session.active,
                 toolSession.active,
@@ -664,6 +666,8 @@ private fun ViewportLayer(
     longPressEnabled: Boolean,
     knifePoints: List<List<Pair<Float, Float>>>,
     snapCandidate: com.blendertablet.remote.model.SnapCandidate?,
+    referenceCandidate: com.blendertablet.remote.model.SnapCandidate?,
+    referenceLocked: Boolean,
     navigationOrbitEnabled: Boolean,
     onShape: (ShapeTool, Float, Float, Float, Float) -> Unit,
     onLongPress: (px: Float, py: Float, u: Float, v: Float) -> Unit,
@@ -698,6 +702,8 @@ private fun ViewportLayer(
                     navigationOrbitEnabled = navigationOrbitEnabled,
                     knifePoints = knifePoints,
                     snapCandidate = snapCandidate,
+                    referenceCandidate = referenceCandidate,
+                    referenceLocked = referenceLocked,
                     onShape = onShape,
                 )
             }
@@ -722,6 +728,8 @@ private fun ViewportLayer(
                 shapeTool = shapeTool,
                 knifePoints = knifePoints,
                 snapCandidate = snapCandidate,
+                referenceCandidate = referenceCandidate,
+                referenceLocked = referenceLocked,
                 onShape = onShape,
             )
             return@Box
@@ -761,6 +769,8 @@ private fun ViewportLayer(
                 shapeTool = shapeTool,
                 knifePoints = knifePoints,
                 snapCandidate = snapCandidate,
+                referenceCandidate = referenceCandidate,
+                referenceLocked = referenceLocked,
                 onShape = onShape,
             )
         }

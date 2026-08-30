@@ -136,23 +136,16 @@ fun TransformBar(
                 }
                 SnapCandidateHint(session)
                 Divider()
-                // Restricción: libre, eje o plano. En ROTATE solo ejes simples.
-                ConstraintPicker(
-                    mode = session.mode,
-                    selected = constraint,
-                    onSelect = onConstraint,
-                )
-                Divider()
-                OrientationPicker(availableOrientations, orientation, onOrientation)
-                Divider()
-                SnapPicker(session.mode, snapType, onSnapType)
-                // El paso solo significa algo si el snap cuadra a un incremento; en
-                // un snap a vértice manda la geometría, no una cifra.
-                if (snapType == SnapType.INCREMENT && session.mode != TransformMode.MOVE) {
-                    StepPicker(session.mode, stepIndex, onStep)
-                }
-                Divider()
                 if (session.mode == TransformMode.MOVE) {
+                    MoveAxisInputs(
+                        session, unitScaleLength, moveStepValue, moveStepUnit,
+                        constraint, onConstraint, onValue,
+                    )
+                    MoveStepInput(
+                        moveStepValue, moveStepUnit, session.referenceLocked,
+                        onMoveStep,
+                    )
+                    Divider()
                     PillButton(
                         when {
                             referencePicking -> "REL · señala"
@@ -161,12 +154,17 @@ fun TransformBar(
                         },
                         selected = referencePicking || session.referenceLocked,
                     ) { onReference() }
-                    MoveStepInput(
-                        moveStepValue, moveStepUnit, session.referenceLocked,
-                        onMoveStep,
-                    )
-                    MoveAxisInputs(session, unitScaleLength, moveStepValue, moveStepUnit, onValue)
+                    SnapPicker(session.mode, snapType, onSnapType)
+                    Divider()
+                    OrientationPicker(availableOrientations, orientation, onOrientation)
                 } else {
+                    ConstraintPicker(session.mode, constraint, onConstraint)
+                    Divider()
+                    OrientationPicker(availableOrientations, orientation, onOrientation)
+                    Divider()
+                    SnapPicker(session.mode, snapType, onSnapType)
+                    if (snapType == SnapType.INCREMENT) StepPicker(session.mode, stepIndex, onStep)
+                    Divider()
                     ValueModePicker(valueMode, onValueMode)
                     ValueInput(session, unitScaleLength, onValue)
                 }
@@ -219,6 +217,8 @@ private fun MoveAxisInputs(
     unitScaleLength: Double,
     stepValue: Double,
     stepUnit: TransformStepUnit,
+    constraint: Constraint,
+    onConstraint: (Constraint) -> Unit,
     onValue: (List<Double>?, Double?) -> Unit,
 ) {
     val referenceDistance = session.referenceDistance ?: 0.0
@@ -244,13 +244,29 @@ private fun MoveAxisInputs(
             onValue(next, null)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                axis.name,
-                color = AxisColors.getValue(axis),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(end = 3.dp),
-            )
+            val active = axis in constraint.axes
+            Box(
+                Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(17.dp))
+                    .background(if (active) AxisColors.getValue(axis).copy(alpha = .28f) else Color.Transparent)
+                    .combinedClickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {
+                            onConstraint(if (active && constraint.axes.size == 1) Constraint.FREE
+                            else Constraint.ofAxes(setOf(axis)))
+                        },
+                        onLongClick = {
+                            val next = if (active) constraint.axes - axis else constraint.axes + axis
+                            onConstraint(Constraint.ofAxes(next))
+                        },
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(axis.name, color = AxisColors.getValue(axis), fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold)
+            }
             PillButton("−") { send(current - step) }
             CompactNumericField(
                 value = text, onValueChange = { text = it }, modifier = Modifier.width(72.dp),

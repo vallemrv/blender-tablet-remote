@@ -11,12 +11,16 @@ exacto, construida sobre controles que puedan reutilizar Rotar y Escalar.
 - Sustituir el único valor por tres campos X/Y/Z, cada uno con − y +.
 - Usar esos campos como lectura viva durante el gesto, con identidad de color por eje,
   sin duplicar una segunda leyenda XYZ y sin sobrescribir el campo que se está editando.
+- Integrar X/Y/Z como labels pulsables de sus propios inputs y ordenar la bandeja como
+  XYZ/incremento → REL → Snap → Global/Local/Vista.
 - Añadir campo de incremento con −/+ y selector `mm | cm | m | %`.
 - En Move, `%` mide una fracción de la distancia pivote→referencia REL y queda
   deshabilitado hasta que exista esa referencia.
 - Retirar Rejilla y Cursor del selector de snap de Move.
 - Añadir botón REL: armado, seguimiento bajo el lápiz, bloqueo al levantar y limpiar.
 - Reutilizar los marcadores existentes para vértice, arista y cara.
+- Dibujar el ancla REL verde mientras se sondea, roja al fijarla y reproyectada durante
+  todo el viaje del objeto; el destino de snap permanece visible a la vez.
 - Mantener confirmar/descartar fijos y la bandeja desplazable.
 - Añadir pruebas JVM de modelos, parseo y política de unidades.
 

@@ -167,7 +167,7 @@
       ]
     },
     "parametric_transforms": {
-      "version": 1,
+      "version": 2,
       "modes": [
         "MOVE"
       ],
@@ -195,7 +195,10 @@
           "EDGE_CENTER",
           "EDGE",
           "FACE"
-        ]
+        ],
+        "attached": true,
+        "source_target_snap": true,
+        "exclude_moving_objects": true
       }
     },
     "edit_tools": {

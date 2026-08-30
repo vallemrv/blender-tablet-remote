@@ -374,12 +374,6 @@ class _Session:
                 # Se cuantizan las coordenadas que edita el usuario. Con REL esto
                 # hace que 0, ±paso... nazcan exactamente en la referencia.
                 values = Vector(round(v / self.step) * self.step for v in values)
-            # Con REL bloqueado `values` son coordenadas desde la referencia. El
-            # desplazamiento aplicado sigue reconstruyéndose desde el pivote inicial.
-            if self.reference_locked and self.reference_position is not None:
-                reference_delta = self.orientation_basis.inverted() @ (
-                    self.reference_position - self.pivot)
-                values += reference_delta
             if self.axes:
                 for name, index in AXIS_INDEX.items():
                     if name not in self.axes:
@@ -513,6 +507,21 @@ class _Session:
             self.invalidate_silently()
             return {"active": False, "phase": "INVALIDATED"}
         values, angle = self._effective()
+        reference_candidate = self.reference_candidate
+        reference_position = self.reference_position
+        if self.mode == "MOVE" and self.reference_locked and reference_position is not None:
+            current_reference = reference_position + self.orientation_basis @ values
+            reference_position = current_reference
+            if reference_candidate is not None:
+                reference_candidate = dict(reference_candidate, position=list(current_reference))
+                try:
+                    rv3d = require_rv3d()
+                    camera.sync_from_region(rv3d)
+                    projected = camera.project(current_reference, rv3d)
+                    if projected is not None:
+                        reference_candidate["screen"] = list(projected)
+                except CommandError:
+                    pass
         return {
             "active": True,
             "session_id": self.session_id,
@@ -527,9 +536,9 @@ class _Session:
             "snap_type": self.snap_type,
             "snap_candidate": self.snap_candidate,
             "snap_locked": self.snap_locked,
-            "reference_candidate": self.reference_candidate,
+            "reference_candidate": reference_candidate,
             "reference_locked": self.reference_locked,
-            "reference_position": list(self.reference_position) if self.reference_position is not None else None,
+            "reference_position": list(reference_position) if reference_position is not None else None,
             "reference_distance": (self.reference_position - self.pivot).length
                 if self.reference_position is not None else None,
             "step": self.step,
@@ -539,9 +548,7 @@ class _Session:
             "objects": [o.name for o, _m in self.originals] or ([self.edit_object.name] if self.edit_object else []),
             # Lo que la barra enseña mientras se arrastra. La rotación va en grados
             # porque es lo que se lee, no radianes.
-            # Para MOVE con REL, la UI edita coordenadas respecto a la referencia,
-            # no el delta interno que termina aplicándose desde el snapshot.
-            "values": list(self.values if self.mode == "MOVE" and self.reference_locked else values),
+            "values": list(values),
             "angle": math.degrees(angle),
         }
 
@@ -676,6 +683,8 @@ def set_snap_candidate(payload: dict) -> dict:
     from .snap import query_candidate
     query_payload = dict(payload)
     query_payload["snap_type"] = payload.get("snap_type", session.snap_type)
+    if session.reference_locked:
+        query_payload["exclude_objects"] = [o.name for o, _matrix in session.originals]
     candidate = query_candidate(query_payload)
     if not candidate.get("hit"):
         session.snap_candidate = None
@@ -685,7 +694,10 @@ def set_snap_candidate(payload: dict) -> dict:
     session.snap = True
     session.snap_candidate = candidate
     session.snap_locked = bool(payload.get("lock", True))
-    session.values = session.orientation_basis.inverted() @ (Vector(candidate["position"]) - session.pivot)
+    snap_origin = session.reference_position if (
+        session.reference_locked and session.reference_position is not None) else session.pivot
+    session.values = session.orientation_basis.inverted() @ (
+        Vector(candidate["position"]) - snap_origin)
     session.apply()
     return session.status()
 
@@ -697,26 +709,20 @@ def set_reference_candidate(payload: dict) -> dict:
     if session.mode != "MOVE":
         raise CommandError("Reference picking requires MOVE", code="wrong_tool")
     if payload.get("clear"):
-        if session.reference_locked and session.reference_position is not None:
-            # Conserva el preview al volver del sistema de coordenadas REL al delta.
-            session.values += session.orientation_basis.inverted() @ (
-                session.reference_position - session.pivot)
         session.reference_candidate = None
         session.reference_locked = False
         session.reference_position = None
         session.apply()
         return session.status()
     from .snap import query_reference_candidate
-    candidate = query_reference_candidate(payload)
+    query_payload = dict(payload)
+    query_payload["include_objects"] = [o.name for o, _matrix in session.originals]
+    candidate = query_reference_candidate(query_payload)
     session.reference_candidate = candidate if candidate.get("hit") else None
     if candidate.get("hit") and bool(payload.get("lock", False)):
         position = Vector(candidate["position"])
-        # Cambiar de origen nunca mueve el objeto: convierte el delta actual a
-        # coordenadas relativas equivalentes antes de publicar el nuevo origen.
-        effective, _angle = session._effective()
         session.reference_position = position
         session.reference_locked = True
-        session.values = effective - session.orientation_basis.inverted() @ (position - session.pivot)
     return session.status()
 
 

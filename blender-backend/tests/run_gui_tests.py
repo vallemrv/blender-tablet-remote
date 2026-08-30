@@ -255,15 +255,71 @@ def scenario(client: WSClient) -> None:
           locked.get("reference_locked") is True and
           (bpy.data.objects[cube].location - original_location).length < 1e-6,
           str(locked))
-    cmd(client, "transform.value", {"values": [0.0, 0.0, 0.0]})
+    zero = cmd(client, "transform.value", {"values": [0.0, 0.0, 0.0]})
     locked_position = SnapVector(locked["reference_position"])
-    check("XYZ cero coloca el pivote en la referencia REL",
-          (bpy.data.objects[cube].matrix_world.translation - locked_position).length < 1e-5,
-          f"{bpy.data.objects[cube].location} -> {locked_position}")
+    check("XYZ cero no mueve al fijar REL",
+          (bpy.data.objects[cube].location - original_location).length < 1e-6,
+          str(zero))
+    travelled = cmd(client, "transform.value", {"values": [0.25, 0.0, 0.0]})
+    check("el marcador REL acompaña al objeto",
+          (SnapVector(travelled["reference_position"]) -
+           (locked_position + SnapVector((0.25, 0.0, 0.0)))).length < 1e-5,
+          str(travelled.get("reference_position")))
     cmd(client, "transform.cancel")
     check("cancelar REL restaura la posición",
           (bpy.data.objects[cube].location - original_location).length < 1e-6,
           str(bpy.data.objects[cube].location))
+
+    # Caso CAD real: un vértice del cubo seleccionado contra un vértice de otro.
+    target_state = cmd(client, "object.add", {"primitive": "CUBE", "x": 3.0, "y": 0.0, "z": 0.0})
+    target_name = target_state["active_object"]
+    cmd(client, "object.select", {"name": cube})
+    cmd(client, "view.axis", {"axis": "FRONT"})
+    cmd(client, "view.frame_all")
+    time.sleep(0.2)
+    snap_rv3d = snap_find_view3d()[3]
+    snap_camera.sync_from_region(snap_rv3d)
+
+    def vertex_probe(object_name):
+        obj = bpy.data.objects[object_name]
+        center_screen = snap_camera.project(obj.matrix_world.translation, snap_rv3d)
+        face = cmd(client, "snap.query", {
+            "u": center_screen[0], "v": center_screen[1], "snap_type": "FACE",
+        })
+        polygon = obj.data.polygons[face["element"]]
+        face_screen = snap_camera.project(obj.matrix_world @ polygon.center, snap_rv3d)
+        vertex_index = polygon.vertices[0]
+        vertex_world = obj.matrix_world @ obj.data.vertices[vertex_index].co
+        vertex_screen = snap_camera.project(vertex_world, snap_rv3d)
+        return vertex_world, (
+            vertex_screen[0] * .97 + face_screen[0] * .03,
+            vertex_screen[1] * .97 + face_screen[1] * .03,
+        )
+
+    source_world, source_probe = vertex_probe(cube)
+    target_world, target_probe = vertex_probe(target_name)
+    cmd(client, "transform.begin", {"mode": "MOVE", "snap_type": "VERTEX"})
+    source_locked = cmd(client, "transform.reference_candidate", {
+        "u": source_probe[0], "v": source_probe[1], "lock": True,
+    })
+    check("REL fija un vértice del objeto móvil",
+          source_locked.get("reference_locked") is True and
+          (source_locked.get("reference_candidate") or {}).get("snap_type") == "VERTEX",
+          str(source_locked))
+    aligned = cmd(client, "transform.snap_candidate", {
+        "u": target_probe[0], "v": target_probe[1], "snap_type": "VERTEX", "lock": True,
+    })
+    check("snap excluye el móvil y encuentra el otro cubo",
+          (aligned.get("snap_candidate") or {}).get("object") == target_name,
+          str(aligned.get("snap_candidate")))
+    check("vértice origen coincide exactamente con vértice destino",
+          (SnapVector(aligned["reference_position"]) - SnapVector(
+              aligned["snap_candidate"]["position"])).length < 1e-5,
+          f"{aligned.get('reference_position')} -> {aligned.get('snap_candidate')}")
+    cmd(client, "transform.cancel")
+    cmd(client, "object.select", {"name": target_name})
+    cmd(client, "object.delete")
+    cmd(client, "object.select", {"name": cube})
 
     # Mover por un eje debe cambiar solo esa coordenada.
     before = cmd(client, "scene.get_state")["active"]["location"]

@@ -64,6 +64,8 @@ fun InputSurface(
     /** Puntos del Knife en pantalla, para dibujarlos sobre el vídeo. */
     knifePoints: List<List<Pair<Float, Float>>> = emptyList(),
     snapCandidate: SnapCandidate? = null,
+    referenceCandidate: SnapCandidate? = null,
+    referenceLocked: Boolean = false,
 ) {
     AndroidView(
         modifier = modifier,
@@ -81,6 +83,8 @@ fun InputSurface(
             view.onShape = onShape
             view.knifePoints = knifePoints
             view.snapCandidate = snapCandidate
+            view.referenceCandidate = referenceCandidate
+            view.referenceLocked = referenceLocked
             view.invalidate()
         },
     )
@@ -177,10 +181,17 @@ private class GestureView(
     /** Puntos del Knife (normalizados) para el overlay. */
     var knifePoints: List<List<Pair<Float, Float>>> = emptyList()
     var snapCandidate: SnapCandidate? = null
+    var referenceCandidate: SnapCandidate? = null
+    var referenceLocked: Boolean = false
     private val candidatePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = android.graphics.Color.parseColor("#66E3A4")
         style = Paint.Style.STROKE
         strokeWidth = 2.5f * resources.displayMetrics.density
+    }
+    private val lockedReferencePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.parseColor("#FF5D68")
+        style = Paint.Style.STROKE
+        strokeWidth = 3f * resources.displayMetrics.density
     }
     private val knifePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = android.graphics.Color.parseColor("#FFB84C")
@@ -676,23 +687,29 @@ private class GestureView(
     }
 
     private fun drawSnapCandidate(canvas: Canvas) {
-        val candidate = snapCandidate ?: return
+        referenceCandidate?.let {
+            drawCandidate(canvas, it, if (referenceLocked) lockedReferencePaint else candidatePaint)
+        }
+        snapCandidate?.let { drawCandidate(canvas, it, candidatePaint) }
+    }
+
+    private fun drawCandidate(canvas: Canvas, candidate: SnapCandidate, paint: Paint) {
         if (candidate.screen.size < 2) return
         val x = candidate.screen[0].toFloat() * width
         val y = candidate.screen[1].toFloat() * height
         val r = 9f * resources.displayMetrics.density
         when (candidate.type) {
-            SnapType.VERTEX -> canvas.drawCircle(x, y, r, candidatePaint)
+            SnapType.VERTEX -> canvas.drawCircle(x, y, r, paint)
             SnapType.EDGE -> {
-                canvas.drawLine(x - r, y, x + r, y, candidatePaint)
-                canvas.drawCircle(x, y, r * .45f, candidatePaint)
+                canvas.drawLine(x - r, y, x + r, y, paint)
+                canvas.drawCircle(x, y, r * .45f, paint)
             }
             SnapType.EDGE_CENTER, SnapType.FACE_CENTER ->
-                canvas.drawRect(x - r * .65f, y - r * .65f, x + r * .65f, y + r * .65f, candidatePaint)
-            SnapType.FACE -> canvas.drawRect(x - r, y - r, x + r, y + r, candidatePaint)
+                canvas.drawRect(x - r * .65f, y - r * .65f, x + r * .65f, y + r * .65f, paint)
+            SnapType.FACE -> canvas.drawRect(x - r, y - r, x + r, y + r, paint)
             else -> {
-                canvas.drawLine(x - r, y, x + r, y, candidatePaint)
-                canvas.drawLine(x, y - r, x, y + r, candidatePaint)
+                canvas.drawLine(x - r, y, x + r, y, paint)
+                canvas.drawLine(x, y - r, x, y + r, paint)
             }
         }
     }

@@ -60,8 +60,26 @@ def query_candidate(payload: dict) -> dict:
     if not 0.0 < threshold <= 0.25:
         raise BadPayload("'threshold' must be in (0, 0.25]")
     origin, direction = camera.ray(u, v, rv3d)
-    hit, location, _normal, face_index, obj, _matrix = bpy.context.scene.ray_cast(
-        bpy.context.evaluated_depsgraph_get(), origin, direction)
+    include = {str(name) for name in payload.get("include_objects", [])}
+    exclude = {str(name) for name in payload.get("exclude_objects", [])}
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    # El objeto móvil puede quedar delante del destino. Avanzar el rayo después de
+    # cada objeto excluido permite seguir viendo el cubo de detrás sin ocultar RNA.
+    hit = False
+    location = None
+    face_index = -1
+    obj = None
+    ray_origin = origin
+    for _attempt in range(16):
+        hit, location, _normal, face_index, obj, _matrix = bpy.context.scene.ray_cast(
+            depsgraph, ray_origin, direction)
+        if not hit or obj is None:
+            break
+        original = getattr(obj, "original", obj)
+        if (not include or original.name in include) and original.name not in exclude:
+            break
+        ray_origin = location + direction * 1e-5
+        hit = False
     if not hit or obj is None or obj.type != "MESH":
         return {"hit": False, "snap_type": snap_type}
     # ``scene.ray_cast`` golpea la geometría evaluada. Con Subdivision Surface el
