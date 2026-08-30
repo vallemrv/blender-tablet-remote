@@ -9,6 +9,8 @@ exacto, construida sobre controles que puedan reutilizar Rotar y Escalar.
 
 - Conservar los botones X/Y/Z y el arrastre normal del lápiz.
 - Sustituir el único valor por tres campos X/Y/Z, cada uno con − y +.
+- Usar esos campos como lectura viva durante el gesto, con identidad de color por eje,
+  sin duplicar una segunda leyenda XYZ y sin sobrescribir el campo que se está editando.
 - Añadir campo de incremento con −/+ y selector `mm | cm | m | %`.
 - En Move, `%` mide una fracción de la distancia pivote→referencia REL y queda
   deshabilitado hasta que exista esa referencia.
@@ -27,4 +29,3 @@ exacto, construida sobre controles que puedan reutilizar Rotar y Escalar.
 - `assembleDebug` y pruebas JVM quedan verdes.
 - Validación táctil real queda como criterio de aceptación del usuario antes de
   retirar estos planes.
-

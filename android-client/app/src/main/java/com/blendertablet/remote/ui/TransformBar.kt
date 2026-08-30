@@ -119,7 +119,9 @@ fun TransformBar(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Readout(session)
+                // En MOVE los propios campos XYZ son el readout vivo; repetir aquí
+                // los mismos tres valores consumía casi media bandeja.
+                if (session.mode != TransformMode.MOVE) Readout(session)
                 if (session.proportional) {
                     PillButton("Radio −") { onProportionalRadius(0.5) }
                     ProportionalRadiusInput(
@@ -230,21 +232,37 @@ private fun MoveAxisInputs(
     Axis.entries.forEach { axis ->
         val index = axis.ordinal
         val current = session.values.getOrElse(index) { 0.0 }
-        var text by remember(session.active, current) {
+        var editing by remember(session.active, axis) { mutableStateOf(false) }
+        var text by remember(session.active, axis) {
             mutableStateOf(format(current * unitScaleLength, 4))
+        }
+        LaunchedEffect(current, unitScaleLength, editing) {
+            if (!editing) text = format(current * unitScaleLength, 4)
         }
         fun send(value: Double) {
             val next = session.values.toMutableList().also { it[index] = value }
             onValue(next, null)
         }
-        PillButton("${axis.name}−") { send(current - step) }
-        CompactNumericField(
-            value = text, onValueChange = { text = it }, modifier = Modifier.width(66.dp),
-            textAlign = TextAlign.End, placeholder = axis.name, onDone = {
-                ValueParser.parse(text, TransformMode.MOVE)?.let { send(it / unitScaleLength) }
-            },
-        )
-        PillButton("${axis.name}+") { send(current + step) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                axis.name,
+                color = AxisColors.getValue(axis),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(end = 3.dp),
+            )
+            PillButton("−") { send(current - step) }
+            CompactNumericField(
+                value = text, onValueChange = { text = it }, modifier = Modifier.width(72.dp),
+                textAlign = TextAlign.End, placeholder = axis.name,
+                textColor = AxisColors.getValue(axis),
+                onFocusChange = { editing = it },
+                onDone = {
+                    ValueParser.parse(text, TransformMode.MOVE)?.let { send(it / unitScaleLength) }
+                },
+            )
+            PillButton("+") { send(current + step) }
+        }
     }
 }
 

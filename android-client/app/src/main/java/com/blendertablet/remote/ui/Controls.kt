@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -53,17 +54,20 @@ fun CompactNumericField(
     modifier: Modifier = Modifier,
     textAlign: TextAlign = TextAlign.Center,
     placeholder: String? = null,
+    textColor: Color = Ink.OnPanel,
+    onFocusChange: (Boolean) -> Unit = {},
     onDone: () -> Unit,
 ) {
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
         singleLine = true,
-        textStyle = TextStyle(color = Ink.OnPanel, fontSize = 13.sp, textAlign = textAlign),
+        textStyle = TextStyle(color = textColor, fontSize = 13.sp, textAlign = textAlign),
         cursorBrush = SolidColor(Ink.Accent),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { onDone() }),
         modifier = modifier
+            .onFocusChanged { onFocusChange(it.isFocused) }
             .height(34.dp)
             .clip(RoundedCornerShape(7.dp))
             .background(Color.White.copy(alpha = .07f)),
