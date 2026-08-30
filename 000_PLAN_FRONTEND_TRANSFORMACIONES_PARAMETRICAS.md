@@ -1,5 +1,11 @@
 # 000 — Android: precisión XYZ y referencia REL en Mover
 
+## Estado
+
+Aceptado por el usuario en tablet el 2026-08-30. Quedan validados el orden compacto de
+la bandeja, los inputs como lectura viva, el incremento, el marcador verde/rojo, el
+snap vértice→vértice y REL después de varios movimientos sin confirmar.
+
 ## Objetivo
 
 Entregar en Object Mode una bandeja de Mover apta para lápiz y posicionamiento

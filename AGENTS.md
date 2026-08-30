@@ -144,6 +144,21 @@ El raycast de REL ve la geometría ya desplazada, pero la sesión reconstruye de
 matrices originales. Al bloquear tras uno o varios movimientos se resta el delta actual
 para guardar el ancla en esa base; así el estado no duplica el primer desplazamiento y
 REL permanece correcto durante movimientos sucesivos sin confirmar entre ellos.
+El usuario validó finalmente este flujo en tablet el 2026-08-30, incluida la secuencia
+primer movimiento → REL → segundo movimiento sin confirmar entre medias. La lección
+arquitectónica es obligatoria para el escalado: todo punto sondeado vive en la geometría
+visible ya transformada, pero cualquier referencia persistente de la sesión debe
+convertirse a su baseline original y reproyectarse aplicando el preview exactamente una
+vez. Asimismo, `ACTION_UP` confirma el último candidato visible y nunca vuelve a
+resolver intención geométrica.
+
+La serie `001` planifica el escalado de esta base a MOVE/ROTATE/SCALE en Object y Edit.
+Sus planes propietarios son `001_PLAN_BACKEND_ESCALADO_TRANSFORMACIONES_PARAMETRICAS.md`
+y `001_PLAN_FRONTEND_ESCALADO_TRANSFORMACIONES_PARAMETRICAS.md`. La arquitectura separa
+centro, fuente y destino: Move resuelve fuente→destino; Rotate alinea los vectores
+centro→fuente y centro→destino; Scale usa su cociente orientado. En Edit se excluye del
+destino únicamente la geometría móvil, no todo el objeto. Los planes conservan como
+invariantes el baseline original, el último candidato visible al soltar y un solo undo.
 
 El snap que condujo a esa solución es reutilizable: primero se restringen candidatos a
 la cara visible del raycast para excluir geometría posterior; después se clasifican en
