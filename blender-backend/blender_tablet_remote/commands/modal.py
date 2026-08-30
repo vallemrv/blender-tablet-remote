@@ -715,11 +715,21 @@ def set_reference_candidate(payload: dict) -> dict:
         session.apply()
         return session.status()
     lock = bool(payload.get("lock", False))
+    def lock_candidate(candidate):
+        # El raycast observa la geometría ya transformada. La sesión, en cambio,
+        # reconstruye siempre desde las matrices originales: guardar directamente
+        # esta posición sumaría otra vez cualquier movimiento previo. Conservamos la
+        # posición base para que status() le aplique el delta exactamente una vez.
+        values, _angle = session._effective()
+        current_position = Vector(candidate["position"])
+        session.reference_position = (
+            current_position - session.orientation_basis @ values)
+        session.reference_locked = True
+
     # END congela exactamente el marcador verde que el usuario estaba viendo. Un
     # segundo raycast con el jitter de ACTION_UP puede elegir otra categoría exacta.
     if lock and session.reference_candidate is not None:
-        session.reference_position = Vector(session.reference_candidate["position"])
-        session.reference_locked = True
+        lock_candidate(session.reference_candidate)
         return session.status()
     from .snap import query_reference_candidate
     query_payload = dict(payload)
@@ -727,9 +737,7 @@ def set_reference_candidate(payload: dict) -> dict:
     candidate = query_reference_candidate(query_payload)
     session.reference_candidate = candidate if candidate.get("hit") else None
     if candidate.get("hit") and lock:
-        position = Vector(candidate["position"])
-        session.reference_position = position
-        session.reference_locked = True
+        lock_candidate(candidate)
     return session.status()
 
 

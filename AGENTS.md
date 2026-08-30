@@ -140,6 +140,10 @@ un punto impreciso y haría temblar la intención táctil.
 Al soltar REL se congela literalmente el último candidato verde: no se repite el
 raycast con ACTION_UP, porque esa muestra inestable podía elegir otro punto exacto y
 hacer aparecer el ancla roja lejos del lugar señalado.
+El raycast de REL ve la geometría ya desplazada, pero la sesión reconstruye desde sus
+matrices originales. Al bloquear tras uno o varios movimientos se resta el delta actual
+para guardar el ancla en esa base; así el estado no duplica el primer desplazamiento y
+REL permanece correcto durante movimientos sucesivos sin confirmar entre ellos.
 
 El snap que condujo a esa solución es reutilizable: primero se restringen candidatos a
 la cara visible del raycast para excluir geometría posterior; después se clasifican en

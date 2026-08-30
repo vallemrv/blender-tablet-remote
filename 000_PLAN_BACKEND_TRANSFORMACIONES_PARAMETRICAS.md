@@ -18,6 +18,8 @@ geométrica independiente del pivote.
 - Limitar el snap exacto de Move a Vértice/Punto medio/Centro de cara, con radios
   táctiles respectivos 0,080/0,070/0,065 en fuente y destino.
 - Al fijar REL, congelar el último candidato verde sin repetir el raycast con ACTION_UP.
+- Si REL se fija tras uno o más movimientos de la misma sesión, convertir el punto
+  visible a la base original para no aplicar dos veces el desplazamiento acumulado.
 - Publicar candidato, referencia y origen de valores en `transform.session`.
 - Actualizar capabilities, protocolo, fixtures y pruebas.
 

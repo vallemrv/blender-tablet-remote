@@ -556,6 +556,30 @@ def modal_scenario(client: WSClient) -> None:
     # Headless no dispone de raycast de viewport; se inyecta únicamente el resultado
     # del picker para probar la matemática y el contrato de valores REL.
     from blender_tablet_remote.commands.modal import session as modal_session
+    ok_reply("begin para REL después de mover", client.command("transform.begin", {"mode": "MOVE"}))
+    ok_reply("primer movimiento antes de REL", client.command("transform.value", {
+        "values": [1.0, 0.0, 0.0],
+    }))
+    modal_session.reference_candidate = {
+        "hit": True, "snap_type": "VERTEX", "id": "test:moved:VERTEX:0",
+        # El vértice base está en X=2 y el raycast lo ve ya desplazado hasta X=3.
+        "position": [3.0, 0.0, 0.0], "screen": [0.5, 0.5],
+    }
+    locked_after_move = ok_reply("fijar REL tras primer movimiento", client.command(
+        "transform.reference_candidate", {"u": 0.01, "v": 0.01, "lock": True}))
+    check("REL no suma dos veces el movimiento previo",
+          abs(cube.location.x - 1.0) < 1e-6
+          and locked_after_move.get("reference_position") == [3.0, 0.0, 0.0]
+          and abs(modal_session.reference_position.x - 2.0) < 1e-6,
+          str(locked_after_move))
+    second_move = ok_reply("segundo movimiento con REL", client.command(
+        "transform.value", {"values": [2.0, 0.0, 0.0]}))
+    check("REL sigue unido durante el segundo movimiento",
+          abs(cube.location.x - 2.0) < 1e-6
+          and second_move.get("reference_position") == [4.0, 0.0, 0.0],
+          str(second_move))
+    ok_reply("cancelar reproducción de dos movimientos", client.command("transform.cancel"))
+
     ok_reply("begin para referencia REL", client.command("transform.begin", {"mode": "MOVE"}))
     modal_session.reference_position = modal_session.pivot.copy()
     modal_session.reference_position.x = 2.0
