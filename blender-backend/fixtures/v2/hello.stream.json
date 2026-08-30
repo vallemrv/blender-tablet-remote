@@ -1,6 +1,4 @@
 {
-  "running": true,
-  "port": 8766,
   "path": "/stream.h264",
   "format": "h264",
   "framing": "btr-h264-v1",

@@ -167,7 +167,7 @@
       ]
     },
     "edit_tools": {
-      "version": 7,
+      "version": 9,
       "tools": [
         "EXTRUDE",
         "BEVEL",
@@ -200,9 +200,19 @@
         "close": true,
         "pop": true,
         "cut_through": false,
-        "threshold": 0.045,
+        "threshold": 0.08,
+        "edge_threshold": 0.042,
+        "edge_center_threshold": 0.07,
+        "snap_priority": ["VERTEX", "EDGE_CENTER", "EDGE"],
+        "auto_vertex_threshold": 0.035,
+        "auto_edge_center_threshold": 0.028,
+        "snap_modes": ["AUTO", "VERTEX", "EDGE_CENTER", "EDGE"],
+        "deferred_commit": true,
+        "staged_preview": true,
         "drag": true,
-        "first_point_drag": true,
+        "point_on_release": true,
+        "multiple_strokes": true,
+        "new_stroke": true,
         "projection": true,
         "snap_types": ["VERTEX", "EDGE_CENTER", "EDGE", "FACE"]
       },
@@ -502,6 +512,13 @@
                 "label": "Snap",
                 "type": "bool",
                 "default": true
+              },
+              {
+                "id": "snap_mode",
+                "label": "Destino",
+                "type": "enum",
+                "default": "AUTO",
+                "values": ["AUTO", "VERTEX", "EDGE_CENTER", "EDGE"]
               }
             ],
             "command": "tool.begin",
@@ -1093,6 +1110,13 @@
                 "label": "Snap",
                 "type": "bool",
                 "default": true
+              },
+              {
+                "id": "snap_mode",
+                "label": "Destino",
+                "type": "enum",
+                "default": "AUTO",
+                "values": ["AUTO", "VERTEX", "EDGE_CENTER", "EDGE"]
               }
             ],
             "command": "tool.begin",
@@ -1530,6 +1554,13 @@
                 "label": "Snap",
                 "type": "bool",
                 "default": true
+              },
+              {
+                "id": "snap_mode",
+                "label": "Destino",
+                "type": "enum",
+                "default": "AUTO",
+                "values": ["AUTO", "VERTEX", "EDGE_CENTER", "EDGE"]
               }
             ],
             "command": "tool.begin",
@@ -2196,7 +2227,7 @@
               "id": "KNIFE",
               "label": "Cuchillo",
               "enabled": true,
-              "input": "VIEWPORT_DRAG_SEGMENTS",
+              "input": "VIEWPORT_POINT_STROKES",
               "payload": {
                 "tool": "KNIFE"
               },
@@ -2206,6 +2237,13 @@
                   "label": "Snap",
                   "type": "bool",
                   "default": true
+                },
+                {
+                  "id": "snap_mode",
+                  "label": "Destino",
+                  "type": "enum",
+                  "default": "AUTO",
+                  "values": ["AUTO", "VERTEX", "EDGE_CENTER", "EDGE"]
                 }
               ]
             },
@@ -2478,6 +2516,7 @@
     "tool.drag_line",
     "tool.knife_close",
     "tool.knife_drag",
+    "tool.knife_new_stroke",
     "tool.knife_point",
     "tool.knife_pop",
     "tool.loop_pick",

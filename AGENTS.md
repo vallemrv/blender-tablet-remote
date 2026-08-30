@@ -98,13 +98,22 @@ vez en dos n-gons que comparten exactamente la cadena dibujada. Esta solución e
 validada por el usuario y no debe sustituirse por triangulación punto a punto. Su límite
 conocido son cadenas interiores que atraviesan caras distintas, que aún conservan el
 fallback antiguo. La deuda de contrato detectada en ese ciclo era un fixture de
-capabilities anterior a los cambios ya presentes en el add-on y debe abrir su propia
-reparación si sigue reproduciéndose.
+capabilities anterior a los cambios ya presentes en el add-on.
 
 El 2026-08-30 el usuario autorizó retirar los planes `000`–`005` y el diagnóstico de
 Knife, incluidas las validaciones pendientes que conservaban esos documentos. El estado
 funcional y las limitaciones relevantes quedan consolidados aquí. La próxima serie de
 refinado y escalado empieza de nuevo en `000`.
+
+La serie posterior `000` saneó esa deuda contractual contra el ZIP recién construido e
+instalado. `capabilities.json` refleja ahora `edit_tools.version = 9`, los umbrales y
+modos de snap, el commit diferido, el Knife multitrazo, sus parámetros de catálogo y
+toolbar y `tool.knife_new_stroke`. El fixture de `hello.stream` ya no fija `running` ni
+`port`, porque son estado y configuración de ejecución, no contrato estable. El test
+añade comprobaciones explícitas de versión y Knife para impedir otro verde falso. El
+contrato, headless y Android quedaron verdes; la suite GUI conserva únicamente el fallo
+previo y ajeno de POST_PIXEL «el fotograma cambia al orbitar». El usuario autorizó
+ejecutar y cerrar este saneamiento el 2026-08-30; la siguiente serie vuelve a `000`.
 
 El snap que condujo a esa solución es reutilizable: primero se restringen candidatos a
 la cara visible del raycast para excluir geometría posterior; después se clasifican en
@@ -739,10 +748,9 @@ puntos interiores se acumulan hasta que el trazo vuelve al contorno y la cara se
 cara; encadenar interiores de caras distintas sigue usando `_poke`.
 
 **Aviso de método:** el contrato se mide contra el add-on instalado, no contra el repo.
-Al reinstalar se destapó que el código anuncia `LOOPTOOLS_CIRCLE`, `snap_mode` y
-`edit_tools.version = 9` que el fixture commiteado (versión 7) no tiene, así que
-`capabilities coincide con fixture` venía dando verde falso. Reinstalar el add-on antes
-de fiarse de un contrato en verde.
+Construir y reinstalar el ZIP antes de fiarse de un contrato en verde. Sus fixtures
+deben contener campos normativos; estado dinámico como el puerto o si el stream pudo
+arrancar se prueba por separado.
 
 ## Entrega obligatoria de cambios
 

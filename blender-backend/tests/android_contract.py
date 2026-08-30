@@ -189,6 +189,18 @@ def main() -> int:
     for entries in (comparable_catalog.get("groups") or {}).values():
         entries[:] = [entry for entry in entries if entry.get("id") not in conditional_ids]
     check("capabilities coincide con fixture", _contains(comparable_caps, expected_caps), str(actual_caps.get("features")))
+    expected_edit_tools = ((expected_caps.get("features") or {}).get("edit_tools") or {})
+    actual_edit_tools = ((actual_caps.get("features") or {}).get("edit_tools") or {})
+    check("fixture fija la versión contractual de edit_tools",
+          actual_edit_tools.get("version") == expected_edit_tools.get("version") == 9,
+          f"actual={actual_edit_tools.get('version')} fixture={expected_edit_tools.get('version')}")
+    check("fixture fija el contrato multitrazo y snap de Knife",
+          _contains(actual_edit_tools.get("knife") or {}, expected_edit_tools.get("knife") or {})
+          and expected_edit_tools.get("knife", {}).get("point_on_release") is True
+          and expected_edit_tools.get("knife", {}).get("multiple_strokes") is True
+          and expected_edit_tools.get("knife", {}).get("snap_modes")
+          == ["AUTO", "VERTEX", "EDGE_CENTER", "EDGE"],
+          str(expected_edit_tools.get("knife")))
     selection_feature = ((actual_caps.get("features") or {}).get("selection") or {})
     check("selection anuncia Ctrl+toque como camino más corto",
           selection_feature.get("shortest_path") is True, str(selection_feature))
