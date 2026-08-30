@@ -543,6 +543,9 @@ private class GestureView(
         if (pendingDx != 0f || pendingDy != 0f) {
             onToolGesture(GesturePhase.UPDATE, nx(pendingDx), ny(pendingDy))
         }
+        // Entrega la última muestra MOVE estable antes de END. REL la usa para
+        // bloquear exactamente el marcador visto, sin confiar en el jitter de UP.
+        onToolPointer(nx(lastX), ny(lastY))
         onToolGesture(GesturePhase.END, 0f, 0f)
         toolActive = false
         resetPending()

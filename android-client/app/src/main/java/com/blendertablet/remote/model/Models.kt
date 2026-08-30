@@ -191,6 +191,10 @@ data class TransformSession(
     val snapType: SnapType = SnapType.NONE,
     /** El elemento al que se está pegando ahora mismo, si el snap es geométrico. */
     val snapCandidate: SnapCandidate? = null,
+    val referenceCandidate: SnapCandidate? = null,
+    val referenceLocked: Boolean = false,
+    val referencePosition: List<Float> = emptyList(),
+    val referenceDistance: Double? = null,
     val step: Double = 0.01,
     val orientation: Orientation = Orientation.GLOBAL,
     val valueMode: ValueMode = ValueMode.RELATIVE,
@@ -408,6 +412,10 @@ data class AppUiState(
     val constraint: Constraint = Constraint.FREE,
     val orientation: Orientation = Orientation.GLOBAL,
     val valueMode: ValueMode = ValueMode.RELATIVE,
+    /** REL armado: el lápiz sondea una referencia sin mover la selección. */
+    val referencePicking: Boolean = false,
+    val moveStepValue: Double = 1.0,
+    val moveStepUnit: TransformStepUnit = TransformStepUnit.CM,
     /** Operación acumulativa de Mayús o sustractiva de Alt. */
     val selectionOp: SelectionOp = SelectionOp.SET,
     /** Ctrl armado para que el siguiente toque seleccione el camino más corto. */

@@ -17,8 +17,8 @@ _CONSTRAINTS_OBJECT = ["FREE", "X", "Y", "Z", "XY", "XZ", "YZ", "VIEW"]
 _CONSTRAINTS_EDIT = ["FREE", "X", "Y", "Z", "XY", "XZ", "YZ", "NORMAL", "VIEW"]
 _ORIENTATIONS_OBJECT = ["GLOBAL", "LOCAL", "VIEW"]
 _ORIENTATIONS_EDIT = ["GLOBAL", "LOCAL", "NORMAL", "VIEW"]
-_SNAP_TYPES = ["NONE", "INCREMENT", "GRID", "VERTEX", "EDGE", "EDGE_CENTER",
-               "FACE", "FACE_CENTER", "CURSOR"]
+_SNAP_TYPES = ["NONE", "INCREMENT", "VERTEX", "EDGE", "EDGE_CENTER",
+               "FACE", "FACE_CENTER"]
 
 
 def selection_mode() -> str:

@@ -12,6 +12,18 @@
   "snap_type": "INCREMENT",
   "snap_candidate": null,
   "snap_locked": false,
+  "reference_candidate": {
+    "hit": true,
+    "snap_type": "VERTEX",
+    "id": "Cube:VERTEX:0",
+    "object": "Cube",
+    "position": [0.0, 0.0, 0.0],
+    "screen": [0.5, 0.5],
+    "distance": 0.0
+  },
+  "reference_locked": true,
+  "reference_position": [0.0, 0.0, 0.0],
+  "reference_distance": 1.0,
   "step": 0.01,
   "objects": ["Cube"],
   "values": [1.25, 0.0, 0.0],

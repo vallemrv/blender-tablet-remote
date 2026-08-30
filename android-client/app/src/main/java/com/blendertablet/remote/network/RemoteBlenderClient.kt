@@ -251,6 +251,8 @@ interface RemoteBlenderClient {
      * servidor responde `wrong_tool` en rotar y escalar.
      */
     fun transformSnapCandidate(u: Double, v: Double, snapType: SnapType, lock: Boolean = true)
+    fun transformReferenceCandidate(u: Double, v: Double, lock: Boolean = false)
+    fun transformReferenceClear()
 
     /** Valor exacto: [values] para mover/escalar, [angleDegrees] para rotar. */
     fun transformValue(values: List<Double>?, angleDegrees: Double?)

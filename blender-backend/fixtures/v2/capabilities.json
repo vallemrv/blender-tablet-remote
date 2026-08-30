@@ -166,6 +166,38 @@
         "SMOOTH"
       ]
     },
+    "parametric_transforms": {
+      "version": 1,
+      "modes": [
+        "MOVE"
+      ],
+      "axis_values": true,
+      "step_units": [
+        "MM",
+        "CM",
+        "M",
+        "PERCENT"
+      ],
+      "move_snap": [
+        "NONE",
+        "INCREMENT",
+        "VERTEX",
+        "EDGE",
+        "EDGE_CENTER",
+        "FACE",
+        "FACE_CENTER"
+      ],
+      "reference": {
+        "command": "transform.reference_candidate",
+        "auto": true,
+        "types": [
+          "VERTEX",
+          "EDGE_CENTER",
+          "EDGE",
+          "FACE"
+        ]
+      }
+    },
     "edit_tools": {
       "version": 9,
       "tools": [
@@ -2532,6 +2564,7 @@
     "transform.confirm",
     "transform.move",
     "transform.nudge",
+    "transform.reference_candidate",
     "transform.reset",
     "transform.rotate",
     "transform.scale",

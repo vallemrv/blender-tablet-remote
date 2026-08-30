@@ -63,6 +63,9 @@ class BackendContractTest {
         assertEquals(Orientation.GLOBAL, session.orientation)
         assertEquals(ValueMode.RELATIVE, session.valueMode)
         assertEquals(SnapType.INCREMENT, session.snapType)
+        assertTrue(session.referenceLocked)
+        assertEquals(SnapType.VERTEX, session.referenceCandidate?.type)
+        assertEquals(1.0, session.referenceDistance ?: 0.0, 1e-9)
         assertEquals(0.01, session.step, 1e-9)
         assertEquals(1.25, session.values[0], 1e-9)
         assertEquals(0.0, session.angle, 1e-9)
@@ -112,7 +115,7 @@ class BackendContractTest {
         val declared = json.getJSONArray("available_snap_types")
         val names = (0 until declared.length()).map { declared.getString(it) }
 
-        assertEquals(names.toSet(), SnapType.entries.map { it.name }.toSet())
+        assertEquals(names.toSet(), SnapType.forMode(TransformMode.MOVE).map { it.name }.toSet())
         assertEquals(names, StateParser.context(json).availableSnapTypes.map { it.name })
     }
 

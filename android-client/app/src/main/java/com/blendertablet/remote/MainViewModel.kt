@@ -37,6 +37,7 @@ import com.blendertablet.remote.model.TouchContext
 import com.blendertablet.remote.model.TouchProbe
 import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.TransformSession
+import com.blendertablet.remote.model.TransformStepUnit
 import com.blendertablet.remote.model.ValueMode
 import com.blendertablet.remote.model.stepsFor
 import com.blendertablet.remote.model.stepInBlenderUnits
@@ -74,6 +75,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val h264Stream = H264ViewportStream(viewModelScope) { fallbackToMjpeg() }
     val h264Size = h264Stream.size
     private var loopCutArmed = false
+    private var lastReferencePointer: Pair<Float, Float>? = null
     // Debe inicializarse antes de `init`: StateFlow emite su valor actual en cuanto
     // empieza el collect y Main.immediate puede ejecutar esa emisión durante el
     // propio constructor del ViewModel.
@@ -353,6 +355,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * es la forma corta de decir a dónde va.
      */
     fun pick(u: Float, v: Float, stylus: Boolean = false) {
+        if (local.value.referencePicking && client.transformSession.value.active) {
+            client.transformReferenceCandidate(u.toDouble(), v.toDouble(), lock = true)
+            local.update { it.copy(referencePicking = false) }
+            return
+        }
         // Knife activo: el toque coloca un punto de la polilínea.
         val knife = client.toolSession.value
         if (knife.active && knife.tool == EditTool.KNIFE) {
@@ -626,6 +633,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Seguimiento absoluto del dedo para snap geométrico durante el arrastre. */
     fun toolPointer(u: Float, v: Float) {
+        if (local.value.referencePicking && client.transformSession.value.active) {
+            lastReferencePointer = u to v
+            client.transformReferenceCandidate(u.toDouble(), v.toDouble(), lock = false)
+            return
+        }
         val tool = client.toolSession.value
         if (tool.active && tool.snapType.geometric) {
             client.toolSnapCandidate(u.toDouble(), v.toDouble(), tool.snapType, lock = false)
@@ -923,6 +935,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun transformValue(values: List<Double>?, angleDegrees: Double?) =
         client.transformValue(values, angleDegrees)
 
+    fun toggleTransformReference() {
+        val session = client.transformSession.value
+        if (!session.active || session.mode != TransformMode.MOVE) return
+        if (session.referenceLocked && !local.value.referencePicking) {
+            client.transformReferenceClear()
+        } else {
+            lastReferencePointer = null
+            local.update { it.copy(referencePicking = !it.referencePicking) }
+        }
+    }
+
+    fun setMoveStep(value: Double, unit: TransformStepUnit) {
+        if (value <= 0.0) return
+        local.update { it.copy(moveStepValue = value, moveStepUnit = unit) }
+        val session = client.transformSession.value
+        if (!session.active || session.mode != TransformMode.MOVE) return
+        val scaleLength = uiState.value.blender.unitScaleLength.coerceAtLeast(1e-12)
+        val blenderStep = when (unit) {
+            TransformStepUnit.MM -> value / 1000.0 / scaleLength
+            TransformStepUnit.CM -> value / 100.0 / scaleLength
+            TransformStepUnit.M -> value / scaleLength
+            TransformStepUnit.PERCENT -> (session.referenceDistance ?: return) * value / 100.0
+        }
+        client.transformSnap(SnapType.INCREMENT, blenderStep)
+    }
+
     fun transformConfirm() = client.transformConfirm()
     fun transformCancel() = client.transformCancel()
 
@@ -978,6 +1016,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // tipo de gesto y usa el modo que eligió la barra.
         val session = client.transformSession.value
         if (session.active) {
+            if (local.value.referencePicking) {
+                if (phase == GesturePhase.END) {
+                    lastReferencePointer?.let { (u, v) ->
+                        client.transformReferenceCandidate(u.toDouble(), v.toDouble(), lock = true)
+                    }
+                    local.update { it.copy(referencePicking = false) }
+                }
+                return
+            }
             val gesture = when (session.mode) {
                 TransformMode.MOVE -> Gesture.MOVE
                 TransformMode.ROTATE -> Gesture.ROTATE

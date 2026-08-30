@@ -102,6 +102,7 @@ class WebSocketRemoteBlenderClient(
             "transform.begin", "transform.axes", "transform.snap",
             "transform.value", "transform.nudge", "transform.status",
             "transform.snap_candidate",
+            "transform.reference_candidate",
         )
 
         /** Comandos cuya respuesta ES el estado de la sesión de herramienta. */
@@ -480,6 +481,15 @@ class WebSocketRemoteBlenderClient(
         pendingTransformSnap = ToolSnapRequest(u, v, snapType, lock)
         flushTransformSnap()
     }
+
+    override fun transformReferenceCandidate(u: Double, v: Double, lock: Boolean) = command(
+        "transform.reference_candidate",
+        JSONObject().put("u", u).put("v", v).put("lock", lock),
+    )
+
+    override fun transformReferenceClear() = command(
+        "transform.reference_candidate", JSONObject().put("clear", true),
+    )
 
     override fun editSettings(parameters: Map<String, Any?>) =
         command("edit.settings_set", JSONObject(parameters))

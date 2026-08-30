@@ -50,6 +50,7 @@ import com.blendertablet.remote.model.Orientation
 import com.blendertablet.remote.model.SnapType
 import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.TransformSession
+import com.blendertablet.remote.model.TransformStepUnit
 import com.blendertablet.remote.model.ValueMode
 import com.blendertablet.remote.model.ValueParser
 import com.blendertablet.remote.model.stepsFor
@@ -83,12 +84,17 @@ fun TransformBar(
     constraint: Constraint,
     orientation: Orientation,
     valueMode: ValueMode,
+    referencePicking: Boolean,
+    moveStepValue: Double,
+    moveStepUnit: TransformStepUnit,
     availableOrientations: List<Orientation>,
     onConstraint: (Constraint) -> Unit,
     onOrientation: (Orientation) -> Unit,
     onSnapType: (SnapType) -> Unit,
     onStep: (Int) -> Unit,
     onValueMode: (ValueMode) -> Unit,
+    onReference: () -> Unit,
+    onMoveStep: (Double, TransformStepUnit) -> Unit,
     onValue: (List<Double>?, Double?) -> Unit,
     onProportionalRadius: (Double) -> Unit,
     onProportionalRadiusValue: (Double) -> Unit,
@@ -140,12 +146,28 @@ fun TransformBar(
                 SnapPicker(session.mode, snapType, onSnapType)
                 // El paso solo significa algo si el snap cuadra a un incremento; en
                 // un snap a vértice manda la geometría, no una cifra.
-                if (snapType == SnapType.INCREMENT || snapType == SnapType.GRID) {
+                if (snapType == SnapType.INCREMENT && session.mode != TransformMode.MOVE) {
                     StepPicker(session.mode, stepIndex, onStep)
                 }
                 Divider()
-                ValueModePicker(valueMode, onValueMode)
-                ValueInput(session, unitScaleLength, onValue)
+                if (session.mode == TransformMode.MOVE) {
+                    PillButton(
+                        when {
+                            referencePicking -> "REL · señala"
+                            session.referenceLocked -> "REL · fijada"
+                            else -> "REL"
+                        },
+                        selected = referencePicking || session.referenceLocked,
+                    ) { onReference() }
+                    MoveStepInput(
+                        moveStepValue, moveStepUnit, session.referenceLocked,
+                        onMoveStep,
+                    )
+                    MoveAxisInputs(session, unitScaleLength, moveStepValue, moveStepUnit, onValue)
+                } else {
+                    ValueModePicker(valueMode, onValueMode)
+                    ValueInput(session, unitScaleLength, onValue)
+                }
             }
             Spacer(Modifier.width(10.dp))
             // Confirmar y descartar, fijos a la derecha: son las dos únicas salidas
@@ -154,6 +176,75 @@ fun TransformBar(
             Spacer(Modifier.width(4.dp))
             RoundAction(Icons.Default.Check, "Confirmar", Ink.Ok, onConfirm)
         }
+    }
+}
+
+@Composable
+private fun MoveStepInput(
+    value: Double,
+    unit: TransformStepUnit,
+    hasReference: Boolean,
+    onChange: (Double, TransformStepUnit) -> Unit,
+) {
+    var text by remember(value) { mutableStateOf(format(value, 3)) }
+    var expanded by remember { mutableStateOf(false) }
+    fun commit(raw: String = text) {
+        raw.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0.0 }?.let { onChange(it, unit) }
+    }
+    PillButton("−") { onChange((value - 1.0).coerceAtLeast(0.001), unit) }
+    CompactNumericField(
+        value = text, onValueChange = { text = it }, modifier = Modifier.width(58.dp),
+        textAlign = TextAlign.End, placeholder = "Paso", onDone = { commit() },
+    )
+    PillButton("+") { onChange(value + 1.0, unit) }
+    Box {
+        PillButton(unit.label) { expanded = true }
+        DropdownMenu(expanded, { expanded = false }) {
+            TransformStepUnit.entries.forEach { option ->
+                val enabled = option != TransformStepUnit.PERCENT || hasReference
+                DropdownMenuItem(
+                    text = { Text(option.label) }, enabled = enabled,
+                    onClick = { expanded = false; onChange(value, option) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MoveAxisInputs(
+    session: TransformSession,
+    unitScaleLength: Double,
+    stepValue: Double,
+    stepUnit: TransformStepUnit,
+    onValue: (List<Double>?, Double?) -> Unit,
+) {
+    val referenceDistance = session.referenceDistance ?: 0.0
+    val stepPhysical = when (stepUnit) {
+        TransformStepUnit.MM -> stepValue / 1000.0
+        TransformStepUnit.CM -> stepValue / 100.0
+        TransformStepUnit.M -> stepValue
+        TransformStepUnit.PERCENT -> referenceDistance * stepValue / 100.0 * unitScaleLength
+    }
+    val step = stepPhysical / unitScaleLength.coerceAtLeast(1e-12)
+    Axis.entries.forEach { axis ->
+        val index = axis.ordinal
+        val current = session.values.getOrElse(index) { 0.0 }
+        var text by remember(session.active, current) {
+            mutableStateOf(format(current * unitScaleLength, 4))
+        }
+        fun send(value: Double) {
+            val next = session.values.toMutableList().also { it[index] = value }
+            onValue(next, null)
+        }
+        PillButton("${axis.name}−") { send(current - step) }
+        CompactNumericField(
+            value = text, onValueChange = { text = it }, modifier = Modifier.width(66.dp),
+            textAlign = TextAlign.End, placeholder = axis.name, onDone = {
+                ValueParser.parse(text, TransformMode.MOVE)?.let { send(it / unitScaleLength) }
+            },
+        )
+        PillButton("${axis.name}+") { send(current + step) }
     }
 }
 

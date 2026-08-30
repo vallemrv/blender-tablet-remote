@@ -546,22 +546,41 @@ def modal_scenario(client: WSClient) -> None:
     status = ok_reply("status tras cancelar", client.command("transform.status"))
     check("la sesión queda cerrada", status.get("active") is False, str(status))
 
-    cube.location = (0.2, 0.3, 0.4)
-    bpy.context.view_layer.update()
-    ok_reply("GRID restringido a X", client.command("transform.begin", {
+    fail_reply("GRID retirado de transformaciones", client.command("transform.begin", {
         "mode": "MOVE", "axes": ["X"], "snap": True, "snap_type": "GRID", "step": 1.0,
+    }), "bad_payload")
+    fail_reply("CURSOR retirado de transformaciones", client.command("transform.begin", {
+        "mode": "MOVE", "snap": True, "snap_type": "CURSOR",
+    }), "bad_payload")
+
+    # Headless no dispone de raycast de viewport; se inyecta únicamente el resultado
+    # del picker para probar la matemática y el contrato de valores REL.
+    from blender_tablet_remote.commands.modal import session as modal_session
+    ok_reply("begin para referencia REL", client.command("transform.begin", {"mode": "MOVE"}))
+    modal_session.reference_position = modal_session.pivot.copy()
+    modal_session.reference_position.x = 2.0
+    modal_session.reference_candidate = {
+        "hit": True, "snap_type": "VERTEX", "id": "test:VERTEX:0",
+        "position": [2.0, 0.0, 0.0], "screen": [0.5, 0.5],
+    }
+    modal_session.reference_locked = True
+    modal_session.values = modal_session.pivot.copy()
+    modal_session.values.x = -2.0  # mismo preview al cambiar origen
+    relative = ok_reply("XYZ cero desde REL", client.command("transform.value", {
+        "values": [0.0, 0.0, 0.0],
     }))
-    ok_reply("mover hacia siguiente línea X", client.command("transform.value", {
-        "values": [0.6, 0.0, 0.0],
-    }))
-    check("GRID no arrastra Y/Z hacia el origen",
-          abs(cube.location.x - 1.0) < 1e-6
-          and abs(cube.location.y - 0.3) < 1e-6
-          and abs(cube.location.z - 0.4) < 1e-6,
-          str(cube.location))
-    ok_reply("cancelar GRID restringido", client.command("transform.cancel"))
-    cube.location = (0.0, 0.0, 0.0)
-    bpy.context.view_layer.update()
+    check("REL cero coloca el pivote en la referencia",
+          abs(cube.location.x - 2.0) < 1e-6, str(cube.location))
+    check("estado publica origen y distancia REL",
+          relative.get("reference_locked") is True
+          and abs(relative.get("reference_distance", 0.0) - 2.0) < 1e-6,
+          str(relative))
+    cleared = ok_reply("limpiar REL conserva preview", client.command(
+        "transform.reference_candidate", {"clear": True}))
+    check("limpiar REL no mueve el objeto",
+          abs(cube.location.x - 2.0) < 1e-6 and cleared.get("reference_locked") is False,
+          f"{cube.location} | {cleared}")
+    ok_reply("cancelar referencia REL", client.command("transform.cancel"))
 
     ok_reply("begin para confirmar", client.command("transform.begin", {"mode": "MOVE", "axes": ["Z"]}))
     ok_reply("valor exacto", client.command("transform.value", {"values": [0, 0, 3.0]}))

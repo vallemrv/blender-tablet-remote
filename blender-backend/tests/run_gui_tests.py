@@ -239,6 +239,32 @@ def scenario(client: WSClient) -> None:
           bool((snapped.get("snap_candidate") or {}).get("id")), str(snapped))
     cmd(client, "transform.cancel")
 
+    original_location = bpy.data.objects[cube].location.copy()
+    cmd(client, "transform.begin", {"mode": "MOVE"})
+    hovered = cmd(client, "transform.reference_candidate", {
+        "u": face_center_screen[0], "v": face_center_screen[1], "lock": False,
+    })
+    check("REL sondea sin mover el objeto",
+          bool((hovered.get("reference_candidate") or {}).get("id")) and
+          (bpy.data.objects[cube].location - original_location).length < 1e-6,
+          str(hovered))
+    locked = cmd(client, "transform.reference_candidate", {
+        "u": face_center_screen[0], "v": face_center_screen[1], "lock": True,
+    })
+    check("REL bloquea la referencia sin mover el objeto",
+          locked.get("reference_locked") is True and
+          (bpy.data.objects[cube].location - original_location).length < 1e-6,
+          str(locked))
+    cmd(client, "transform.value", {"values": [0.0, 0.0, 0.0]})
+    locked_position = SnapVector(locked["reference_position"])
+    check("XYZ cero coloca el pivote en la referencia REL",
+          (bpy.data.objects[cube].matrix_world.translation - locked_position).length < 1e-5,
+          f"{bpy.data.objects[cube].location} -> {locked_position}")
+    cmd(client, "transform.cancel")
+    check("cancelar REL restaura la posición",
+          (bpy.data.objects[cube].location - original_location).length < 1e-6,
+          str(bpy.data.objects[cube].location))
+
     # Mover por un eje debe cambiar solo esa coordenada.
     before = cmd(client, "scene.get_state")["active"]["location"]
     client.gesture("move", "begin", axis="X")
@@ -672,7 +698,7 @@ def scenario(client: WSClient) -> None:
     check("cancelar restaura la topología", restored == original_verts, str(restored))
     cmd(client, "mode.object")
 
-    print("\n[12] Snap continuo y rejilla GRID absoluta", flush=True)
+    print("\n[12] Snap continuo sin rejilla modal", flush=True)
     # Vista FRONT: el nudge en pantalla mueve a lo largo del eje X de mundo, así las
     # posiciones son comparables y los múltiplos del paso se pueden comprobar.
     cmd(client, "object.select", {"name": cube})
@@ -695,16 +721,6 @@ def scenario(client: WSClient) -> None:
           all(abs(v - round(v / 0.05) * 0.05) < 1e-6 for v in positions), str(positions))
     cmd(client, "transform.cancel")
     time.sleep(0.2)
-
-    # MOVE + GRID: el objeto nace fuera de rejilla (x=0.3) y, con step 1.0, debe
-    # aterrizar en un múltiplo de 1.0 en coordenadas de mundo al primer nudge.
-    cmd(client, "transform.move", {"x": 0.3, "y": 0.0, "z": 0.0, "absolute": True})
-    time.sleep(0.2)
-    cmd(client, "transform.begin", {"mode": "MOVE", "snap": True, "snap_type": "GRID", "step": 1.0})
-    cmd(client, "transform.nudge", {"dx": 0.01, "dy": 0.0})
-    landed = bpy.data.objects[cube].location.x
-    check("GRID aterriza en la rejilla mundial", abs(landed - round(landed)) < 1e-6, str(landed))
-    cmd(client, "transform.cancel")
 
     print("\n[13] Signo del giro de cámara", flush=True)
     # El yaw es sobre el eje vertical LOCAL de la cámara (no el Z global): así el

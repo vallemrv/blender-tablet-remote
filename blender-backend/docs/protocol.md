@@ -406,9 +406,10 @@ transformación todavía viva.
 |---|---|
 | `transform.begin` | `mode`: `MOVE`\|`ROTATE`\|`SCALE`, `axes[]`/`constraint`, `orientation`, `value_mode`, `snap`, `snap_type`, `step`; en Edit también `proportional`, `radius`, `falloff` |
 | `transform.axes` | `axes[]` — cambia la restricción en vivo |
-| `transform.snap` | `snap` (bool), `step` |
+| `transform.snap` | `snap` (bool), `snap_type`, `step`; en Move no admite `GRID` ni `CURSOR` |
 | `snap.query` | `u`, `v`, `snap_type`: `VERTEX`\|`EDGE`\|`EDGE_CENTER`\|`FACE`\|`FACE_CENTER`\|`CURSOR`, `threshold` |
 | `transform.snap_candidate` | igual que `snap.query`, `lock` (predeterminado true) |
+| `transform.reference_candidate` | `u`, `v`, `lock`; o `clear`. Sondea/bloquea el origen REL sin mover la selección |
 | `transform.nudge` | `dx`, `dy` — normalmente llega por el canal de gestos |
 | `transform.value` | `values`: [x,y,z], o `angle` en GRADOS si el modo es ROTATE |
 | `transform.confirm` | — cierra con un único paso de undo |

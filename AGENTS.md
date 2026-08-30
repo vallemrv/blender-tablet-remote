@@ -122,6 +122,13 @@ la cámara independiente de la tablet; H.264 preferido y MJPEG fallback permanec
 transportes. Backend, GUI, contrato y Android quedaron verdes contra el ZIP reinstalado.
 La próxima serie vuelve a `000`.
 
+La serie activa `000` abre la base de transformaciones paramétricas, empezando por
+Mover en Object Mode. La bandeja conservará el gesto de lápiz y las restricciones
+X/Y/Z, añadirá valores exactos independientes, incremento editable con unidad y una
+referencia geométrica REL que no depende del pivote. Los planes propietarios son
+`000_PLAN_BACKEND_TRANSFORMACIONES_PARAMETRICAS.md` y
+`000_PLAN_FRONTEND_TRANSFORMACIONES_PARAMETRICAS.md`.
+
 El snap que condujo a esa solución es reutilizable: primero se restringen candidatos a
 la cara visible del raycast para excluir geometría posterior; después se clasifican en
 VERTEX, EDGE_CENTER y EDGE; el modo explícito filtra una categoría y AUTO aplica

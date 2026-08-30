@@ -75,8 +75,14 @@ enum class SnapType(val label: String, val geometric: Boolean = false) {
 
     companion object {
         fun forMode(mode: TransformMode): List<SnapType> =
-            if (mode == TransformMode.MOVE) entries else listOf(NONE, INCREMENT, GRID)
+            if (mode == TransformMode.MOVE)
+                listOf(NONE, INCREMENT, VERTEX, EDGE, EDGE_CENTER, FACE, FACE_CENTER)
+            else listOf(NONE, INCREMENT)
     }
+}
+
+enum class TransformStepUnit(val label: String) {
+    MM("mm"), CM("cm"), M("m"), PERCENT("%")
 }
 
 /**
