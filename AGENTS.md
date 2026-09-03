@@ -114,6 +114,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   alteraciones funcionales; no se aprovecha ese cambio para "mejorarlo" o refactorizarlo.
 - Rotar se presenta y se edita exclusivamente en grados; los radianes quedan limitados
   al cálculo interno y nunca se ofrecen como unidad en la interfaz.
+- Rotar ofrece Reset dentro de la sesión: restaura la preview a `0°` sin cancelar ni
+  obligar a volver a activar la herramienta.
 - El selector y los pasos de snap viven en `ui/SnapControl.kt`; las bandejas declaran
   opciones y reciben valores, pero no vuelven a implementar su interfaz.
 - Cada tipo de Snap obtiene su símbolo semántico desde `AppIcons.snap`; la marca de

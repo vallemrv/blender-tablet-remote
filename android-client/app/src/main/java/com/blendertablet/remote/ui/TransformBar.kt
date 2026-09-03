@@ -164,7 +164,12 @@ fun TransformBar(
                         // Escalar es un factor: el paso se escribe en % y es el mismo
                         // que mueven los −/+ de cada eje.
                         TransformMode.SCALE -> ScaleStepInput(scaleStepPercent, onScaleStep)
-                        TransformMode.ROTATE -> StepPicker(session.mode, stepIndex, onStep)
+                        TransformMode.ROTATE -> {
+                            IconAction(AppIcons.Reset, "Restablecer rotación a 0°") {
+                                onValue(listOf(0.0, 0.0, 0.0), null, null)
+                            }
+                            StepPicker(session.mode, stepIndex, onStep)
+                        }
                         TransformMode.MOVE -> Unit
                     }
                     Divider()

@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.RoundedCorner
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Rowing
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Straighten
@@ -71,6 +72,7 @@ object AppIcons {
     val Move: ImageVector = Icons.Default.OpenWith
     val Rotate: ImageVector = Icons.AutoMirrored.Filled.RotateRight
     val Scale: ImageVector = Icons.Default.AspectRatio
+    val Reset: ImageVector = Icons.Default.RestartAlt
 
     fun action(id: ActionId): ImageVector = when (id) {
         ActionId.ADD_OBJECT -> Icons.Default.Add
