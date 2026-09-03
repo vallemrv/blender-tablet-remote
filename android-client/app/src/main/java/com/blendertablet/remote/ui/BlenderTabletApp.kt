@@ -344,15 +344,20 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             exit = fadeOut(tween(120)),
         ) {
             Box(Modifier.fillMaxSize()) {
-                MenuBar(
-                    state = state,
-                    fps = stats.fps,
-                    lagMs = stats.lagMs,
-                    streaming = stats.connected,
-                    host = host,
-                    actions = menuActions,
+                Column(
                     modifier = Modifier.align(Alignment.TopStart).padding(Metrics.EdgeMargin),
-                )
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    MenuBar(
+                        state = state,
+                        fps = stats.fps,
+                        lagMs = stats.lagMs,
+                        streaming = stats.connected,
+                        host = host,
+                        actions = menuActions,
+                    )
+                    TransformToolRail(state = state, session = session, vm = vm)
+                }
 
                 val modifiersAvailable = state.blender.features.modifiers &&
                     state.blender.mode == BlenderMode.OBJECT && state.blender.activeObjectType == "MESH"
@@ -824,10 +829,8 @@ private fun EmptyViewport() {
 /**
  * Contenido de la barra desplegable: la herramienta activa y utilidades.
  *
- * El rail elige; el footer muestra las opciones. Mover/Rotar/Escalar abren la
- * transformación modal; Extruir/Bisel/Inset/Subdividir/Loop Cut abren la herramienta
- * paramétrica. El modo (Object/Edit) y el submodo de selección ya no están aquí:
- * viven en la barra superior.
+ * Las transformaciones y Tweak viven en su rail permanente junto a Archivo. Este rail
+ * desplegable queda para seleccionar, editar y acceder a utilidades.
  */
 @Composable
 private fun RailContent(
@@ -848,35 +851,6 @@ private fun RailContent(
         selected = state.activeTool == ActiveTool.SELECT && !session.active && !toolSession.active,
         onClick = vm::selectTool,
     )
-    if (inEdit && state.blender.features.selectionTweak) {
-        TweakToolButton(
-            settings = state.tweak,
-            motions = state.blender.features.tweakMotions,
-            snapTypes = state.blender.features.tweakSnapTypes,
-            selected = state.activeTool == ActiveTool.TWEAK,
-            enabled = state.blender.selectionMode != SelectionMode.FACE,
-            vm = vm,
-        )
-    }
-    IconAction(
-        Icons.Default.OpenWith, "Mover",
-        selected = session.active && session.mode == TransformMode.MOVE,
-        enabled = editable,
-        onClick = { vm.transformBegin(TransformMode.MOVE) },
-    )
-    IconAction(
-        Icons.AutoMirrored.Filled.RotateRight, "Rotar",
-        selected = session.active && session.mode == TransformMode.ROTATE,
-        enabled = editable,
-        onClick = { vm.transformBegin(TransformMode.ROTATE) },
-    )
-    IconAction(
-        Icons.Default.AspectRatio, "Escalar",
-        selected = session.active && session.mode == TransformMode.SCALE,
-        enabled = editable,
-        onClick = { vm.transformBegin(TransformMode.SCALE) },
-    )
-
     // Barra de tools activas (edit_toolbar, B0/F1): Extrude, Inset, Loop Cut y Cut
     // agrupados con la lógica de Blender, en vez de duplicarlos en el catálogo
     // contextual. Un servidor sin la feature no la anuncia y no se dibuja nada aquí.

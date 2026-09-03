@@ -80,6 +80,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 
 - El rail es una superficie limitada para herramientas gestuales frecuentes, no un
   catálogo completo.
+- Junto al menú Archivo hay un rail permanente con Mover/Rotar/Escalar; en Edit añade
+  Tweak. No se pliega y esas cuatro herramientas no se duplican en otros raíles.
 - Los comandos discretos viven en menús contextuales.
 - Los parámetros viven en una bandeja común.
 - Las nuevas herramientas deben describirse mediante catálogo/esquema siempre que sea

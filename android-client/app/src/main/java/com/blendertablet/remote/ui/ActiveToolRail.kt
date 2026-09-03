@@ -6,6 +6,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,10 +18,13 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.CropFree
+import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.material.icons.filled.RoundedCorner
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.ViewWeek
+import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -39,14 +43,69 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.blendertablet.remote.MainViewModel
+import com.blendertablet.remote.model.ActiveTool
+import com.blendertablet.remote.model.AppUiState
+import com.blendertablet.remote.model.BlenderMode
 import com.blendertablet.remote.model.EditTool
 import com.blendertablet.remote.model.EditToolbarFamily
 import com.blendertablet.remote.model.EditToolbarVariant
 import com.blendertablet.remote.model.SnapType
+import com.blendertablet.remote.model.SelectionMode
 import com.blendertablet.remote.model.ToolSession
+import com.blendertablet.remote.model.TransformSession
 import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.TweakMotion
 import com.blendertablet.remote.model.TweakSettings
+
+/**
+ * Rail permanente de manipulación, junto al menú Archivo.
+ *
+ * Su tamaño no depende del catálogo de herramientas: Object muestra siempre las tres
+ * transformaciones y Edit añade Tweak. No tiene estado abierto/cerrado.
+ */
+@Composable
+fun TransformToolRail(
+    state: AppUiState,
+    session: TransformSession,
+    vm: MainViewModel,
+    modifier: Modifier = Modifier,
+) {
+    val editable = state.blender.activeObject != null
+    val inEdit = state.blender.mode == BlenderMode.EDIT
+
+    FloatingPanel(modifier) {
+        Row {
+            IconAction(
+                Icons.Default.OpenWith, "Mover",
+                selected = session.active && session.mode == TransformMode.MOVE,
+                enabled = editable,
+                onClick = { vm.transformBegin(TransformMode.MOVE) },
+            )
+            IconAction(
+                Icons.AutoMirrored.Filled.RotateRight, "Rotar",
+                selected = session.active && session.mode == TransformMode.ROTATE,
+                enabled = editable,
+                onClick = { vm.transformBegin(TransformMode.ROTATE) },
+            )
+            IconAction(
+                Icons.Default.AspectRatio, "Escalar",
+                selected = session.active && session.mode == TransformMode.SCALE,
+                enabled = editable,
+                onClick = { vm.transformBegin(TransformMode.SCALE) },
+            )
+            if (inEdit && state.blender.features.selectionTweak) {
+                TweakToolButton(
+                    settings = state.tweak,
+                    motions = state.blender.features.tweakMotions,
+                    snapTypes = state.blender.features.tweakSnapTypes,
+                    selected = state.activeTool == ActiveTool.TWEAK,
+                    enabled = state.blender.selectionMode != SelectionMode.FACE,
+                    vm = vm,
+                )
+            }
+        }
+    }
+}
 
 /**
  * Barra izquierda de tools activas de Edit Mode (`edit_toolbar`, F1).
