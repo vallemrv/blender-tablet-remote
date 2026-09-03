@@ -82,6 +82,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   catálogo completo.
 - Junto al menú Archivo hay un rail permanente con Mover/Rotar/Escalar; en Edit añade
   Tweak. No se pliega y esas cuatro herramientas no se duplican en otros raíles.
+- Debajo del ojo hay un selector vertical Object/Edit/Sculpt. Sculpt y el menú superior
+  Layouts son por ahora únicamente presencia visual y no envían comandos.
 - Los comandos discretos viven en menús contextuales.
 - Los parámetros viven en una bandeja común.
 - Las nuevas herramientas deben describirse mediante catálogo/esquema siempre que sea

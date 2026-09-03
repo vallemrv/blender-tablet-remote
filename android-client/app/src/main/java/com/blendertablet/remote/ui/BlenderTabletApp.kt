@@ -512,6 +512,13 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             onToggleChrome = vm::toggleControls,
             modifier = Modifier.align(Alignment.TopEnd).padding(Metrics.EdgeMargin),
         )
+        if (chromeVisible) {
+            ModeRail(
+                state = state,
+                vm = vm,
+                modifier = Modifier.align(Alignment.TopEnd).padding(end = Metrics.EdgeMargin, top = 76.dp),
+            )
+        }
 
         state.error?.let { message ->
             ErrorToast(message, Modifier.align(Alignment.TopCenter).padding(top = 64.dp))

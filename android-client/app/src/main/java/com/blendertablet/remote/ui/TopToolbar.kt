@@ -1,6 +1,7 @@
 package com.blendertablet.remote.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
@@ -8,6 +9,7 @@ import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.automirrored.filled.CallMerge
 import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.BlurOn
+import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Grid4x4
 import androidx.compose.material.icons.filled.LinearScale
 import androidx.compose.material.icons.filled.ScatterPlot
@@ -57,10 +59,6 @@ fun TopToolbar(
         // solo el ojo: con la interfaz oculta no queda nada más en pantalla, ni el
         // modo, ni los modificadores de selección, ni los submodos.
         if (chromeVisible) {
-            // Modo (Object/Edit) en su propio panel, fuera del rail y sin mezclarse
-            // con el del ojo: es la barra de modo, la primera de la fila superior.
-            ModeBar(state, vm)
-
             FloatingPanel {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     if (blender.features.shading) {
@@ -126,13 +124,13 @@ fun TopToolbar(
     }
 }
 
-/** Barra de modo: Object/Edit, en su propio panel junto a las tools del top. */
+/** Selector vertical de modo colocado directamente debajo del ojo. */
 @Composable
-private fun ModeBar(state: AppUiState, vm: MainViewModel) {
+fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier) {
     val editable = state.blender.activeObject != null
     val inEdit = state.blender.mode == BlenderMode.EDIT
-    FloatingPanel {
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+    FloatingPanel(modifier) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             IconAction(
                 Icons.Default.ViewInAr, "Object Mode",
                 selected = !inEdit,
@@ -142,6 +140,10 @@ private fun ModeBar(state: AppUiState, vm: MainViewModel) {
                 selected = inEdit,
                 enabled = editable,
             ) { vm.setMode(BlenderMode.EDIT) }
+            IconAction(
+                Icons.Default.Brush, "Sculpt Mode · próximamente",
+                onClick = {},
+            )
         }
     }
 }

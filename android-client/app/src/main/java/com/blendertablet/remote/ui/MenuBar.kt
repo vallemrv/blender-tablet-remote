@@ -62,6 +62,7 @@ fun MenuBar(
         if (state.blender.features.sceneScale) {
             MenuAnchor("Escena") { close -> sceneMenu(state, actions, close) }
         }
+        MenuPlaceholder("Layouts")
         if (state.blender.hiddenObjects.isNotEmpty() && state.blender.features.visibility) {
             MenuAnchor("Ocultos") { close -> hiddenMenu(state, actions, close) }
         }
@@ -76,6 +77,18 @@ fun MenuBar(
             fontSize = 11.sp,
             modifier = Modifier.padding(start = 4.dp, end = 6.dp),
         )
+    }
+}
+
+/** Entrada visual reservada para un menú todavía sin comportamiento. */
+@Composable
+private fun MenuPlaceholder(title: String) {
+    Row(
+        Modifier.heightIn(min = 34.dp).padding(start = 10.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, color = Ink.Muted, fontSize = 13.sp)
+        Icon(Icons.Default.ArrowDropDown, null, Modifier.size(18.dp), tint = Ink.Faint)
     }
 }
 
