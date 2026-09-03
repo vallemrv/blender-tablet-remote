@@ -191,20 +191,6 @@ internal fun hasLongClickMenu(family: EditToolbarFamily): Boolean =
  * que dan un punto impreciso). Con SLIDE solo quedan los escalares: deslizar por una
  * arista ya decide el destino.
  */
-internal fun tweakSnapOptions(announced: List<SnapType>, motion: TweakMotion): List<SnapType> {
-    val exact = SnapType.forMode(TransformMode.MOVE)
-    val usable = if (motion == TweakMotion.SLIDE) exact.filterNot { it.geometric } else exact
-    return usable.filter { it == SnapType.NONE || it in announced }
-}
-
-/** Pasos ofrecidos: fracción del riel al deslizar, distancia real al mover libre. */
-internal fun tweakSnapSteps(motion: TweakMotion): List<Pair<String, Double>> =
-    if (motion == TweakMotion.SLIDE) {
-        listOf("5%" to .05, "10%" to .1, "25%" to .25, "50%" to .5)
-    } else {
-        listOf("1mm" to .001, "1cm" to .01, "10cm" to .1, "1m" to 1.0)
-    }
-
 /**
  * Botón de Tweak: tap lo arma, pulsación larga elige cómo se mueve y a qué se pega.
  *

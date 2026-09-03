@@ -19,13 +19,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -138,39 +135,47 @@ fun TransformBar(
                 }
                 SnapCandidateHint(session)
                 Divider()
-                run {
+                if (session.mode == TransformMode.MOVE) {
+                    MovementControls(
+                        session = session,
+                        unitScaleLength = unitScaleLength,
+                        moveStepValue = moveStepValue,
+                        moveStepUnit = moveStepUnit,
+                        constraint = constraint,
+                        snapType = snapType,
+                        orientation = orientation,
+                        referencePicking = referencePicking,
+                        availableOrientations = availableOrientations,
+                        onConstraint = onConstraint,
+                        onSnapType = onSnapType,
+                        onReference = onReference,
+                        onMoveStep = onMoveStep,
+                        onValue = onValue,
+                        onOrientation = onOrientation,
+                    )
+                } else {
                     ParametricAxisInputs(
                         session, unitScaleLength, moveStepValue, moveStepUnit,
                         scaleStepPercent, stepIndex, constraint, onConstraint, onValue,
                     )
                     when (session.mode) {
-                        TransformMode.MOVE -> MoveStepInput(
-                            moveStepValue, moveStepUnit, session.referenceLocked,
-                            onMoveStep,
-                        )
                         // Escalar es un factor: el paso se escribe en % y es el mismo
                         // que mueven los −/+ de cada eje.
                         TransformMode.SCALE -> ScaleStepInput(scaleStepPercent, onScaleStep)
                         TransformMode.ROTATE -> StepPicker(session.mode, stepIndex, onStep)
+                        TransformMode.MOVE -> Unit
                     }
                     Divider()
-                    if (session.mode == TransformMode.MOVE) {
-                        PillButton(
-                            if (referencePicking) "REL · señala" else if (session.sourceLocked) "REL · fijada" else "REL",
-                            selected = referencePicking || session.sourceLocked,
-                        ) { onReference("SOURCE") }
-                    } else {
-                        PillButton(
-                            if (referencePicking && referencePickingRole == "CENTER") "REL · señala"
-                            else if (session.centerLocked) "REL · pivote" else "REL · centro selección",
-                            selected = (referencePicking && referencePickingRole == "CENTER") || session.centerLocked,
-                        ) { onReference("CENTER") }
-                        PillButton(
-                            if (referencePicking && referencePickingRole == "SOURCE") "Fuente · señala"
-                            else if (session.sourceLocked) "Fuente · fijada" else "Fuente",
-                            selected = (referencePicking && referencePickingRole == "SOURCE") || session.sourceLocked,
-                        ) { onReference("SOURCE") }
-                    }
+                    PillButton(
+                        if (referencePicking && referencePickingRole == "CENTER") "REL · señala"
+                        else if (session.centerLocked) "REL · pivote" else "REL · centro selección",
+                        selected = (referencePicking && referencePickingRole == "CENTER") || session.centerLocked,
+                    ) { onReference("CENTER") }
+                    PillButton(
+                        if (referencePicking && referencePickingRole == "SOURCE") "Fuente · señala"
+                        else if (session.sourceLocked) "Fuente · fijada" else "Fuente",
+                        selected = (referencePicking && referencePickingRole == "SOURCE") || session.sourceLocked,
+                    ) { onReference("SOURCE") }
                     SnapPicker(session.mode, snapType, onSnapType)
                     Divider()
                     OrientationPicker(availableOrientations, orientation, onOrientation)
@@ -184,6 +189,52 @@ fun TransformBar(
             RoundAction(Icons.Default.Check, "Confirmar", Ink.Ok, onConfirm)
         }
     }
+}
+
+/**
+ * Sistema único de movimiento para Object y Edit.
+ *
+ * Todo consumidor de una sesión MOVE pasa por este componente: valores XYZ,
+ * incremento, referencia, snap y orientación no se vuelven a implementar por modo.
+ */
+@Composable
+fun MovementControls(
+    session: TransformSession,
+    unitScaleLength: Double,
+    moveStepValue: Double,
+    moveStepUnit: TransformStepUnit,
+    constraint: Constraint,
+    snapType: SnapType,
+    orientation: Orientation,
+    referencePicking: Boolean,
+    availableOrientations: List<Orientation>,
+    onConstraint: (Constraint) -> Unit,
+    onSnapType: (SnapType) -> Unit,
+    onReference: (String) -> Unit,
+    onMoveStep: (Double, TransformStepUnit) -> Unit,
+    onValue: (List<Double>?, Double?, List<Double>?) -> Unit,
+    onOrientation: (Orientation) -> Unit,
+) {
+    ParametricAxisInputs(
+        session = session,
+        unitScaleLength = unitScaleLength,
+        stepValue = moveStepValue,
+        stepUnit = moveStepUnit,
+        scaleStepPercent = 0.0,
+        stepIndex = 0,
+        constraint = constraint,
+        onConstraint = onConstraint,
+        onValue = onValue,
+    )
+    MoveStepInput(moveStepValue, moveStepUnit, session.referenceLocked, onMoveStep)
+    Divider()
+    PillButton(
+        if (referencePicking) "REL · señala" else if (session.sourceLocked) "REL · fijada" else "REL",
+        selected = referencePicking || session.sourceLocked,
+    ) { onReference("SOURCE") }
+    SnapControl(SnapType.forMode(TransformMode.MOVE), snapType, onSnapType)
+    Divider()
+    OrientationPicker(availableOrientations, orientation, onOrientation)
 }
 
 /**
@@ -451,52 +502,7 @@ private fun OrientationPicker(
  */
 @Composable
 private fun SnapPicker(mode: TransformMode, selected: SnapType, onSelect: (SnapType) -> Unit) {
-    val options = SnapType.forMode(mode)
-    val active = selected != SnapType.NONE
-    var expanded by remember(mode) { mutableStateOf(false) }
-
-    Box {
-        Row(
-            Modifier
-                .height(Metrics.Touch)
-                .clip(RoundedCornerShape(10.dp))
-                .background(if (active) Ink.Accent.copy(alpha = .22f) else Color.White.copy(alpha = .05f))
-                .clickableNoRipple { expanded = true }
-                .padding(start = 10.dp, end = 5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                Icons.Default.GridOn,
-                if (active) "Snap: ${selected.label}" else "Snap desactivado",
-                Modifier.size(16.dp),
-                tint = if (active) Ink.Accent else Ink.Muted,
-            )
-            Spacer(Modifier.width(5.dp))
-            Text(selected.label, color = if (active) Ink.Accent else Ink.Muted, fontSize = 12.sp)
-            Icon(
-                Icons.Default.ArrowDropDown,
-                "Abrir tipos de snap",
-                Modifier.size(18.dp),
-                tint = if (active) Ink.Accent else Ink.Muted,
-            )
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            for (option in options) {
-                DropdownMenuItem(
-                    text = { Text(option.label) },
-                    leadingIcon = {
-                        if (option == selected) {
-                            Icon(Icons.Default.Check, null, tint = Ink.Accent)
-                        }
-                    },
-                    onClick = {
-                        expanded = false
-                        onSelect(option)
-                    },
-                )
-            }
-        }
-    }
+    SnapControl(SnapType.forMode(mode), selected, onSelect)
 }
 
 /** Cuánto avanza cada incremento: milímetros, centímetros, metros, grados o factor. */

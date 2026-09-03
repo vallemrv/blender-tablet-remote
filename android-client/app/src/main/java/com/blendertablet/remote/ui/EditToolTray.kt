@@ -12,12 +12,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.automirrored.filled.Undo
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -245,36 +240,14 @@ private fun SnapToggle(session: ToolSession, onParameter: (String, Any?) -> Unit
     val options = session.availableSnapTypes
     if (options.isEmpty()) return
     val selected = session.snapType
-    var expanded by remember(session.tool) { mutableStateOf(false) }
-    androidx.compose.foundation.layout.Box {
-        PillButton("Snap: ${selected.label}", selected = selected != SnapType.NONE) { expanded = true }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option.label) },
-                    leadingIcon = { Icon(Icons.Default.GridOn, null) },
-                    onClick = {
-                        expanded = false
-                        onParameter("snap_type", option.name)
-                    },
-                )
-            }
-        }
-    }
+    SnapControl(options, selected, onSelect = { onParameter("snap_type", it.name) })
     if (selected == SnapType.INCREMENT || selected == SnapType.GRID) {
         val distance = session.tool in setOf(EditTool.EXTRUDE, EditTool.INSET, EditTool.BEVEL)
-        val presets = if (distance) {
-            listOf("1mm" to .001, "1cm" to .01, "10cm" to .1, "1m" to 1.0)
-        } else {
-            listOf("1%" to .01, "5%" to .05, "10%" to .1, "25%" to .25)
-        }
-        androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            presets.forEach { (label, step) ->
-                PillButton(label, selected = kotlin.math.abs(session.snapStep - step) < 1e-9) {
-                    onParameter("snap_step", step)
-                }
-            }
-        }
+        SnapStepControl(
+            selected = session.snapStep,
+            presets = if (distance) DistanceSnapSteps else FactorSnapSteps,
+            onSelect = { onParameter("snap_step", it) },
+        )
     }
 }
 

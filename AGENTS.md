@@ -90,6 +90,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   posible, evitando nuevas ramas específicas en Compose.
 - Los componentes compartidos poseen disposición, estado, unidades y ciclo de sesión;
   Blender conserva únicamente la lógica geométrica específica.
+- Mover usa un único `MovementControls` en Object y Edit sobre la misma sesión modal.
+- El selector y los pasos de snap viven en `ui/SnapControl.kt`; las bandejas declaran
+  opciones y reciben valores, pero no vuelven a implementar su interfaz.
+- El sondeo geométrico del backend permanece centralizado en `commands/snap.py`.
 
 ## Compilación
 
