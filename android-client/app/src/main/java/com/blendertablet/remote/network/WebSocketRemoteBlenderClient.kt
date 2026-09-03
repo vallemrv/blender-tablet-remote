@@ -794,14 +794,22 @@ class WebSocketRemoteBlenderClient(
                     }
                     command == "scene.scale" -> result?.let { scales ->
                         _sceneScalePresets.value = StateParser.sceneScalePresets(scales)
-                        scales.optJSONObject("scale")?.let {
-                            _state.value = _state.value.copy(sceneScale = StateParser.sceneScale(it))
+                        scales.optJSONObject("scale")?.let { scale ->
+                            _state.value = _state.value.copy(
+                                sceneScale = StateParser.sceneScale(scale),
+                                unitScaleLength = StateParser.sceneScaleLength(
+                                    scale, _state.value.unitScaleLength),
+                            )
                         }
                     }
                     // Responde con la escala ya aplicada: se pinta sin esperar al
                     // siguiente snapshot, que puede tardar hasta 100 ms.
                     command == "scene.scale_set" -> result?.let { scale ->
-                        _state.value = _state.value.copy(sceneScale = StateParser.sceneScale(scale))
+                        _state.value = _state.value.copy(
+                            sceneScale = StateParser.sceneScale(scale),
+                            unitScaleLength = StateParser.sceneScaleLength(
+                                scale, _state.value.unitScaleLength),
+                        )
                     }
                     command != null && command.startsWith("modifier.") -> result?.let { stack ->
                         _state.value = _state.value.copy(modifiers = StateParser.modifiers(stack.optJSONArray("modifiers")))
@@ -990,7 +998,9 @@ class WebSocketRemoteBlenderClient(
             features = old.features,
             modifierOptions = old.modifierOptions,
             view = if (json.has("view") || json.has("shading")) parsed.view else old.view,
-            unitScaleLength = old.unitScaleLength,
+            unitScaleLength = json.optJSONObject("scene_scale")?.let { scale ->
+                StateParser.sceneScaleLength(scale, old.unitScaleLength)
+            } ?: old.unitScaleLength,
             // La escala viaja con la vista, así que un snapshot de selección tampoco
             // la trae y volvería al preset por defecto en cada toque.
             sceneScale = if (json.has("scene_scale")) parsed.sceneScale else old.sceneScale,

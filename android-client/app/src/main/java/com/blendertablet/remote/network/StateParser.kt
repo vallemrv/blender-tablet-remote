@@ -39,6 +39,11 @@ object StateParser {
         json?.optJSONObject("units")?.optDouble("scale_length", 1.0)
             ?.takeIf { it.isFinite() && it > 0.0 } ?: 1.0
 
+    /** `scene_scale` repite la escala real para mantenerla al cargar otro `.blend`. */
+    fun sceneScaleLength(json: JSONObject?, fallback: Double): Double =
+        json?.optDouble("scale_length", fallback)
+            ?.takeIf { it.isFinite() && it > 0.0 } ?: fallback
+
     /**
      * Escala de trabajo. Un servidor que no la publica se comporta como hasta ahora,
      * así que el default equivale al preset medio y la UI simplemente no la ofrece.

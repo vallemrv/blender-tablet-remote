@@ -201,13 +201,38 @@ fun stepInBlenderUnits(preset: StepPreset, mode: TransformMode, scaleLength: Dou
  */
 fun moveStepInBlenderUnits(value: Double, unit: TransformStepUnit, scaleLength: Double): Double? {
     if (value <= 0.0) return null
+    if (unit == TransformStepUnit.PERCENT) return null
+    return moveValueInBlenderUnits(value, unit, scaleLength)
+}
+
+/** Convierte el número escrito junto a X/Y/Z a unidades internas de Blender. */
+fun moveValueInBlenderUnits(
+    value: Double,
+    unit: TransformStepUnit,
+    scaleLength: Double,
+    referenceDistance: Double = 0.0,
+): Double {
     val safe = scaleLength.coerceAtLeast(1e-12)
     return when (unit) {
         TransformStepUnit.MM -> value / 1000.0 / safe
         TransformStepUnit.CM -> value / 100.0 / safe
         TransformStepUnit.M -> value / safe
-        TransformStepUnit.PERCENT -> null
+        TransformStepUnit.PERCENT -> referenceDistance * value / 100.0
     }
+}
+
+/** Convierte el desplazamiento interno al número que enseña el selector X/Y/Z. */
+fun moveValueForDisplay(
+    value: Double,
+    unit: TransformStepUnit,
+    scaleLength: Double,
+    referenceDistance: Double = 0.0,
+): Double = when (unit) {
+    TransformStepUnit.MM -> value * scaleLength * 1000.0
+    TransformStepUnit.CM -> value * scaleLength * 100.0
+    TransformStepUnit.M -> value * scaleLength
+    TransformStepUnit.PERCENT ->
+        if (referenceDistance > 1e-12) value / referenceDistance * 100.0 else 0.0
 }
 
 /**

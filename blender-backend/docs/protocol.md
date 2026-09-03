@@ -210,7 +210,8 @@ cambiaría el significado de la geometría existente. `length_unit` sí, porque 
 cómo se escribe la medida. El preset viaja en `scene.get_state` como `scene_scale`. Al
 abrir un `.blend`, el preset inicial se deduce de su unidad real: milímetros selecciona
 `SMALL`, centímetros `MEDIUM` y metros `LARGE`. Una elección posterior del usuario se
-conserva durante esa sesión.
+conserva durante esa sesión. `scene_scale.scale_length` contiene siempre el valor real
+del archivo para que el cliente actualice sus conversiones al cargar otra escena.
 
 `object.add` usa `primitive_size` para que las primitivas nazcan a la escala elegida.
 Cada operador de Blender nombra su tamaño distinto (`size`, `radius`, los dos radios del

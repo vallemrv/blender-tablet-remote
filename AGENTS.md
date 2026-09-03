@@ -100,6 +100,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Los componentes compartidos poseen disposición, estado, unidades y ciclo de sesión;
   Blender conserva únicamente la lógica geométrica específica.
 - Mover usa un único `MovementControls` en Object y Edit sobre la misma sesión modal.
+- El selector `mm`/`cm`/`m` junto a X/Y/Z gobierna tanto los valores escritos y
+  mostrados como el paso, los botones y el snap de Mover.
+- Android renueva `unitScaleLength` desde cada `scene_scale`; cargar otro `.blend` no
+  conserva la conversión métrica de la conexión anterior.
 - El selector y los pasos de snap viven en `ui/SnapControl.kt`; las bandejas declaran
   opciones y reciben valores, pero no vuelven a implementar su interfaz.
 - El sondeo geométrico del backend permanece centralizado en `commands/snap.py`.

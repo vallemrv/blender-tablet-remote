@@ -49,6 +49,8 @@ import com.blendertablet.remote.model.SnapType
 import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.TransformSession
 import com.blendertablet.remote.model.TransformStepUnit
+import com.blendertablet.remote.model.moveValueForDisplay
+import com.blendertablet.remote.model.moveValueInBlenderUnits
 import com.blendertablet.remote.model.ValueMode
 import com.blendertablet.remote.model.ValueParser
 import com.blendertablet.remote.model.stepsFor
@@ -331,13 +333,7 @@ private fun ParametricAxisInputs(
     val referenceDistance = session.referenceDistance ?: 0.0
     val step = when (session.mode) {
         TransformMode.MOVE -> {
-            val physical = when (stepUnit) {
-                TransformStepUnit.MM -> stepValue / 1000.0
-                TransformStepUnit.CM -> stepValue / 100.0
-                TransformStepUnit.M -> stepValue
-                TransformStepUnit.PERCENT -> referenceDistance * stepValue / 100.0 * unitScaleLength
-            }
-            physical / unitScaleLength.coerceAtLeast(1e-12)
+            moveValueInBlenderUnits(stepValue, stepUnit, unitScaleLength, referenceDistance)
         }
         TransformMode.ROTATE -> stepsFor(session.mode)[stepIndex.coerceIn(0, stepsFor(session.mode).lastIndex)].step
         TransformMode.SCALE -> 0.0 // depende de la dimensión base de cada eje
@@ -348,7 +344,8 @@ private fun ParametricAxisInputs(
             if (session.mode == TransformMode.SCALE) 1.0 else 0.0
         }
         val displayed = when (session.mode) {
-            TransformMode.MOVE -> current * unitScaleLength
+            TransformMode.MOVE ->
+                moveValueForDisplay(current, stepUnit, unitScaleLength, referenceDistance)
             TransformMode.ROTATE -> if (alternateUnit) current else Math.toDegrees(current)
             TransformMode.SCALE -> if (scaleUnit == TransformStepUnit.PERCENT) current * 100.0 else {
                 val physical = session.dimensions.getOrElse(index) { 0.0 } * unitScaleLength
@@ -422,7 +419,9 @@ private fun ParametricAxisInputs(
                     }
                     parsed?.let {
                         send(when (session.mode) {
-                            TransformMode.MOVE -> it / unitScaleLength
+                            TransformMode.MOVE -> moveValueInBlenderUnits(
+                                it, stepUnit, unitScaleLength, referenceDistance,
+                            )
                             TransformMode.ROTATE -> if (alternateUnit) it else Math.toRadians(it)
                             TransformMode.SCALE -> it
                         })
