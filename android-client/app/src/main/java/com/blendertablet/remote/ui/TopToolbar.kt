@@ -1,7 +1,6 @@
 package com.blendertablet.remote.ui
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
@@ -124,13 +123,13 @@ fun TopToolbar(
     }
 }
 
-/** Selector vertical de modo colocado directamente debajo del ojo. */
+/** Selector horizontal de modo colocado directamente debajo del ojo. */
 @Composable
 fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier) {
     val editable = state.blender.activeObject != null
     val inEdit = state.blender.mode == BlenderMode.EDIT
     FloatingPanel(modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             IconAction(
                 Icons.Default.ViewInAr, "Object Mode",
                 selected = !inEdit,

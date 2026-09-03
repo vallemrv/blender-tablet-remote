@@ -376,7 +376,13 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     state.blender,
                     ModifierActions(vm::addModifier, vm::setModifier, vm::toggleModifier,
                         vm::moveModifier, vm::applyModifier, vm::removeModifier) { modifiersOpen = false },
-                    Modifier.align(Alignment.CenterEnd).padding(end = Metrics.EdgeMargin),
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(
+                            top = 132.dp,
+                            end = Metrics.EdgeMargin,
+                            bottom = 64.dp,
+                        ),
                 )
 
                 ToolRail(

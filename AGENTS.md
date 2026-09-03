@@ -83,8 +83,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Mover/Rotar/Escalar viven en el rail desplegable de tools; en Edit añade Tweak.
 - Duplicar vive en el radial. En Object conserva normal/enlazado y en Edit duplica la
   selección efectiva.
-- Debajo del ojo hay un selector vertical Object/Edit/Sculpt. Sculpt y el menú superior
+- Debajo del ojo hay un selector horizontal Object/Edit/Sculpt. Sculpt y el menú superior
   Layouts son por ahora únicamente presencia visual y no envían comandos.
+- El panel de modificadores queda limitado entre ese selector de modos y el selector
+  inferior de vistas/atajos, sin invadir ninguno de los dos.
 - Los comandos discretos viven en menús contextuales.
 - Los parámetros viven en una bandeja común.
 - Las nuevas herramientas deben describirse mediante catálogo/esquema siempre que sea
