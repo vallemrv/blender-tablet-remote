@@ -107,6 +107,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   mostrados como el paso, los botones y el snap de Mover.
 - Android renueva `unitScaleLength` desde cada `scene_scale`; cargar otro `.blend` no
   conserva la conversión métrica de la conexión anterior.
+- El comportamiento de Mover queda aceptado y protegido en los commits `a936769` y
+  `667cbcf`: no se modifican su gesto libre, conversiones, campos X/Y/Z, incremento,
+  snap ni sesión modal salvo que la incidencia activa mencione expresamente Mover.
+- Si otro cambio toca un archivo compartido con Mover, su camino debe conservarse sin
+  alteraciones funcionales; no se aprovecha ese cambio para "mejorarlo" o refactorizarlo.
 - El selector y los pasos de snap viven en `ui/SnapControl.kt`; las bandejas declaran
   opciones y reciben valores, pero no vuelven a implementar su interfaz.
 - Cada tipo de Snap obtiene su símbolo semántico desde `AppIcons.snap`; la marca de
