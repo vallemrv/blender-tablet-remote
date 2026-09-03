@@ -108,6 +108,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   conserva la conversión métrica de la conexión anterior.
 - El selector y los pasos de snap viven en `ui/SnapControl.kt`; las bandejas declaran
   opciones y reciben valores, pero no vuelven a implementar su interfaz.
+- Cada tipo de Snap obtiene su símbolo semántico desde `AppIcons.snap`; la marca de
+  selección es un indicador aparte y no sustituye el icono del tipo.
 - El sondeo geométrico del backend permanece centralizado en `commands/snap.py`.
 - La iconografía se resuelve por intención desde `ui/Iconography.kt`; las pantallas no
   eligen símbolos ni mantienen tablas de iconos propias.

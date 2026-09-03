@@ -18,7 +18,9 @@ import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Deselect
+import androidx.compose.material.icons.filled.DoNotDisturb
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Flip
 import androidx.compose.material.icons.filled.Grid4x4
 import androidx.compose.material.icons.filled.GridOn
@@ -37,6 +39,7 @@ import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.RoundedCorner
 import androidx.compose.material.icons.filled.Rowing
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.TouchApp
@@ -52,6 +55,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import com.blendertablet.remote.model.ActionId
 import com.blendertablet.remote.model.AddCategory
 import com.blendertablet.remote.model.EditTool
+import com.blendertablet.remote.model.SnapType
 
 /**
  * Vocabulario visual único de la aplicación.
@@ -126,6 +130,19 @@ object AppIcons {
     }
 
     fun toolbarFamily(id: String): ImageVector = editCatalog(id)
+
+    /** Un símbolo reconocible por destino; SnapControl solo decide estado y color. */
+    fun snap(type: SnapType): ImageVector = when (type) {
+        SnapType.NONE -> Icons.Default.DoNotDisturb
+        SnapType.INCREMENT -> Icons.Default.Straighten
+        SnapType.GRID -> Icons.Default.GridOn
+        SnapType.VERTEX -> Icons.Default.FiberManualRecord
+        SnapType.EDGE -> Icons.Default.LinearScale
+        SnapType.EDGE_CENTER -> Icons.Default.Adjust
+        SnapType.FACE -> Icons.Default.CropFree
+        SnapType.FACE_CENTER -> Icons.Default.CenterFocusStrong
+        SnapType.CURSOR -> Icons.Default.MyLocation
+    }
 
     fun addCategory(category: AddCategory): ImageVector = when (category) {
         AddCategory.MESH -> Icons.Default.ViewInAr

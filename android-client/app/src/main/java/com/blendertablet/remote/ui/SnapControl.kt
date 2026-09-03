@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -47,10 +46,13 @@ fun SnapControl(
                     text = { Text(option.label) },
                     leadingIcon = {
                         Icon(
-                            if (option == selected) Icons.Default.Check else Icons.Default.GridOn,
+                            AppIcons.snap(option),
                             null,
                             tint = if (option == selected) Ink.Accent else Ink.Muted,
                         )
+                    },
+                    trailingIcon = {
+                        if (option == selected) Icon(Icons.Default.Check, null, tint = Ink.Accent)
                     },
                     onClick = {
                         expanded = false
