@@ -370,9 +370,9 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     Modifier
                         .align(Alignment.TopEnd)
                         .padding(
-                            top = 132.dp,
+                            top = 142.dp,
                             end = Metrics.EdgeMargin,
-                            bottom = 64.dp,
+                            bottom = 74.dp,
                         ),
                 )
 
