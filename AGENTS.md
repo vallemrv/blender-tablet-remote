@@ -112,6 +112,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   snap ni sesión modal salvo que la incidencia activa mencione expresamente Mover.
 - Si otro cambio toca un archivo compartido con Mover, su camino debe conservarse sin
   alteraciones funcionales; no se aprovecha ese cambio para "mejorarlo" o refactorizarlo.
+- Rotar se presenta y se edita exclusivamente en grados; los radianes quedan limitados
+  al cálculo interno y nunca se ofrecen como unidad en la interfaz.
 - El selector y los pasos de snap viven en `ui/SnapControl.kt`; las bandejas declaran
   opciones y reciben valores, pero no vuelven a implementar su interfaz.
 - Cada tipo de Snap obtiene su símbolo semántico desde `AppIcons.snap`; la marca de

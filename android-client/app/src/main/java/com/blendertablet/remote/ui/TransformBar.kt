@@ -306,11 +306,10 @@ private fun ParametricAxisInputs(
     onConstraint: (Constraint) -> Unit,
     onValue: (List<Double>?, Double?, List<Double>?) -> Unit,
 ) {
-    var alternateUnit by remember(session.mode) { mutableStateOf(false) }
     var scaleUnit by remember(session.mode) { mutableStateOf(TransformStepUnit.M) }
     var scaleLinked by remember(session.sessionId) { mutableStateOf(true) }
     if (session.mode == TransformMode.ROTATE) {
-        PillButton(if (alternateUnit) "rad" else "°") { alternateUnit = !alternateUnit }
+        Text("°", color = Ink.Muted, fontSize = 13.sp)
     } else if (session.mode == TransformMode.SCALE) {
         Box {
             var expanded by remember { mutableStateOf(false) }
@@ -346,7 +345,7 @@ private fun ParametricAxisInputs(
         val displayed = when (session.mode) {
             TransformMode.MOVE ->
                 moveValueForDisplay(current, stepUnit, unitScaleLength, referenceDistance)
-            TransformMode.ROTATE -> if (alternateUnit) current else Math.toDegrees(current)
+            TransformMode.ROTATE -> Math.toDegrees(current)
             TransformMode.SCALE -> if (scaleUnit == TransformStepUnit.PERCENT) current * 100.0 else {
                 val physical = session.dimensions.getOrElse(index) { 0.0 } * unitScaleLength
                 when (scaleUnit) {
@@ -409,8 +408,6 @@ private fun ParametricAxisInputs(
                 onFocusChange = { editing = it },
                 onDone = {
                     val parsed = when {
-                        session.mode == TransformMode.ROTATE && alternateUnit ->
-                            text.replace(',', '.').toDoubleOrNull()
                         session.mode == TransformMode.SCALE -> ValueParser.parseScaleDimension(
                             text, scaleUnit, unitScaleLength,
                             session.baseDimensions.getOrElse(index) { 0.0 },
@@ -422,7 +419,7 @@ private fun ParametricAxisInputs(
                             TransformMode.MOVE -> moveValueInBlenderUnits(
                                 it, stepUnit, unitScaleLength, referenceDistance,
                             )
-                            TransformMode.ROTATE -> if (alternateUnit) it else Math.toRadians(it)
+                            TransformMode.ROTATE -> Math.toRadians(it)
                             TransformMode.SCALE -> it
                         })
                     }
