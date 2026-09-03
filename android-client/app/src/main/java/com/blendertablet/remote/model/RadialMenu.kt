@@ -80,6 +80,7 @@ object RadialMenu {
                 add(ActionId.HIDE_OBJECT)
                 add(ActionId.VIEW_LOCAL)
                 if (context.objectShadingAvailable) add(ActionId.SHADE_OBJECT)
+                add(ActionId.DUPLICATE)
                 add(ActionId.APPLY_TRANSFORMS)
                 add(ActionId.SET_ORIGIN)
             }
@@ -91,6 +92,7 @@ object RadialMenu {
                 add(ActionId.TOOL_BOX)
                 add(ActionId.TOOL_CIRCLE)
                 if (context.hasSelection) {
+                    add(ActionId.DUPLICATE)
                     add(ActionId.HIDE_OBJECT)
                     add(ActionId.VIEW_LOCAL)
                 }
@@ -117,7 +119,7 @@ object RadialMenu {
         // Enlazado (la `L`) siembra con lo seleccionado: sin semilla no hay isla.
         if (context.hasSelection) {
             add(ActionId.SELECT_LINKED)
-            add(ActionId.HIDE_GEOMETRY)
+            add(ActionId.DUPLICATE)
         }
         // "Mostrar oculto" salió del anillo: es raro comparado con lo demás y no
         // cabía junto a Enlazado en Aristas, donde el tope de ocho ya iba lleno.

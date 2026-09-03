@@ -98,7 +98,6 @@ enum class ActionId {
     HIDE_GEOMETRY,
     /** Entrada al catálogo de vértice/arista/cara (plan 001): abre panel vertical. */
     EDIT_MESH_TOOLS,
-    DUPLICATE_LINKED,
     RENAME,
     DELETE,
     DISSOLVE,
@@ -143,7 +142,6 @@ object SurfaceCatalog {
         ActionEntry(ActionId.TOOL_BEVEL, ActionSurface.RAIL, "Bisel"),
         ActionEntry(ActionId.TOOL_INSET, ActionSurface.RAIL, "Inset"),
         ActionEntry(ActionId.TOOL_SUBDIVIDE, ActionSurface.RAIL, "Subdividir"),
-        ActionEntry(ActionId.DUPLICATE, ActionSurface.RAIL, "Duplicar"),
         ActionEntry(ActionId.TOOL_LOOP_CUT, ActionSurface.RAIL, "Loop Cut"),
 
         // Barra de modo: Object/Edit, junto al ojo. Salieron del rail para dejarlo
@@ -205,7 +203,7 @@ object SurfaceCatalog {
         ActionEntry(ActionId.HIDE_OBJECT, ActionSurface.RADIAL, "Ocultar objeto"),
         ActionEntry(ActionId.SHADE_OBJECT, ActionSurface.RADIAL, "Suave"),
         ActionEntry(ActionId.HIDE_GEOMETRY, ActionSurface.RADIAL, "Ocultar geometría"),
-        ActionEntry(ActionId.DUPLICATE_LINKED, ActionSurface.RAIL, "Duplicar enlazado"),
+        ActionEntry(ActionId.DUPLICATE, ActionSurface.RADIAL, "Duplicar"),
         ActionEntry(ActionId.RENAME, ActionSurface.RADIAL, "Renombrar"),
         ActionEntry(ActionId.DELETE, ActionSurface.RADIAL, "Borrar"),
         ActionEntry(ActionId.DISSOLVE, ActionSurface.RADIAL, "Disolver"),

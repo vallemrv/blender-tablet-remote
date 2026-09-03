@@ -80,8 +80,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 
 - El rail es una superficie limitada para herramientas gestuales frecuentes, no un
   catálogo completo.
-- Junto al menú Archivo hay un rail permanente con Mover/Rotar/Escalar; en Edit añade
-  Tweak. No se pliega y esas cuatro herramientas no se duplican en otros raíles.
+- Mover/Rotar/Escalar viven en el rail desplegable de tools; en Edit añade Tweak.
+- Duplicar vive en el radial. En Object conserva normal/enlazado y en Edit duplica la
+  selección efectiva.
 - Debajo del ojo hay un selector vertical Object/Edit/Sculpt. Sculpt y el menú superior
   Layouts son por ahora únicamente presencia visual y no envían comandos.
 - Los comandos discretos viven en menús contextuales.

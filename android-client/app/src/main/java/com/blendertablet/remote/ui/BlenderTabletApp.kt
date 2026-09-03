@@ -344,20 +344,15 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             exit = fadeOut(tween(120)),
         ) {
             Box(Modifier.fillMaxSize()) {
-                Column(
+                MenuBar(
+                    state = state,
+                    fps = stats.fps,
+                    lagMs = stats.lagMs,
+                    streaming = stats.connected,
+                    host = host,
+                    actions = menuActions,
                     modifier = Modifier.align(Alignment.TopStart).padding(Metrics.EdgeMargin),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    MenuBar(
-                        state = state,
-                        fps = stats.fps,
-                        lagMs = stats.lagMs,
-                        streaming = stats.connected,
-                        host = host,
-                        actions = menuActions,
-                    )
-                    TransformToolRail(state = state, session = session, vm = vm)
-                }
+                )
 
                 val modifiersAvailable = state.blender.features.modifiers &&
                     state.blender.mode == BlenderMode.OBJECT && state.blender.activeObjectType == "MESH"
@@ -615,7 +610,7 @@ private val TOOLBAR_OWNED_CATALOG_IDS = setOf("EXTRUDE", "INSET", "LOOP_CUT", "K
 
 /** IDs de `edit_catalog` que ya viven directamente en el anillo de nivel 1. */
 private val RADIAL_TOP_LEVEL_CATALOG_IDS =
-    setOf("SELECT_LOOP", "SELECT_RING", "SELECT_LINKED", "HIDE", "DELETE")
+    setOf("SELECT_LOOP", "SELECT_RING", "SELECT_LINKED", "DELETE")
 
 /** Convierte el contrato opaco en filas, sin repartir nombres wire por la UI. */
 private fun editCatalogActions(actions: List<EditCatalogAction>, vm: MainViewModel): List<QuickAction> =
@@ -858,6 +853,34 @@ private fun RailContent(
         selected = state.activeTool == ActiveTool.SELECT && !session.active && !toolSession.active,
         onClick = vm::selectTool,
     )
+    if (inEdit && state.blender.features.selectionTweak) {
+        TweakToolButton(
+            settings = state.tweak,
+            motions = state.blender.features.tweakMotions,
+            snapTypes = state.blender.features.tweakSnapTypes,
+            selected = state.activeTool == ActiveTool.TWEAK,
+            enabled = state.blender.selectionMode != SelectionMode.FACE,
+            vm = vm,
+        )
+    }
+    IconAction(
+        Icons.Default.OpenWith, "Mover",
+        selected = session.active && session.mode == TransformMode.MOVE,
+        enabled = editable,
+        onClick = { vm.transformBegin(TransformMode.MOVE) },
+    )
+    IconAction(
+        Icons.AutoMirrored.Filled.RotateRight, "Rotar",
+        selected = session.active && session.mode == TransformMode.ROTATE,
+        enabled = editable,
+        onClick = { vm.transformBegin(TransformMode.ROTATE) },
+    )
+    IconAction(
+        Icons.Default.AspectRatio, "Escalar",
+        selected = session.active && session.mode == TransformMode.SCALE,
+        enabled = editable,
+        onClick = { vm.transformBegin(TransformMode.SCALE) },
+    )
     // Barra de tools activas (edit_toolbar, B0/F1): Extrude, Inset, Loop Cut y Cut
     // agrupados con la lógica de Blender, en vez de duplicarlos en el catálogo
     // contextual. Un servidor sin la feature no la anuncia y no se dibuja nada aquí.
@@ -900,14 +923,6 @@ private fun RailContent(
             )
         }
     }
-
-    RailDivider()
-    DuplicateFamilyButton(
-        inEdit = inEdit,
-        linked = state.duplicateLinked,
-        enabled = editable,
-        vm = vm,
-    )
 
     RailDivider()
     IconAction(Icons.Default.BugReport, "Diagnóstico", selected = state.debugVisible, onClick = vm::toggleDebug)
@@ -1017,7 +1032,21 @@ private fun quickActions(
             if (context.localView) Icons.Default.ZoomOutMap else Icons.Default.CenterFocusStrong,
         ) { vm.toggleLocalView() }
         ActionId.HIDE_GEOMETRY -> QuickAction(label, Icons.Default.VisibilityOff) { vm.hideSelection() }
-        ActionId.DUPLICATE_LINKED -> QuickAction(label, Icons.Default.ContentCopy, enabled = false)
+        ActionId.DUPLICATE -> if (context.mode == BlenderMode.EDIT) {
+            QuickAction("Duplicar selección", Icons.Default.ContentCopy) { vm.runDuplicateVariant(false) }
+        } else {
+            val linked = vm.uiState.value.duplicateLinked
+            QuickAction(
+                if (linked) "Duplicar enlazado" else "Duplicar",
+                Icons.Default.ContentCopy,
+                opensChildrenOnClick = false,
+                onClick = { vm.runDuplicateVariant(linked) },
+                children = listOf(
+                    QuickAction("Duplicar", Icons.Default.ContentCopy) { vm.runDuplicateVariant(false) },
+                    QuickAction("Duplicar enlazado", Icons.Default.ContentCopy) { vm.runDuplicateVariant(true) },
+                ),
+            )
+        }
         ActionId.RENAME -> QuickAction(label, Icons.Default.Edit, onClick = onRename)
         ActionId.DISSOLVE -> QuickAction(label, Icons.Default.DeleteSweep) {
             vm.meshDissolve(deleteWhat(context.selectionMode))
