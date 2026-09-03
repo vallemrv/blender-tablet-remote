@@ -57,7 +57,6 @@ import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.TouchApp
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -164,7 +163,6 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     val h264Size by vm.h264Size.collectAsStateWithLifecycle()
     val remoteFiles by vm.remoteFiles.collectAsStateWithLifecycle()
 
-    var railOpen by remember { mutableStateOf(false) }
     var quickMenuAt by remember { mutableStateOf<Pair<Float, Float>?>(null) }
     // El ojo vive en el estado del ViewModel, no aquí: apagar los controles apaga
     // también los overlays del servidor, y esa parte no es local.
@@ -356,12 +354,6 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 val modifiersAvailable = state.blender.features.modifiers &&
                     state.blender.mode == BlenderMode.OBJECT && state.blender.activeObjectType == "MESH"
 
-                if (!railOpen) {
-                    FloatingPanel(Modifier.align(Alignment.CenterStart).padding(start = Metrics.EdgeMargin)) {
-                        IconAction(Icons.Default.Tune, "Abrir herramientas") { railOpen = true }
-                    }
-                }
-
                 if (modifiersAvailable && !modifiersOpen) {
                     FloatingPanel(Modifier.align(Alignment.CenterEnd).padding(end = Metrics.EdgeMargin)) {
                         IconAction(Icons.Default.Build, "Abrir modificadores") {
@@ -385,9 +377,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 )
 
                 ToolRail(
-                    visible = railOpen,
                     modifier = Modifier.align(Alignment.CenterStart).padding(start = Metrics.EdgeMargin),
-                ) { RailContent(state, session, toolSession, vm) { railOpen = false } }
+                ) { RailContent(state, session, toolSession, vm) }
 
                 if (state.activeTool != ActiveTool.TWEAK) TransformBar(
                     session = session,
@@ -834,10 +825,8 @@ private fun EmptyViewport() {
 }
 
 /**
- * Contenido de la barra desplegable: la herramienta activa y utilidades.
- *
- * Las transformaciones y Tweak viven en su rail permanente junto a Archivo. Este rail
- * desplegable queda para seleccionar, editar y acceder a utilidades.
+ * Contenido del rail permanente: selección, transformaciones, herramientas Edit y
+ * diagnóstico. Si crece más que la altura disponible conserva scroll propio.
  */
 @Composable
 private fun RailContent(
@@ -845,13 +834,10 @@ private fun RailContent(
     session: TransformSession,
     toolSession: ToolSession,
     vm: MainViewModel,
-    onClose: () -> Unit,
 ) {
     val editable = state.blender.activeObject != null
     val inEdit = state.blender.mode == BlenderMode.EDIT
 
-    IconAction(Icons.Default.Close, "Ocultar herramientas", onClick = onClose)
-    RailDivider()
     RailLabel("HERRAMIENTA")
     IconAction(
         Icons.Default.Mouse, "Seleccionar",

@@ -1,11 +1,5 @@
 package com.blendertablet.remote.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -165,30 +159,18 @@ fun FloatingPanel(
     }
 }
 
-/**
- * Barra vertical desplegable de herramientas: la lista scrollable que se abre desde
- * un solo icono, para que en reposo la pantalla sea todo viewport.
- */
+/** Barra vertical permanente de herramientas, con scroll si no cabe completa. */
 @Composable
 fun ToolRail(
-    visible: Boolean,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    AnimatedVisibility(
-        visible = visible,
-        // Transiciones cortas: 120-200 ms, nada decorativo (§54).
-        enter = fadeIn(tween(140)) + scaleIn(tween(140), initialScale = .92f),
-        exit = fadeOut(tween(120)) + scaleOut(tween(120), targetScale = .92f),
-        modifier = modifier,
-    ) {
-        FloatingPanel(modifier = Modifier.widthIn(max = 72.dp).heightIn(max = 560.dp)) {
-            Column(
-                Modifier.verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) { content() }
-        }
+    FloatingPanel(modifier = modifier.widthIn(max = 72.dp).heightIn(max = 560.dp)) {
+        Column(
+            Modifier.verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) { content() }
     }
 }
 
