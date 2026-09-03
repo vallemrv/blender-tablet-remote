@@ -617,7 +617,7 @@ private fun editCatalogActions(actions: List<EditCatalogAction>, vm: MainViewMod
     actions.map { action ->
         val variants = action.variants.filter { it.enabled }
         if (variants.isEmpty()) {
-            QuickAction(action.label, Icons.Default.Build, enabled = action.enabled) {
+            QuickAction(action.label, AppIcons.editCatalog(action.id), enabled = action.enabled) {
                 vm.editCatalogAction(action)
             }
         } else {
@@ -625,11 +625,11 @@ private fun editCatalogActions(actions: List<EditCatalogAction>, vm: MainViewMod
             // abre el selector compacto. Las incompatibles no se dibujan activas.
             val default = variants.first()
             QuickAction(
-                action.label, Icons.Default.Build, enabled = action.enabled,
+                action.label, AppIcons.editCatalog(action.id), enabled = action.enabled,
                 opensChildrenOnClick = false,
                 onClick = { vm.editCatalogAction(action, default.id) },
                 children = variants.map { variant ->
-                    QuickAction(variant.label, Icons.Default.Build, enabled = action.enabled) {
+                    QuickAction(variant.label, AppIcons.editCatalog(action.id), enabled = action.enabled) {
                         vm.editCatalogAction(action, variant.id)
                     }
                 },
@@ -914,7 +914,7 @@ private fun RailContent(
                 EditTool.BISECT -> true
             }
             IconAction(
-                icon = editToolIcon(tool),
+                icon = AppIcons.editTool(tool),
                 description = if (ready) tool.label else "${tool.label} · ${tool.requirement}",
                 selected = toolSession.active && toolSession.tool == tool ||
                     (tool == EditTool.LOOP_CUT && state.activeTool == ActiveTool.LOOP_CUT && !toolSession.active),
@@ -926,29 +926,6 @@ private fun RailContent(
 
     RailDivider()
     IconAction(Icons.Default.BugReport, "Diagnóstico", selected = state.debugVisible, onClick = vm::toggleDebug)
-}
-
-private fun editToolIcon(tool: EditTool) = when (tool) {
-    EditTool.EXTRUDE -> Icons.AutoMirrored.Filled.CallMade
-    EditTool.BEVEL -> Icons.Default.RoundedCorner
-    EditTool.INSET -> Icons.Default.CropFree
-    EditTool.SUBDIVIDE -> Icons.Default.Grid4x4
-    EditTool.LOOP_CUT -> Icons.Default.LinearScale
-    EditTool.BISECT -> Icons.Default.ContentCut
-    EditTool.BRIDGE_EDGE_LOOPS -> Icons.Default.JoinFull
-    EditTool.KNIFE -> Icons.Default.ContentCut
-}
-
-/** Icono de cada familia del catálogo Add. */
-private fun addCategoryIcon(category: AddCategory) = when (category) {
-    AddCategory.MESH -> Icons.Default.ViewInAr
-    AddCategory.CURVE -> Icons.AutoMirrored.Filled.ShowChart
-    AddCategory.SURFACE -> Icons.Default.Waves
-    AddCategory.METABALL -> Icons.Default.BlurOn
-    AddCategory.TEXT -> Icons.Default.TextFields
-    AddCategory.EMPTY -> Icons.Default.CropFree
-    AddCategory.LIGHT -> Icons.Default.Lightbulb
-    AddCategory.CAMERA -> Icons.Default.PhotoCamera
 }
 
 /** Qué borra `mesh.delete` según el submodo de selección. */
@@ -989,12 +966,12 @@ private fun quickActions(
                 // Texto y Cámara son categorías de un solo elemento: un subnivel con
                 // una entrada sería un clic de más para nada.
                 if (items.size == 1) {
-                    QuickAction(items.first().label, addCategoryIcon(category)) { vm.addPrimitive(items.first()) }
+                    QuickAction(items.first().label, AppIcons.addCategory(category)) { vm.addPrimitive(items.first()) }
                 } else {
                     QuickAction(
-                        category.label, addCategoryIcon(category),
+                        category.label, AppIcons.addCategory(category),
                         children = items.map { item ->
-                            QuickAction(item.label, addCategoryIcon(category)) { vm.addPrimitive(item) }
+                            QuickAction(item.label, AppIcons.addCategory(category)) { vm.addPrimitive(item) }
                         },
                     )
                 }
@@ -1003,7 +980,7 @@ private fun quickActions(
         // Separar/Split/Normales/Bevel/Subdivide/Bridge/Borrar: el catálogo del
         // servidor, ya sin lo que vive en el anillo (Loop/Ring/Ocultar) ni en la
         // barra izquierda (Extrude/Inset/Loop Cut/Cut).
-        ActionId.EDIT_MESH_TOOLS -> QuickAction(label, Icons.Default.Build, children = meshToolsChildren)
+        ActionId.EDIT_MESH_TOOLS -> QuickAction(label, AppIcons.action(id), children = meshToolsChildren)
         ActionId.SELECT_ALL -> QuickAction(label, Icons.Default.SelectAll) { vm.selectAll() }
         ActionId.DESELECT_ALL -> QuickAction(label, Icons.Default.Deselect) { vm.deselectAll() }
         // Caja y Círculo arman el arrastre por forma y cierran el menú: el siguiente
@@ -1025,25 +1002,25 @@ private fun quickActions(
         // sin leer. Suave = esfera, plano = facetas; aislar = enfocar, ver todo = salir.
         ActionId.SHADE_OBJECT -> QuickAction(
             label,
-            if (context.shadeSmooth) Icons.Default.Hexagon else Icons.Default.Lens,
+            AppIcons.shading(context.shadeSmooth),
         ) { vm.toggleObjectShading(context.objectName) }
         ActionId.VIEW_LOCAL -> QuickAction(
             label,
-            if (context.localView) Icons.Default.ZoomOutMap else Icons.Default.CenterFocusStrong,
+            AppIcons.localView(context.localView),
         ) { vm.toggleLocalView() }
         ActionId.HIDE_GEOMETRY -> QuickAction(label, Icons.Default.VisibilityOff) { vm.hideSelection() }
         ActionId.DUPLICATE -> if (context.mode == BlenderMode.EDIT) {
-            QuickAction("Duplicar selección", Icons.Default.ContentCopy) { vm.runDuplicateVariant(false) }
+            QuickAction("Duplicar selección", AppIcons.Duplicate) { vm.runDuplicateVariant(false) }
         } else {
             val linked = vm.uiState.value.duplicateLinked
             QuickAction(
                 if (linked) "Duplicar enlazado" else "Duplicar",
-                Icons.Default.ContentCopy,
+                if (linked) AppIcons.DuplicateLinked else AppIcons.Duplicate,
                 opensChildrenOnClick = false,
                 onClick = { vm.runDuplicateVariant(linked) },
                 children = listOf(
-                    QuickAction("Duplicar", Icons.Default.ContentCopy) { vm.runDuplicateVariant(false) },
-                    QuickAction("Duplicar enlazado", Icons.Default.ContentCopy) { vm.runDuplicateVariant(true) },
+                    QuickAction("Duplicar", AppIcons.Duplicate) { vm.runDuplicateVariant(false) },
+                    QuickAction("Duplicar enlazado", AppIcons.DuplicateLinked) { vm.runDuplicateVariant(true) },
                 ),
             )
         }

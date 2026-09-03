@@ -10,16 +10,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.CallMade
-import androidx.compose.material.icons.automirrored.filled.CompareArrows
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ContentCut
-import androidx.compose.material.icons.filled.CropFree
-import androidx.compose.material.icons.filled.GridOn
-import androidx.compose.material.icons.filled.RoundedCorner
 import androidx.compose.material.icons.filled.TouchApp
-import androidx.compose.material.icons.filled.ViewWeek
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -33,7 +25,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -98,7 +89,7 @@ private fun FamilyToolButton(
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(familyIcon(family), description, tint = if (selected) Ink.Accent else Ink.OnPanel)
+            Icon(AppIcons.toolbarFamily(family.id), description, tint = if (selected) Ink.Accent else Ink.OnPanel)
             if (hasLongClickMenu(family)) {
                 VariantBadge(variantBadge(family.id, displayedVariant?.id), selected)
             }
@@ -293,17 +284,6 @@ private fun activeVariantOf(family: EditToolbarFamily, session: ToolSession): Ed
  * variante a costa de no decir la herramienta. Ahora el icono identifica la familia y
  * la variante se lee en [VariantBadge].
  */
-private fun familyIcon(family: EditToolbarFamily): ImageVector = when (family.id) {
-    "EXTRUDE" -> Icons.AutoMirrored.Filled.CallMade
-    "BEVEL" -> Icons.Default.RoundedCorner
-    "INSET" -> Icons.Default.CropFree
-    "LOOP_CUT" -> Icons.Default.ViewWeek
-    "BRIDGE_EDGE_LOOPS" -> Icons.AutoMirrored.Filled.CompareArrows
-    "SUBDIVIDE" -> Icons.Default.GridOn
-    "CUT" -> Icons.Default.ContentCut
-    else -> Icons.Default.Build
-}
-
 /**
  * Etiqueta corta de la variante armada, para la esquina del botón.
  *
