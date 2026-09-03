@@ -46,7 +46,10 @@ SCALE_SENSITIVITY = 2.0
 # Mover era el único que seguía al dedo 1:1 como el paneo, y por eso la misma pizca de
 # dedo valía micras o metros según lo cerca que estuviera la cámara. Con 100, un paso
 # cae cada 1 % de pantalla: fino para el lápiz y todavía cómodo para el dedo.
-MOVE_STEPS_PER_SCREEN = 100.0
+# Con snap, cruzar la pantalla recorre cuarenta incrementos. Un paso cada 2,5 % de
+# pantalla deja una zona táctil perceptible antes del siguiente salto; con 100 el
+# redondeo era correcto matemáticamente pero se sentía casi igual al movimiento libre.
+MOVE_SNAP_STEPS_PER_SCREEN = 40.0
 
 MIN_SCALE = 1e-4
 PROPORTIONAL_FALLOFFS = {"SMOOTH", "SPHERE", "ROOT", "SHARP", "LINEAR", "CONSTANT", "INVERSE_SQUARE"}
@@ -585,17 +588,18 @@ class _Session:
         pantalla avanza exactamente un paso, con la cámara cerca o lejos. Así el gesto
         es un contador de pasos y el resultado deja de depender del zoom.
 
-        Se conserva el arrastre 1:1 en dos casos donde no hay paso con el que contar:
-        sin incremento definido, y deslizando por aristas, donde el incremento ya es
-        una fracción del riel y no una distancia (ver `_slide_offsets`).
+        Sin snap el objeto sigue al dedo de forma continua. Solo Incremento convierte
+        el gesto en pasos; deslizando por aristas el incremento ya es una fracción del
+        riel y se resuelve en `_slide_offsets`.
         """
         world = self._screen_to_world(dx, dy)
-        if not self.step or self.step <= 0.0 or self.slide_candidates is not None:
+        if (not self.snap or self.snap_type != "INCREMENT" or not self.step
+                or self.step <= 0.0 or self.slide_candidates is not None):
             return world
         length = world.length
         if length <= 1e-12:
             return world
-        steps = math.hypot(dx, dy) * MOVE_STEPS_PER_SCREEN
+        steps = math.hypot(dx, dy) * MOVE_SNAP_STEPS_PER_SCREEN
         return world * (steps * self.step / length)
 
     def _screen_to_world(self, dx: float, dy: float) -> Vector:

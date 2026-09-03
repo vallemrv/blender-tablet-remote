@@ -58,6 +58,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Knife acumula puntos interiores y divide una cara una sola vez en dos n-gons. No se
   sustituye por triangulación punto a punto.
 - El snap táctil filtra primero por geometría visible y después clasifica el candidato.
+- Mover sin snap sigue al dedo continuamente; con Incremento avanza en saltos táctiles
+  perceptibles y no reutiliza la misma sensibilidad del movimiento libre.
 - Un preset de escala de trabajo nunca reescala geometría ni modifica `scale_length`.
 - Al abrir una escena, el preset mostrado se deduce de su `length_unit`; nunca se
   anuncia Mediana por defecto si el `.blend` está en milímetros o metros.

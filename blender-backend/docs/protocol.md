@@ -213,6 +213,10 @@ abrir un `.blend`, el preset inicial se deduce de su unidad real: milímetros se
 conserva durante esa sesión. `scene_scale.scale_length` contiene siempre el valor real
 del archivo para que el cliente actualice sus conversiones al cargar otra escena.
 
+En Mover, `NONE` conserva un arrastre continuo ligado a la vista. `INCREMENT` convierte
+el recorrido en saltos táctiles deliberados: una pantalla completa recorre 40 pasos,
+de modo que un incremento de 1 mm tenga una zona perceptible antes del siguiente salto.
+
 `object.add` usa `primitive_size` para que las primitivas nazcan a la escala elegida.
 Cada operador de Blender nombra su tamaño distinto (`size`, `radius`, los dos radios del
 toro), así que se consulta el RNA; un tamaño explícito en el payload siempre gana.
