@@ -207,8 +207,10 @@ cociente cercano a 10.000. Así el objeto no desaparece por cambiar el encuadre.
 
 `scale_length` de la escena **no** se modifica: multiplica el tamaño del mundo y
 cambiaría el significado de la geometría existente. `length_unit` sí, porque solo decide
-cómo se escribe la medida. El preset viaja en `scene.get_state` como `scene_scale` y es
-del usuario, no del `.blend`: cargar otro archivo lo devuelve a `MEDIUM`.
+cómo se escribe la medida. El preset viaja en `scene.get_state` como `scene_scale`. Al
+abrir un `.blend`, el preset inicial se deduce de su unidad real: milímetros selecciona
+`SMALL`, centímetros `MEDIUM` y metros `LARGE`. Una elección posterior del usuario se
+conserva durante esa sesión.
 
 `object.add` usa `primitive_size` para que las primitivas nazcan a la escala elegida.
 Cada operador de Blender nombra su tamaño distinto (`size`, `radius`, los dos radios del

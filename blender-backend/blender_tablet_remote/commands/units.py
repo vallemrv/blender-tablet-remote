@@ -15,10 +15,10 @@ from ..errors import BadPayload, CommandError
 from ..protocol import DEFAULT_SCENE_SCALE, SCENE_SCALES
 from . import command
 
-# El preset elegido es del usuario, no de la escena: se conserva entre archivos porque
-# quien modela en milímetros lo hace en todos, y volver a elegirlo en cada `.blend`
-# sería la clase de ajuste que este preset existe para no tener que repetir.
-_current = DEFAULT_SCENE_SCALE
+# `None` significa que todavía no hubo una elección explícita en esta sesión. En ese
+# caso la unidad real del .blend decide qué preset se anuncia; así una escena en mm no
+# aparece falsamente como "Mediana" solo por ser el valor por defecto del add-on.
+_current: str | None = None
 
 
 def _length_unit() -> str:
@@ -26,9 +26,19 @@ def _length_unit() -> str:
     return str(bpy.context.scene.unit_settings.length_unit)
 
 
+def _preset_for_scene() -> str:
+    """Preset cuya unidad coincide con la que trae el archivo abierto."""
+    length_unit = _length_unit()
+    return next(
+        (name for name, scale in SCENE_SCALES.items() if scale["length_unit"] == length_unit),
+        DEFAULT_SCENE_SCALE,
+    )
+
+
 def current_scale() -> dict:
     """Preset activo, con lo que la tablet necesita para pintar sus controles."""
-    preset = SCENE_SCALES.get(_current, SCENE_SCALES[DEFAULT_SCENE_SCALE])
+    current = _current or _preset_for_scene()
+    preset = SCENE_SCALES[current]
     return dict(
         preset,
         length_unit=_length_unit(),
@@ -76,11 +86,11 @@ def _apply_grid(grid_scale: float) -> None:
 
 
 def reset() -> None:
-    """Vuelta al preset por defecto al cargar otro archivo."""
+    """Adopta la unidad del archivo nuevo sin modificarla ni tocar su geometría."""
     global _current
-    _current = DEFAULT_SCENE_SCALE
-    default = SCENE_SCALES[DEFAULT_SCENE_SCALE]
-    camera.set_clipping(default["clip_start"], default["clip_end"])
+    _current = _preset_for_scene()
+    scale = SCENE_SCALES[_current]
+    camera.set_clipping(scale["clip_start"], scale["clip_end"])
 
 
 @command("scene.scale")

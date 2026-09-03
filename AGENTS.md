@@ -59,6 +59,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   sustituye por triangulación punto a punto.
 - El snap táctil filtra primero por geometría visible y después clasifica el candidato.
 - Un preset de escala de trabajo nunca reescala geometría ni modifica `scale_length`.
+- Al abrir una escena, el preset mostrado se deduce de su `length_unit`; nunca se
+  anuncia Mediana por defecto si el `.blend` está en milímetros o metros.
 - La cámara remota no escribe en `rv3d`.
 
 ## Sistema de trabajo

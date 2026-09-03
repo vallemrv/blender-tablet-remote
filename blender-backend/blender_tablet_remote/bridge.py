@@ -175,8 +175,8 @@ def reset_session() -> None:
     _watcher.reset()
     _gestures.reset()
     _camera.reset()
-    # El archivo nuevo trae sus propias unidades: la escala vuelve al preset por
-    # defecto para no anunciar un clipping que ya no corresponde a esta escena.
+    # El archivo nuevo trae sus propias unidades: se adopta el preset equivalente
+    # para no anunciar "Mediana" sobre una escena que realmente está en milímetros.
     from .commands.units import reset as reset_scene_scale
     reset_scene_scale()
     from .commands.view import reset_local_view
