@@ -235,10 +235,15 @@ private fun ConnectionMenu(
         ConnectionStatus.RECONNECTING -> Ink.Warn to "Reconectando (${state.retryAttempt})"
         ConnectionStatus.DISCONNECTED -> Ink.Bad to "Desconectado"
     }
+    val title = if (state.connection == ConnectionStatus.CONNECTED && state.blender.features.sceneScale) {
+        "$label · ${state.blender.sceneScale.lengthUnit.short}"
+    } else {
+        label
+    }
 
     Box {
         // El punto de estado es el propio botón: ya se miraba ahí, y ahorra un título.
-        StatusDot(color, label, Modifier.clickableNoRipple { open = true })
+        StatusDot(color, title, Modifier.clickableNoRipple { open = true })
         DropdownMenu(
             expanded = open,
             onDismissRequest = { open = false },
