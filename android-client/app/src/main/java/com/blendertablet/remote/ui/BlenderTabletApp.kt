@@ -355,7 +355,11 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     state.blender.mode == BlenderMode.OBJECT && state.blender.activeObjectType == "MESH"
 
                 if (modifiersAvailable && !modifiersOpen) {
-                    FloatingPanel(Modifier.align(Alignment.CenterEnd).padding(end = Metrics.EdgeMargin)) {
+                    FloatingPanel(
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 142.dp, end = Metrics.EdgeMargin),
+                    ) {
                         IconAction(Icons.Default.Build, "Abrir modificadores") {
                             modifiersOpen = true
                             vm.openModifiers()
