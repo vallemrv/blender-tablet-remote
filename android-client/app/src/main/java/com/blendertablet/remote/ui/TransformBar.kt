@@ -158,17 +158,21 @@ fun TransformBar(
                 } else {
                     ParametricAxisInputs(
                         session, unitScaleLength, moveStepValue, moveStepUnit,
-                        scaleStepPercent, stepIndex, constraint, onConstraint, onValue,
+                        scaleStepPercent, stepIndex, constraint, snapType, onConstraint, onValue,
                     )
                     when (session.mode) {
                         // Escalar es un factor: el paso se escribe en % y es el mismo
                         // que mueven los −/+ de cada eje.
-                        TransformMode.SCALE -> ScaleStepInput(scaleStepPercent, onScaleStep)
+                        TransformMode.SCALE -> if (snapType == SnapType.INCREMENT) {
+                            ScaleStepInput(scaleStepPercent, onScaleStep)
+                        }
                         TransformMode.ROTATE -> {
                             IconAction(AppIcons.Reset, "Restablecer rotación a 0°") {
                                 onValue(listOf(0.0, 0.0, 0.0), null, null)
                             }
-                            StepPicker(session.mode, stepIndex, onStep)
+                            if (snapType == SnapType.INCREMENT) {
+                                StepPicker(session.mode, stepIndex, onStep)
+                            }
                         }
                         TransformMode.MOVE -> Unit
                     }
@@ -230,10 +234,13 @@ fun MovementControls(
         scaleStepPercent = 0.0,
         stepIndex = 0,
         constraint = constraint,
+        snapType = snapType,
         onConstraint = onConstraint,
         onValue = onValue,
     )
-    MoveStepInput(moveStepValue, moveStepUnit, session.referenceLocked, onMoveStep)
+    if (snapType == SnapType.INCREMENT) {
+        MoveStepInput(moveStepValue, moveStepUnit, session.referenceLocked, onMoveStep)
+    }
     Divider()
     PillButton(
         if (referencePicking) "REL · señala" else if (session.sourceLocked) "REL · fijada" else "REL",
@@ -308,6 +315,7 @@ private fun ParametricAxisInputs(
     scaleStepPercent: Double,
     stepIndex: Int,
     constraint: Constraint,
+    snapType: SnapType,
     onConstraint: (Constraint) -> Unit,
     onValue: (List<Double>?, Double?, List<Double>?) -> Unit,
 ) {
@@ -402,9 +410,11 @@ private fun ParametricAxisInputs(
                 Text(axis.name, color = AxisColors.getValue(axis), fontSize = 13.sp,
                     fontWeight = FontWeight.Bold)
             }
-            PillButton("−") {
-                val next = current - axisStep
-                send(if (session.mode == TransformMode.SCALE && next <= 0.0) current else next)
+            if (snapType == SnapType.INCREMENT) {
+                PillButton("−") {
+                    val next = current - axisStep
+                    send(if (session.mode == TransformMode.SCALE && next <= 0.0) current else next)
+                }
             }
             CompactNumericField(
                 value = text, onValueChange = { text = it }, modifier = Modifier.width(72.dp),
@@ -430,7 +440,9 @@ private fun ParametricAxisInputs(
                     }
                 },
             )
-            PillButton("+") { send(current + axisStep) }
+            if (snapType == SnapType.INCREMENT) {
+                PillButton("+") { send(current + axisStep) }
+            }
         }
     }
 }
