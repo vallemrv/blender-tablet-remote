@@ -8,7 +8,6 @@ import com.blendertablet.remote.model.EditTool
 import com.blendertablet.remote.model.FileInfo
 import com.blendertablet.remote.model.Gesture
 import com.blendertablet.remote.model.GesturePhase
-import com.blendertablet.remote.model.LengthUnit
 import com.blendertablet.remote.model.SceneScale
 import com.blendertablet.remote.model.AddObject
 import com.blendertablet.remote.model.Orientation
@@ -147,12 +146,8 @@ interface RemoteBlenderClient {
     /** Catálogo de escalas de trabajo; llega a [sceneScalePresets]. */
     fun requestSceneScales()
 
-    /**
-     * Cambia la escala de trabajo. [preset] ajusta unidades, profundidad y pasos de
-     * una vez; [lengthUnit] cambia solo cómo se escriben las medidas. Ninguno de los
-     * dos reescala la geometría existente.
-     */
-    fun setSceneScale(preset: String? = null, lengthUnit: LengthUnit? = null)
+    /** Cambia unidad, profundidad y pasos como una sola escala de trabajo. */
+    fun setSceneScale(preset: String)
 
     /** Presets que anuncia el servidor; vacío si no los publica. */
     val sceneScalePresets: StateFlow<List<SceneScale>>

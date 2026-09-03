@@ -24,7 +24,6 @@ import com.blendertablet.remote.model.EditToolbarFamily
 import com.blendertablet.remote.model.Gesture
 import com.blendertablet.remote.model.GesturePhase
 import com.blendertablet.remote.model.InputDebug
-import com.blendertablet.remote.model.LengthUnit
 import com.blendertablet.remote.model.AddObject
 import com.blendertablet.remote.model.Orientation
 import com.blendertablet.remote.model.Projection
@@ -574,9 +573,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     /** Preset de escala: unidades, profundidad de cámara, pasos y tamaño al añadir. */
     fun setSceneScale(preset: String) = client.setSceneScale(preset = preset)
-
-    /** Solo cómo se escriben las medidas; no toca cámara ni pasos. */
-    fun setLengthUnit(unit: LengthUnit) = client.setSceneScale(lengthUnit = unit)
 
     fun addModifier(type: String, parameters: Map<String, Any?> = emptyMap()) = client.modifierAdd(type, parameters)
     fun removeModifier(name: String) = client.modifierRemove(name)

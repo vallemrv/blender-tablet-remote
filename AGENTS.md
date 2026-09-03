@@ -89,8 +89,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   Layouts son por ahora únicamente presencia visual y no envían comandos.
 - El panel de modificadores queda limitado entre ese selector de modos y el selector
   inferior de vistas/atajos, sin invadir ninguno de los dos.
-- La cabecera de conexión muestra siempre la unidad activa (`mm`, `cm` o `m`) cuando
-  Blender está conectado.
+- Pequeña/Mediana/Grande son la única elección de escala visible y fijan respectivamente
+  `mm`/`cm`/`m`; no existe un selector de unidad independiente en Android.
+- La cabecera muestra preset y unidad activos cuando Blender está conectado, por ejemplo
+  `Conectado · Mediana · cm`.
 - Los comandos discretos viven en menús contextuales.
 - Los parámetros viven en una bandeja común.
 - Las nuevas herramientas deben describirse mediante catálogo/esquema siempre que sea

@@ -22,7 +22,6 @@ import com.blendertablet.remote.model.ToolSession
 import com.blendertablet.remote.model.LoopProbe
 import com.blendertablet.remote.model.TouchProbe
 import com.blendertablet.remote.model.TransformMode
-import com.blendertablet.remote.model.LengthUnit
 import com.blendertablet.remote.model.SceneScale
 import com.blendertablet.remote.model.TransformSession
 import com.blendertablet.remote.model.TweakSettings
@@ -381,11 +380,8 @@ class WebSocketRemoteBlenderClient(
     override fun requestModifierOptions() = command("modifier.add_options")
     override fun listObjects() = command("scene.list_objects")
     override fun requestSceneScales() = command("scene.scale")
-    override fun setSceneScale(preset: String?, lengthUnit: LengthUnit?) =
-        command("scene.scale_set", JSONObject().apply {
-            preset?.let { put("preset", it) }
-            lengthUnit?.let { put("length_unit", it.wire) }
-        })
+    override fun setSceneScale(preset: String) =
+        command("scene.scale_set", JSONObject().put("preset", preset))
     override fun modifierAdd(type: String, parameters: Map<String, Any?>) = command("modifier.add", JSONObject().put("type", type).put("parameters", JSONObject(parameters)))
     override fun modifierRemove(name: String) = command("modifier.remove", JSONObject().put("name", name))
     override fun modifierMove(name: String, index: Int) = command("modifier.move", JSONObject().put("name", name).put("index", index))

@@ -225,7 +225,6 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             if (modifiersOpen) vm.openModifiers()
         },
         onSceneScale = vm::setSceneScale,
-        onLengthUnit = vm::setLengthUnit,
     )
 
     val session by vm.transformSession.collectAsStateWithLifecycle()

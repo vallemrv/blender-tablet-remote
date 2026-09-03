@@ -34,7 +34,6 @@ import androidx.compose.ui.unit.sp
 import com.blendertablet.remote.model.AppUiState
 import com.blendertablet.remote.model.BlenderMode
 import com.blendertablet.remote.model.ConnectionStatus
-import com.blendertablet.remote.model.LengthUnit
 import com.blendertablet.remote.model.SnapAction
 import com.blendertablet.remote.model.SnapGroup
 
@@ -108,7 +107,6 @@ data class MenuActions(
     val onApplyTransform: (Boolean, Boolean, Boolean) -> Unit,
     val onModifiers: () -> Unit,
     val onSceneScale: (String) -> Unit,
-    val onLengthUnit: (LengthUnit) -> Unit,
 )
 
 // ------------------------------------------------------------- árbol de menú
@@ -175,12 +173,8 @@ private fun objectMenu(state: AppUiState, actions: MenuActions, close: () -> Uni
 // -------------------------------------------------------------------- Escena
 
 /**
- * Escala de trabajo: un preset y, aparte, la unidad con la que se escriben las medidas.
- *
- * El preset es lo que se usa el 99 % de las veces —ajusta unidad, profundidad, pasos y
- * tamaño de las primitivas de una vez— y la unidad suelta queda para quien quiera medir
- * en milímetros una escena grande. Ninguno reescala geometría, y el menú lo dice: es la
- * duda que frena a aplicarlo en mitad de un modelado.
+ * Escala de trabajo: una sola elección ajusta unidad, profundidad, pasos y tamaño de
+ * primitivas. La unidad no se ofrece por separado para impedir estados contradictorios.
  */
 internal fun sceneMenu(state: AppUiState, actions: MenuActions, close: () -> Unit): List<MenuNode> {
     val scale = state.blender.sceneScale
@@ -196,16 +190,6 @@ internal fun sceneMenu(state: AppUiState, actions: MenuActions, close: () -> Uni
             )
         }
         add(MenuNote("No reescala lo ya modelado"))
-        add(MenuSeparator)
-        add(MenuHeading("Medidas en"))
-        LengthUnit.entries.forEach { unit ->
-            add(
-                MenuLeaf(unit.label, selected = unit == scale.lengthUnit) {
-                    close()
-                    actions.onLengthUnit(unit)
-                },
-            )
-        }
     }
 }
 
@@ -236,7 +220,8 @@ private fun ConnectionMenu(
         ConnectionStatus.DISCONNECTED -> Ink.Bad to "Desconectado"
     }
     val title = if (state.connection == ConnectionStatus.CONNECTED && state.blender.features.sceneScale) {
-        "$label · ${state.blender.sceneScale.lengthUnit.short}"
+        val scale = state.blender.sceneScale
+        "$label · ${scale.label} · ${scale.lengthUnit.short}"
     } else {
         label
     }
