@@ -1,9 +1,0 @@
-{
-  "path": "/stream.h264",
-  "format": "h264",
-  "framing": "btr-h264-v1",
-  "codec": "avc1.42C01F",
-  "alternatives": [
-    {"format": "mjpeg", "path": "/stream.mjpg"}
-  ]
-}

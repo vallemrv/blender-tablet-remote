@@ -27,6 +27,17 @@ from mathutils import Matrix, Quaternion, Vector
 MIN_DISTANCE = 0.001
 MAX_DISTANCE = 100000.0
 
+# Rango de profundidad del vídeo de la tablet.
+#
+# No se hereda el del viewport del PC: su valor por defecto (0,01 m a 1000 m) reparte
+# el z-buffer sobre un rango 100.000 veces mayor que la pieza, y a partir de ahí las
+# caras cercanas compiten por el mismo valor de profundidad — la malla se ve rota y con
+# artefactos aunque la geometría esté perfecta. La proyección sigue heredando el FOV de
+# la ventana (ver `projection_matrix`), así que el rayo del toque continúa coincidiendo
+# con lo que se ve; lo único que cambia es dónde empieza y acaba la profundidad.
+DEFAULT_CLIP_START = 0.01
+DEFAULT_CLIP_END = 1000.0
+
 
 class RemoteCamera:
     """Cámara orbital: un punto de interés, una orientación y una distancia."""
@@ -38,6 +49,8 @@ class RemoteCamera:
         self._synced = False
         self.perspective = "PERSP"
         self.axis_view = None
+        self.clip_start = DEFAULT_CLIP_START
+        self.clip_end = DEFAULT_CLIP_END
         # Caché de matrices del frame en curso: (rv3d, window_matrix, perspectiva,
         # inversa). `project`/`ray` se llaman decenas de veces por frame (picking,
         # box/circle y captura) y reconstruir la cadena completa cada vez
@@ -73,24 +86,52 @@ class RemoteCamera:
         ).inverted()
 
     def projection_matrix(self, rv3d) -> Matrix:
-        """Se hereda la de la región: así imagen y raycast usan exactamente la misma.
+        """Se hereda el FOV de la región y se impone el rango de profundidad propio.
 
-        Construirla por nuestra cuenta obligaría a replicar el manejo de sensor y
-        lente de Blender, con el riesgo de que el rayo del toque no coincidiese con
-        lo que se ve. Depende del tamaño de la ventana del PC, que es aceptable.
+        El encuadre sigue viniendo de la ventana del PC: replicar el manejo de sensor
+        y lente de Blender arriesgaría que el rayo del toque no coincidiese con lo que
+        se ve. Pero el clipping sí es nuestro, porque el del PC está pensado para su
+        pantalla y no para la escala de la pieza (ver `DEFAULT_CLIP_START`). Solo se
+        reescribe la fila de profundidad, así que el FOV heredado queda intacto.
         """
         if self.perspective == "PERSP":
-            return rv3d.window_matrix.copy()
+            return self._reclipped(rv3d.window_matrix)
         # Proyección ortográfica propia: conserva el encuadre que tenía la vista
         # perspectiva en el plano del pivote, por lo que el cambio no da saltos.
         persp = rv3d.window_matrix
         width = 2.0 * self.distance / max(abs(persp[0][0]), 1e-9)
         height = 2.0 * self.distance / max(abs(persp[1][1]), 1e-9)
+        # La ortográfica no hereda nada y reparte la profundidad linealmente, así que
+        # no sufre el z-fighting de la perspectiva: conserva su rango amplio.
         near, far = 0.001, MAX_DISTANCE * 2.0
         return Matrix(((2.0 / width, 0.0, 0.0, 0.0),
                        (0.0, 2.0 / height, 0.0, 0.0),
                        (0.0, 0.0, -2.0 / (far - near), -(far + near) / (far - near)),
                        (0.0, 0.0, 0.0, 1.0)))
+
+    def _reclipped(self, window: Matrix) -> Matrix:
+        """La matriz de la ventana con `clip_start`/`clip_end` en vez de los suyos."""
+        # El preset define el mínimo útil, no una pared rígida. Al alejar la cámara
+        # `distance` puede superar `clip_end` y antes el objeto desaparecía cortado.
+        # Abrimos el fondo automáticamente y subimos el near solo lo necesario para
+        # conservar un cociente ~10 000, sin pedir al usuario que gestione clipping.
+        far = max(self.clip_end, self.distance * 4.0)
+        near = max(self.clip_start, far / 10_000.0)
+        if far <= near:
+            return window.copy()
+        matrix = window.copy()
+        if abs(window[3][2]) > 1e-9:  # perspectiva: w sale de -z
+            matrix[2][2] = -(far + near) / (far - near)
+            matrix[2][3] = -2.0 * far * near / (far - near)
+        else:  # la ventana del PC está en ortográfica
+            matrix[2][2] = -2.0 / (far - near)
+            matrix[2][3] = -(far + near) / (far - near)
+        return matrix
+
+    def set_clipping(self, start: float, end: float) -> None:
+        self.clip_start = float(start)
+        self.clip_end = float(end)
+        self._invalidate()
 
     def perspective_matrix(self, rv3d) -> Matrix:
         """Proyección @ vista, con caché por frame (ver `_frame_cache`)."""
@@ -131,7 +172,7 @@ class RemoteCamera:
         contenido acompañe al dedo. El pitch conserva el signo anterior sobre el eje
         derecho local.
 
-        Ver tests: run_gui_tests.py [13] (signo del giro) y [14] (BACK/BOTTOM).
+        El signo del giro y las orientaciones BACK/BOTTOM dependen de esta convención.
         """
         right = self.rotation @ Vector((1.0, 0.0, 0.0))
         up = self.rotation @ Vector((0.0, 1.0, 0.0))

@@ -13,6 +13,32 @@ from ..bpy_utils import undo_push, view3d_override
 from ..errors import CommandError
 from . import command
 
+_last_action: tuple[str, dict] | None = None
+_last_tool: tuple[str, dict] | None = None
+
+
+def remember(name: str, payload: dict) -> None:
+    """Conserva solo intenciones discretas que pueden ejecutarse otra vez."""
+    global _last_action, _last_tool
+    allowed = (
+        name.startswith("mesh.") and name not in {"mesh.info", "mesh.loop_probe"}
+        or name in {"object.add", "object.duplicate", "object.delete", "object.shade",
+                    "transform.move", "transform.rotate", "transform.scale", "transform.apply"}
+        or name in {"modifier.add", "modifier.remove", "modifier.set", "modifier.apply"}
+    )
+    if not allowed:
+        return
+    _last_action = (name, {key: value for key, value in payload.items() if key != "_client_id"})
+    _last_tool = None
+
+
+def remember_tool(name: str, parameters: dict) -> None:
+    global _last_action, _last_tool
+    if name in {"KNIFE", "BISECT"}:
+        return
+    _last_tool = (name, dict(parameters))
+    _last_action = None
+
 
 def _run(op, label: str) -> dict:
     if bpy.app.background:
@@ -43,3 +69,24 @@ def push(payload: dict) -> dict:
     label = str(payload.get("message", "Remote step"))
     undo_push(label)
     return {"pushed": label}
+
+
+@command("history.repeat_last", mutating=True)
+def repeat_last(payload: dict) -> dict:
+    """Shift+R remoto: repite la última intención de modelado confirmada."""
+    owner = payload.get("_client_id")
+    if _last_tool is not None:
+        from . import tools
+        name, parameters = _last_tool
+        tools.begin({"tool": name, "parameters": dict(parameters), "_client_id": owner})
+        result = tools.confirm({"_client_id": owner})
+        return {"repeated": name, "result": result}
+    if _last_action is not None:
+        from . import get
+        name, saved = _last_action
+        func = get(name)
+        if func is None:
+            raise CommandError("Last action is no longer available", code="not_found")
+        result = func(dict(saved, _client_id=owner))
+        return {"repeated": name, "result": result}
+    raise CommandError("There is no repeatable action yet", code="nothing_to_repeat")

@@ -47,6 +47,7 @@ data class ModifierState(
     val showRender: Boolean = true, val parameters: Map<String, Any?> = emptyMap(),
 )
 data class ServerFeatures(
+    val repeatLast: Boolean = false,
     val modifiers: Boolean = false, val visibility: Boolean = false,
     val transformApply: Boolean = false, val objectShading: Boolean = false,
     val loopCut: Boolean = false,
@@ -70,6 +71,15 @@ data class ServerFeatures(
     val editCatalog: EditCatalog = EditCatalog(),
     /** Barra de tools activas; vacío conserva el rail y `edit_catalog` legacy. */
     val editToolbar: EditToolbar = EditToolbar(),
+    /**
+     * Modos de movimiento de Tweak que anuncia el servidor. Un servidor anterior a
+     * `selection` v8 no los publica y solo se ofrece el arrastre libre de siempre.
+     */
+    val tweakMotions: List<TweakMotion> = listOf(TweakMotion.FREE),
+    /** Destinos de snap admitidos en el gesto de Tweak; vacío oculta el selector. */
+    val tweakSnapTypes: List<SnapType> = emptyList(),
+    /** `scene.scale`: presets de escala de trabajo. Sin ellos no se ofrece el menú. */
+    val sceneScale: Boolean = false,
 )
 
 data class EditSettings(
@@ -154,7 +164,8 @@ val RotateSteps = listOf(
 )
 
 // La etiqueta se lee en porcentaje (lo que piensa quien escala) pero por el cable
-// viaja el factor, que es lo que usa el servidor.
+// viaja el factor, que es lo que usa el servidor. La barra ya no los cicla: el paso
+// de Escalar se escribe a mano (`scaleStepPercent`) y esta lista solo fija el arranque.
 val ScaleSteps = listOf(
     StepPreset("1%", 0.01),
     StepPreset("5%", 0.05),
@@ -178,6 +189,28 @@ fun stepInBlenderUnits(preset: StepPreset, mode: TransformMode, scaleLength: Dou
     if (mode == TransformMode.MOVE) preset.step / scaleLength.coerceAtLeast(1e-12) else preset.step
 
 /**
+ * El paso de MOVE escrito en la barra, en unidades de Blender.
+ *
+ * Es la ÚNICA fuente del incremento de mover: la barra, los botones +/− y el snap del
+ * servidor tienen que cuadrar. Cuando cada uno sacaba el suyo por su cuenta, la barra
+ * enseñaba un paso y el servidor cuantizaba con otro, y el valor saltaba a un
+ * incremento que nadie había elegido.
+ *
+ * `PERCENT` se mide contra la distancia de referencia, que solo conoce la sesión
+ * abierta: lo resuelve quien la tiene.
+ */
+fun moveStepInBlenderUnits(value: Double, unit: TransformStepUnit, scaleLength: Double): Double? {
+    if (value <= 0.0) return null
+    val safe = scaleLength.coerceAtLeast(1e-12)
+    return when (unit) {
+        TransformStepUnit.MM -> value / 1000.0 / safe
+        TransformStepUnit.CM -> value / 100.0 / safe
+        TransformStepUnit.M -> value / safe
+        TransformStepUnit.PERCENT -> null
+    }
+}
+
+/**
  * La transformación en curso, tal como la cuenta el servidor.
  *
  * Los valores llegan por el evento `transform.session` a 10 Hz: es el marcador que
@@ -185,6 +218,7 @@ fun stepInBlenderUnits(preset: StepPreset, mode: TransformMode, scaleLength: Dou
  */
 data class TransformSession(
     val active: Boolean = false,
+    val sessionId: String? = null,
     val mode: TransformMode = TransformMode.MOVE,
     val axes: Set<Axis> = emptySet(),
     val snap: Boolean = false,
@@ -193,15 +227,25 @@ data class TransformSession(
     val snapCandidate: SnapCandidate? = null,
     val referenceCandidate: SnapCandidate? = null,
     val referenceLocked: Boolean = false,
+    val referenceRole: String? = null,
+    val centerLocked: Boolean = false,
+    val sourceLocked: Boolean = false,
     val referencePosition: List<Float> = emptyList(),
     val referenceDistance: Double? = null,
+    /** Roles canónicos del solver; reference* se conserva como compatibilidad v2. */
+    val center: List<Float> = emptyList(),
+    val source: List<Float> = emptyList(),
+    val target: List<Float> = emptyList(),
+    val baseDimensions: List<Double> = listOf(0.0, 0.0, 0.0),
+    val dimensions: List<Double> = listOf(0.0, 0.0, 0.0),
     val step: Double = 0.01,
     val orientation: Orientation = Orientation.GLOBAL,
     val valueMode: ValueMode = ValueMode.RELATIVE,
     val proportional: Boolean = false,
     val proportionalRadius: Double = 1.0,
     val proportionalFalloff: String = "SMOOTH",
-    /** Metros o factor, según el modo. En ROTATE no se usa: manda [angle]. */
+    val proportionalCircle: ProportionalCircle? = null,
+    /** Distancia, ángulos XYZ en radianes o factores, según el modo. */
     val values: List<Double> = listOf(0.0, 0.0, 0.0),
     /** Grados. */
     val angle: Double = 0.0,
@@ -209,6 +253,8 @@ data class TransformSession(
     /** La restricción en curso derivada de los ejes, para enseñarla en la barra. */
     val constraint: Constraint get() = Constraint.ofAxes(axes)
 }
+
+data class ProportionalCircle(val center: List<Float>, val radius: Float)
 
 /** Familias del menú Add de Blender. Las de un solo elemento no abren submenú. */
 enum class AddCategory(val label: String) {
@@ -225,7 +271,7 @@ enum class AddCategory(val label: String) {
 /**
  * Lo que se puede añadir. **El nombre del enum viaja tal cual** como `primitive` de
  * `object.add`, así que debe coincidir con las claves de `_add_catalog()` del backend;
- * `android_contract.py` lo comprueba.
+ * ambos lados deben mantener esas claves alineadas.
  */
 enum class AddObject(val label: String, val category: AddCategory) {
     PLANE("Plano", AddCategory.MESH),
@@ -378,6 +424,40 @@ data class BlenderState(
     val editSettings: EditSettings = EditSettings(),
     /** Metros físicos representados por una Blender Unit. */
     val unitScaleLength: Double = 1.0,
+    /** Escala de trabajo activa: unidades, profundidad y pasos. */
+    val sceneScale: SceneScale = SceneScale(),
+)
+
+/** Unidad con la que se escriben las medidas. Viaja como `length_unit`. */
+enum class LengthUnit(val wire: String, val label: String, val short: String) {
+    MILLIMETERS("MILLIMETERS", "Milímetros", "mm"),
+    CENTIMETERS("CENTIMETERS", "Centímetros", "cm"),
+    METERS("METERS", "Metros", "m");
+
+    companion object {
+        fun fromWire(value: String?): LengthUnit? = entries.firstOrNull { it.wire == value }
+    }
+}
+
+/**
+ * Escala de trabajo de la escena.
+ *
+ * No reescala nada: decide con qué unidad se escriben las medidas, hasta dónde ve la
+ * cámara (de lo que depende que la malla no se vea con artefactos de profundidad) y con
+ * qué paso avanzan los controles. El catálogo lo manda el servidor.
+ */
+data class SceneScale(
+    val id: String = "MEDIUM",
+    val label: String = "Mediana",
+    val hint: String = "",
+    val lengthUnit: LengthUnit = LengthUnit.METERS,
+    val clipStart: Double = 0.01,
+    val clipEnd: Double = 1000.0,
+    val snapStep: Double = 0.01,
+    val moveStep: Double = 0.01,
+    val primitiveSize: Double = 0.5,
+    val proportionalRadius: Double = 0.5,
+    val proportionalRadiusStep: Double = 0.05,
 )
 
 data class InputDebug(
@@ -414,14 +494,20 @@ data class AppUiState(
     val valueMode: ValueMode = ValueMode.RELATIVE,
     /** REL armado: el lápiz sondea una referencia sin mover la selección. */
     val referencePicking: Boolean = false,
+    val referenceRole: String = "SOURCE",
+    /** Paso de mover, en la unidad en que se escribe. Arranca en el más fino: 1 mm. */
     val moveStepValue: Double = 1.0,
-    val moveStepUnit: TransformStepUnit = TransformStepUnit.CM,
-    /** Operación acumulativa de Mayús o sustractiva de Alt. */
+    val moveStepUnit: TransformStepUnit = TransformStepUnit.MM,
+    /** Paso de escalar, en % de factor. Escalar no tiene unidad de longitud. */
+    val scaleStepPercent: Double = 5.0,
+    /** Mayús alterna como el Shift+click de Blender; Alt resta. */
     val selectionOp: SelectionOp = SelectionOp.SET,
     /** Ctrl armado para que el siguiente toque seleccione el camino más corto. */
     val shortestPathActive: Boolean = false,
     /** Herramienta de forma (B/C) armada en la barra superior. */
     val shapeTool: ShapeTool = ShapeTool.NONE,
+    /** Radio normalizado fijo de Círculo; null conserva el radio dibujado libre. */
+    val circleRadius: Float? = null,
     /** `view.local` activo: aislar la selección (el `/` del footer de vistas). */
     val localViewActive: Boolean = false,
     /** Loop Cut armado esperando el toque que coloca el corte. */
@@ -430,6 +516,10 @@ data class AppUiState(
     val toolbarVariant: Map<String, String> = emptyMap(),
     /** Variante discreta recordada por la familia Duplicar del rail (Object Mode). */
     val duplicateLinked: Boolean = false,
+    /** Modo y snap del gesto de Tweak, elegidos antes de arrastrar. */
+    val tweak: TweakSettings = TweakSettings(),
+    /** Catálogo de escalas que anuncia el servidor, para el menú Escena. */
+    val sceneScalePresets: List<SceneScale> = emptyList(),
 )
 
 /**

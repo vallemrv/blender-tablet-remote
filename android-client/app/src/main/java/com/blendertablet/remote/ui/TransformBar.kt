@@ -1,7 +1,6 @@
 package com.blendertablet.remote.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -22,6 +21,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -54,6 +55,7 @@ import com.blendertablet.remote.model.TransformStepUnit
 import com.blendertablet.remote.model.ValueMode
 import com.blendertablet.remote.model.ValueParser
 import com.blendertablet.remote.model.stepsFor
+import com.blendertablet.remote.model.scaleValuesAfterAxisEdit
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -85,17 +87,20 @@ fun TransformBar(
     orientation: Orientation,
     valueMode: ValueMode,
     referencePicking: Boolean,
+    referencePickingRole: String,
     moveStepValue: Double,
     moveStepUnit: TransformStepUnit,
+    scaleStepPercent: Double,
     availableOrientations: List<Orientation>,
     onConstraint: (Constraint) -> Unit,
     onOrientation: (Orientation) -> Unit,
     onSnapType: (SnapType) -> Unit,
     onStep: (Int) -> Unit,
     onValueMode: (ValueMode) -> Unit,
-    onReference: () -> Unit,
+    onReference: (String) -> Unit,
     onMoveStep: (Double, TransformStepUnit) -> Unit,
-    onValue: (List<Double>?, Double?) -> Unit,
+    onScaleStep: (Double) -> Unit,
+    onValue: (List<Double>?, Double?, List<Double>?) -> Unit,
     onProportionalRadius: (Double) -> Unit,
     onProportionalRadiusValue: (Double) -> Unit,
     onProportionalFalloff: () -> Unit,
@@ -119,54 +124,56 @@ fun TransformBar(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // En MOVE los propios campos XYZ son el readout vivo; repetir aquí
-                // los mismos tres valores consumía casi media bandeja.
-                if (session.mode != TransformMode.MOVE) Readout(session)
                 if (session.proportional) {
-                    PillButton("Radio −") { onProportionalRadius(0.5) }
+                    PillButton("Radio −") { onProportionalRadius(-1.0) }
                     ProportionalRadiusInput(
                         editSettings.radius,
                         unitScaleLength,
                         onProportionalRadiusValue,
                     )
-                    PillButton("Radio +") { onProportionalRadius(2.0) }
+                    PillButton("Radio +") { onProportionalRadius(1.0) }
                     PillButton("Perfil: ${falloffLabel(editSettings.falloff)}") {
                         onProportionalFalloff()
                     }
                 }
                 SnapCandidateHint(session)
                 Divider()
-                if (session.mode == TransformMode.MOVE) {
-                    MoveAxisInputs(
+                run {
+                    ParametricAxisInputs(
                         session, unitScaleLength, moveStepValue, moveStepUnit,
-                        constraint, onConstraint, onValue,
+                        scaleStepPercent, stepIndex, constraint, onConstraint, onValue,
                     )
-                    MoveStepInput(
-                        moveStepValue, moveStepUnit, session.referenceLocked,
-                        onMoveStep,
-                    )
+                    when (session.mode) {
+                        TransformMode.MOVE -> MoveStepInput(
+                            moveStepValue, moveStepUnit, session.referenceLocked,
+                            onMoveStep,
+                        )
+                        // Escalar es un factor: el paso se escribe en % y es el mismo
+                        // que mueven los −/+ de cada eje.
+                        TransformMode.SCALE -> ScaleStepInput(scaleStepPercent, onScaleStep)
+                        TransformMode.ROTATE -> StepPicker(session.mode, stepIndex, onStep)
+                    }
                     Divider()
-                    PillButton(
-                        when {
-                            referencePicking -> "REL · señala"
-                            session.referenceLocked -> "REL · fijada"
-                            else -> "REL"
-                        },
-                        selected = referencePicking || session.referenceLocked,
-                    ) { onReference() }
+                    if (session.mode == TransformMode.MOVE) {
+                        PillButton(
+                            if (referencePicking) "REL · señala" else if (session.sourceLocked) "REL · fijada" else "REL",
+                            selected = referencePicking || session.sourceLocked,
+                        ) { onReference("SOURCE") }
+                    } else {
+                        PillButton(
+                            if (referencePicking && referencePickingRole == "CENTER") "REL · señala"
+                            else if (session.centerLocked) "REL · pivote" else "REL · centro selección",
+                            selected = (referencePicking && referencePickingRole == "CENTER") || session.centerLocked,
+                        ) { onReference("CENTER") }
+                        PillButton(
+                            if (referencePicking && referencePickingRole == "SOURCE") "Fuente · señala"
+                            else if (session.sourceLocked) "Fuente · fijada" else "Fuente",
+                            selected = (referencePicking && referencePickingRole == "SOURCE") || session.sourceLocked,
+                        ) { onReference("SOURCE") }
+                    }
                     SnapPicker(session.mode, snapType, onSnapType)
                     Divider()
                     OrientationPicker(availableOrientations, orientation, onOrientation)
-                } else {
-                    ConstraintPicker(session.mode, constraint, onConstraint)
-                    Divider()
-                    OrientationPicker(availableOrientations, orientation, onOrientation)
-                    Divider()
-                    SnapPicker(session.mode, snapType, onSnapType)
-                    if (snapType == SnapType.INCREMENT) StepPicker(session.mode, stepIndex, onStep)
-                    Divider()
-                    ValueModePicker(valueMode, onValueMode)
-                    ValueInput(session, unitScaleLength, onValue)
                 }
             }
             Spacer(Modifier.width(10.dp))
@@ -177,6 +184,29 @@ fun TransformBar(
             RoundAction(Icons.Default.Check, "Confirmar", Ink.Ok, onConfirm)
         }
     }
+}
+
+/**
+ * Paso de Escalar, escrito en porcentaje.
+ *
+ * Escalar es un factor, así que su paso es siempre un %: no hay desplegable de unidad
+ * que elegir. Antes solo se podía ciclar entre cuatro porcentajes fijos, y quien
+ * necesitaba un 0,5 % no tenía dónde escribirlo.
+ */
+@Composable
+private fun ScaleStepInput(percent: Double, onChange: (Double) -> Unit) {
+    var text by remember(percent) { mutableStateOf(format(percent, 3)) }
+    fun commit(raw: String = text) {
+        raw.replace(',', '.').removeSuffix("%").toDoubleOrNull()
+            ?.takeIf { it > 0.0 }?.let(onChange)
+    }
+    PillButton("−") { onChange((percent - 1.0).coerceAtLeast(0.001)) }
+    CompactNumericField(
+        value = text, onValueChange = { text = it }, modifier = Modifier.width(58.dp),
+        textAlign = TextAlign.End, placeholder = "Paso", onDone = { commit() },
+    )
+    PillButton("+") { onChange(percent + 1.0) }
+    Text("%", color = Ink.Muted, fontSize = 13.sp)
 }
 
 @Composable
@@ -212,37 +242,90 @@ private fun MoveStepInput(
 }
 
 @Composable
-private fun MoveAxisInputs(
+private fun ParametricAxisInputs(
     session: TransformSession,
     unitScaleLength: Double,
     stepValue: Double,
     stepUnit: TransformStepUnit,
+    scaleStepPercent: Double,
+    stepIndex: Int,
     constraint: Constraint,
     onConstraint: (Constraint) -> Unit,
-    onValue: (List<Double>?, Double?) -> Unit,
+    onValue: (List<Double>?, Double?, List<Double>?) -> Unit,
 ) {
-    val referenceDistance = session.referenceDistance ?: 0.0
-    val stepPhysical = when (stepUnit) {
-        TransformStepUnit.MM -> stepValue / 1000.0
-        TransformStepUnit.CM -> stepValue / 100.0
-        TransformStepUnit.M -> stepValue
-        TransformStepUnit.PERCENT -> referenceDistance * stepValue / 100.0 * unitScaleLength
+    var alternateUnit by remember(session.mode) { mutableStateOf(false) }
+    var scaleUnit by remember(session.mode) { mutableStateOf(TransformStepUnit.M) }
+    var scaleLinked by remember(session.sessionId) { mutableStateOf(true) }
+    if (session.mode == TransformMode.ROTATE) {
+        PillButton(if (alternateUnit) "rad" else "°") { alternateUnit = !alternateUnit }
+    } else if (session.mode == TransformMode.SCALE) {
+        Box {
+            var expanded by remember { mutableStateOf(false) }
+            PillButton(scaleUnit.label) { expanded = true }
+            DropdownMenu(expanded, { expanded = false }) {
+                TransformStepUnit.entries.forEach { unit ->
+                    DropdownMenuItem(
+                        text = { Text(unit.label) },
+                        onClick = { scaleUnit = unit; expanded = false },
+                    )
+                }
+            }
+        }
+        IconAction(
+            icon = if (scaleLinked) Icons.Default.Link else Icons.Default.LinkOff,
+            description = if (scaleLinked) "Dimensiones vinculadas" else "Dimensiones independientes",
+            selected = scaleLinked,
+        ) { scaleLinked = !scaleLinked }
     }
-    val step = stepPhysical / unitScaleLength.coerceAtLeast(1e-12)
+    val referenceDistance = session.referenceDistance ?: 0.0
+    val step = when (session.mode) {
+        TransformMode.MOVE -> {
+            val physical = when (stepUnit) {
+                TransformStepUnit.MM -> stepValue / 1000.0
+                TransformStepUnit.CM -> stepValue / 100.0
+                TransformStepUnit.M -> stepValue
+                TransformStepUnit.PERCENT -> referenceDistance * stepValue / 100.0 * unitScaleLength
+            }
+            physical / unitScaleLength.coerceAtLeast(1e-12)
+        }
+        TransformMode.ROTATE -> stepsFor(session.mode)[stepIndex.coerceIn(0, stepsFor(session.mode).lastIndex)].step
+        TransformMode.SCALE -> 0.0 // depende de la dimensión base de cada eje
+    }
     Axis.entries.forEach { axis ->
         val index = axis.ordinal
-        val current = session.values.getOrElse(index) { 0.0 }
+        val current = session.values.getOrElse(index) {
+            if (session.mode == TransformMode.SCALE) 1.0 else 0.0
+        }
+        val displayed = when (session.mode) {
+            TransformMode.MOVE -> current * unitScaleLength
+            TransformMode.ROTATE -> if (alternateUnit) current else Math.toDegrees(current)
+            TransformMode.SCALE -> if (scaleUnit == TransformStepUnit.PERCENT) current * 100.0 else {
+                val physical = session.dimensions.getOrElse(index) { 0.0 } * unitScaleLength
+                when (scaleUnit) {
+                    TransformStepUnit.MM -> physical * 1000.0
+                    TransformStepUnit.CM -> physical * 100.0
+                    TransformStepUnit.M -> physical
+                    TransformStepUnit.PERCENT -> current * 100.0
+                }
+            }
+        }
         var editing by remember(session.active, axis) { mutableStateOf(false) }
         var text by remember(session.active, axis) {
-            mutableStateOf(format(current * unitScaleLength, 4))
+            mutableStateOf(format(displayed, 4))
         }
-        LaunchedEffect(current, unitScaleLength, editing) {
-            if (!editing) text = format(current * unitScaleLength, 4)
+        LaunchedEffect(displayed, editing) {
+            if (!editing) text = format(displayed, 4)
         }
         fun send(value: Double) {
-            val next = session.values.toMutableList().also { it[index] = value }
-            onValue(next, null)
+            val next = if (session.mode == TransformMode.SCALE) {
+                scaleValuesAfterAxisEdit(session.values, index, value, scaleLinked)
+            } else session.values.toMutableList().also { it[index] = value }
+            onValue(next, null, null)
         }
+        // Escalar avanza siempre por el paso escrito en la barra, sea cual sea la
+        // unidad en que se lean los ejes: el factor es el mismo y la unidad solo
+        // decide si el campo enseña la dimensión resultante o el porcentaje.
+        val axisStep = if (session.mode == TransformMode.SCALE) scaleStepPercent / 100.0 else step
         Row(verticalAlignment = Alignment.CenterVertically) {
             val active = axis in constraint.axes
             Box(
@@ -267,17 +350,35 @@ private fun MoveAxisInputs(
                 Text(axis.name, color = AxisColors.getValue(axis), fontSize = 13.sp,
                     fontWeight = FontWeight.Bold)
             }
-            PillButton("−") { send(current - step) }
+            PillButton("−") {
+                val next = current - axisStep
+                send(if (session.mode == TransformMode.SCALE && next <= 0.0) current else next)
+            }
             CompactNumericField(
                 value = text, onValueChange = { text = it }, modifier = Modifier.width(72.dp),
                 textAlign = TextAlign.End, placeholder = axis.name,
                 textColor = AxisColors.getValue(axis),
                 onFocusChange = { editing = it },
                 onDone = {
-                    ValueParser.parse(text, TransformMode.MOVE)?.let { send(it / unitScaleLength) }
+                    val parsed = when {
+                        session.mode == TransformMode.ROTATE && alternateUnit ->
+                            text.replace(',', '.').toDoubleOrNull()
+                        session.mode == TransformMode.SCALE -> ValueParser.parseScaleDimension(
+                            text, scaleUnit, unitScaleLength,
+                            session.baseDimensions.getOrElse(index) { 0.0 },
+                        )
+                        else -> ValueParser.parse(text, session.mode)
+                    }
+                    parsed?.let {
+                        send(when (session.mode) {
+                            TransformMode.MOVE -> it / unitScaleLength
+                            TransformMode.ROTATE -> if (alternateUnit) it else Math.toRadians(it)
+                            TransformMode.SCALE -> it
+                        })
+                    }
                 },
             )
-            PillButton("+") { send(current + step) }
+            PillButton("+") { send(current + axisStep) }
         }
     }
 }
@@ -326,78 +427,6 @@ private fun SnapCandidateHint(session: TransformSession) {
     val candidate = session.snapCandidate ?: return
     val target = candidate.objectName?.let { "$it · ${candidate.type.label}" } ?: candidate.type.label
     Text("⇥ $target", color = Ink.Ok, fontSize = 11.sp)
-}
-
-/** Cuánto se lleva movido/girado/escalado. Es la razón de ser de la barra. */
-@Composable
-private fun Readout(session: TransformSession) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        if (session.mode == TransformMode.ROTATE) {
-            Text(
-                "${format(session.angle, 1)}°",
-                color = Ink.Accent,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-        } else {
-            for (axis in Axis.entries) {
-                val value = session.values.getOrElse(axis.ordinal) { 0.0 }
-                // Un eje descartado por la restricción se apaga en vez de desaparecer:
-                // así la fila no cambia de ancho al tocar los botones de restricción.
-                val muted = session.axes.isNotEmpty() && axis !in session.axes
-                Text(
-                    "${axis.name} ${format(value, 3)}",
-                    color = if (muted) Ink.Faint else AxisColors.getValue(axis),
-                    fontSize = 17.sp,
-                    fontWeight = if (muted) FontWeight.Normal else FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 7.dp),
-                )
-            }
-        }
-    }
-}
-
-/**
- * Selector mínimo: solo X/Y/Z. Un toque elige un único eje (o lo libera si ya estaba
- * elegido); una pulsación larga añade/quita ejes para formar planos sin seis botones
- * extra. Rotar conserva por definición un único eje.
- */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun ConstraintPicker(mode: TransformMode, selected: Constraint, onSelect: (Constraint) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        for (axis in Axis.entries) {
-            val active = axis in selected.axes
-            Box(
-                Modifier
-                    .size(38.dp)
-                    .clip(RoundedCornerShape(19.dp))
-                    .background(if (active) AxisColors.getValue(axis).copy(alpha = .28f) else Color.White.copy(alpha = .05f))
-                    .combinedClickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = {
-                            onSelect(if (active && selected.axes.size == 1) Constraint.FREE else Constraint.ofAxes(setOf(axis)))
-                        },
-                        onLongClick = {
-                            if (mode == TransformMode.ROTATE) onSelect(Constraint.ofAxes(setOf(axis)))
-                            else {
-                                val next = if (active) selected.axes - axis else selected.axes + axis
-                                onSelect(Constraint.ofAxes(next))
-                            }
-                        },
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    axis.name,
-                    color = if (active) AxisColors.getValue(axis) else Ink.Muted,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-        }
-    }
 }
 
 /** Orientación de los ejes. Solo se ofrecen las que el contexto declara válidas. */
@@ -470,16 +499,6 @@ private fun SnapPicker(mode: TransformMode, selected: SnapType, onSelect: (SnapT
     }
 }
 
-/** Relativo (cuánto se mueve) o absoluto (a dónde va). Cambia qué significa el valor. */
-@Composable
-private fun ValueModePicker(selected: ValueMode, onSelect: (ValueMode) -> Unit) {
-    val next = if (selected == ValueMode.RELATIVE) ValueMode.ABSOLUTE else ValueMode.RELATIVE
-    PillButton(
-        if (selected == ValueMode.RELATIVE) "Δ rel" else "= abs",
-        selected = selected == ValueMode.ABSOLUTE,
-    ) { onSelect(next) }
-}
-
 /** Cuánto avanza cada incremento: milímetros, centímetros, metros, grados o factor. */
 @Composable
 private fun StepPicker(mode: TransformMode, index: Int, onStep: (Int) -> Unit) {
@@ -498,47 +517,6 @@ private fun StepPicker(mode: TransformMode, index: Int, onStep: (Int) -> Unit) {
     ) {
         Text(steps[safe].label, color = Ink.Muted, fontSize = 13.sp)
     }
-}
-
-/**
- * Valor exacto. Acepta unidades (`4m`, `25cm`, `3mm`), grados (`45°`) y porcentajes
- * (`50%`): el parser devuelve metros, grados o factor según el modo. Sin restricción
- * el número se aplica a los tres ejes; con un eje o plano, solo a los elegidos.
- */
-@Composable
-private fun ValueInput(
-    session: TransformSession,
-    unitScaleLength: Double,
-    onValue: (List<Double>?, Double?) -> Unit,
-) {
-    var text by remember(session.mode) { mutableStateOf("") }
-    // Al cerrar y reabrir la sesión el campo debe quedar limpio, no con lo anterior.
-    LaunchedEffect(session.active) { if (!session.active) text = "" }
-
-    fun commit() {
-        val physical = ValueParser.parse(text, session.mode) ?: return
-        val parsed = if (session.mode == TransformMode.MOVE) physical / unitScaleLength else physical
-        if (session.mode == TransformMode.ROTATE) {
-            onValue(null, parsed)
-        } else {
-            // El número se aplica a los ejes activos; sin restricción, a los tres.
-            val neutral = if (session.mode == TransformMode.SCALE) 1.0 else 0.0
-            val values = Axis.entries.map { axis ->
-                if (session.axes.isEmpty() || axis in session.axes) parsed else neutral
-            }
-            onValue(values, null)
-        }
-        text = ""
-    }
-
-    CompactNumericField(
-        value = text,
-        onValueChange = { text = it },
-        placeholder = "4m · 25cm · 45° · 50%",
-        textAlign = TextAlign.End,
-        onDone = { commit() },
-        modifier = Modifier.width(118.dp),
-    )
 }
 
 @Composable

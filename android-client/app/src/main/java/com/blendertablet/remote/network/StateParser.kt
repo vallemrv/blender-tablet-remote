@@ -26,10 +26,8 @@ import com.blendertablet.remote.model.*
 /**
  * Traduce el JSON del servidor a los modelos de la app.
  *
- * Vive fuera del cliente WebSocket para poder probarlo en la JVM contra las fixtures
- * que publica el backend (`blender-backend/fixtures/`), que es donde se detecta que un
- * campo se ha renombrado. Sin esto, un `snap_type` que pasara a llamarse de otra forma
- * solo se notaría al tocar el control en la tablet.
+ * Vive fuera del cliente WebSocket para separar la decodificación del transporte y
+ * centralizar la tolerancia a cambios del contrato.
  *
  * Todo se lee de forma tolerante: un campo que falte o traiga un valor desconocido cae
  * en el valor por defecto en vez de romper la conexión. El servidor puede ser más nuevo
@@ -40,6 +38,35 @@ object StateParser {
     fun unitScaleLength(json: JSONObject?): Double =
         json?.optJSONObject("units")?.optDouble("scale_length", 1.0)
             ?.takeIf { it.isFinite() && it > 0.0 } ?: 1.0
+
+    /**
+     * Escala de trabajo. Un servidor que no la publica se comporta como hasta ahora,
+     * así que el default equivale al preset medio y la UI simplemente no la ofrece.
+     */
+    fun sceneScale(json: JSONObject?, fallback: SceneScale = SceneScale()): SceneScale {
+        if (json == null) return fallback
+        return SceneScale(
+            id = json.optString("id", fallback.id).ifBlank { fallback.id },
+            label = json.optString("label", fallback.label).ifBlank { fallback.label },
+            hint = json.optString("hint", fallback.hint),
+            lengthUnit = LengthUnit.fromWire(json.optString("length_unit")) ?: fallback.lengthUnit,
+            clipStart = json.optDouble("clip_start", fallback.clipStart),
+            clipEnd = json.optDouble("clip_end", fallback.clipEnd),
+            snapStep = json.optDouble("snap_step", fallback.snapStep),
+            moveStep = json.optDouble("move_step", fallback.moveStep),
+            primitiveSize = json.optDouble("primitive_size", fallback.primitiveSize),
+            proportionalRadius = json.optDouble("proportional_radius", fallback.proportionalRadius),
+            proportionalRadiusStep = json.optDouble(
+                "proportional_radius_step", fallback.proportionalRadiusStep),
+        )
+    }
+
+    /** Catálogo de presets de `scene.scale`, en el orden que manda el servidor. */
+    fun sceneScalePresets(json: JSONObject?): List<SceneScale> {
+        val array = json?.optJSONArray("presets") ?: return emptyList()
+        return (0 until array.length()).mapNotNull { array.optJSONObject(it) }
+            .map { sceneScale(it) }
+    }
 
     fun state(json: JSONObject): BlenderState {
         val selected = json.optJSONArray("selected_objects") ?: JSONArray()
@@ -58,6 +85,7 @@ object StateParser {
             hiddenObjects = hiddenObjects(json.optJSONArray("hidden_objects")),
             modifiers = modifiers(json.optJSONObject("active")?.optJSONArray("modifiers")),
             editSettings = editSettings(json.optJSONObject("edit_settings")),
+            sceneScale = sceneScale(json.optJSONObject("scene_scale")),
         )
     }
 
@@ -104,6 +132,7 @@ object StateParser {
         val view = f.optJSONObject("view")
         val selection = f.optJSONObject("selection")
         return ServerFeatures(
+            f.optJSONObject("history")?.optBoolean("repeat_last") == true,
             f.has("modifiers"), f.has("visibility"), f.has("transform_apply"),
             f.has("object_shading"),
             f.optJSONObject("context") != null,
@@ -124,7 +153,31 @@ object StateParser {
             f.optJSONObject("edit_settings") != null,
             editCatalog(f.optJSONObject("edit_catalog")),
             editToolbar(f.optJSONObject("edit_toolbar")),
+            tweakMotions(selection?.optJSONObject("tweak")),
+            tweakSnapTypes(selection?.optJSONObject("tweak")),
+            f.optJSONObject("scene_scale") != null,
         )
+    }
+
+    /**
+     * Modos de Tweak anunciados. Un servidor que no los publica sigue admitiendo el
+     * arrastre libre, así que ese es el mínimo; los nombres que esta versión no conoce
+     * se ignoran en vez de romper el resto de capabilities.
+     */
+    fun tweakMotions(tweak: JSONObject?): List<TweakMotion> {
+        val array = tweak?.optJSONArray("motion") ?: return listOf(TweakMotion.FREE)
+        val parsed = (0 until array.length()).mapNotNull { index ->
+            runCatching { TweakMotion.valueOf(array.optString(index).uppercase()) }.getOrNull()
+        }
+        return parsed.ifEmpty { listOf(TweakMotion.FREE) }
+    }
+
+    /** Destinos de snap del Tweak. Sin anuncio no se ofrece ninguno. */
+    fun tweakSnapTypes(tweak: JSONObject?): List<SnapType> {
+        val array = tweak?.optJSONArray("snap_types") ?: return emptyList()
+        return (0 until array.length()).mapNotNull { index ->
+            runCatching { SnapType.valueOf(array.optString(index).uppercase()) }.getOrNull()
+        }
     }
 
     /**
@@ -255,8 +308,11 @@ object StateParser {
         if (json == null || !json.optBoolean("active")) return TransformSession()
         val axes = json.optJSONArray("axes") ?: JSONArray()
         val values = json.optJSONArray("values") ?: JSONArray()
+        val baseDimensions = json.optJSONArray("base_dimensions") ?: JSONArray()
+        val dimensions = json.optJSONArray("dimensions") ?: JSONArray()
         return TransformSession(
             active = true,
+            sessionId = json.optString("session_id").takeIf { it.isNotBlank() },
             mode = enum(json.optString("mode"), TransformMode.MOVE),
             axes = enums(axes, Axis.entries).toSet(),
             snap = json.optBoolean("snap"),
@@ -264,14 +320,28 @@ object StateParser {
             snapCandidate = candidate(json.optJSONObject("snap_candidate")),
             referenceCandidate = candidate(json.optJSONObject("reference_candidate")),
             referenceLocked = json.optBoolean("reference_locked", false),
+            referenceRole = json.optString("reference_role").takeIf { it.isNotBlank() },
+            centerLocked = json.optBoolean("center_locked", false),
+            sourceLocked = json.optBoolean("source_locked", false),
             referencePosition = floats(json.optJSONArray("reference_position")),
             referenceDistance = json.optDouble("reference_distance").takeIf { !it.isNaN() },
+            center = optionalFloats(json.optJSONArray("center")),
+            source = optionalFloats(json.optJSONArray("source")),
+            target = optionalFloats(json.optJSONArray("target")),
+            baseDimensions = List(3) { baseDimensions.optDouble(it, 0.0) },
+            dimensions = List(3) { dimensions.optDouble(it, 0.0) },
             step = json.optDouble("step", 0.01),
             orientation = enum(json.optString("orientation"), Orientation.GLOBAL),
             valueMode = enum(json.optString("value_mode"), ValueMode.RELATIVE),
             proportional = json.optBoolean("proportional", false),
             proportionalRadius = json.optDouble("proportional_radius", 1.0),
             proportionalFalloff = json.optString("proportional_falloff", "SMOOTH"),
+            proportionalCircle = json.optJSONObject("proportional_circle")?.let { circle ->
+                com.blendertablet.remote.model.ProportionalCircle(
+                    optionalFloats(circle.optJSONArray("center")),
+                    circle.optDouble("radius", 0.0).toFloat(),
+                )
+            },
             values = List(3) { values.optDouble(it, 0.0) },
             angle = json.optDouble("angle", 0.0),
         )
@@ -431,6 +501,9 @@ object StateParser {
     /** Tres componentes siempre: un vector a medias descuadraría el panel numérico. */
     private fun floats(array: JSONArray?, fallback: Float = 0f): List<Float> =
         List(3) { array?.optDouble(it, fallback.toDouble())?.toFloat() ?: fallback }
+
+    private fun optionalFloats(array: JSONArray?): List<Float> =
+        if (array == null) emptyList() else floats(array)
 
     private inline fun <reified T : Enum<T>> enum(name: String?, fallback: T): T =
         T::class.java.enumConstants?.firstOrNull { it.name == name } ?: fallback

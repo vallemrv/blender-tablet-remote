@@ -239,12 +239,27 @@ def inset(payload: dict) -> dict:
             "variant": "INDIVIDUAL" if individual else "REGION", "boundary": boundary}
 
 
+# Remate de la esquina exterior (Miter Outer). Los nombres son los del enum de
+# `bmesh.ops.bevel`, así que viajan por el contrato tal cual.
+BEVEL_MITERS = {"SHARP", "PATCH", "ARC"}
+
+
 @command("mesh.bevel", mutating=True)
 def bevel(payload: dict) -> dict:
     obj, bm = _bm_and_obj()
     offset = _apply_scalar_snap(get_float(payload, "offset", 0.1), payload)
     segments = max(1, get_int(payload, "segments", 1))
-    profile = get_float(payload, "profile", 0.5)
+    # 0 hunde la esquina, 0,5 la deja circular y 1 la remata en pico. Fuera de [0,1]
+    # `bmesh.ops.bevel` produce geometría degenerada, así que se acota aquí.
+    profile = min(1.0, max(0.0, get_float(payload, "profile", 0.5)))
+    miter_outer = str(payload.get("miter_outer", "SHARP")).upper()
+    if miter_outer not in BEVEL_MITERS:
+        raise BadPayload("'miter_outer' must be SHARP, PATCH or ARC")
+    # Cuánto se separa el remate de la esquina. Sin esto `ARC` y `PATCH` colapsan sobre
+    # `SHARP` y el usuario cambia de modo sin ver nada. El default de Blender es 0,1
+    # absoluto; aquí se toma el propio ancho del bisel, que es la escala del detalle
+    # que se está creando y no desfigura una pieza de milímetros.
+    spread = max(0.0, get_float(payload, "spread", offset))
     vert_mode, _edge_mode, _face_mode = _select_mode()
     affect = str(payload.get("affect", "VERTICES" if vert_mode else "EDGES")).upper()
     if affect not in {"EDGES", "VERTICES"}:
@@ -266,13 +281,17 @@ def bevel(payload: dict) -> dict:
         profile=profile,
         affect=affect,
         clamp_overlap=bool(payload.get("clamp", True)),
+        miter_outer=miter_outer,
+        spread=spread,
     )
 
     _deselect_all(bm)
     _select_geom(bm, ret.get("faces", []))
     flush_bmesh(obj, bm)
     _undo(payload, "Remote bevel")
-    return {"offset": offset, "segments": segments, "new_faces": len(ret.get("faces", []))}
+    return {"offset": offset, "segments": segments, "profile": profile,
+            "miter_outer": miter_outer, "spread": spread,
+            "new_faces": len(ret.get("faces", []))}
 
 
 LOOP_FALLOFFS = {"SMOOTH", "SPHERE", "ROOT", "SHARP", "LINEAR", "INVERSE_SQUARE"}

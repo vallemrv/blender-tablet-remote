@@ -175,6 +175,10 @@ def reset_session() -> None:
     _watcher.reset()
     _gestures.reset()
     _camera.reset()
+    # El archivo nuevo trae sus propias unidades: la escala vuelve al preset por
+    # defecto para no anunciar un clipping que ya no corresponde a esta escena.
+    from .commands.units import reset as reset_scene_scale
+    reset_scene_scale()
     from .commands.view import reset_local_view
     reset_local_view()
 
@@ -341,7 +345,7 @@ def _pump() -> float | None:
     # Con la pantalla del PC apagada, Blender se bloquea al redibujar y este timer deja
     # de correr: el mismo `busy` decide si hay que impedir que se apague (ver screen.py).
     # En background no hay ventana que se bloquee, así que no hay por qué tocar la
-    # pantalla de nadie: importa sobre todo para no manosearla durante los tests.
+    # pantalla de nadie: evita alterar la interfaz local del PC.
     screen.keep_awake(bool(busy) and not bpy.app.background)
     return TICK_ACTIVE if busy else TICK_IDLE
 
@@ -478,6 +482,8 @@ def _handle_command(client: WSClient, msg: dict) -> None:
     log.info("command %s", name)
     try:
         result = func(payload)
+        from .commands import history as command_history
+        command_history.remember(name, payload)
     except CommandError as exc:
         _stats["errors"] += 1
         log.warn("command %s failed: %s", name, exc.message)

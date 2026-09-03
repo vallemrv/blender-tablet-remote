@@ -23,6 +23,10 @@ MODE_FLAGS = {
 
 SELECTION_OPS = {"SET", "ADD", "REMOVE", "TOGGLE"}
 DEFAULT_TOUCH_THRESHOLD = 0.035
+# Face Loop/Ring necesita una dirección además de la cara. La toma de la arista más
+# próxima al último toque sobre esa cara, equivalente a la posición del cursor en el
+# Alt+click de Blender. Se invalida por objeto para no reutilizar intención vieja.
+_last_face_edge: tuple[str, int] | None = None
 
 
 def _with_state(result: dict) -> dict:
@@ -39,6 +43,20 @@ def _selection_op(payload: dict) -> str:
 
 def _apply_op(elem, mode: str) -> None:
     elem.select = False if mode == "REMOVE" else (not elem.select if mode == "TOGGLE" else True)
+
+
+def _apply_group_op(elements, mode: str) -> None:
+    """TOGGLE sobre un grupo alterna el grupo entero, no elemento a elemento.
+
+    Es el Shift+Alt+click de Blender: un loop ya seleccionado se apaga entero y uno
+    nuevo se enciende entero. Alternando uno a uno, un loop seleccionado a medias
+    quedaría en damero.
+    """
+    elements = list(elements)
+    if mode == "TOGGLE":
+        mode = "REMOVE" if elements and all(elem.select for elem in elements) else "ADD"
+    for elem in elements:
+        _apply_op(elem, mode)
 
 
 def _touch_threshold(payload: dict) -> float:
@@ -216,13 +234,42 @@ def _edit_cage_raycast(obj, world_origin: Vector, world_direction: Vector):
 
 _tweak_owner = None
 _tweak_missed = False
+# El BEGIN configura el gesto entero; los UPDATE llegan sin repetir los ajustes.
+_tweak_snap_type = "NONE"
+
+TWEAK_SNAP_TYPES = {"NONE", "INCREMENT", "VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER"}
+GEOMETRIC_SNAP_TYPES = {"VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER"}
+# Fracción del riel con SLIDE, unidades de escena con FREE.
+DEFAULT_TWEAK_SLIDE_STEP = 0.1
+
+
+def _tweak_settings(payload: dict) -> tuple[str, str, float | None, bool]:
+    """Lee y concilia motion/snap del BEGIN."""
+    motion = str(payload.get("motion", "FREE")).upper()
+    if motion not in {"FREE", "SLIDE"}:
+        raise BadPayload("'motion' must be FREE or SLIDE")
+    snap_type = str(payload.get("snap_type", "NONE")).upper()
+    if snap_type not in TWEAK_SNAP_TYPES:
+        raise BadPayload("Unknown 'snap_type'")
+    # Deslizar por una arista ya decide el destino: un candidato geométrico lo sacaría
+    # del riel. Se degrada en vez de fallar para que la UI conserve ambos ajustes
+    # independientes y el gesto siga funcionando.
+    if motion == "SLIDE" and snap_type in GEOMETRIC_SNAP_TYPES:
+        snap_type = "NONE"
+    if "snap_step" in payload:
+        step = get_float(payload, "snap_step", DEFAULT_TWEAK_SLIDE_STEP)
+        if step <= 0.0:
+            raise BadPayload("'snap_step' must be positive")
+    else:
+        step = DEFAULT_TWEAK_SLIDE_STEP if motion == "SLIDE" else None
+    return motion, snap_type, step, bool(payload.get("clamp", True))
 
 
 @command("selection.tweak", mutating=True)
 def tweak(payload: dict) -> dict:
     """Selecciona bajo el apoyo y mueve directamente hasta soltar el gesto."""
     from . import modal
-    global _tweak_owner, _tweak_missed
+    global _tweak_owner, _tweak_missed, _tweak_snap_type
 
     phase = str(payload.get("phase", "")).upper()
     if phase not in {"BEGIN", "UPDATE", "END", "CANCEL"}:
@@ -236,6 +283,7 @@ def tweak(payload: dict) -> dict:
         selection_mode = tuple(bpy.context.scene.tool_settings.mesh_select_mode)
         if not (selection_mode[0] or selection_mode[1]) or selection_mode[2]:
             raise CommandError("Tweak requires Vertex or Edge selection mode", code="wrong_selection")
+        motion, snap_type, step, clamp = _tweak_settings(payload)
         if modal.session.active:
             modal.session.restore_safely()
             modal.session.reset()
@@ -247,11 +295,14 @@ def tweak(payload: dict) -> dict:
             picked = pick(dict(payload, mode="SET"))
         _tweak_owner = owner
         _tweak_missed = not picked.get("hit")
+        _tweak_snap_type = snap_type
         if not picked.get("hit"):
             return picked
-        modal.session.begin("MOVE", [], False, None, owner_id=owner,
-                            orientation="GLOBAL", value_mode="RELATIVE", snap_type="NONE")
-        return dict(picked, tweak=True, session_id=modal.session.session_id)
+        modal.session.begin("MOVE", [], snap_type != "NONE", step, owner_id=owner,
+                            orientation="GLOBAL", value_mode="RELATIVE", snap_type=snap_type,
+                            motion=motion, slide_clamp=clamp)
+        return dict(picked, tweak=True, session_id=modal.session.session_id,
+                    motion=motion, snap_type=snap_type)
 
     if _tweak_missed:
         if owner != _tweak_owner:
@@ -268,6 +319,7 @@ def tweak(payload: dict) -> dict:
         if phase in {"END", "CANCEL"}:
             _tweak_owner = None
             _tweak_missed = False
+            _tweak_snap_type = "NONE"
         return {"hit": False, "tweak": True, "orbit": True, "moved": False}
 
     modal.session.require(owner)
@@ -276,14 +328,27 @@ def tweak(payload: dict) -> dict:
     if phase == "UPDATE":
         modal.session.nudge(get_float(payload, "dx", 0.0), get_float(payload, "dy", 0.0))
         modal.session.apply()
+        if _tweak_snap_type in GEOMETRIC_SNAP_TYPES and "u" in payload and "v" in payload:
+            # El elemento arrastrado es la fuente de la sesión, así que resolver
+            # fuente→candidato lo deja exactamente encima del destino. Sin impacto se
+            # conserva el nudge ya aplicado y el gesto sigue al dedo.
+            status = modal.set_snap_candidate(
+                dict(payload, snap_type=_tweak_snap_type, lock=False))
+            return dict(status, tweak=True)
         return dict(modal.session.status(), tweak=True)
-    moved = modal.session.values.length > 1e-12
+    # Con SLIDE el delta acumulado no es el desplazamiento: hasta que el arrastre fija
+    # un riel el vértice no se ha movido, y confirmar ahí crearía un undo vacío.
+    if modal.session.slide_candidates is not None:
+        moved = modal.session.slide_rails is not None
+    else:
+        moved = modal.session.values.length > 1e-12
     if phase == "CANCEL" or not moved:
         result = modal.cancel(payload)
     else:
         result = modal.confirm(payload)
     _tweak_owner = None
     _tweak_missed = False
+    _tweak_snap_type = "NONE"
     return dict(result, tweak=True, moved=moved and phase == "END")
 
 
@@ -455,6 +520,15 @@ def _pick_element(obj, world_location, face_index: int, mode: str, payload: dict
     else:
         scored = [(0.0, visible_face)]
         kind = "face"
+        edge_scores = []
+        for edge in visible_face.edges:
+            points = [camera.project(obj.matrix_world @ vert.co, rv3d) for vert in edge.verts]
+            if None not in points:
+                edge_scores.append((_point_segment_distance(
+                    touch, Vector(points[0]), Vector(points[1])), edge))
+        if edge_scores:
+            global _last_face_edge
+            _last_face_edge = (obj.name, min(edge_scores, key=lambda item: item[0])[1].index)
 
     if not scored:
         return {"hit": False, "reason": "no_visible_candidate"}
@@ -467,7 +541,12 @@ def _pick_element(obj, world_location, face_index: int, mode: str, payload: dict
         bm.select_history.add(target)
     else:
         bm.select_history.discard(target)
-    bm.select_flush(target.select)
+    # `select_flush(True)` propaga hacia arriba DESDE los vértices: enciende toda
+    # arista cuyos dos vértices ya estuvieran marcados. Como Blender marca los
+    # vértices de las aristas seleccionadas al escribir la malla, picar una segunda
+    # arista arrastraba a sus vecinas. `select_flush_mode` respeta el modo activo
+    # (deriva los vértices desde lo picado, no al revés), igual que loop/ring/box.
+    bm.select_flush_mode()
     flush_bmesh(obj, bm, destructive=False)
     return {"hit": True, "object": obj.name, "element": kind, "index": target.index,
             "distance": distance}
@@ -527,7 +606,7 @@ def _pick_through(obj, bm, rv3d, touch: Vector, threshold: float, mode: str, sel
         bm.select_history.add(target)
     else:
         bm.select_history.discard(target)
-    bm.select_flush(target.select)
+    bm.select_flush_mode()
     flush_bmesh(obj, bm, destructive=False)
     return {"hit": True, "object": obj.name, "element": kind, "index": target.index,
             "distance": distance}
@@ -712,8 +791,54 @@ def _topology_select(payload: dict, resolver) -> dict:
         for edge in bm.edges:
             edge.select = False
     targets = resolver(seed)
-    for edge in targets:
-        _apply_op(edge, mode)
+    _apply_group_op(targets, mode)
+    bm.select_flush_mode()
+    flush_bmesh(obj, bm, destructive=False)
+    return dict(sel_info({}), affected=len(targets))
+
+
+def _face_strip(seed_face, seed_edge):
+    """Fila de quads que atraviesa la cara por `seed_edge` y su opuesta."""
+    if len(seed_face.edges) != 4 or seed_edge not in seed_face.edges:
+        return {seed_face}
+    result = {seed_face}
+    opposite = next(edge for edge in seed_face.edges
+                    if not set(edge.verts).intersection(seed_edge.verts))
+    pending = [(seed_face, seed_edge), (seed_face, opposite)]
+    while pending:
+        face, exit_edge = pending.pop()
+        neighbor = next((candidate for candidate in exit_edge.link_faces
+                         if candidate is not face and not candidate.hide), None)
+        if neighbor is None or neighbor in result or len(neighbor.edges) != 4:
+            continue
+        result.add(neighbor)
+        next_edge = next((edge for edge in neighbor.edges
+                          if not set(edge.verts).intersection(exit_edge.verts)), None)
+        if next_edge is not None and not next_edge.hide:
+            pending.append((neighbor, next_edge))
+    return result
+
+
+def _face_topology_select(payload: dict, perpendicular: bool) -> dict:
+    obj = active_object()
+    bm = edit_bmesh(obj)
+    active = bm.select_history.active
+    seed_face = active if isinstance(active, bmesh.types.BMFace) and active.select else next(
+        (face for face in bm.faces if face.select and not face.hide), None)
+    if seed_face is None:
+        raise CommandError("Select a face first", code="empty_selection")
+    edge_index = (_last_face_edge[1] if _last_face_edge and _last_face_edge[0] == obj.name else None)
+    seed_edge = next((edge for edge in seed_face.edges if edge.index == edge_index), seed_face.edges[0])
+    if perpendicular:
+        position = list(seed_face.edges).index(seed_edge)
+        seed_edge = seed_face.edges[(position + 1) % len(seed_face.edges)]
+    targets = _face_strip(seed_face, seed_edge)
+    mode = _selection_op(payload)
+    if mode == "SET":
+        for collection in (bm.verts, bm.edges, bm.faces):
+            for elem in collection:
+                elem.select = False
+    _apply_group_op(targets, mode)
     bm.select_flush_mode()
     flush_bmesh(obj, bm, destructive=False)
     return dict(sel_info({}), affected=len(targets))
@@ -721,11 +846,15 @@ def _topology_select(payload: dict, resolver) -> dict:
 
 @command("selection.loop", mutating=True)
 def loop_select(payload: dict) -> dict:
+    if bpy.context.scene.tool_settings.mesh_select_mode[2]:
+        return _face_topology_select(payload, perpendicular=False)
     return _topology_select(payload, _edge_loop)
 
 
 @command("selection.ring", mutating=True)
 def ring_select(payload: dict) -> dict:
+    if bpy.context.scene.tool_settings.mesh_select_mode[2]:
+        return _face_topology_select(payload, perpendicular=True)
     return _topology_select(payload, _edge_ring)
 
 

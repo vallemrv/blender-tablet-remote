@@ -6,8 +6,7 @@ Si algo aquí no coincide con el servidor, el bug está en el documento.
 Transporte: **WebSocket**, marcos de **texto** con **JSON** UTF-8.
 Endpoint: `ws://<host>:8765/`
 
-Los fixtures normativos consumibles por Android están en `fixtures/v2/`. La respuesta
-de `server.capabilities` incluye `features` estructuradas, todos los `enums` canónicos
+La respuesta de `server.capabilities` incluye `features` estructuradas, todos los `enums` canónicos
 y `units`. Distancias son Blender Units acompañadas de `scale_length`/`unit_system`,
 giros son grados y escalas factores. `RELATIVE` expresa un delta desde el snapshot de
 inicio; `ABSOLUTE` expresa el valor objetivo en la referencia indicada.
@@ -177,8 +176,43 @@ edición, no sobre el objeto.
 | `scene.get_context` | — | contexto canónico, conteos y opciones válidas |
 | `scene.list_objects` | — | `{objects: [{name, type, selected}]}` |
 | `scene.get_object` | `name` | info del objeto |
+| `scene.scale` | — | `{scale, presets[]}` — escala de trabajo activa y catálogo |
+| `scene.scale_set` | `preset`: `SMALL`\|`MEDIUM`\|`LARGE`, y/o `length_unit`: `MILLIMETERS`\|`CENTIMETERS`\|`METERS` | la escala resultante |
 | `server.ping` | `echo` | `{pong: true, echo}` |
 | `server.capabilities` | — | versiones, lista de comandos y gestos |
+
+#### Escala de trabajo (`scene_scale`)
+
+Un preset **no reescala geometría**: un cubo de 2 unidades sigue midiendo 2 unidades en
+los tres. Lo que cambia es cómo se mide, hasta dónde se ve y con qué paso se trabaja.
+
+| Preset | `length_unit` | `clip_start` | `clip_end` | `snap_step` | `primitive_size` | radio proporcional / paso |
+|---|---|---|---|---|---|---|
+| `SMALL` | `MILLIMETERS` | 0.0005 | 5 | 0.001 | 0.01 | 0.01 / 0.001 |
+| `MEDIUM` | `CENTIMETERS` | 0.01 | 100 | 0.01 | 0.5 | 0.5 / 0.05 |
+| `LARGE` | `METERS` | 0.1 | 1000 | 0.1 | 2.0 | 5.0 / 0.5 |
+
+El clipping es la razón de que esto exista. La proyección del vídeo hereda el **FOV** de
+la ventana del PC pero **no su rango de profundidad**: con el clip por defecto de Blender
+(0,01 m a 1000 m) el z-buffer se reparte sobre un rango 100.000 veces mayor que la pieza,
+las caras próximas compiten por el mismo valor y la malla se ve rota aunque la geometría
+sea correcta. Cada preset mantiene `clip_end / clip_start` en torno a 10.000, que es lo
+que un z-buffer de 24 bits sostiene sin artefactos. Solo se reescribe la fila de
+profundidad de la matriz heredada, así que el rayo del toque sigue coincidiendo con lo
+que se ve y la ventana del PC no se toca.
+
+`clip_end` es un mínimo, no una pared: al alejar la cámara la perspectiva amplía el
+fondo hasta `max(clip_end, camera.distance*4)` y ajusta el near para conservar el
+cociente cercano a 10.000. Así el objeto no desaparece por cambiar el encuadre.
+
+`scale_length` de la escena **no** se modifica: multiplica el tamaño del mundo y
+cambiaría el significado de la geometría existente. `length_unit` sí, porque solo decide
+cómo se escribe la medida. El preset viaja en `scene.get_state` como `scene_scale` y es
+del usuario, no del `.blend`: cargar otro archivo lo devuelve a `MEDIUM`.
+
+`object.add` usa `primitive_size` para que las primitivas nazcan a la escala elegida.
+Cada operador de Blender nombra su tamaño distinto (`size`, `radius`, los dos radios del
+toro), así que se consulta el RNA; un tamaño explícito en el payload siempre gana.
 
 `scene.get_state` devuelve:
 
@@ -231,7 +265,7 @@ seleccionada la copia, equivalente a `Shift+D` antes de moverla.
 
 ### Modos
 
-`mode.object`, `mode.edit`, `mode.sculpt`, `mode.toggle`, `mode.set` (`mode`).
+`mode.object`, `mode.edit`, `mode.toggle`, `mode.set` (`mode`: `OBJECT` o `EDIT`).
 
 ### Selección
 
@@ -243,12 +277,12 @@ seleccionada la copia, equivalente a `Shift+D` antes de moverla.
 | `selection.info` | — devuelve índices seleccionados |
 | `selection.elements` | `verts[]`, `edges[]`, `faces[]`, `mode` |
 | `selection.pick` | `u`, `v` (0..1), `threshold`, `mode`: `SET`\|`ADD`\|`REMOVE`\|`TOGGLE` |
-| `selection.tweak` | `phase`: `BEGIN`\|`UPDATE`\|`END`\|`CANCEL`; BEGIN lleva `u`,`v`, UPDATE lleva `dx`,`dy` |
+| `selection.tweak` | `phase`: `BEGIN`\|`UPDATE`\|`END`\|`CANCEL`; BEGIN lleva `u`,`v`, `motion`, `snap_type`, `snap_step`, `clamp`; UPDATE lleva `dx`,`dy` y `u`,`v` |
 | `selection.shortest_path` | `u`, `v` (0..1), `threshold`, `extend` (bool, por defecto false) — solo Edit |
 | `selection.box` | `u0`, `v0`, `u1`, `v1`, `mode` |
 | `selection.circle` | `u`, `v`, `radius`, `mode` |
 | `selection.more` / `selection.less` | — en Edit Mode |
-| `selection.loop` / `.ring` | `edge` (opcional; usa la seleccionada), `mode` |
+| `selection.loop` / `.ring` | `edge` (opcional en Edge), `mode`; en Face usa cara activa y dirección del último toque |
 | `selection.linked` | — en Edit Mode; siembra con la selección |
 
 `mesh.delete` elimina topología. `mesh.dissolve` conserva la superficie vecina y
@@ -266,6 +300,34 @@ acumula deltas normalizados en el plano de la vista; END confirma un único undo
 CANCEL restaura las coordenadas originales. Un BEGIN sin impacto no abre sesión MOVE:
 los UPDATE siguientes orbitan la cámara (`miss_behavior: ORBIT`) hasta END/CANCEL. Un
 toque sin desplazamiento conserva la selección pero no crea un undo de movimiento.
+
+El BEGIN configura el gesto entero y esos ajustes se conservan hasta END/CANCEL:
+
+- `motion`: `FREE` (por defecto) mueve libre en el plano de la vista; `SLIDE` restringe
+  cada vértice a una de sus aristas, como el `GG` de Blender.
+- `snap_type`: `NONE` (por defecto), `INCREMENT` o un destino geométrico
+  (`VERTEX`, `EDGE`, `EDGE_CENTER`, `FACE`, `FACE_CENTER`).
+- `snap_step`: tamaño del incremento. Con `motion: FREE` son unidades de escena; con
+  `SLIDE` es la fracción del riel (`0.1` = un décimo de arista).
+- `clamp` (solo `SLIDE`, por defecto `true`): impide que el vértice se salga del
+  segmento; con `false` el riel extrapola más allá de sus dos extremos.
+
+Con `motion: SLIDE`, el riel de cada vértice se elige **una sola vez**, en el primer
+UPDATE que supera el umbral de arrastre: de sus aristas incidentes gana la que mejor se
+alinea con la dirección del dedo **proyectada en pantalla**, no en el espacio del mundo
+(si no, una arista casi paralela al eje de visión ganaría siempre por su longitud
+aparente). Fijarlo así evita que el riel salte de arista a mitad de gesto. Se prefieren
+las aristas cuyo otro extremo no está seleccionado; si un vértice no tiene ninguna, se
+consideran todas. El factor de deslizamiento sale de proyectar el arrastre sobre ese
+riel proyectado, de modo que el vértice acompaña al dedo en pantalla. La sesión publica
+`motion`, `slide_clamp` y, cuando ya hay riel, `slide_factor`.
+
+Con un destino geométrico, el UPDATE sondea bajo `u`,`v` con la misma consulta que
+`transform.snap_candidate` (excluyendo la geometría que se está moviendo) y resuelve
+fuente→destino: la fuente es el elemento arrastrado, así que el vértice aterriza
+exactamente sobre el candidato. Sin impacto, ese UPDATE se comporta como `NONE` y sigue
+el dedo. `SLIDE` y los destinos geométricos son excluyentes: deslizar por una arista ya
+determina el destino, y el snap de `SLIDE` solo aplica `INCREMENT` sobre su factor.
 
 Con shading `WIREFRAME` el pick ve a través en ambos modos. En Object Mode **cicla hacia
 detrás**: si el primer objeto impactado ya está seleccionado, se avanza el origen del
@@ -310,7 +372,7 @@ Ctrl+Plus / Ctrl+Minus del numpad). Solo Edit Mode (`wrong_mode` fuera).
 |---|---|
 | `mesh.extrude` | `offset` (def. 0.0), `direction` [x,y,z] opcional, `variant`: `REGION`\|`ALONG_NORMALS`\|`INDIVIDUAL` |
 | `mesh.inset` | `thickness` (def. 0.1), `depth`, `individual` (bool), `boundary` (bool, def. true; false conserva costuras abiertas/Mirror) |
-| `mesh.bevel` | `offset` (def. 0.1), `segments` (def. 1), `profile`, `affect`, `clamp` |
+| `mesh.bevel` | `offset` (def. 0.1), `segments` (def. 1), `profile` (0..1, def. 0.5), `miter_outer`: `SHARP`\|`PATCH`\|`ARC` (def. `SHARP`), `affect`, `clamp` |
 | `mesh.subdivide` | `cuts` |
 | `mesh.loop_cut` | `edge` (opcional), `cuts` (def. 1), `smoothness`, `factor`, `falloff`, `even`, `flip`, `clamp` |
 | `mesh.loop_probe` | `u`, `v` — sondeo read-only para colocar un corte con el toque |
@@ -352,7 +414,10 @@ viewport (`no_viewport` en background) y Edit Mode (`wrong_mode`).
 
 ### Historial
 
-`history.undo`, `history.redo`, `history.push` (`message`).
+`history.undo`, `history.redo`, `history.push` (`message`) y `history.repeat_last`.
+Este último es el Shift+R remoto: repite la última acción discreta de modelado o la
+última herramienta paramétrica confirmada, pero ignora selección, navegación, archivos
+y sesiones incompletas. Cada repetición crea su propio paso de undo.
 
 ### Vista
 
@@ -406,16 +471,18 @@ transformación todavía viva.
 |---|---|
 | `transform.begin` | `mode`: `MOVE`\|`ROTATE`\|`SCALE`, `axes[]`/`constraint`, `orientation`, `value_mode`, `snap`, `snap_type`, `step`; en Edit también `proportional`, `radius`, `falloff` |
 | `transform.axes` | `axes[]` — cambia la restricción en vivo |
+| `transform.orientation` | `orientation` — cambia GLOBAL/LOCAL/VIEW/NORMAL sin reiniciar la sesión |
 | `transform.snap` | `snap` (bool), `snap_type`, `step`; en Move no admite `GRID` ni `CURSOR` |
 | `snap.query` | `u`, `v`, `snap_type`: `VERTEX`\|`EDGE`\|`EDGE_CENTER`\|`FACE`\|`FACE_CENTER`\|`CURSOR`, `threshold` |
 | `transform.snap_candidate` | igual que `snap.query`, `lock` (predeterminado true) |
-| `transform.reference_candidate` | `u`, `v`, `lock`; o `clear`. Fija un ancla REL a la selección; el ancla viaja con ella y el snap geométrico alinea ancla→destino excluyendo los objetos móviles |
+| `transform.reference_candidate` | `u`, `v`, `lock`, `role`: `CENTER`/`SOURCE`; o `clear`. MOVE usa source→target; ROTATE/SCALE separan centro, fuente y destino |
 
-El snap exacto de Move ofrece `VERTEX`, `EDGE_CENTER` y `FACE_CENTER`. Sus radios
+El snap exacto de MOVE/ROTATE/SCALE ofrece `VERTEX`, `EDGE_CENTER` y `FACE_CENTER`. Sus radios
 táctiles predeterminados son respectivamente `0.080`, `0.070` y `0.065`, idénticos
 para elegir el ancla fuente y para seguir el destino.
 | `transform.nudge` | `dx`, `dy` — normalmente llega por el canal de gestos |
-| `transform.value` | `values`: [x,y,z], o `angle` en GRADOS si el modo es ROTATE |
+| `transform.value` | `values`: [x,y,z], `angle` en GRADOS legado, o `dimensions`: [x,y,z] finales en unidades Blender para SCALE |
+| `transform.session` | Publica `values` canónico y los roles `center`, `source`, `target`; `angle` y `reference_*` quedan como derivados v2 |
 | `transform.confirm` | — cierra con un único paso de undo |
 | `transform.cancel` | — restaura las matrices originales |
 
@@ -434,6 +501,11 @@ Cada sesión incluye UUID `session_id`, `owner` y `phase`. Solo su conexión pro
 puede alterarla; al desconectarse se cancela. Funciona tanto en Object como en Edit y
 reconstruye matrices o coordenadas BMesh desde el snapshot inicial.
 
+Al bloquear referencias sobre una preview existente, `SOURCE` se convierte al baseline
+para que la transformación se aplique una sola vez. `CENTER` conserva, en cambio, la
+posición visible exacta: desde ese instante es un pivote estacionario, no un punto que
+deba desrotarse o desescalarse con la selección.
+
 ### Ajustes globales de Edit
 
 `edit.settings` devuelve `edit_settings`; el mismo bloque también viaja en
@@ -441,6 +513,10 @@ reconstruye matrices o coordenadas BMesh desde el snapshot inicial.
 (bool), `falloff` (`SMOOTH|SPHERE|ROOT|SHARP|LINEAR|CONSTANT|INVERSE_SQUARE`),
 `radius` (> 0), `auto_merge` (bool) y `merge_threshold` (>= 0). Son ajustes globales
 respaldados por `ToolSettings` de Blender y se conservan entre transformaciones.
+Cambiar el preset aplica su `proportional_radius`; la tablet ajusta −/+ mediante
+`proportional_radius_step`. Una sesión proporcional Edit publica además
+`proportional_circle: {center:[u,v], radius}` en coordenadas normalizadas del viewport,
+proyectado por la misma cámara que produce el vídeo.
 
 La edición proporcional afecta a los vértices visibles dentro del radio durante
 MOVE/ROTATE/SCALE, con peso según el perfil elegido; cancelar restaura todas las
@@ -635,6 +711,12 @@ cambia) — un cliente sin soporte de `edit_toolbar` sigue usando el catálogo l
 sola variante, igual que Loop Cut: sin elección real de variante, solo aportan el
 selector de snap y el icono en la barra en vez de vivir escondidos en el catálogo
 contextual.
+
+Bevel publica además de ancho y segmentos los dos parámetros que deciden la forma de la
+esquina: `profile` (0..1; `0.5` es el arco circular, por debajo la hunde y `1.0` la
+remata en pico) y `miter_outer` (`SHARP` corta la esquina en ángulo, `PATCH` la rellena
+con una cara y `ARC` la redondea). Se anuncian también en
+`edit_tools.bevel` (`profile`, `miter_outer`) para un cliente que no lea el toolbar.
 Cada familia tiene esta forma:
 
 ```json
@@ -773,8 +855,8 @@ Solo Object Mode: en Edit responde `wrong_mode`.
 `object.add` con `primitive` es el menú Add de Blender: mallas, curvas, superficies,
 metaballs, texto, vacíos, luces y cámara. `object.add_options` devuelve el catálogo
 completo agrupado por categoría (`{categories: {MESH: [...], CURVE: [...]}}`); el enum
-`AddObject` del cliente Android es un espejo de esas claves y `android_contract.py`
-comprueba que no se han separado.
+`AddObject` del cliente Android es un espejo de esas claves y ambos lados deben
+mantenerse alineados al ampliar el catálogo.
 
 **Sin `x`/`y`/`z` explícitos se añade en el cursor 3D**, como Blender. Con ellos manda
 el payload.
@@ -1026,8 +1108,3 @@ con Blender a 53 Hz.
 
 MJPEG permanece como fallback. H.264/libx264 es la ruta preferida por su menor ancho
 de banda y configuración de latencia interactiva.
-`selection.tweak` está disponible solo en Edit y submodos VERTEX/EDGE. BEGIN hace un
-pick SET bajo el punto inicial y abre una transformación MOVE reversible; UPDATE
-acumula deltas normalizados en el plano de la vista; END confirma un único undo y
-CANCEL restaura las coordenadas originales. Un BEGIN sin impacto no abre sesión. Un
-toque sin desplazamiento conserva la selección pero no crea un undo de movimiento.

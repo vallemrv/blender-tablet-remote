@@ -42,6 +42,25 @@ enum class LoopFalloff(val wire: String, val label: String) {
     fun next(): LoopFalloff = entries[(ordinal + 1) % entries.size]
 }
 
+/**
+ * Cómo remata el bisel la esquina donde termina (el Miter Outer de Blender).
+ *
+ * Solo cambia la malla donde el bisel acaba en un vértice que conserva aristas sin
+ * biselar; con la selección entera las tres opciones dan lo mismo.
+ */
+enum class BevelMiter(val wire: String, val label: String) {
+    SHARP("SHARP", "Aguda"),
+    PATCH("PATCH", "Parche"),
+    ARC("ARC", "Arco");
+
+    companion object {
+        fun fromWire(value: String?): BevelMiter? = entries.firstOrNull { it.wire == value }
+    }
+
+    /** Siguiente del ciclo, para recorrer los remates sin abrir un desplegable. */
+    fun next(): BevelMiter = entries[(ordinal + 1) % entries.size]
+}
+
 /** Línea de arrastre de una sesión Bisect, en coordenadas de pantalla normalizadas. */
 data class DragLine(val start: List<Double>, val end: List<Double>)
 
@@ -100,6 +119,8 @@ data class ToolSession(
     fun flag(key: String, default: Boolean = false): Boolean = (parameters[key] as? Boolean) ?: default
     fun falloff(default: LoopFalloff = LoopFalloff.SMOOTH): LoopFalloff =
         (parameters["falloff"] as? String)?.let(LoopFalloff::fromWire) ?: default
+    fun miterOuter(default: BevelMiter = BevelMiter.SHARP): BevelMiter =
+        (parameters["miter_outer"] as? String)?.let(BevelMiter::fromWire) ?: default
 
     /** Tipos que el contrato admite realmente para esta sesión concreta. */
     val availableSnapTypes: List<SnapType>

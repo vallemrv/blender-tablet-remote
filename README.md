@@ -4,15 +4,10 @@ Interfaz táctil Android para controlar Blender sin convertir la tablet en un
 escritorio remoto. Blender conserva el motor 3D; la app aporta vídeo, gestos y
 controles adaptados a dedo y stylus.
 
-## Estado y documentación
+## Documentación
 
-- [`AGENTS.md`](AGENTS.md): arquitectura, funcionalidades ya construidas y reglas de trabajo.
+- [`AGENTS.md`](AGENTS.md): arquitectura, invariantes y reglas de trabajo.
 - [`blender-backend/docs/protocol.md`](blender-backend/docs/protocol.md): contrato canónico entre ambos lados.
-
-Cuando hay un ciclo abierto, su plan vive en un `PLAN_BACKEND.md`/`PLAN_FRONTEND.md`
-(separados por propiedad de directorios para que dos agentes trabajen a la vez sin
-editar los mismos archivos) y se borra al cerrarlo. Sin esos archivos, no hay ciclo
-abierto y el estado real vive solo en `AGENTS.md`.
 
 ## Arquitectura
 
@@ -30,8 +25,8 @@ entrada de valores con unidades. El inventario preciso está en `AGENTS.md`.
 ## Directorios
 
 ```text
-blender-backend/   add-on de Blender, protocolo, herramientas y pruebas
-android-client/    aplicación Kotlin/Compose y pruebas JVM
+blender-backend/   add-on de Blender, protocolo y herramientas
+android-client/    aplicación Kotlin/Compose
 ```
 
 ## Compilar
@@ -46,16 +41,7 @@ export PATH="$JAVA_HOME/bin:$PATH"
 bash blender-backend/tools/build_addon.sh
 ```
 
-## Verificar
-
-```bash
-blender --background --python blender-backend/tests/run_tests.py
-blender --python blender-backend/tests/run_gui_tests.py
-./gradlew :android-client:app:testDebugUnitTest
-```
-
-Las pruebas con ventana son necesarias para rutas que dependen de un `VIEW_3D` real,
-como selección por raycast y navegación. El vídeo requiere `ffmpeg` en el `PATH` del PC.
+El vídeo requiere `ffmpeg` en el `PATH` del PC.
 
 ## Uso
 

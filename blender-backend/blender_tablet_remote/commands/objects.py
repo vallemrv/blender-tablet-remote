@@ -210,6 +210,40 @@ def add_options(payload: dict) -> dict:
     return {"categories": grouped}
 
 
+def _sized_kwargs(op, kwargs: dict) -> dict:
+    """El tamaño con el que nace la primitiva, según la escala de trabajo.
+
+    El cubo de 2 unidades de Blender es enorme para una pieza de milímetros y diminuto
+    para un edificio, y quien elige un preset no quiere escalar a mano cada objeto que
+    añade. Cada operador nombra su tamaño de forma distinta —`size`, `radius`, los dos
+    radios del toro—, así que se pregunta al RNA en vez de mantener aquí una tabla que
+    se desincronizaría con Blender. Un tamaño explícito del cliente siempre gana.
+    """
+    from .units import current_scale
+
+    size = float(current_scale().get("primitive_size") or 0.0)
+    if size <= 0.0:
+        return kwargs
+    try:
+        properties = op.get_rna_type().properties
+    except (AttributeError, RuntimeError):
+        return kwargs
+
+    sized = dict(kwargs)
+    if "size" in properties:
+        sized.setdefault("size", size)
+    if "radius" in properties:
+        sized.setdefault("radius", size / 2.0)
+    if "radius1" in properties:  # cono: base y punta
+        sized.setdefault("radius1", size / 2.0)
+    if "depth" in properties:
+        sized.setdefault("depth", size)
+    if "major_radius" in properties:
+        sized.setdefault("major_radius", size / 2.0)
+        sized.setdefault("minor_radius", size / 8.0)
+    return sized
+
+
 @command("object.add", mutating=True)
 def add_primitive(payload: dict) -> dict:
     """Equivalente al menú Add de Blender: mallas, curvas, superficies, texto…
@@ -239,7 +273,7 @@ def add_primitive(payload: dict) -> dict:
 
     try:
         with view3d_override():
-            op(location=location, **kwargs)
+            op(location=location, **_sized_kwargs(op, kwargs))
     except RuntimeError as exc:
         raise CommandError(f"Cannot add {kind}: {exc}")
 

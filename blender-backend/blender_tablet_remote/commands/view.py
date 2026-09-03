@@ -244,7 +244,7 @@ def shading(payload: dict) -> dict:
         # Con 1.0 el xray es opaco y vuelve a ocultar lo que hay dentro. Un valor
         # moderado conserva legibles frente e interior, como el xray de Blender.
         space.shading.show_xray_wireframe = True
-        space.shading.xray_alpha_wireframe = 0.35
+        space.shading.xray_alpha_wireframe = 0.65
     return {"shading": shading_state()}
 
 

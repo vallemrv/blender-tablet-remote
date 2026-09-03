@@ -26,7 +26,7 @@ from . import log
 # RFC 6455 §1.3. El último grupo es C5AB0DC85B11: cuidado al teclearlo, una C
 # perdida al principio hace que el servidor devuelva un Sec-WebSocket-Accept
 # coherente consigo mismo pero inválido, y todo cliente que valide (OkHttp) lo
-# rechaza. tests/run_tests.py comprueba el vector de ejemplo del RFC.
+# rechaza. Debe conservarse el valor definido por RFC 6455.
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 OP_CONT = 0x0

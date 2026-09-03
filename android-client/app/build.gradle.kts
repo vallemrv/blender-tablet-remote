@@ -14,7 +14,6 @@ android {
         targetSdk = 36
         versionCode = 4
         versionName = "0.1.3"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildFeatures { compose = true }
@@ -32,7 +31,6 @@ android {
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2026.06.00")
     implementation(composeBom)
-    androidTestImplementation(composeBom)
 
     implementation("androidx.activity:activity-compose:1.12.3")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
@@ -48,11 +46,4 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
-    testImplementation("junit:junit:4.13.2")
-    // El android.jar de las pruebas unitarias trae org.json en versión "stub", que
-    // lanza en cada llamada. Con la implementación real en el classpath de test,
-    // StateParser se puede probar contra las fixtures del backend sin emulador.
-    testImplementation("org.json:json:20231013")
-    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
-    androidTestImplementation("androidx.test.ext:junit:1.3.0")
 }

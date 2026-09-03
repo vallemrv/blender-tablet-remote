@@ -58,9 +58,8 @@ enum class Orientation(val label: String) {
  * Tipo de snap. El nombre viaja tal cual como `snap_type`.
  *
  * Los geométricos se resuelven con un rayo desde el dedo (`transform.snap_candidate`),
- * y el backend **solo los admite en MOVE**: girar o escalar "hacia un vértice" no
- * significa nada. [forMode] es quien impone esa regla, para no ofrecer un control que
- * el servidor rechazaría con `wrong_tool`.
+ * En MOVE alinean source→target; ROTATE alinea direcciones desde center y SCALE
+ * resuelve su cociente. Todos conservan solo destinos exactos.
  */
 enum class SnapType(val label: String, val geometric: Boolean = false) {
     NONE("Sin snap"),
@@ -75,14 +74,41 @@ enum class SnapType(val label: String, val geometric: Boolean = false) {
 
     companion object {
         fun forMode(mode: TransformMode): List<SnapType> =
-            if (mode == TransformMode.MOVE)
-                listOf(NONE, INCREMENT, VERTEX, EDGE_CENTER, FACE_CENTER)
-            else listOf(NONE, INCREMENT)
+            listOf(NONE, INCREMENT, VERTEX, EDGE_CENTER, FACE_CENTER)
     }
 }
 
 enum class TransformStepUnit(val label: String) {
     MM("mm"), CM("cm"), M("m"), PERCENT("%")
+}
+
+/** Cómo se mueve el elemento arrastrado con Tweak. Viaja como `motion`. */
+enum class TweakMotion(val label: String) {
+    FREE("Libre"),
+    /** El `GG` de Blender: el vértice no sale de una de sus aristas. */
+    SLIDE("Solo aristas"),
+}
+
+/**
+ * Ajustes del gesto de Tweak. Viven fuera de la sesión porque el gesto es tan corto
+ * que no da tiempo a configurarlo mientras dura: se eligen antes, en el rail, y el
+ * BEGIN los manda enteros.
+ */
+data class TweakSettings(
+    val motion: TweakMotion = TweakMotion.FREE,
+    val snapType: SnapType = SnapType.NONE,
+    /** Fracción del riel con SLIDE; unidades de escena con FREE. */
+    val snapStep: Double = 0.1,
+    /** Con SLIDE, impide que el vértice se salga del segmento. */
+    val clamp: Boolean = true,
+) {
+    /**
+     * Deslizar por una arista ya decide el destino, así que el backend degrada ahí los
+     * destinos geométricos a NONE. Se refleja aquí para no prometer en la UI un snap
+     * que el gesto no va a aplicar.
+     */
+    val effectiveSnapType: SnapType
+        get() = if (motion == TweakMotion.SLIDE && snapType.geometric) SnapType.NONE else snapType
 }
 
 /**

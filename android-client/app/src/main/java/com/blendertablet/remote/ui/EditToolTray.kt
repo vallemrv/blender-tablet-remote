@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.blendertablet.remote.model.EditTool
 import com.blendertablet.remote.model.LoopFalloff
+import com.blendertablet.remote.model.SelectionMode
 import com.blendertablet.remote.model.ToolSession
 import com.blendertablet.remote.model.SnapType
 import com.blendertablet.remote.model.ValueParser
@@ -50,13 +51,23 @@ private data class ParamSpec(
     val isInt: Boolean,
     /** Unidades que entiende el parser del valor exacto. */
     val mode: TransformMode,
+    /** Valor con el que nace el parámetro si la sesión aún no lo trae. */
+    val default: Double = 0.0,
+    /** Rango cerrado, cuando el backend solo acepta una franja (perfil del bisel). */
+    val min: Double? = null,
+    val max: Double? = null,
 )
 
 private fun specsFor(tool: EditTool): List<ParamSpec> = when (tool) {
     EditTool.EXTRUDE -> listOf(ParamSpec("offset", "Distancia", 0.01, false, TransformMode.MOVE))
+    // Los cuatro controles que deciden la forma del bisel. `profile` es un factor
+    // 0..1: 0,5 traza el arco circular, por debajo hunde la esquina y 1,0 la remata
+    // en pico. El remate exterior va aparte, en su propio botón.
     EditTool.BEVEL -> listOf(
-        ParamSpec("offset", "Ancho", 0.01, false, TransformMode.MOVE),
-        ParamSpec("segments", "Segmentos", 1.0, true, TransformMode.SCALE),
+        ParamSpec("offset", "Ancho", 0.1, false, TransformMode.MOVE),
+        ParamSpec("segments", "Segmentos", 1.0, true, TransformMode.SCALE, default = 1.0),
+        ParamSpec("profile", "Perfil", 0.05, false, TransformMode.SCALE,
+                  default = 0.5, min = 0.0, max = 1.0),
     )
     EditTool.INSET -> listOf(
         ParamSpec("thickness", "Grosor", 0.01, false, TransformMode.MOVE),
@@ -77,7 +88,20 @@ private fun specsFor(tool: EditTool): List<ParamSpec> = when (tool) {
     EditTool.BISECT -> emptyList()
 }
 
-private fun defaultValue(spec: ParamSpec): Double = if (spec.isInt) 1.0 else 0.0
+private fun defaultValue(spec: ParamSpec): Double =
+    if (spec.isInt) maxOf(1.0, spec.default) else spec.default
+
+/** El valor que el backend acepta: entero mínimo 1 y, si lo hay, dentro del rango. */
+internal fun clampParam(value: Double, isInt: Boolean, min: Double?, max: Double?): Double {
+    var result = if (isInt) maxOf(1.0, value.roundToInt().toDouble()) else value
+    min?.let { result = maxOf(it, result) }
+    max?.let { result = minOf(it, result) }
+    return result
+}
+
+internal fun stepParam(
+    value: Double, step: Double, direction: Int, isInt: Boolean, min: Double?, max: Double?,
+): Double = clampParam(value + step * direction, isInt, min, max)
 
 /**
  * Bandeja de la herramienta paramétrica de Edit Mode, en una franja horizontal.
@@ -96,6 +120,7 @@ private fun defaultValue(spec: ParamSpec): Double = if (spec.isInt) 1.0 else 0.0
 @Composable
 fun EditToolTray(
     session: ToolSession,
+    selectionMode: SelectionMode,
     unitScaleLength: Double,
     onParameter: (String, Any?) -> Unit,
     onConfirm: () -> Unit,
@@ -152,7 +177,7 @@ fun EditToolTray(
                 } else if (session.tool == EditTool.INSET) {
                     InsetParams(session, unitScaleLength, onParameter)
                 } else if (session.tool == EditTool.BEVEL) {
-                    BevelParams(session, unitScaleLength, onParameter)
+                    BevelParams(session, selectionMode, unitScaleLength, onParameter)
                 } else {
                     for (spec in specsFor(session.tool)) {
                         ParamStepper(
@@ -307,9 +332,21 @@ private fun InsetParams(session: ToolSession, unitScaleLength: Double, onParamet
 
 internal fun toggledInsetBoundary(boundary: Boolean): Boolean = !boundary
 
-/** Parámetros de Bevel: ancho, segmentos y snap de incremento real. */
+/**
+ * Parámetros de Bevel: ancho, segmentos, perfil, remate de la esquina y snap.
+ *
+ * El perfil y el remate son los dos que deciden la forma, así que van en la bandeja y
+ * no escondidos: con un solo segmento el perfil apenas se nota, pero con varios manda
+ * sobre el resultado. El remate cicla porque son tres valores y un desplegable para
+ * tres opciones cortas cuesta más toques que el propio ciclo.
+ */
 @Composable
-private fun BevelParams(session: ToolSession, unitScaleLength: Double, onParameter: (String, Any?) -> Unit) {
+private fun BevelParams(
+    session: ToolSession,
+    selectionMode: SelectionMode,
+    unitScaleLength: Double,
+    onParameter: (String, Any?) -> Unit,
+) {
     for (spec in specsFor(EditTool.BEVEL)) {
         ParamStepper(
             spec = spec,
@@ -317,6 +354,12 @@ private fun BevelParams(session: ToolSession, unitScaleLength: Double, onParamet
             unitScaleLength = unitScaleLength,
             onCommit = { onParameter(spec.key, it) },
         )
+    }
+    // Miter Outer solo existe en las terminaciones de un bisel de aristas. Blender
+    // lo ignora al biselar vértices y tampoco cambia un loop cerrado completo.
+    if (selectionMode == SelectionMode.EDGE) {
+        val miter = session.miterOuter()
+        PillButton("Final: ${miter.label}") { onParameter("miter_outer", miter.next().wire) }
     }
     SnapToggle(session, onParameter)
 }
@@ -530,17 +573,14 @@ private fun ParamStepper(
     fun commit() {
         val parsed = ValueParser.parse(text, spec.mode) ?: return
         val wire = if (spec.mode == TransformMode.MOVE) parsed / unitScaleLength else parsed
-        val next = if (spec.isInt) maxOf(1.0, wire.roundToInt().toDouble()) else wire
-        onCommit(next)
+        onCommit(clampParam(wire, spec.isInt, spec.min, spec.max))
         text = ""
     }
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(spec.label, color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.padding(end = 4.dp))
         StepperButton("−") {
-            val step = if (spec.mode == TransformMode.MOVE) 1.0 else spec.step
-            val next = if (spec.isInt) maxOf(1.0, value - step) else value - step
-            onCommit(next)
+            onCommit(stepParam(value, spec.step, -1, spec.isInt, spec.min, spec.max))
         }
         CompactNumericField(
             value = if (text.isEmpty()) formatted else text,
@@ -549,9 +589,7 @@ private fun ParamStepper(
             modifier = Modifier.width(64.dp),
         )
         StepperButton("+") {
-            val step = if (spec.mode == TransformMode.MOVE) 1.0 else spec.step
-            val next = if (spec.isInt) maxOf(1.0, value + step) else value + step
-            onCommit(next)
+            onCommit(stepParam(value, spec.step, 1, spec.isInt, spec.min, spec.max))
         }
     }
 }

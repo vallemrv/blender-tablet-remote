@@ -19,11 +19,54 @@ ENUMS = {
     "value_mode": ["RELATIVE", "ABSOLUTE"],
     "shading": ["WIREFRAME", "SOLID"],
     "loop_falloff": ["SMOOTH", "SPHERE", "ROOT", "SHARP", "LINEAR", "INVERSE_SQUARE"],
+    # Cómo se remata la esquina exterior del bisel (el Miter Outer de Blender).
+    "bevel_miter": ["SHARP", "PATCH", "ARC"],
+    "scene_scale": ["SMALL", "MEDIUM", "LARGE"],
+    "length_unit": ["MILLIMETERS", "CENTIMETERS", "METERS"],
     "proportional_falloff": ["SMOOTH", "SPHERE", "ROOT", "SHARP", "LINEAR", "CONSTANT", "INVERSE_SQUARE"],
 }
 
 UNITS = {"distance": "BLENDER_UNIT", "rotation": "DEGREE", "scale": "FACTOR",
          "screen": "NORMALIZED_TOP_LEFT"}
+
+
+# Escalas de trabajo.
+#
+# Existen por un problema real: la proyección del vídeo repartía el z-buffer sobre el
+# rango del viewport del PC (0,01 m a 1000 m). En una pieza de 2 m eso deja tan pocos
+# bits de profundidad por metro que las caras próximas compiten entre sí y la malla se
+# ve rota, aunque la geometría sea correcta. La cura es ajustar el clipping al tamaño
+# de lo que se está modelando, y de paso el resto de magnitudes que dependen de esa
+# escala y que si no habría que tocar a mano una por una.
+#
+# `clip_end / clip_start` se mantiene en torno a 10.000 en los tres presets: es el
+# reparto que un z-buffer de 24 bits sostiene sin artefactos visibles.
+#
+# Ninguno reescala geometría. Cambian cómo se mide (`length_unit`), hasta dónde se ve
+# (`clip_*`), con qué paso se mueven los controles (`snap_step`, `move_step`) y de qué
+# tamaño nacen las primitivas (`primitive_size`). Un cubo de 2 unidades sigue midiendo
+# 2 unidades en los tres.
+SCENE_SCALES = {
+    # Joyería, piezas impresas, tornillería: el detalle vive en décimas de milímetro.
+    "SMALL": {"id": "SMALL", "label": "Pequeña", "hint": "Piezas de milímetros",
+              "length_unit": "MILLIMETERS", "clip_start": 0.0005, "clip_end": 5.0,
+              "snap_step": 0.001, "move_step": 0.001, "primitive_size": 0.01,
+              "grid_scale": 0.001, "proportional_radius": 0.01,
+              "proportional_radius_step": 0.001},
+    # Producto, mobiliario, impresión grande: centímetros.
+    "MEDIUM": {"id": "MEDIUM", "label": "Mediana", "hint": "Objetos de centímetros",
+               "length_unit": "CENTIMETERS", "clip_start": 0.01, "clip_end": 100.0,
+               "snap_step": 0.01, "move_step": 0.01, "primitive_size": 0.5,
+               "grid_scale": 0.01, "proportional_radius": 0.5,
+               "proportional_radius_step": 0.05},
+    # Arquitectura, vehículos, terreno: metros.
+    "LARGE": {"id": "LARGE", "label": "Grande", "hint": "Escenas de metros",
+              "length_unit": "METERS", "clip_start": 0.1, "clip_end": 1000.0,
+              "snap_step": 0.1, "move_step": 0.1, "primitive_size": 2.0,
+              "grid_scale": 1.0, "proportional_radius": 5.0,
+              "proportional_radius_step": 0.5},
+}
+DEFAULT_SCENE_SCALE = "MEDIUM"
 
 
 # Catálogo declarativo para la UI contextual de Edit.  No es una lista de comandos:
@@ -98,6 +141,11 @@ _TOOL_PARAMETERS = {
     "BEVEL": [
         {"id": "offset", "label": "Ancho", "type": "float", "default": 0.1, "min": 0.0},
         {"id": "segments", "label": "Segmentos", "type": "int", "default": 1, "min": 1},
+        # 0,5 es el arco circular; por debajo hunde la esquina y 1,0 la deja en pico.
+        {"id": "profile", "label": "Perfil", "type": "float", "default": 0.5,
+         "min": 0.0, "max": 1.0},
+        {"id": "miter_outer", "label": "Esquina", "type": "enum", "default": "SHARP",
+         "values": ENUMS["bevel_miter"]},
         *_scalar_snap(["offset"], 0.1),
     ],
     "INSET": [
@@ -344,22 +392,34 @@ EDIT_CATALOG = {
 }
 
 FEATURES = {
+    "history": {"version": 1, "repeat_last": True},
     "context": {"version": 1, "events": ["context.changed"], "selection_counts": True},
     "transform_modal": {"version": 3, "modes": ["OBJECT", "EDIT"],
                         "tools": ["MOVE", "ROTATE", "SCALE"],
                         "constraints": ENUMS["constraint"], "orientations": ENUMS["orientation"],
                         "owned_sessions": True, "manual_confirm": True,
                         "geometric_snap": True, "locked_candidate": True},
-    "edit_settings": {"version": 1, "proportional": True,
+    "edit_settings": {"version": 2, "proportional": True,
                       "falloffs": ENUMS["proportional_falloff"],
-                      "radius": True, "auto_merge": True, "merge_threshold": True},
-    "selection": {"version": 7, "operations": ["SET", "ADD", "REMOVE", "TOGGLE"],
+                      "radius": True, "projected_circle": True,
+                      "auto_merge": True, "merge_threshold": True},
+    "selection": {"version": 9, "operations": ["SET", "ADD", "REMOVE", "TOGGLE"],
                   "pick": True, "touch_threshold": True, "grow": True,
                   "shapes": ["BOX", "CIRCLE"], "topology": ["LOOP", "RING"],
+                  "topology_modes": ["EDGE", "FACE"],
                   "linked": True, "shortest_path": True,
                   "tweak": {"phases": ["BEGIN", "UPDATE", "END", "CANCEL"],
                             "selection_modes": ["VERTEX", "EDGE"],
-                            "miss_behavior": "ORBIT"}},
+                            "miss_behavior": "ORBIT",
+                            "motion": ["FREE", "SLIDE"],
+                            "snap_types": ["NONE", "INCREMENT", "VERTEX", "EDGE",
+                                           "EDGE_CENTER", "FACE", "FACE_CENTER"],
+                            "snap_step": True, "clamp": True}},
+    "scene_scale": {"version": 2, "presets": ENUMS["scene_scale"],
+                    "length_units": ENUMS["length_unit"],
+                    "commands": ["scene.scale", "scene.scale_set"],
+                    "clipping": True, "grid": True, "proportional_radius": True,
+                    "rescales_geometry": False},
     "view": {"version": 4, "axis_views": ["FRONT", "BACK", "LEFT", "RIGHT", "TOP", "BOTTOM"],
              "projections": ["PERSP", "ORTHO"], "independent_camera": True,
              "shading": ENUMS["shading"], "local_view": True, "overlays": True},
@@ -372,11 +432,19 @@ FEATURES = {
     "transform_apply": {"version": 1, "components": ["location", "rotation", "scale"]},
     "object_shading": {"version": 1, "modes": ["TOGGLE", "FLAT", "SMOOTH"]},
     "parametric_transforms": {
-        "version": 2,
-        "modes": ["MOVE"],
+        "version": 3,
+        "modes": ["MOVE", "ROTATE", "SCALE"],
         "axis_values": True,
+        "scale_dimensions": True,
+        "canonical_values": True,
+        "roles": ["center", "source", "target"],
         "step_units": ["MM", "CM", "M", "PERCENT"],
         "move_snap": ["NONE", "INCREMENT", "VERTEX", "EDGE_CENTER", "FACE_CENTER"],
+        "rotate_snap": ["NONE", "INCREMENT", "VERTEX", "EDGE_CENTER", "FACE_CENTER"],
+        "scale_snap": ["NONE", "INCREMENT", "VERTEX", "EDGE_CENTER", "FACE_CENTER"],
+        "reference_roles": {"MOVE": ["SOURCE"],
+                            "ROTATE": ["CENTER", "SOURCE"],
+                            "SCALE": ["CENTER", "SOURCE"]},
         "reference": {"command": "transform.reference_candidate", "auto": True,
                       "types": ["VERTEX", "EDGE_CENTER", "FACE_CENTER"],
                       "thresholds": {"VERTEX": 0.080, "EDGE_CENTER": 0.070,
@@ -384,9 +452,10 @@ FEATURES = {
                       "attached": True, "source_target_snap": True,
                       "exclude_moving_objects": True},
     },
-    "edit_tools": {"version": 9,
+    "edit_tools": {"version": 10,
                    "tools": ["EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS",
                              "KNIFE", "BISECT"],
+                   "bevel": {"profile": True, "miter_outer": ENUMS["bevel_miter"]},
                    "loop_cut": {"pick": True, "probe": True, "falloff": ENUMS["loop_falloff"],
                                 "even": True, "flip": True, "clamp": True,
                                 "multiple": True, "pop": True},

@@ -24,6 +24,7 @@ import com.blendertablet.remote.model.EditToolbarFamily
 import com.blendertablet.remote.model.Gesture
 import com.blendertablet.remote.model.GesturePhase
 import com.blendertablet.remote.model.InputDebug
+import com.blendertablet.remote.model.LengthUnit
 import com.blendertablet.remote.model.AddObject
 import com.blendertablet.remote.model.Orientation
 import com.blendertablet.remote.model.Projection
@@ -38,7 +39,9 @@ import com.blendertablet.remote.model.TouchProbe
 import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.TransformSession
 import com.blendertablet.remote.model.TransformStepUnit
+import com.blendertablet.remote.model.TweakMotion
 import com.blendertablet.remote.model.ValueMode
+import com.blendertablet.remote.model.moveStepInBlenderUnits
 import com.blendertablet.remote.model.stepsFor
 import com.blendertablet.remote.model.stepInBlenderUnits
 import com.blendertablet.remote.model.defaultStepIndex
@@ -99,7 +102,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                    retryAttempt = retryAttempt, notice = notice)
     }
 
-    val uiState = combine(local, remote, client.file) { ui, net, file ->
+    val uiState = combine(
+        local, remote, client.file, client.sceneScalePresets,
+    ) { ui, net, file, scalePresets ->
         ui.copy(
             connection = net.connection,
             blender = net.blender,
@@ -107,6 +112,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             notice = net.notice,
             retryAttempt = net.retryAttempt,
             file = file,
+            sceneScalePresets = scalePresets,
         )
     }
         // Dos emisiones con el mismo contenido no deben recomponer nada: el servidor
@@ -148,6 +154,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 status == ConnectionStatus.CONNECTED && remote.features.overlays
             }.distinctUntilChanged().collect { ready ->
                 if (ready) client.viewOverlays(local.value.controlsVisible)
+            }
+        }
+        // El catálogo de escalas no viaja en el snapshot (es fijo) y el menú Escena
+        // lo necesita: se pide una vez por conexión, cuando ya se sabe si el servidor
+        // lo soporta. Mismo motivo que los overlays de arriba.
+        viewModelScope.launch {
+            combine(client.connection, client.state) { status, remote ->
+                status == ConnectionStatus.CONNECTED && remote.features.sceneScale
+            }.distinctUntilChanged().collect { ready ->
+                if (ready) client.requestSceneScales()
             }
         }
         // Colocación por toque: el sondeo responde con la arista y el factor, y
@@ -341,6 +357,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun undo() = client.undo()
     fun redo() = client.redo()
+    fun repeatLast() = client.repeatLast()
     fun delete() = client.delete()
     fun duplicate() = client.duplicate()
     fun runDuplicateVariant(linked: Boolean) {
@@ -387,14 +404,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         val session = client.transformSession.value
-        if (session.active && session.mode == TransformMode.MOVE && session.snapType.geometric) {
+        if (session.active && session.snapType.geometric) {
+            if (session.mode != TransformMode.MOVE && session.source.isEmpty()) {
+                local.update { it.copy(referencePicking = true, referenceRole = "SOURCE") }
+                return
+            }
             client.transformSnapCandidate(u.toDouble(), v.toDouble(), session.snapType)
             return
         }
         if (session.active) return
         // El pen apunta con precisión: un radio menor evita saltar al elemento vecino.
         // El dedo conserva una diana más grande y cómoda.
-        val threshold = if (stylus) 0.018 else 0.045
+        val threshold = if (stylus) 0.028 else 0.055
         if (local.value.shortestPathActive && uiState.value.blender.mode == BlenderMode.EDIT) {
             client.shortestPath(u.toDouble(), v.toDouble(), threshold)
         } else {
@@ -434,7 +455,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun scaleProportionalRadius(factor: Double) {
-        setProportionalRadius(client.state.value.editSettings.radius * factor)
+        val current = client.state.value
+        setProportionalRadius(
+            current.editSettings.radius + current.sceneScale.proportionalRadiusStep * factor
+        )
     }
 
     fun setProportionalRadius(value: Double) {
@@ -490,6 +514,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         local.update { it.copy(shapeTool = tool, shortestPathActive = false) }
     }
 
+    fun setCircleRadius(radius: Float?) {
+        local.update { it.copy(circleRadius = radius?.coerceIn(0.01f, 0.5f)) }
+    }
+
     /**
      * La forma terminada de dibujar en el viewport. Box recibe las dos esquinas;
      * Circle el centro y un punto del borde, del que sale el radio. La operación
@@ -512,7 +540,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             bisectDragLine(u0, v0, u1, v1)
             return
         }
-        val op = local.value.selectionOp
+        // Mayús+arrastre extiende, no alterna: es el Shift de la caja de Blender, que
+        // suma lo barrido en vez de invertir cada elemento que toca.
+        val op = local.value.selectionOp.let { if (it == SelectionOp.TOGGLE) SelectionOp.ADD else it }
         when (shape) {
             ShapeTool.BOX -> client.boxSelect(u0.toDouble(), v0.toDouble(), u1.toDouble(), v1.toDouble(), op)
             ShapeTool.CIRCLE -> client.circleSelect(
@@ -542,6 +572,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // habitual: se pide aparte al abrir el inspector.
         client.listObjects()
     }
+    /** Preset de escala: unidades, profundidad de cámara, pasos y tamaño al añadir. */
+    fun setSceneScale(preset: String) = client.setSceneScale(preset = preset)
+
+    /** Solo cómo se escriben las medidas; no toca cámara ni pasos. */
+    fun setLengthUnit(unit: LengthUnit) = client.setSceneScale(lengthUnit = unit)
+
     fun addModifier(type: String, parameters: Map<String, Any?> = emptyMap()) = client.modifierAdd(type, parameters)
     fun removeModifier(name: String) = client.modifierRemove(name)
     fun moveModifier(name: String, index: Int) = client.modifierMove(name, index)
@@ -550,7 +586,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun applyModifier(name: String) = client.modifierApply(name)
     fun selectLoop() {
         val op = local.value.selectionOp
-        client.selectLoop(if (op == SelectionOp.TOGGLE) SelectionOp.ADD else op)
+        client.selectLoop(op)
     }
     fun selectRing() = client.selectRing()
 
@@ -635,7 +671,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun toolPointer(u: Float, v: Float) {
         if (local.value.referencePicking && client.transformSession.value.active) {
             lastReferencePointer = u to v
-            client.transformReferenceCandidate(u.toDouble(), v.toDouble(), lock = false)
+            client.transformReferenceCandidate(
+                u.toDouble(), v.toDouble(), lock = false, role = local.value.referenceRole,
+            )
             return
         }
         val tool = client.toolSession.value
@@ -644,7 +682,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         val transform = client.transformSession.value
-        if (transform.active && transform.mode == TransformMode.MOVE && transform.snapType.geometric) {
+        if (transform.active && transform.snapType.geometric &&
+            (transform.mode == TransformMode.MOVE || transform.source.isNotEmpty())) {
             client.transformSnapCandidate(u.toDouble(), v.toDouble(), transform.snapType, lock = false)
         }
     }
@@ -831,7 +870,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         loopCutArmed = false
         local.update { it.copy(loopCutAwaitingTap = false) }
         val preset = stepsFor(mode)[localStepIndex(mode)]
-        val step = stepInBlenderUnits(preset, mode, uiState.value.blender.unitScaleLength)
+        val scaleLength = uiState.value.blender.unitScaleLength
+        // MOVE y SCALE leen el paso del campo de la barra, que es el que el usuario ve
+        // y el que mueven los botones +/−. Con PERCENT en MOVE no hay distancia de
+        // referencia todavía, así que ahí sigue mandando el preset hasta que exista.
+        val step = when (mode) {
+            TransformMode.MOVE ->
+                moveStepInBlenderUnits(local.value.moveStepValue, local.value.moveStepUnit, scaleLength)
+            TransformMode.SCALE -> local.value.scaleStepPercent / 100.0
+            TransformMode.ROTATE -> null
+        } ?: stepInBlenderUnits(preset, mode, scaleLength)
         val constraint = if (mode == TransformMode.ROTATE && local.value.constraint.axes.size > 1) {
             // Un giro es alrededor de UN eje: un plano elegido para mover no vale.
             Constraint.Z
@@ -853,13 +901,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun tweakGesture(phase: GesturePhase, u: Float, v: Float, dx: Float, dy: Float) {
-        client.selectionTweak(phase, u.toDouble(), v.toDouble(), dx.toDouble(), dy.toDouble())
+        // Los ajustes solo acompañan al BEGIN: el servidor los conserva hasta soltar.
+        val settings = if (phase == GesturePhase.BEGIN) local.value.tweak else null
+        client.selectionTweak(phase, u.toDouble(), v.toDouble(), dx.toDouble(), dy.toDouble(), settings)
         if (phase == GesturePhase.END || phase == GesturePhase.CANCEL) client.requestState()
     }
 
+    /** Modo de movimiento del Tweak; elegirlo también deja el Tweak como herramienta. */
+    fun setTweakMotion(motion: TweakMotion) {
+        local.update { it.copy(activeTool = ActiveTool.TWEAK, tweak = it.tweak.copy(motion = motion)) }
+    }
+
+    fun setTweakSnapType(snapType: SnapType) {
+        local.update { it.copy(activeTool = ActiveTool.TWEAK, tweak = it.tweak.copy(snapType = snapType)) }
+    }
+
+    fun setTweakSnapStep(step: Double) {
+        local.update { it.copy(tweak = it.tweak.copy(snapStep = step)) }
+    }
+
+    fun toggleTweakClamp() {
+        local.update { it.copy(tweak = it.tweak.copy(clamp = !it.tweak.clamp)) }
+    }
+
     /**
-     * El snap elegido, recortado a lo que admite el modo: los geométricos solo
-     * existen en MOVE, y pedirlos en rotar o escalar daría `wrong_tool`.
+     * El snap elegido, recortado a lo que admite el modo anunciado.
      */
     private fun snapTypeFor(mode: TransformMode): SnapType {
         val chosen = local.value.snapType
@@ -874,20 +940,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Elige la orientación. El servidor no la cambia en vivo, así que si hay sesión
-     * abierta se reabre conservando ejes, snap y paso; el delta vuelve a cero.
+     * Elige la orientación en vivo conservando session_id, valores y referencias.
      */
     fun setOrientation(orientation: Orientation) {
         local.update { it.copy(orientation = orientation) }
         val session = client.transformSession.value
-        if (session.active) {
-            client.transformBegin(
-                session.mode, session.axes, session.step,
-                snapType = session.snapType,
-                orientation = orientation,
-                valueMode = session.valueMode,
-            )
-        }
+        if (session.active) client.transformOrientation(orientation)
     }
 
     /** Elige el tipo de snap. Con sesión abierta se aplica en vivo. */
@@ -932,17 +990,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun localStepIndex(mode: TransformMode) =
         local.value.stepIndex[mode] ?: defaultStepIndex(mode)
 
-    fun transformValue(values: List<Double>?, angleDegrees: Double?) =
-        client.transformValue(values, angleDegrees)
+    fun transformValue(values: List<Double>?, angleDegrees: Double?, dimensions: List<Double>?) =
+        client.transformValue(values, angleDegrees, dimensions)
 
-    fun toggleTransformReference() {
+    fun toggleTransformReference(role: String) {
         val session = client.transformSession.value
-        if (!session.active || session.mode != TransformMode.MOVE) return
-        if (session.referenceLocked && !local.value.referencePicking) {
-            client.transformReferenceClear()
+        if (!session.active) return
+        val normalized = if (session.mode == TransformMode.MOVE) "SOURCE" else role
+        val roleAlreadyLocked = if (normalized == "CENTER") session.centerLocked else session.sourceLocked
+        if (roleAlreadyLocked && !local.value.referencePicking) {
+            client.transformReferenceClear(normalized)
         } else {
             lastReferencePointer = null
-            local.update { it.copy(referencePicking = !it.referencePicking) }
+            local.update { it.copy(referencePicking = !it.referencePicking, referenceRole = normalized) }
         }
     }
 
@@ -951,14 +1011,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         local.update { it.copy(moveStepValue = value, moveStepUnit = unit) }
         val session = client.transformSession.value
         if (!session.active || session.mode != TransformMode.MOVE) return
-        val scaleLength = uiState.value.blender.unitScaleLength.coerceAtLeast(1e-12)
-        val blenderStep = when (unit) {
-            TransformStepUnit.MM -> value / 1000.0 / scaleLength
-            TransformStepUnit.CM -> value / 100.0 / scaleLength
-            TransformStepUnit.M -> value / scaleLength
-            TransformStepUnit.PERCENT -> (session.referenceDistance ?: return) * value / 100.0
-        }
+        val blenderStep = moveStepInBlenderUnits(value, unit, uiState.value.blender.unitScaleLength)
+            ?: ((session.referenceDistance ?: return) * value / 100.0)
         client.transformSnap(SnapType.INCREMENT, blenderStep)
+    }
+
+    /** Paso de Escalar, en % de factor. Misma regla que [setMoveStep]: una sola fuente. */
+    fun setScaleStep(percent: Double) {
+        if (percent <= 0.0) return
+        local.update { it.copy(scaleStepPercent = percent) }
+        val session = client.transformSession.value
+        if (!session.active || session.mode != TransformMode.SCALE) return
+        client.transformSnap(session.snapType, percent / 100.0)
     }
 
     fun transformConfirm() = client.transformConfirm()
@@ -1019,7 +1083,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (local.value.referencePicking) {
                 if (phase == GesturePhase.END) {
                     lastReferencePointer?.let { (u, v) ->
-                        client.transformReferenceCandidate(u.toDouble(), v.toDouble(), lock = true)
+                        client.transformReferenceCandidate(
+                            u.toDouble(), v.toDouble(), lock = true,
+                            role = local.value.referenceRole,
+                        )
                     }
                     local.update { it.copy(referencePicking = false) }
                 }

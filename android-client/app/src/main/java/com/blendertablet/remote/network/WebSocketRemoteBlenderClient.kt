@@ -22,7 +22,10 @@ import com.blendertablet.remote.model.ToolSession
 import com.blendertablet.remote.model.LoopProbe
 import com.blendertablet.remote.model.TouchProbe
 import com.blendertablet.remote.model.TransformMode
+import com.blendertablet.remote.model.LengthUnit
+import com.blendertablet.remote.model.SceneScale
 import com.blendertablet.remote.model.TransformSession
+import com.blendertablet.remote.model.TweakSettings
 import com.blendertablet.remote.model.ValueMode
 import java.net.Proxy
 import java.util.concurrent.ConcurrentHashMap
@@ -75,6 +78,8 @@ class WebSocketRemoteBlenderClient(
     private val _toolSession = MutableStateFlow(ToolSession())
     private val _touchProbe = MutableStateFlow<TouchProbe?>(null)
     private val _streamEndpoint = MutableStateFlow<StreamEndpoint?>(null)
+    private val _sceneScalePresets = MutableStateFlow<List<SceneScale>>(emptyList())
+    override val sceneScalePresets: StateFlow<List<SceneScale>> = _sceneScalePresets.asStateFlow()
     override val connection: StateFlow<ConnectionStatus> = _connection.asStateFlow()
     override val state: StateFlow<BlenderState> = _state.asStateFlow()
     override val errors: StateFlow<String?> = _errors.asStateFlow()
@@ -375,6 +380,12 @@ class WebSocketRemoteBlenderClient(
         "transform.apply", JSONObject().put("location", location).put("rotation", rotation).put("scale", scale))
     override fun requestModifierOptions() = command("modifier.add_options")
     override fun listObjects() = command("scene.list_objects")
+    override fun requestSceneScales() = command("scene.scale")
+    override fun setSceneScale(preset: String?, lengthUnit: LengthUnit?) =
+        command("scene.scale_set", JSONObject().apply {
+            preset?.let { put("preset", it) }
+            lengthUnit?.let { put("length_unit", it.wire) }
+        })
     override fun modifierAdd(type: String, parameters: Map<String, Any?>) = command("modifier.add", JSONObject().put("type", type).put("parameters", JSONObject(parameters)))
     override fun modifierRemove(name: String) = command("modifier.remove", JSONObject().put("name", name))
     override fun modifierMove(name: String, index: Int) = command("modifier.move", JSONObject().put("name", name).put("index", index))
@@ -385,6 +396,7 @@ class WebSocketRemoteBlenderClient(
     override fun meshDissolve(what: String) = command("mesh.dissolve", JSONObject().put("what", what))
     override fun undo() = command("history.undo")
     override fun redo() = command("history.redo")
+    override fun repeatLast() = command("history.repeat_last")
     override fun frameSelected() = command("view.frame_selected")
     override fun viewAxis(name: String) = command("view.axis", JSONObject().put("axis", name))
     override fun viewFrameAll() = command("view.frame_all")
@@ -438,11 +450,25 @@ class WebSocketRemoteBlenderClient(
     override fun fileDefaultFolder(path: String) =
         command("file.default_folder", JSONObject().put("path", path))
 
-    override fun selectionTweak(phase: GesturePhase, u: Double, v: Double, dx: Double, dy: Double) =
-        command("selection.tweak", JSONObject()
-            .put("phase", phase.name)
-            .put("u", u).put("v", v)
-            .put("dx", dx).put("dy", dy))
+    override fun selectionTweak(
+        phase: GesturePhase,
+        u: Double,
+        v: Double,
+        dx: Double,
+        dy: Double,
+        settings: TweakSettings?,
+    ) = command("selection.tweak", JSONObject()
+        .put("phase", phase.name)
+        .put("u", u).put("v", v)
+        .put("dx", dx).put("dy", dy)
+        .apply {
+            settings?.let {
+                put("motion", it.motion.name)
+                put("snap_type", it.effectiveSnapType.name)
+                put("snap_step", it.snapStep)
+                put("clamp", it.clamp)
+            }
+        })
 
     override fun transformBegin(
         mode: TransformMode,
@@ -469,6 +495,9 @@ class WebSocketRemoteBlenderClient(
     override fun transformAxes(axes: Set<Axis>) =
         command("transform.axes", JSONObject().put("axes", axesArray(axes)))
 
+    override fun transformOrientation(orientation: Orientation) =
+        command("transform.orientation", JSONObject().put("orientation", orientation.name))
+
     override fun transformSnap(snapType: SnapType, step: Double) = command(
         "transform.snap",
         JSONObject()
@@ -482,13 +511,13 @@ class WebSocketRemoteBlenderClient(
         flushTransformSnap()
     }
 
-    override fun transformReferenceCandidate(u: Double, v: Double, lock: Boolean) = command(
+    override fun transformReferenceCandidate(u: Double, v: Double, lock: Boolean, role: String) = command(
         "transform.reference_candidate",
-        JSONObject().put("u", u).put("v", v).put("lock", lock),
+        JSONObject().put("u", u).put("v", v).put("lock", lock).put("role", role),
     )
 
-    override fun transformReferenceClear() = command(
-        "transform.reference_candidate", JSONObject().put("clear", true),
+    override fun transformReferenceClear(role: String) = command(
+        "transform.reference_candidate", JSONObject().put("clear", true).put("role", role),
     )
 
     override fun editSettings(parameters: Map<String, Any?>) =
@@ -509,10 +538,11 @@ class WebSocketRemoteBlenderClient(
         )
     }
 
-    override fun transformValue(values: List<Double>?, angleDegrees: Double?) {
+    override fun transformValue(values: List<Double>?, angleDegrees: Double?, dimensions: List<Double>?) {
         val payload = JSONObject()
         values?.let { payload.put("values", JSONArray(it)) }
         angleDegrees?.let { payload.put("angle", it) }
+        dimensions?.let { payload.put("dimensions", JSONArray(it)) }
         command("transform.value", payload)
     }
 
@@ -766,6 +796,17 @@ class WebSocketRemoteBlenderClient(
                     command == "scene.list_objects" -> result?.let { listing ->
                         _state.value = _state.value.copy(objects = StateParser.objects(listing.optJSONArray("objects")))
                     }
+                    command == "scene.scale" -> result?.let { scales ->
+                        _sceneScalePresets.value = StateParser.sceneScalePresets(scales)
+                        scales.optJSONObject("scale")?.let {
+                            _state.value = _state.value.copy(sceneScale = StateParser.sceneScale(it))
+                        }
+                    }
+                    // Responde con la escala ya aplicada: se pinta sin esperar al
+                    // siguiente snapshot, que puede tardar hasta 100 ms.
+                    command == "scene.scale_set" -> result?.let { scale ->
+                        _state.value = _state.value.copy(sceneScale = StateParser.sceneScale(scale))
+                    }
                     command != null && command.startsWith("modifier.") -> result?.let { stack ->
                         _state.value = _state.value.copy(modifiers = StateParser.modifiers(stack.optJSONArray("modifiers")))
                     }
@@ -798,7 +839,9 @@ class WebSocketRemoteBlenderClient(
                     // Los modales devuelven el estado de la sesión; confirmar y
                     // cancelar la cierran y sí necesitan refrescar la escena.
                     command in MODAL_COMMANDS -> {
-                        _transformSession.value = StateParser.session(result)
+                        acceptTransformSession(
+                            StateParser.session(result), allowReplace = command == "transform.begin",
+                        )
                         if (command == "transform.snap_candidate") {
                             transformSnapInFlight.set(false)
                             flushTransformSnap()
@@ -855,7 +898,7 @@ class WebSocketRemoteBlenderClient(
                     // Marcador en vivo del arrastre. Llega a 10 Hz y NO debe pedir el
                     // estado completo: sería un viaje por cada fotograma del gesto.
                     message.optString("event") == "transform.session" ->
-                        _transformSession.value = StateParser.session(payload)
+                        acceptTransformSession(StateParser.session(payload))
                     message.optString("event") == "modifiers.changed" -> payload?.let {
                         _state.value = _state.value.copy(modifiers = StateParser.modifiers(it.optJSONArray("modifiers")))
                     }
@@ -934,6 +977,13 @@ class WebSocketRemoteBlenderClient(
         )
     }
 
+    private fun acceptTransformSession(incoming: TransformSession, allowReplace: Boolean = false) {
+        val current = _transformSession.value
+        if (shouldAcceptTransformSession(current, incoming, allowReplace)) {
+            _transformSession.value = incoming
+        }
+    }
+
     private fun updateState(json: JSONObject) {
         val old = _state.value
         val parsed = StateParser.state(json)
@@ -945,9 +995,19 @@ class WebSocketRemoteBlenderClient(
             modifierOptions = old.modifierOptions,
             view = if (json.has("view") || json.has("shading")) parsed.view else old.view,
             unitScaleLength = old.unitScaleLength,
+            // La escala viaja con la vista, así que un snapshot de selección tampoco
+            // la trae y volvería al preset por defecto en cada toque.
+            sceneScale = if (json.has("scene_scale")) parsed.sceneScale else old.sceneScale,
         )
     }
 }
+
+internal fun shouldAcceptTransformSession(
+    current: TransformSession,
+    incoming: TransformSession,
+    allowReplace: Boolean = false,
+): Boolean = allowReplace || !current.active ||
+    (incoming.active && incoming.sessionId != null && incoming.sessionId == current.sessionId)
 
 internal fun duplicateCommand(mode: BlenderMode): String =
     if (mode == BlenderMode.EDIT) "mesh.duplicate" else "object.duplicate"

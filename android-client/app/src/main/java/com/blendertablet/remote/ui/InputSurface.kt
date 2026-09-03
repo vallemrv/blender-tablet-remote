@@ -13,6 +13,7 @@ import com.blendertablet.remote.model.Gesture
 import com.blendertablet.remote.model.GesturePhase
 import com.blendertablet.remote.model.InputDebug
 import com.blendertablet.remote.model.NavigationOrbitLayout
+import com.blendertablet.remote.model.ProportionalCircle
 import com.blendertablet.remote.model.ShapeTool
 import com.blendertablet.remote.model.SnapCandidate
 import com.blendertablet.remote.model.SnapType
@@ -57,6 +58,7 @@ fun InputSurface(
     onLongPress: (px: Float, py: Float, u: Float, v: Float) -> Unit = { _, _, _, _ -> },
     /** Herramienta de forma armada (B/C); NONE = gesto normal de un dedo. */
     shapeTool: ShapeTool = ShapeTool.NONE,
+    fixedCircleRadius: Float? = null,
     /** Círculo derecho que navega sin alimentar una sesión modal. */
     navigationOrbitEnabled: Boolean = false,
     /** Forma terminada: esquinas (box) o centro+borde (circle) normalizados. */
@@ -66,6 +68,7 @@ fun InputSurface(
     snapCandidate: SnapCandidate? = null,
     referenceCandidate: SnapCandidate? = null,
     referenceLocked: Boolean = false,
+    proportionalCircle: ProportionalCircle? = null,
 ) {
     AndroidView(
         modifier = modifier,
@@ -74,6 +77,7 @@ fun InputSurface(
             view.updateCallbacks(onDebug, onToolGesture, onToolPointer, onViewGesture, onTap, onDoubleTap)
             view.onLongPress = onLongPress
             view.shapeTool = shapeTool
+            view.fixedCircleRadius = fixedCircleRadius
             view.knifeActive = knifeActive
             view.onKnifeDrag = onKnifeDrag
             view.tweakActive = tweakActive
@@ -85,6 +89,7 @@ fun InputSurface(
             view.snapCandidate = snapCandidate
             view.referenceCandidate = referenceCandidate
             view.referenceLocked = referenceLocked
+            view.proportionalCircle = proportionalCircle
             view.invalidate()
         },
     )
@@ -171,6 +176,7 @@ private class GestureView(
 
     /** Herramienta de forma (B/C). Con una armada, el dedo dibuja en vez de orbitar. */
     var shapeTool: ShapeTool = ShapeTool.NONE
+    var fixedCircleRadius: Float? = null
     var knifeActive: Boolean = false
     var onKnifeDrag: (GesturePhase, Float, Float) -> Unit = { _, _, _ -> }
     var tweakActive: Boolean = false
@@ -183,6 +189,12 @@ private class GestureView(
     var snapCandidate: SnapCandidate? = null
     var referenceCandidate: SnapCandidate? = null
     var referenceLocked: Boolean = false
+    var proportionalCircle: ProportionalCircle? = null
+    private val proportionalPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.parseColor("#B3FFFFFF")
+        style = Paint.Style.STROKE
+        strokeWidth = 1.5f * resources.displayMetrics.density
+    }
     private val candidatePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = android.graphics.Color.parseColor("#66E3A4")
         style = Paint.Style.STROKE
@@ -633,6 +645,11 @@ private class GestureView(
      */
     private fun finishShape() {
         invalidate()
+        if (shapeTool == ShapeTool.CIRCLE && fixedCircleRadius != null) {
+            val radius = fixedCircleRadius!!.coerceIn(0.01f, 0.5f)
+            onShape(shapeTool, nx(shapeStartX), ny(shapeStartY), nx(shapeStartX) + radius, ny(shapeStartY))
+            return
+        }
         if (hypot(shapeCurrentX - shapeStartX, shapeCurrentY - shapeStartY) <= systemTouchSlop) return
         onShape(shapeTool, nx(shapeStartX), ny(shapeStartY), nx(shapeCurrentX), ny(shapeCurrentY))
     }
@@ -677,6 +694,11 @@ private class GestureView(
             canvas.drawLine(start.first, start.second, shapeCurrentX, shapeCurrentY, candidatePaint)
         }
         drawSnapCandidate(canvas)
+        proportionalCircle?.takeIf { it.center.size >= 2 && it.radius > 0f }?.let {
+            val radiusPixels = it.radius * width
+            canvas.drawCircle(it.center[0] * width, it.center[1] * height,
+                radiusPixels, proportionalPaint)
+        }
         val remaining = tapFeedbackUntil - android.os.SystemClock.uptimeMillis()
         if (remaining <= 0L || tapFeedbackX < 0f) return
         tapPaint.alpha = (255f * remaining / 220f).toInt().coerceIn(0, 255)

@@ -108,9 +108,9 @@ object RadialMenu {
         add(ActionId.TOOL_CIRCLE)
         if (!context.hasSelection) add(ActionId.SELECT_ALL)
 
-        // Loop y Ring necesitan una arista de partida: sin ella el servidor
-        // responde `empty_selection`, así que no se ofrecen.
-        if (context.selectionMode == SelectionMode.EDGE && context.hasSelection) {
+        // En caras el último toque conserva también la dirección topológica de la
+        // arista más próxima, igual que Alt+click en Blender.
+        if (context.selectionMode in setOf(SelectionMode.EDGE, SelectionMode.FACE) && context.hasSelection) {
             add(ActionId.SELECT_LOOP)
             add(ActionId.SELECT_RING)
         }

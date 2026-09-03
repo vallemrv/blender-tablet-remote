@@ -86,73 +86,168 @@ def query_candidate(payload: dict) -> dict:
             break
         ray_origin = location + direction * 1e-5
         hit = False
-    if not hit or obj is None or obj.type != "MESH":
-        return {"hit": False, "snap_type": snap_type}
     # ``scene.ray_cast`` golpea la geometría evaluada. Con Subdivision Surface el
     # índice de cara puede no existir en ``obj.data`` (la malla original), pero para
     # FACE el propio hit ya es la respuesta exacta que necesitamos. Además se devuelve
     # el original seleccionable: Android compara este nombre con selected_objects.
-    original = getattr(obj, "original", obj)
-    object_name = original.name
     if snap_type == "FACE":
-        return {"hit": True, "snap_type": snap_type, "id": f"{object_name}:FACE:{face_index}",
-                "object": object_name, "element": face_index, "position": list(location),
-                "screen": [u, v], "distance": 0.0}
-    mesh = obj.data
-    if not 0 <= face_index < len(mesh.polygons):
-        return {"hit": False, "snap_type": snap_type}
-    polygon = mesh.polygons[face_index]
-    touch = Vector((u, v))
-
-    if snap_type == "FACE_CENTER":
-        position = obj.matrix_world @ polygon.center
-        projected = camera.project(position, rv3d)
-        if projected is None:
+        if not hit or obj is None or obj.type != "MESH":
             return {"hit": False, "snap_type": snap_type}
-        distance = (Vector(projected) - touch).length
-        if distance > threshold:
-            return {"hit": False, "snap_type": snap_type, "distance": distance}
-        return {"hit": True, "snap_type": snap_type,
-                "id": f"{obj.name}:FACE_CENTER:{face_index}", "object": obj.name,
-                "element": face_index, "position": list(position),
-                "screen": list(projected), "distance": distance}
+        original = getattr(obj, "original", obj)
+        return {"hit": True, "snap_type": snap_type, "id": f"{original.name}:FACE:{face_index}",
+                "object": original.name, "element": face_index, "position": list(location),
+                "screen": [u, v], "distance": 0.0}
 
-    candidates = []
-    if snap_type == "VERTEX":
-        for index in polygon.vertices:
-            position = obj.matrix_world @ mesh.vertices[index].co
-            projected = camera.project(position, rv3d)
-            if projected is not None:
-                candidates.append(((Vector(projected) - touch).length, index, position))
-    elif snap_type == "EDGE":
-        for edge_key in polygon.edge_keys:
-            a = obj.matrix_world @ mesh.vertices[edge_key[0]].co
-            b = obj.matrix_world @ mesh.vertices[edge_key[1]].co
+    target = _snap_target_object(hit, obj, include, exclude)
+    if target is None:
+        return {"hit": False, "snap_type": snap_type}
+    object_name = target.name
+    excluded = payload.get("exclude_elements", {})
+    excluded_vertices = {
+        int(index) for index in excluded.get(object_name, {}).get("vertices", [])
+    } if isinstance(excluded, dict) else set()
+
+    touch = Vector((u, v))
+    candidates = _screen_candidates(
+        target, snap_type, rv3d, touch, direction, excluded_vertices)
+    if not candidates:
+        return {"hit": False, "snap_type": snap_type}
+    distance, element, position = min(candidates, key=lambda item: item[0])
+    if distance > threshold:
+        return {"hit": False, "snap_type": snap_type, "distance": distance}
+    return {"hit": True, "snap_type": snap_type, "id": f"{object_name}:{snap_type}:{element}",
+            "object": object_name, "element": element, "position": list(position),
+            "screen": list(camera.project(position, rv3d) or (u, v)), "distance": distance}
+
+
+def _snap_target_object(hit: bool, obj, include: set[str], exclude: set[str]):
+    """Objeto sobre el que buscar candidatos.
+
+    El rayo manda cuando golpea algo. Si no golpea se cae al objeto en edición: el
+    dedo cae a menudo junto a la silueta, o sobre el hueco que deja la geometría que
+    se está moviendo, y ahí sigue habiendo destinos válidos a la vista.
+    """
+    if hit and obj is not None and obj.type == "MESH":
+        return getattr(obj, "original", obj)
+    active = bpy.context.view_layer.objects.active
+    if (active is not None and active.type == "MESH" and active.mode == "EDIT"
+            and (not include or active.name in include) and active.name not in exclude):
+        return active
+    return None
+
+
+def _screen_candidates(obj, snap_type: str, rv3d, touch: Vector, view_direction: Vector,
+                       excluded_vertices: set[int]) -> list[tuple[float, object, Vector]]:
+    """Candidatos del objeto puntuados por distancia EN PANTALLA al toque.
+
+    Blender busca el snap en un radio de pantalla; limitarse a la cara que cruza el
+    rayo hacía inalcanzables casi todos los destinos: el centro de arista que se ve
+    pegado al dedo rara vez pertenece a esa cara, y al mover un loop las caras que lo
+    rodean están todas excluidas. Se descarta lo que da la espalda a la cámara para
+    no engancharse a la parte de atrás de la malla.
+    """
+    matrix = obj.matrix_world
+    normals = matrix.to_3x3().inverted_safe().transposed()
+    in_edit = obj.mode == "EDIT"
+
+    def collect(frontfacing) -> list[tuple[float, object, Vector]]:
+        sources = (_edit_sources(obj, snap_type, excluded_vertices, frontfacing) if in_edit
+                   else _mesh_sources(obj, snap_type, excluded_vertices, frontfacing))
+        scored: list[tuple[float, object, Vector]] = []
+        for element, points in sources:
+            if len(points) == 1:
+                position = matrix @ points[0]
+                projected = camera.project(position, rv3d)
+                if projected is not None:
+                    scored.append(((Vector(projected) - touch).length, element, position))
+                continue
+            # EDGE engancha al punto del segmento más próximo al dedo, no a un extremo.
+            a, b = matrix @ points[0], matrix @ points[1]
             pa, pb = camera.project(a, rv3d), camera.project(b, rv3d)
             if pa is None or pb is None:
                 continue
             segment = Vector(pb) - Vector(pa)
             t = 0.0 if segment.length_squared <= 1e-12 else max(
                 0.0, min(1.0, (touch - Vector(pa)).dot(segment) / segment.length_squared))
-            candidates.append(((touch - (Vector(pa) + segment * t)).length,
-                               f"{edge_key[0]}-{edge_key[1]}", a.lerp(b, t)))
-    else:  # EDGE_CENTER
-        for edge_key in polygon.edge_keys:
-            a = obj.matrix_world @ mesh.vertices[edge_key[0]].co
-            b = obj.matrix_world @ mesh.vertices[edge_key[1]].co
-            position = a.lerp(b, 0.5)
-            projected = camera.project(position, rv3d)
-            if projected is not None:
-                candidates.append(((Vector(projected) - touch).length,
-                                   f"{edge_key[0]}-{edge_key[1]}", position))
-    if not candidates:
-        return {"hit": False, "snap_type": snap_type}
-    distance, element, position = min(candidates, key=lambda item: item[0])
-    if distance > threshold:
-        return {"hit": False, "snap_type": snap_type, "distance": distance}
-    return {"hit": True, "snap_type": snap_type, "id": f"{obj.name}:{snap_type}:{element}",
-            "object": obj.name, "element": element, "position": list(position),
-            "screen": list(camera.project(position, rv3d) or (u, v)), "distance": distance}
+            scored.append(((touch - (Vector(pa) + segment * t)).length, element, a.lerp(b, t)))
+        return scored
+
+    scored = collect(lambda normal: (normals @ normal).dot(view_direction) < 0.0)
+    # Una malla abierta mirada por su reverso (el plano visto desde abajo) no tiene
+    # ni una cara de cara a la cámara, y se ve entera. Si el filtro no deja nada,
+    # es que no había nada que ocultar: se repite sin él.
+    return scored or collect(lambda _normal: True)
+
+
+def _edit_sources(obj, snap_type: str, excluded: set[int], frontfacing):
+    """Elementos del BMesh vivo: en Edit Mode `obj.data` va por detrás del gesto."""
+    bm = bmesh.from_edit_mesh(obj.data)
+    if snap_type == "FACE_CENTER":
+        for face in bm.faces:
+            if face.hide or any(vert.index in excluded for vert in face.verts):
+                continue
+            if frontfacing(face.normal):
+                yield face.index, (face.calc_center_median(),)
+        return
+    if snap_type == "VERTEX":
+        for vert in bm.verts:
+            if vert.hide or vert.index in excluded:
+                continue
+            if not vert.link_faces or any(frontfacing(f.normal) for f in vert.link_faces):
+                yield vert.index, (vert.co.copy(),)
+        return
+    for edge in bm.edges:
+        if edge.hide or any(vert.index in excluded for vert in edge.verts):
+            continue
+        if edge.link_faces and not any(frontfacing(f.normal) for f in edge.link_faces):
+            continue
+        a, b = edge.verts[0].co, edge.verts[1].co
+        element = "-".join(str(index) for index in sorted(v.index for v in edge.verts))
+        yield element, ((a.lerp(b, 0.5),) if snap_type == "EDGE_CENTER" else (a.copy(), b.copy()))
+
+
+def _mesh_sources(obj, snap_type: str, excluded: set[int], frontfacing):
+    mesh = obj.data
+    if snap_type == "FACE_CENTER":
+        for polygon in mesh.polygons:
+            if polygon.hide or any(index in excluded for index in polygon.vertices):
+                continue
+            if frontfacing(polygon.normal):
+                yield polygon.index, (polygon.center.copy(),)
+        return
+    # Un vértice/arista es visible si toca alguna cara orientada a la cámara. Sin
+    # caras (mallas de solo aristas) no hay nada que ocluya y entran todos.
+    vertices, edges = _frontfacing_keys(mesh, frontfacing)
+    if snap_type == "VERTEX":
+        for vert in mesh.vertices:
+            if vert.hide or vert.index in excluded:
+                continue
+            if vertices is None or vert.index in vertices:
+                yield vert.index, (vert.co.copy(),)
+        return
+    for edge in mesh.edges:
+        key = tuple(sorted(edge.vertices))
+        if edge.hide or any(index in excluded for index in key):
+            continue
+        if edges is not None and key not in edges:
+            continue
+        a, b = mesh.vertices[key[0]].co, mesh.vertices[key[1]].co
+        element = f"{key[0]}-{key[1]}"
+        yield element, ((a.lerp(b, 0.5),) if snap_type == "EDGE_CENTER" else (a.copy(), b.copy()))
+
+
+def _frontfacing_keys(mesh, frontfacing):
+    """(vértices, aristas) que tocan alguna cara orientada a la cámara. None si no hay caras."""
+    if not mesh.polygons:
+        return None, None
+    vertices: set[int] = set()
+    edges: set[tuple[int, int]] = set()
+    for polygon in mesh.polygons:
+        if polygon.hide or not frontfacing(polygon.normal):
+            continue
+        vertices.update(polygon.vertices)
+        edges.update(polygon.edge_keys)
+    return vertices, edges
 
 
 @command("snap.query")

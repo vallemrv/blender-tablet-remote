@@ -833,6 +833,8 @@ def confirm(payload):
     if tool_session.tool == "BISECT" and tool_session.line is None:
         raise CommandError("Bisect needs a drawn line", code="empty_selection")
     result = tool_session.status()
+    from . import history
+    history.remember_tool(tool_session.tool, tool_session.params)
     undo_push(f"Remote {tool_session.tool.lower()}")
     tool_session.close()
     result["active"], result["armed"], result["phase"] = False, False, "CONFIRMED"

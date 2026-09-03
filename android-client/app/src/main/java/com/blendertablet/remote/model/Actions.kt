@@ -8,11 +8,8 @@ package com.blendertablet.remote.model
  * acción que ya tenga un control visible porque no ocupan otro menú (p. ej. el doble
  * toque ejecuta "Encuadrar selección").
  *
- * Este catálogo es la única tabla `acción → superficie`, y no es decorativo: el menú
- * radial se construye con [RadialMenu.actionsFor], que devuelve [ActionId]s, y el test
- * comprueba que **todo lo que ese constructor puede emitir pertenece a RADIAL**. Así
- * el invariante se verifica contra el código que dibuja el menú, no contra una lista
- * escrita a mano en paralelo.
+ * Este catálogo es la única tabla `acción → superficie`: el menú radial se construye
+ * con [RadialMenu.actionsFor], que devuelve [ActionId]s pertenecientes a RADIAL.
  */
 enum class ActionSurface { TOP, TOP_DYNAMIC, TOP_TOOLS, TOP_MODE, RAIL, FOOTER, FOOTER_VIEWS, FOOTER_EDIT, RADIAL, MODIFIER_PANEL }
 

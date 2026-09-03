@@ -1,4 +1,4 @@
-"""Streaming del viewport (Fase 2 del plan).
+"""Streaming del viewport.
 
 Dos piezas que no se conocen entre sí más que por un buffer de un frame:
 
@@ -7,9 +7,8 @@ Dos piezas que no se conocen entre sí más que por un buffer de un frame:
     capture.tick()  ── JPEG ──▶  FrameBuffer  ──▶  mjpeg.StreamServer
     (bpy + gpu aquí)                              (aquí NO se toca bpy)
 
-El plan (§89) admite MJPEG para el prototipo y pide sustituirlo luego por WebRTC.
-El límite de MJPEG es el ancho de banda: cada frame va completo, sin predicción
-entre fotogramas. Dentro de WireGuard en LAN da de sobra para validar la app.
+MJPEG permanece como fallback de H.264. Su límite es el ancho de banda: cada frame va
+completo, sin predicción entre fotogramas.
 """
 
 from __future__ import annotations

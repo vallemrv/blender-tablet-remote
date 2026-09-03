@@ -224,6 +224,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             modifiersOpen = !modifiersOpen
             if (modifiersOpen) vm.openModifiers()
         },
+        onSceneScale = vm::setSceneScale,
+        onLengthUnit = vm::setLengthUnit,
     )
 
     val session by vm.transformSession.collectAsStateWithLifecycle()
@@ -284,6 +286,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             h264Size = h264Size,
             input = viewportInput,
             shapeTool = state.shapeTool,
+            fixedCircleRadius = state.circleRadius,
             knifePoints = knifeScreenPoints,
             knifeActive = toolSession.active && toolSession.tool == EditTool.KNIFE &&
                 state.blender.features.knifeDrag,
@@ -294,6 +297,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             snapCandidate = toolSession.snapCandidate ?: session.snapCandidate,
             referenceCandidate = session.referenceCandidate,
             referenceLocked = session.referenceLocked,
+            proportionalCircle = session.proportionalCircle,
             navigationOrbitEnabled = navigationOrbitVisible(
                 session.active,
                 toolSession.active,
@@ -390,8 +394,10 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     orientation = orientation,
                     valueMode = if (session.active) session.valueMode else state.valueMode,
                     referencePicking = state.referencePicking,
+                    referencePickingRole = state.referenceRole,
                     moveStepValue = state.moveStepValue,
                     moveStepUnit = state.moveStepUnit,
+                    scaleStepPercent = state.scaleStepPercent,
                     availableOrientations = availableOrientations,
                     onConstraint = vm::setConstraint,
                     onOrientation = vm::setOrientation,
@@ -400,6 +406,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     onValueMode = vm::setValueMode,
                     onReference = vm::toggleTransformReference,
                     onMoveStep = vm::setMoveStep,
+                    onScaleStep = vm::setScaleStep,
                     onValue = vm::transformValue,
                     onProportionalRadius = vm::scaleProportionalRadius,
                     onProportionalRadiusValue = vm::setProportionalRadius,
@@ -414,6 +421,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
 
                 EditToolTray(
                     session = toolSession,
+                    selectionMode = state.blender.selectionMode,
                     unitScaleLength = state.blender.unitScaleLength,
                     onParameter = vm::setToolParameter,
                     onConfirm = vm::confirmTool,
@@ -476,6 +484,14 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
 
                 if (state.debugVisible) {
                     DebugOverlay(vm, state.blender.mode, Modifier.align(Alignment.TopStart).padding(start = Metrics.EdgeMargin, top = 56.dp))
+                }
+
+                if (state.shapeTool == ShapeTool.CIRCLE) {
+                    CircleRadiusBar(
+                        selected = state.circleRadius,
+                        onRadius = vm::setCircleRadius,
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = 62.dp),
+                    )
                 }
             }
         }
@@ -661,6 +677,7 @@ private fun ViewportLayer(
     h264Size: Pair<Int, Int>?,
     input: ViewportInput,
     shapeTool: ShapeTool,
+    fixedCircleRadius: Float?,
     knifeActive: Boolean,
     tweakActive: Boolean,
     longPressEnabled: Boolean,
@@ -668,6 +685,7 @@ private fun ViewportLayer(
     snapCandidate: com.blendertablet.remote.model.SnapCandidate?,
     referenceCandidate: com.blendertablet.remote.model.SnapCandidate?,
     referenceLocked: Boolean,
+    proportionalCircle: com.blendertablet.remote.model.ProportionalCircle?,
     navigationOrbitEnabled: Boolean,
     onShape: (ShapeTool, Float, Float, Float, Float) -> Unit,
     onLongPress: (px: Float, py: Float, u: Float, v: Float) -> Unit,
@@ -699,11 +717,13 @@ private fun ViewportLayer(
                     longPressEnabled = longPressEnabled,
                     onLongPress = onLongPress,
                     shapeTool = shapeTool,
+                    fixedCircleRadius = fixedCircleRadius,
                     navigationOrbitEnabled = navigationOrbitEnabled,
                     knifePoints = knifePoints,
                     snapCandidate = snapCandidate,
                     referenceCandidate = referenceCandidate,
                     referenceLocked = referenceLocked,
+                    proportionalCircle = proportionalCircle,
                     onShape = onShape,
                 )
             }
@@ -726,10 +746,12 @@ private fun ViewportLayer(
                 longPressEnabled = longPressEnabled,
                 onLongPress = onLongPress,
                 shapeTool = shapeTool,
+                fixedCircleRadius = fixedCircleRadius,
                 knifePoints = knifePoints,
                 snapCandidate = snapCandidate,
                 referenceCandidate = referenceCandidate,
                 referenceLocked = referenceLocked,
+                proportionalCircle = proportionalCircle,
                 onShape = onShape,
             )
             return@Box
@@ -767,10 +789,12 @@ private fun ViewportLayer(
                 longPressEnabled = longPressEnabled,
                 onLongPress = onLongPress,
                 shapeTool = shapeTool,
+                fixedCircleRadius = fixedCircleRadius,
                 knifePoints = knifePoints,
                 snapCandidate = snapCandidate,
                 referenceCandidate = referenceCandidate,
                 referenceLocked = referenceLocked,
+                proportionalCircle = proportionalCircle,
                 onShape = onShape,
             )
         }
@@ -825,11 +849,13 @@ private fun RailContent(
         onClick = vm::selectTool,
     )
     if (inEdit && state.blender.features.selectionTweak) {
-        IconAction(
-            Icons.Default.TouchApp, "Tweak · seleccionar y arrastrar",
+        TweakToolButton(
+            settings = state.tweak,
+            motions = state.blender.features.tweakMotions,
+            snapTypes = state.blender.features.tweakSnapTypes,
             selected = state.activeTool == ActiveTool.TWEAK,
             enabled = state.blender.selectionMode != SelectionMode.FACE,
-            onClick = vm::activateTweak,
+            vm = vm,
         )
     }
     IconAction(
@@ -1059,6 +1085,23 @@ private fun quickContextLabel(context: TouchContext): String = when {
     }
     context.objectName != null -> context.objectName
     else -> "Escena"
+}
+
+@Composable
+private fun CircleRadiusBar(
+    selected: Float?,
+    onRadius: (Float?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    FloatingPanel(modifier) {
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Radio", color = Ink.Muted, fontSize = 11.sp)
+            PillButton("Libre", selected = selected == null) { onRadius(null) }
+            listOf(.05f to "5%", .10f to "10%", .20f to "20%", .30f to "30%").forEach { (radius, label) ->
+                PillButton(label, selected = selected == radius) { onRadius(radius) }
+            }
+        }
+    }
 }
 
 @Composable

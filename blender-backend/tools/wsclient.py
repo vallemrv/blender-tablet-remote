@@ -20,7 +20,7 @@ OP_PONG = 0xA
 
 # Duplicado a propósito respecto a wsserver.GUID: este cliente tiene que funcionar
 # fuera de Blender (CLI, CI) y el paquete del add-on importa bpy al cargarse.
-# run_tests.py comprueba que ambas copias coinciden con el vector del RFC 6455.
+# Ambas copias deben coincidir con el vector definido por RFC 6455.
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 

@@ -5,19 +5,22 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.CropFree
-import androidx.compose.material.icons.filled.LinearScale
-import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.RoundedCorner
+import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material.icons.filled.ViewWeek
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -32,12 +35,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.blendertablet.remote.MainViewModel
 import com.blendertablet.remote.model.EditTool
 import com.blendertablet.remote.model.EditToolbarFamily
 import com.blendertablet.remote.model.EditToolbarVariant
+import com.blendertablet.remote.model.SnapType
 import com.blendertablet.remote.model.ToolSession
+import com.blendertablet.remote.model.TransformMode
+import com.blendertablet.remote.model.TweakMotion
+import com.blendertablet.remote.model.TweakSettings
 
 /**
  * Barra izquierda de tools activas de Edit Mode (`edit_toolbar`, F1).
@@ -90,14 +99,9 @@ private fun FamilyToolButton(
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(familyIcon(family, displayedVariant), description, tint = if (selected) Ink.Accent else Ink.OnPanel)
+            Icon(familyIcon(family), description, tint = if (selected) Ink.Accent else Ink.OnPanel)
             if (hasLongClickMenu(family)) {
-                Icon(
-                    Icons.Default.KeyboardArrowDown,
-                    "Mantén pulsado para ver variantes",
-                    Modifier.align(Alignment.BottomEnd).padding(2.dp).size(13.dp),
-                    tint = if (selected) Ink.Accent else Ink.Faint,
-                )
+                VariantBadge(variantBadge(family.id, displayedVariant?.id), selected)
             }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -119,6 +123,153 @@ private fun FamilyToolButton(
 
 internal fun hasLongClickMenu(family: EditToolbarFamily): Boolean =
     family.variants.count { it.enabled } > 1
+
+/**
+ * Destinos de snap que se ofrecen en Tweak, en orden estable.
+ *
+ * Se cruzan los que anuncia el servidor con los que esta interfaz considera exactos
+ * (misma decisión que la bandeja de transformación: nada de arista o cara arbitraria,
+ * que dan un punto impreciso). Con SLIDE solo quedan los escalares: deslizar por una
+ * arista ya decide el destino.
+ */
+internal fun tweakSnapOptions(announced: List<SnapType>, motion: TweakMotion): List<SnapType> {
+    val exact = SnapType.forMode(TransformMode.MOVE)
+    val usable = if (motion == TweakMotion.SLIDE) exact.filterNot { it.geometric } else exact
+    return usable.filter { it == SnapType.NONE || it in announced }
+}
+
+/** Pasos ofrecidos: fracción del riel al deslizar, distancia real al mover libre. */
+internal fun tweakSnapSteps(motion: TweakMotion): List<Pair<String, Double>> =
+    if (motion == TweakMotion.SLIDE) {
+        listOf("5%" to .05, "10%" to .1, "25%" to .25, "50%" to .5)
+    } else {
+        listOf("1mm" to .001, "1cm" to .01, "10cm" to .1, "1m" to 1.0)
+    }
+
+/**
+ * Botón de Tweak: tap lo arma, pulsación larga elige cómo se mueve y a qué se pega.
+ *
+ * Los ajustes viven aquí y no en una bandeja inferior porque Tweak es un gesto de un
+ * solo arrastre: cuando la bandeja aparecería el movimiento ya habría terminado. Por
+ * eso tampoco muestra bandeja durante la sesión (ver `bottomTrayVisible`).
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun TweakToolButton(
+    settings: TweakSettings,
+    motions: List<TweakMotion>,
+    snapTypes: List<SnapType>,
+    selected: Boolean,
+    enabled: Boolean,
+    vm: MainViewModel,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val snapOptions = tweakSnapOptions(snapTypes, settings.motion)
+    val snap = settings.effectiveSnapType
+    val configurable = motions.size > 1 || snapOptions.size > 1
+    val description = "Tweak · ${settings.motion.label}" +
+        if (snap != SnapType.NONE) " · ${snap.label}" else ""
+
+    Box {
+        Box(
+            Modifier
+                .size(Metrics.Touch)
+                .clip(RoundedCornerShape(10.dp))
+                .background(if (selected) Ink.Accent.copy(alpha = .22f) else Color.Transparent)
+                .combinedClickable(
+                    enabled = enabled,
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = { vm.activateTweak() },
+                    onLongClick = { if (configurable) expanded = true },
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Default.TouchApp, description,
+                tint = if (!enabled) Ink.Faint else if (selected) Ink.Accent else Ink.OnPanel,
+            )
+            // El badge dice el movimiento con su inicial y avisa del snap con el color:
+            // dos ajustes en una esquina de 14 dp no caben como texto.
+            if (configurable) {
+                VariantBadge(
+                    if (settings.motion == TweakMotion.SLIDE) "A" else "L",
+                    selected = snap != SnapType.NONE,
+                )
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            MenuHeader("Movimiento")
+            for (motion in motions) {
+                DropdownMenuItem(
+                    text = { Text(motion.label) },
+                    leadingIcon = {
+                        if (motion == settings.motion) Icon(Icons.Default.Check, null, tint = Ink.Accent)
+                    },
+                    onClick = {
+                        expanded = false
+                        vm.setTweakMotion(motion)
+                    },
+                )
+            }
+            if (settings.motion == TweakMotion.SLIDE) {
+                DropdownMenuItem(
+                    text = { Text("Sin salir de la arista") },
+                    leadingIcon = {
+                        if (settings.clamp) Icon(Icons.Default.Check, null, tint = Ink.Accent)
+                    },
+                    onClick = {
+                        expanded = false
+                        vm.toggleTweakClamp()
+                    },
+                )
+            }
+            if (snapOptions.size > 1) {
+                MenuHeader("Snap")
+                for (option in snapOptions) {
+                    DropdownMenuItem(
+                        text = { Text(option.label) },
+                        leadingIcon = {
+                            if (option == snap) Icon(Icons.Default.Check, null, tint = Ink.Accent)
+                        },
+                        onClick = {
+                            expanded = false
+                            vm.setTweakSnapType(option)
+                        },
+                    )
+                }
+                if (snap == SnapType.INCREMENT) {
+                    MenuHeader("Paso")
+                    for ((label, step) in tweakSnapSteps(settings.motion)) {
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            leadingIcon = {
+                                if (kotlin.math.abs(settings.snapStep - step) < 1e-9) {
+                                    Icon(Icons.Default.Check, null, tint = Ink.Accent)
+                                }
+                            },
+                            onClick = {
+                                expanded = false
+                                vm.setTweakSnapStep(step)
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MenuHeader(label: String) {
+    Text(
+        label.uppercase(),
+        color = Ink.Faint,
+        fontSize = 10.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 2.dp),
+    )
+}
 
 internal fun displayedVariantOf(
     family: EditToolbarFamily,
@@ -150,18 +301,58 @@ private fun activeVariantOf(family: EditToolbarFamily, session: ToolSession): Ed
     return candidates.firstOrNull { it.id == variantParam } ?: candidates.first()
 }
 
-private fun familyIcon(family: EditToolbarFamily, variant: EditToolbarVariant?): ImageVector = when {
-    family.id == "EXTRUDE" && variant?.id == "ALONG_NORMALS" -> Icons.AutoMirrored.Filled.CompareArrows
-    family.id == "EXTRUDE" && variant?.id == "INDIVIDUAL" -> Icons.Default.CropFree
-    family.id == "EXTRUDE" -> Icons.AutoMirrored.Filled.CallMade
-    family.id == "BEVEL" -> Icons.Default.RoundedCorner
-    family.id == "INSET" && variant?.id == "INDIVIDUAL" -> Icons.AutoMirrored.Filled.CompareArrows
-    family.id == "INSET" -> Icons.Default.CropFree
-    family.id == "LOOP_CUT" -> Icons.Default.LinearScale
-    family.id == "BRIDGE_EDGE_LOOPS" -> Icons.AutoMirrored.Filled.CompareArrows
-    family.id == "CUT" && variant?.id == "BISECT" -> Icons.Default.LinearScale
-    family.id == "CUT" -> Icons.Default.ContentCut
-    else -> Icons.Default.ContentCut
+/**
+ * Un icono por familia y **nunca compartido entre familias**.
+ *
+ * Antes la variante también cambiaba el icono, y el resultado era que Extrude a lo
+ * largo de normales, Inset individual y Bridge se dibujaban los tres con la misma
+ * flecha doble, e Inset compartía cuadro con Extrude individual: el rail decía la
+ * variante a costa de no decir la herramienta. Ahora el icono identifica la familia y
+ * la variante se lee en [VariantBadge].
+ */
+private fun familyIcon(family: EditToolbarFamily): ImageVector = when (family.id) {
+    "EXTRUDE" -> Icons.AutoMirrored.Filled.CallMade
+    "BEVEL" -> Icons.Default.RoundedCorner
+    "INSET" -> Icons.Default.CropFree
+    "LOOP_CUT" -> Icons.Default.ViewWeek
+    "BRIDGE_EDGE_LOOPS" -> Icons.AutoMirrored.Filled.CompareArrows
+    "SUBDIVIDE" -> Icons.Default.GridOn
+    "CUT" -> Icons.Default.ContentCut
+    else -> Icons.Default.Build
+}
+
+/**
+ * Etiqueta corta de la variante armada, para la esquina del botón.
+ *
+ * Sustituye al chevrón, que era idéntico en todas las familias: anunciaba que había
+ * menú pero no cuál de los modos estaba puesto, justo lo que hay que saber de un
+ * vistazo. Devolver el badge sigue implicando que hay menú, porque solo se pinta en
+ * familias con más de una variante.
+ */
+internal fun variantBadge(familyId: String, variantId: String?): String = when {
+    variantId == null -> "·"
+    familyId == "EXTRUDE" && variantId == "ALONG_NORMALS" -> "N"
+    variantId == "REGION" -> "R"
+    variantId == "INDIVIDUAL" -> "I"
+    variantId == "KNIFE" -> "K"
+    variantId == "BISECT" -> "B"
+    else -> variantId.take(1).uppercase()
+}
+
+@Composable
+private fun BoxScope.VariantBadge(label: String, selected: Boolean) {
+    val color = if (selected) Ink.Accent else Ink.Muted
+    Box(
+        Modifier
+            .align(Alignment.BottomEnd)
+            .padding(2.dp)
+            .size(14.dp)
+            .clip(RoundedCornerShape(4.dp))
+            .background(Ink.PanelSolid),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, color = color, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+    }
 }
 
 /** Familia discreta Duplicar: tap ejecuta la recordada; long-click elige y ejecuta. */
@@ -185,18 +376,16 @@ fun DuplicateFamilyButton(inEdit: Boolean, linked: Boolean, enabled: Boolean, vm
                 ),
             contentAlignment = Alignment.Center,
         ) {
+            // Duplicar conserva su icono en las dos variantes: la flecha doble que
+            // usaba para "enlazado" es la de Bridge, y dos utilidades distintas del
+            // mismo rail no pueden dibujarse igual. El enlace lo dice el badge.
             Icon(
-                if (useLinked) Icons.AutoMirrored.Filled.CompareArrows else Icons.Default.ContentCopy,
+                Icons.Default.ContentCopy,
                 description,
                 tint = if (enabled) Ink.OnPanel else Ink.Faint,
             )
             if (hasDuplicateLongClickMenu(inEdit)) {
-                Icon(
-                    Icons.Default.KeyboardArrowDown,
-                    "Mantén pulsado para elegir duplicado",
-                    Modifier.align(Alignment.BottomEnd).padding(2.dp).size(13.dp),
-                    tint = Ink.Faint,
-                )
+                VariantBadge(if (useLinked) "L" else "D", selected = useLinked)
             }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {

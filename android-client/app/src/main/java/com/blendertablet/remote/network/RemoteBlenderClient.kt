@@ -8,6 +8,8 @@ import com.blendertablet.remote.model.EditTool
 import com.blendertablet.remote.model.FileInfo
 import com.blendertablet.remote.model.Gesture
 import com.blendertablet.remote.model.GesturePhase
+import com.blendertablet.remote.model.LengthUnit
+import com.blendertablet.remote.model.SceneScale
 import com.blendertablet.remote.model.AddObject
 import com.blendertablet.remote.model.Orientation
 import com.blendertablet.remote.model.Projection
@@ -20,6 +22,7 @@ import com.blendertablet.remote.model.ToolSession
 import com.blendertablet.remote.model.LoopProbe
 import com.blendertablet.remote.model.TouchProbe
 import com.blendertablet.remote.model.TransformMode
+import com.blendertablet.remote.model.TweakSettings
 import com.blendertablet.remote.model.TransformSession
 import com.blendertablet.remote.model.ValueMode
 import kotlinx.coroutines.flow.Flow
@@ -140,6 +143,19 @@ interface RemoteBlenderClient {
 
     /** Lista de objetos de la escena, para el picker de operando del Booleano. */
     fun listObjects()
+
+    /** Catálogo de escalas de trabajo; llega a [sceneScalePresets]. */
+    fun requestSceneScales()
+
+    /**
+     * Cambia la escala de trabajo. [preset] ajusta unidades, profundidad y pasos de
+     * una vez; [lengthUnit] cambia solo cómo se escriben las medidas. Ninguno de los
+     * dos reescala la geometría existente.
+     */
+    fun setSceneScale(preset: String? = null, lengthUnit: LengthUnit? = null)
+
+    /** Presets que anuncia el servidor; vacío si no los publica. */
+    val sceneScalePresets: StateFlow<List<SceneScale>>
     fun modifierAdd(type: String, parameters: Map<String, Any?> = emptyMap())
     fun modifierRemove(name: String)
     fun modifierMove(name: String, index: Int)
@@ -153,10 +169,22 @@ interface RemoteBlenderClient {
 
     /** La `L` de Blender: extiende la selección a las islas conectadas. */
     fun selectLinked()
-    fun selectionTweak(phase: GesturePhase, u: Double = 0.0, v: Double = 0.0, dx: Double = 0.0, dy: Double = 0.0)
+    /**
+     * [settings] solo viaja en `BEGIN`: configura el gesto entero y el servidor lo
+     * conserva hasta soltar, así que repetirlo en cada UPDATE sería ruido.
+     */
+    fun selectionTweak(
+        phase: GesturePhase,
+        u: Double = 0.0,
+        v: Double = 0.0,
+        dx: Double = 0.0,
+        dy: Double = 0.0,
+        settings: TweakSettings? = null,
+    )
     fun meshDelete(what: String)
     fun undo()
     fun redo()
+    fun repeatLast()
 
     /**
      * Gesto continuo. [dx] y [dy] son fracción de pantalla (1.0 = ancho completo),
@@ -244,6 +272,7 @@ interface RemoteBlenderClient {
     )
 
     fun transformAxes(axes: Set<Axis>)
+    fun transformOrientation(orientation: Orientation)
     fun transformSnap(snapType: SnapType, step: Double)
 
     /**
@@ -251,11 +280,11 @@ interface RemoteBlenderClient {
      * servidor responde `wrong_tool` en rotar y escalar.
      */
     fun transformSnapCandidate(u: Double, v: Double, snapType: SnapType, lock: Boolean = true)
-    fun transformReferenceCandidate(u: Double, v: Double, lock: Boolean = false)
-    fun transformReferenceClear()
+    fun transformReferenceCandidate(u: Double, v: Double, lock: Boolean = false, role: String = "SOURCE")
+    fun transformReferenceClear(role: String = "SOURCE")
 
     /** Valor exacto: [values] para mover/escalar, [angleDegrees] para rotar. */
-    fun transformValue(values: List<Double>?, angleDegrees: Double?)
+    fun transformValue(values: List<Double>?, angleDegrees: Double?, dimensions: List<Double>? = null)
     fun transformConfirm()
     fun transformCancel()
 

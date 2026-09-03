@@ -1,8 +1,0 @@
-{
-  "default_folder": "/home/valle/proyectos",
-  "locations": [
-    {"id": "DEFAULT", "label": "Predeterminada", "path": "/home/valle/proyectos"},
-    {"id": "HOME", "label": "Carpeta personal", "path": "/home/valle"},
-    {"id": "ROOT", "label": "Sistema", "path": "/"}
-  ]
-}

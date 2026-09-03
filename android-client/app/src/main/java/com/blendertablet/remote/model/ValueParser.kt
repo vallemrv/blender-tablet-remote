@@ -51,6 +51,31 @@ object ValueParser {
         }
     }
 
+    /** Factor necesario para alcanzar una dimensión final o un porcentaje. */
+    fun parseScaleDimension(
+        input: String,
+        unit: TransformStepUnit,
+        unitScaleLength: Double,
+        baseDimension: Double,
+    ): Double? {
+        if (baseDimension <= 1e-12 || unitScaleLength <= 1e-12) return null
+        if (unit == TransformStepUnit.PERCENT) {
+            val number = input.trim().replace(',', '.').removeSuffix("%").toDoubleOrNull() ?: return null
+            return (number / 100.0).takeIf { it > 0.0 }
+        }
+        val explicit = split(input)?.second?.isNotEmpty() == true
+        val physicalMeters = (if (explicit) parseMove(input) else {
+            val number = input.trim().replace(',', '.').toDoubleOrNull() ?: return null
+            when (unit) {
+                TransformStepUnit.MM -> number / 1000.0
+                TransformStepUnit.CM -> number / 100.0
+                TransformStepUnit.M -> number
+                TransformStepUnit.PERCENT -> return null
+            }
+        }) ?: return null
+        return (physicalMeters / unitScaleLength / baseDimension).takeIf { it > 0.0 }
+    }
+
     /** Separa el número de su sufijo: `"25cm"` -> `(25.0, "cm")`. */
     private fun split(input: String): Pair<Double, String>? {
         val text = input.trim().replace(',', '.').lowercase()
@@ -61,4 +86,21 @@ object ValueParser {
         val number = text.substring(0, i).toDoubleOrNull() ?: return null
         return number to text.substring(i)
     }
+}
+
+/**
+ * Aplica la edición de un campo de escala. Con la cadena activa replica el factor
+ * relativo y conserva las proporciones; abierta cambia únicamente el eje editado.
+ */
+fun scaleValuesAfterAxisEdit(
+    current: List<Double>,
+    axisIndex: Int,
+    factor: Double,
+    linked: Boolean,
+): List<Double> {
+    require(axisIndex in 0..2) { "axisIndex must be 0, 1 or 2" }
+    val values = MutableList(3) { current.getOrElse(it) { 1.0 } }
+    if (linked) values.indices.forEach { values[it] = factor }
+    else values[axisIndex] = factor
+    return values
 }

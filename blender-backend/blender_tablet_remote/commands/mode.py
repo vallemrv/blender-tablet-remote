@@ -11,10 +11,6 @@ from . import command
 VALID_MODES = {
     "OBJECT",
     "EDIT",
-    "SCULPT",
-    "VERTEX_PAINT",
-    "WEIGHT_PAINT",
-    "TEXTURE_PAINT",
 }
 
 
@@ -40,11 +36,6 @@ def mode_object(payload: dict) -> dict:
 @command("mode.edit", mutating=False)
 def mode_edit(payload: dict) -> dict:
     return _set_mode("EDIT")
-
-
-@command("mode.sculpt", mutating=False)
-def mode_sculpt(payload: dict) -> dict:
-    return _set_mode("SCULPT")
 
 
 @command("mode.set", mutating=False)

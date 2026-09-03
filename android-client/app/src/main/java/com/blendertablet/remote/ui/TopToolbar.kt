@@ -90,6 +90,9 @@ fun TopToolbar(
                     PillButton("Alt", selected = state.selectionOp == SelectionOp.REMOVE) { vm.toggleSelectionOp(SelectionOp.REMOVE) }
                     IconAction(Icons.AutoMirrored.Filled.Undo, "Deshacer") { vm.undo() }
                     IconAction(Icons.AutoMirrored.Filled.Redo, "Rehacer") { vm.redo() }
+                    if (blender.features.repeatLast) {
+                        PillButton("⇧R") { vm.repeatLast() }
+                    }
                 }
             }
 

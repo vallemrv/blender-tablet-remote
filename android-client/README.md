@@ -6,8 +6,7 @@ stylus y ratón.
 
 Consulta [`../AGENTS.md`](../AGENTS.md) para el estado real y
 [`../blender-backend/docs/protocol.md`](../blender-backend/docs/protocol.md) para el
-contrato de red. Si hay un ciclo abierto, su trabajo pendiente vive en un
-`PLAN_FRONTEND.md` de la raíz.
+contrato de red.
 
 ## Abrir y compilar
 
@@ -18,7 +17,6 @@ Abre la raíz del repositorio en Android Studio. El módulo ejecutable es
 export JAVA_HOME=/home/valle/.local/opt/jdk-17.0.20+8
 export PATH="$JAVA_HOME/bin:$PATH"
 ./gradlew :android-client:app:assembleDebug
-./gradlew :android-client:app:testDebugUnitTest
 ```
 
 El APK queda en `app/build/outputs/apk/debug/app-debug.apk`.

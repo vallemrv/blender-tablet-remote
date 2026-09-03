@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import com.blendertablet.remote.model.AppUiState
 import com.blendertablet.remote.model.BlenderMode
 import com.blendertablet.remote.model.ConnectionStatus
+import com.blendertablet.remote.model.LengthUnit
 import com.blendertablet.remote.model.SnapAction
 import com.blendertablet.remote.model.SnapGroup
 
@@ -58,6 +59,9 @@ fun MenuBar(
             fileMenu(state, actions, close)
         }
         MenuAnchor("Objeto") { close -> objectMenu(state, actions, close) }
+        if (state.blender.features.sceneScale) {
+            MenuAnchor("Escena") { close -> sceneMenu(state, actions, close) }
+        }
         if (state.blender.hiddenObjects.isNotEmpty() && state.blender.features.visibility) {
             MenuAnchor("Ocultos") { close -> hiddenMenu(state, actions, close) }
         }
@@ -90,6 +94,8 @@ data class MenuActions(
     val onRevealAllObjects: () -> Unit,
     val onApplyTransform: (Boolean, Boolean, Boolean) -> Unit,
     val onModifiers: () -> Unit,
+    val onSceneScale: (String) -> Unit,
+    val onLengthUnit: (LengthUnit) -> Unit,
 )
 
 // ------------------------------------------------------------- árbol de menú
@@ -150,6 +156,43 @@ private fun objectMenu(state: AppUiState, actions: MenuActions, close: () -> Uni
                 }
             },
         )
+    }
+}
+
+// -------------------------------------------------------------------- Escena
+
+/**
+ * Escala de trabajo: un preset y, aparte, la unidad con la que se escriben las medidas.
+ *
+ * El preset es lo que se usa el 99 % de las veces —ajusta unidad, profundidad, pasos y
+ * tamaño de las primitivas de una vez— y la unidad suelta queda para quien quiera medir
+ * en milímetros una escena grande. Ninguno reescala geometría, y el menú lo dice: es la
+ * duda que frena a aplicarlo en mitad de un modelado.
+ */
+internal fun sceneMenu(state: AppUiState, actions: MenuActions, close: () -> Unit): List<MenuNode> {
+    val scale = state.blender.sceneScale
+    val presets = state.sceneScalePresets.ifEmpty { listOf(scale) }
+    return buildList {
+        add(MenuHeading("Escala de la escena"))
+        presets.forEach { preset ->
+            add(
+                MenuLeaf(preset.label, selected = preset.id == scale.id, hint = preset.hint) {
+                    close()
+                    actions.onSceneScale(preset.id)
+                },
+            )
+        }
+        add(MenuNote("No reescala lo ya modelado"))
+        add(MenuSeparator)
+        add(MenuHeading("Medidas en"))
+        LengthUnit.entries.forEach { unit ->
+            add(
+                MenuLeaf(unit.label, selected = unit == scale.lengthUnit) {
+                    close()
+                    actions.onLengthUnit(unit)
+                },
+            )
+        }
     }
 }
 
