@@ -41,6 +41,7 @@ import com.blendertablet.remote.model.TransformStepUnit
 import com.blendertablet.remote.model.TweakMotion
 import com.blendertablet.remote.model.ValueMode
 import com.blendertablet.remote.model.moveStepInBlenderUnits
+import com.blendertablet.remote.model.transformStepUnit
 import com.blendertablet.remote.model.stepsFor
 import com.blendertablet.remote.model.stepInBlenderUnits
 import com.blendertablet.remote.model.defaultStepIndex
@@ -60,6 +61,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -153,6 +155,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 status == ConnectionStatus.CONNECTED && remote.features.overlays
             }.distinctUntilChanged().collect { ready ->
                 if (ready) client.viewOverlays(local.value.controlsVisible)
+            }
+        }
+        // La unidad visible de Mover sigue al preset real de la escena. Se observa
+        // también al abrir otro .blend, no solo cuando el usuario toca el menú.
+        viewModelScope.launch {
+            client.state.map { it.sceneScale.lengthUnit }.distinctUntilChanged().collect { unit ->
+                local.update { it.copy(moveStepUnit = unit.transformStepUnit()) }
             }
         }
         // El catálogo de escalas no viaja en el snapshot (es fijo) y el menú Escena

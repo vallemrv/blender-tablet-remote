@@ -49,6 +49,8 @@ import com.blendertablet.remote.model.SnapType
 import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.TransformSession
 import com.blendertablet.remote.model.TransformStepUnit
+import com.blendertablet.remote.model.LengthUnit
+import com.blendertablet.remote.model.transformStepUnit
 import com.blendertablet.remote.model.moveValueForDisplay
 import com.blendertablet.remote.model.moveValueInBlenderUnits
 import com.blendertablet.remote.model.ValueMode
@@ -79,6 +81,7 @@ private val AxisColors = mapOf(
 fun TransformBar(
     session: TransformSession,
     unitScaleLength: Double,
+    sceneLengthUnit: LengthUnit,
     editSettings: EditSettings,
     stepIndex: Int,
     snapType: SnapType,
@@ -160,7 +163,8 @@ fun TransformBar(
                 } else {
                     ParametricAxisInputs(
                         session, unitScaleLength, moveStepValue, moveStepUnit,
-                        scaleStepPercent, stepIndex, constraint, snapType, onConstraint, onValue,
+                        scaleStepPercent, stepIndex, constraint, snapType,
+                        sceneLengthUnit.transformStepUnit(), onConstraint, onValue,
                     )
                     when (session.mode) {
                         // Escalar es un factor: el paso se escribe en % y es el mismo
@@ -247,6 +251,7 @@ fun MovementControls(
         stepIndex = 0,
         constraint = constraint,
         snapType = snapType,
+        defaultScaleUnit = moveStepUnit,
         onConstraint = onConstraint,
         onValue = onValue,
     )
@@ -335,10 +340,13 @@ private fun ParametricAxisInputs(
     stepIndex: Int,
     constraint: Constraint,
     snapType: SnapType,
+    defaultScaleUnit: TransformStepUnit,
     onConstraint: (Constraint) -> Unit,
     onValue: (List<Double>?, Double?, List<Double>?) -> Unit,
 ) {
-    var scaleUnit by remember(session.mode) { mutableStateOf(TransformStepUnit.M) }
+    var scaleUnit by remember(session.sessionId, defaultScaleUnit) {
+        mutableStateOf(defaultScaleUnit)
+    }
     var scaleLinked by remember(session.sessionId) { mutableStateOf(true) }
     if (session.mode == TransformMode.SCALE) {
         Box {

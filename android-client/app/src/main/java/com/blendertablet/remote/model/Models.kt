@@ -465,6 +465,12 @@ enum class LengthUnit(val wire: String, val label: String, val short: String) {
     }
 }
 
+fun LengthUnit.transformStepUnit(): TransformStepUnit = when (this) {
+    LengthUnit.MILLIMETERS -> TransformStepUnit.MM
+    LengthUnit.CENTIMETERS -> TransformStepUnit.CM
+    LengthUnit.METERS -> TransformStepUnit.M
+}
+
 /**
  * Escala de trabajo de la escena.
  *

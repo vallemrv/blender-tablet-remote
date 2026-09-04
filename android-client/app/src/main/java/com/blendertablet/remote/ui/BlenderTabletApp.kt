@@ -387,6 +387,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 if (state.activeTool != ActiveTool.TWEAK) TransformBar(
                     session = session,
                     unitScaleLength = state.blender.unitScaleLength,
+                    sceneLengthUnit = state.blender.sceneScale.lengthUnit,
                     editSettings = state.blender.editSettings,
                     stepIndex = vm.stepIndex(session.mode),
                     snapType = snapType,
