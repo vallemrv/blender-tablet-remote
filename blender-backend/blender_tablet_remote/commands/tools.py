@@ -334,7 +334,7 @@ def snap_candidate(payload):
     from .snap import query_candidate
     tool_session.restore()
     query = dict(payload, snap_type=snap_type)
-    candidate = query_candidate(query)
+    candidate = query_candidate(query, tool_session.snap_candidate)
     if not candidate.get("hit"):
         tool_session.snap_candidate = None
         tool_session.preview()
@@ -452,10 +452,14 @@ def knife_drag(payload):
         tool_session.snap_candidate = None
         return tool_session.status()
 
-    candidate = _knife_candidate(tool_session.obj, float(payload.get("u", 0.5)),
-                                  float(payload.get("v", 0.5)),
-                                  bool(tool_session.params.get("snap", True)),
-                                  str(tool_session.params.get("snap_mode", "AUTO")).upper())
+    # END confirma exactamente el último marcador publicado. Android entrega antes
+    # la última muestra UPDATE estable; repetir aquí el raycast reintroduciría jitter.
+    candidate = tool_session.snap_candidate if phase == "END" else _knife_candidate(
+        tool_session.obj, float(payload.get("u", 0.5)), float(payload.get("v", 0.5)),
+        bool(tool_session.params.get("snap", True)),
+        str(tool_session.params.get("snap_mode", "AUTO")).upper(),
+        tool_session.snap_candidate)
+    candidate = candidate or {"hit": False, "snap_type": "NONE"}
     tool_session.snap_candidate = candidate if candidate.get("hit") else None
     if phase == "BEGIN":
         tool_session.knife_start = candidate if candidate.get("hit") else None
@@ -476,7 +480,7 @@ def knife_drag(payload):
     return dict(tool_session.status(), hit=bool(candidate.get("hit")), candidate=candidate)
 
 
-def _knife_candidate(obj, u, v, snap_enabled, snap_mode="AUTO"):
+def _knife_candidate(obj, u, v, snap_enabled, snap_mode="AUTO", previous=None):
     """Punto visible de cara con snap deliberado solo a sus vértices/aristas."""
     found = find_view3d()
     if found is None:
@@ -504,8 +508,7 @@ def _knife_candidate(obj, u, v, snap_enabled, snap_mode="AUTO"):
             screen = camera.project(obj.matrix_world @ vert.co, rv3d)
             if screen is not None:
                 distance = (Vector(screen) - touch).length
-                if distance <= vertex_threshold:
-                    vertices.append((distance, "VERTEX", vert.co.copy(), screen, vert.index))
+                vertices.append((distance, "VERTEX", vert.co.copy(), screen, vert.index))
         for edge in face.edges:
             pa = camera.project(obj.matrix_world @ edge.verts[0].co, rv3d)
             pb = camera.project(obj.matrix_world @ edge.verts[1].co, rv3d)
@@ -515,24 +518,47 @@ def _knife_candidate(obj, u, v, snap_enabled, snap_mode="AUTO"):
             span = b2 - a2
             center_screen = (a2 + b2) * 0.5
             center_distance = (center_screen - touch).length
-            if center_distance <= center_threshold:
-                centers.append((center_distance, "EDGE_CENTER",
-                                (edge.verts[0].co + edge.verts[1].co) * 0.5,
-                                center_screen, edge.index))
+            centers.append((center_distance, "EDGE_CENTER",
+                            (edge.verts[0].co + edge.verts[1].co) * 0.5,
+                            center_screen, edge.index))
             t = max(0.0, min(1.0, (touch - a2).dot(span) / span.length_squared)) if span.length_squared > 1e-12 else 0.5
             screen = a2 + span * t
             distance = (screen - touch).length
-            if distance <= KNIFE_EDGE_THRESHOLD:
-                edges.append((distance, "EDGE", edge.verts[0].co.lerp(edge.verts[1].co, t), screen, edge.index))
+            edges.append((distance, "EDGE", edge.verts[0].co.lerp(edge.verts[1].co, t), screen, edge.index))
         # Prioridad categórica, no por distancia global: una arista tiene siempre
         # distancia ~0 bajo el lápiz y antes robaba el snap a sus propios vértices y
         # centro. Dentro de su radio, VERTEX > EDGE_CENTER > EDGE.
         groups = {"VERTEX": vertices, "EDGE_CENTER": centers, "EDGE": edges}
         if snap_mode not in {"AUTO", *groups}:
             snap_mode = "AUTO"
-        ranked = (vertices or centers or edges) if snap_mode == "AUTO" else groups[snap_mode]
-        if ranked:
-            _distance, snap_type, snapped, _screen, element = min(ranked, key=lambda item: item[0])
+        previous_type = previous.get("snap_type") if isinstance(previous, dict) else None
+        order = ([previous_type] if previous_type in groups else [])
+        order += [kind for kind in ("VERTEX", "EDGE_CENTER", "EDGE") if kind not in order]
+        if snap_mode != "AUTO":
+            order = [snap_mode]
+        thresholds = {
+            "VERTEX": vertex_threshold,
+            "EDGE_CENTER": center_threshold,
+            "EDGE": KNIFE_EDGE_THRESHOLD,
+        }
+        chosen = None
+        from .snap import choose_sticky_candidate
+        for kind in order:
+            ranked = [
+                {"hit": True, "snap_type": candidate_type,
+                 "id": f"{obj.name}:{candidate_type}:{candidate_element}",
+                 "object": obj.name, "element": candidate_element,
+                 "position": list(obj.matrix_world @ candidate_local),
+                 "local_position": list(candidate_local), "screen": list(candidate_screen),
+                 "distance": candidate_distance}
+                for candidate_distance, candidate_type, candidate_local, candidate_screen,
+                    candidate_element in groups[kind]
+            ]
+            chosen = choose_sticky_candidate(ranked, previous, thresholds[kind])
+            if chosen is not None:
+                break
+        if chosen is not None:
+            return chosen
         else:
             element = face.index if face is not None else -1
     else:

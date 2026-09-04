@@ -125,6 +125,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Cada tipo de Snap obtiene su símbolo semántico desde `AppIcons.snap`; la marca de
   selección es un indicador aparte y no sustituye el icono del tipo.
 - El sondeo geométrico del backend permanece centralizado en `commands/snap.py`.
+- La adquisición táctil de candidatos usa allí una única política pegajosa con
+  histéresis, margen de cambio y conservación del último candidato estable; Snap,
+  REL/Fuente, Tweak, Extrude y Knife no definen pegajosidad propia.
 - La iconografía se resuelve por intención desde `ui/Iconography.kt`; las pantallas no
   eligen símbolos ni mantienen tablas de iconos propias.
 

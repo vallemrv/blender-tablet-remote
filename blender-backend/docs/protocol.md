@@ -487,6 +487,10 @@ transformación todavía viva.
 El snap exacto de MOVE/ROTATE/SCALE ofrece `VERTEX`, `EDGE_CENTER` y `FACE_CENTER`. Sus radios
 táctiles predeterminados son respectivamente `0.080`, `0.070` y `0.065`, idénticos
 para elegir el ancla fuente y para seguir el destino.
+El sondeo continuo aplica una histéresis común: adquiere dentro del radio de cada tipo,
+conserva el candidato hasta un radio de salida mayor y solo cambia antes si el nuevo
+candidato mejora claramente la distancia. Esta política también se usa en REL/Fuente,
+Tweak, Extrude y Knife; `END` conserva el último candidato visual estable.
 | `transform.nudge` | `dx`, `dy` — normalmente llega por el canal de gestos |
 | `transform.value` | `values`: [x,y,z], `angle` en GRADOS legado, o `dimensions`: [x,y,z] finales en unidades Blender para SCALE |
 | `transform.session` | Publica `values` canónico y los roles `center`, `source`, `target`; `angle` y `reference_*` quedan como derivados v2 |

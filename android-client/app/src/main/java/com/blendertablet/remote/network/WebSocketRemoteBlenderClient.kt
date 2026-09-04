@@ -572,7 +572,7 @@ class WebSocketRemoteBlenderClient(
         command(
             "tool.snap_candidate",
             JSONObject().put("u", request.u).put("v", request.v)
-                .put("snap_type", request.type.name).put("threshold", 0.035).put("lock", request.lock),
+                .put("snap_type", request.type.name).put("lock", request.lock),
         )
     }
 

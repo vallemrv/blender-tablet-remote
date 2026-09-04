@@ -27,10 +27,45 @@ from . import command
 
 GEOMETRIC_TYPES = {"VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER"}
 
+# Política táctil común. El candidato entra con el radio propio de su categoría,
+# pero no se suelta hasta salir bastante más lejos. Dentro de esa corona otro punto
+# solo lo reemplaza si es inequívocamente mejor; así el jitter del stylus no hace
+# alternar dos vértices o un vértice y el centro de su arista.
+STICKY_RELEASE_FACTOR = 1.55
+STICKY_RELEASE_PADDING = 0.012
+STICKY_SWITCH_MARGIN = 0.014
 
-def query_reference_candidate(payload: dict) -> dict:
+
+def choose_sticky_candidate(candidates: list[dict], previous: dict | None,
+                            acquire_threshold: float) -> dict | None:
+    """Elige un candidato con histéresis, independiente de la herramienta usuaria."""
+    if not candidates:
+        return None
+    best = min(candidates, key=lambda item: item["distance"])
+    previous_id = previous.get("id") if isinstance(previous, dict) else None
+    incumbent = next((item for item in candidates if item.get("id") == previous_id), None)
+    release_threshold = acquire_threshold * STICKY_RELEASE_FACTOR + STICKY_RELEASE_PADDING
+    if incumbent is not None and incumbent["distance"] <= release_threshold:
+        if (best.get("id") != incumbent.get("id")
+                and best["distance"] + STICKY_SWITCH_MARGIN < incumbent["distance"]):
+            return best
+        return incumbent
+    return best if best["distance"] <= acquire_threshold else None
+
+
+def query_reference_candidate(payload: dict, previous: dict | None = None) -> dict:
     """Referencia táctil automática: destinos exactos por prioridad."""
     thresholds = (("VERTEX", 0.080), ("EDGE_CENTER", 0.070), ("FACE_CENTER", 0.065))
+    previous_type = previous.get("snap_type") if isinstance(previous, dict) else None
+    # La categoría activa recibe primero su radio de salida. Solo cuando se pierde
+    # vuelve a entrar en juego la prioridad Vértice > Medio > Centro de cara.
+    if previous_type in dict(thresholds):
+        candidate = query_candidate(
+            dict(payload, snap_type=previous_type, threshold=dict(thresholds)[previous_type]),
+            previous,
+        )
+        if candidate.get("hit"):
+            return candidate
     for snap_type, threshold in thresholds:
         candidate = query_candidate(dict(payload, snap_type=snap_type, threshold=threshold))
         if candidate.get("hit"):
@@ -38,7 +73,7 @@ def query_reference_candidate(payload: dict) -> dict:
     return {"hit": False, "snap_type": "NONE"}
 
 
-def query_candidate(payload: dict) -> dict:
+def query_candidate(payload: dict, previous: dict | None = None) -> dict:
     """Devuelve el candidato visible más cercano bajo coordenadas normalizadas."""
     snap_type = str(payload.get("snap_type", payload.get("type", "VERTEX"))).upper()
     if snap_type == "CURSOR":
@@ -112,12 +147,18 @@ def query_candidate(payload: dict) -> dict:
         target, snap_type, rv3d, touch, direction, excluded_vertices)
     if not candidates:
         return {"hit": False, "snap_type": snap_type}
-    distance, element, position = min(candidates, key=lambda item: item[0])
-    if distance > threshold:
-        return {"hit": False, "snap_type": snap_type, "distance": distance}
-    return {"hit": True, "snap_type": snap_type, "id": f"{object_name}:{snap_type}:{element}",
-            "object": object_name, "element": element, "position": list(position),
-            "screen": list(camera.project(position, rv3d) or (u, v)), "distance": distance}
+    ranked = [
+        {"hit": True, "snap_type": snap_type,
+         "id": f"{object_name}:{snap_type}:{element}", "object": object_name,
+         "element": element, "position": list(position),
+         "screen": list(camera.project(position, rv3d) or (u, v)), "distance": distance}
+        for distance, element, position in candidates
+    ]
+    chosen = choose_sticky_candidate(ranked, previous, threshold)
+    if chosen is None:
+        nearest = min(ranked, key=lambda item: item["distance"])
+        return {"hit": False, "snap_type": snap_type, "distance": nearest["distance"]}
+    return chosen
 
 
 def _snap_target_object(hit: bool, obj, include: set[str], exclude: set[str]):

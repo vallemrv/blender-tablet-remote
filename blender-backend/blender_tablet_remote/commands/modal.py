@@ -1020,7 +1020,7 @@ def set_snap_candidate(payload: dict) -> dict:
         query_payload["exclude_elements"] = {
             session.edit_object.name: {"vertices": list(session.edit_coords)}
         }
-    candidate = query_candidate(query_payload)
+    candidate = query_candidate(query_payload, session.snap_candidate)
     if not candidate.get("hit"):
         session.snap_candidate = None
         session.snap_locked = False
@@ -1091,7 +1091,7 @@ def set_reference_candidate(payload: dict) -> dict:
         query_payload["include_objects"] = [o.name for o, _matrix in session.originals]
     elif session.edit_object is not None:
         query_payload["include_objects"] = [session.edit_object.name]
-    candidate = query_reference_candidate(query_payload)
+    candidate = query_reference_candidate(query_payload, session.reference_candidate)
     session.reference_candidate = candidate if candidate.get("hit") else None
     if candidate.get("hit") and lock:
         lock_candidate(candidate)
