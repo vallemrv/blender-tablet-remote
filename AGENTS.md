@@ -128,6 +128,12 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - La adquisición táctil de candidatos usa allí una única política pegajosa con
   histéresis, margen de cambio y conservación del último candidato estable; Snap,
   REL/Fuente, Tweak, Extrude y Knife no definen pegajosidad propia.
+- En REL/Fuente, retener un candidato solo conserva su mismo `id`: si se pierde no se
+  adquiere otro de la misma categoría antes de comparar todas las categorías.
+- REL/Centro y Fuente mantienen separado el rol de su candidato temporal: la
+  histéresis de uno nunca retiene ni confirma el marcador perteneciente al otro.
+- Al activar snap geométrico en Rotar o Escalar sin Fuente, Android arma su búsqueda
+  automáticamente; un toque directo también intenta fijarla en ese mismo punto.
 - La iconografía se resuelve por intención desde `ui/Iconography.kt`; las pantallas no
   eligen símbolos ni mantienen tablas de iconos propias.
 

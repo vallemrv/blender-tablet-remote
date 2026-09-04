@@ -35,16 +35,28 @@ STICKY_RELEASE_FACTOR = 1.55
 STICKY_RELEASE_PADDING = 0.012
 STICKY_SWITCH_MARGIN = 0.014
 
+# REL/Fuente compara varias categorías a la vez. Sus radios de entrada son más
+# pequeños que los del snap explícito para que sus zonas no se tapen entre sí:
+# vértice es el más accesible, después centro de cara y por último centro de arista.
+# Los radios de salida conservan exactamente la pegajosidad anterior.
+REFERENCE_THRESHOLDS = {
+    "VERTEX": (0.055, 0.080 * STICKY_RELEASE_FACTOR + STICKY_RELEASE_PADDING),
+    "EDGE_CENTER": (0.045, 0.070 * STICKY_RELEASE_FACTOR + STICKY_RELEASE_PADDING),
+    "FACE_CENTER": (0.050, 0.065 * STICKY_RELEASE_FACTOR + STICKY_RELEASE_PADDING),
+}
+
 
 def choose_sticky_candidate(candidates: list[dict], previous: dict | None,
-                            acquire_threshold: float) -> dict | None:
+                            acquire_threshold: float,
+                            release_threshold: float | None = None) -> dict | None:
     """Elige un candidato con histéresis, independiente de la herramienta usuaria."""
     if not candidates:
         return None
     best = min(candidates, key=lambda item: item["distance"])
     previous_id = previous.get("id") if isinstance(previous, dict) else None
     incumbent = next((item for item in candidates if item.get("id") == previous_id), None)
-    release_threshold = acquire_threshold * STICKY_RELEASE_FACTOR + STICKY_RELEASE_PADDING
+    if release_threshold is None:
+        release_threshold = acquire_threshold * STICKY_RELEASE_FACTOR + STICKY_RELEASE_PADDING
     if incumbent is not None and incumbent["distance"] <= release_threshold:
         if (best.get("id") != incumbent.get("id")
                 and best["distance"] + STICKY_SWITCH_MARGIN < incumbent["distance"]):
@@ -55,25 +67,29 @@ def choose_sticky_candidate(candidates: list[dict], previous: dict | None,
 
 def query_reference_candidate(payload: dict, previous: dict | None = None) -> dict:
     """Referencia táctil automática: destinos exactos por prioridad."""
-    thresholds = (("VERTEX", 0.080), ("EDGE_CENTER", 0.070), ("FACE_CENTER", 0.065))
     previous_type = previous.get("snap_type") if isinstance(previous, dict) else None
     # La categoría activa recibe primero su radio de salida. Solo cuando se pierde
     # vuelve a entrar en juego la prioridad Vértice > Medio > Centro de cara.
-    if previous_type in dict(thresholds):
+    if previous_type in REFERENCE_THRESHOLDS:
+        acquire, release = REFERENCE_THRESHOLDS[previous_type]
         candidate = query_candidate(
-            dict(payload, snap_type=previous_type, threshold=dict(thresholds)[previous_type]),
-            previous,
+            dict(payload, snap_type=previous_type, threshold=acquire), previous, release,
         )
-        if candidate.get("hit"):
+        # Esta pasada existe exclusivamente para retener EL MISMO punto. Si salió
+        # del radio, no debe adquirir otro punto de la misma clase saltándose la
+        # comparación general de categorías.
+        if candidate.get("hit") and candidate.get("id") == previous.get("id"):
             return candidate
-    for snap_type, threshold in thresholds:
-        candidate = query_candidate(dict(payload, snap_type=snap_type, threshold=threshold))
+    for snap_type in ("VERTEX", "FACE_CENTER", "EDGE_CENTER"):
+        acquire, _release = REFERENCE_THRESHOLDS[snap_type]
+        candidate = query_candidate(dict(payload, snap_type=snap_type, threshold=acquire))
         if candidate.get("hit"):
             return candidate
     return {"hit": False, "snap_type": "NONE"}
 
 
-def query_candidate(payload: dict, previous: dict | None = None) -> dict:
+def query_candidate(payload: dict, previous: dict | None = None,
+                    release_threshold: float | None = None) -> dict:
     """Devuelve el candidato visible más cercano bajo coordenadas normalizadas."""
     snap_type = str(payload.get("snap_type", payload.get("type", "VERTEX"))).upper()
     if snap_type == "CURSOR":
@@ -154,7 +170,7 @@ def query_candidate(payload: dict, previous: dict | None = None) -> dict:
          "screen": list(camera.project(position, rv3d) or (u, v)), "distance": distance}
         for distance, element, position in candidates
     ]
-    chosen = choose_sticky_candidate(ranked, previous, threshold)
+    chosen = choose_sticky_candidate(ranked, previous, threshold, release_threshold)
     if chosen is None:
         nearest = min(ranked, key=lambda item: item["distance"])
         return {"hit": False, "snap_type": snap_type, "distance": nearest["distance"]}

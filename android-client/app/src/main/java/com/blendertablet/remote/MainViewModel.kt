@@ -405,7 +405,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val session = client.transformSession.value
         if (session.active && session.snapType.geometric) {
             if (session.mode != TransformMode.MOVE && session.source.isEmpty()) {
-                local.update { it.copy(referencePicking = true, referenceRole = "SOURCE") }
+                client.transformReferenceCandidate(
+                    u.toDouble(), v.toDouble(), lock = true, role = "SOURCE",
+                )
+                local.update { it.copy(referencePicking = false, referenceRole = "SOURCE") }
                 return
             }
             client.transformSnapCandidate(u.toDouble(), v.toDouble(), session.snapType)
@@ -882,9 +885,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             local.value.constraint
         }
+        val snapType = snapTypeFor(mode)
+        if (mode != TransformMode.MOVE && snapType.geometric) {
+            lastReferencePointer = null
+            local.update { it.copy(referencePicking = true, referenceRole = "SOURCE") }
+        }
         client.transformBegin(
             mode, constraint.axes, step = step,
-            snapType = snapTypeFor(mode),
+            snapType = snapType,
             orientation = local.value.orientation,
             valueMode = local.value.valueMode,
         )
@@ -948,7 +956,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setSnapType(type: SnapType) {
         rememberSnapType(type)
         val session = client.transformSession.value
-        if (session.active) client.transformSnap(snapTypeFor(session.mode), session.step)
+        if (session.active) {
+            client.transformSnap(snapTypeFor(session.mode), session.step)
+            if (session.mode != TransformMode.MOVE && type.geometric && session.source.isEmpty()) {
+                lastReferencePointer = null
+                local.update { it.copy(referencePicking = true, referenceRole = "SOURCE") }
+            }
+        }
     }
 
     fun setStep(mode: TransformMode, index: Int) {

@@ -491,6 +491,10 @@ El sondeo continuo aplica una histéresis común: adquiere dentro del radio de c
 conserva el candidato hasta un radio de salida mayor y solo cambia antes si el nuevo
 candidato mejora claramente la distancia. Esta política también se usa en REL/Fuente,
 Tweak, Extrude y Knife; `END` conserva el último candidato visual estable.
+REL/Fuente usa radios de entrada separados (`VERTEX` 0.055, `FACE_CENTER` 0.050 y
+`EDGE_CENTER` 0.045) para reducir el solapamiento, pero mantiene los radios de salida
+anteriores. Retener una categoría nunca permite adquirir otro punto de esa categoría
+sin volver a comparar las tres.
 | `transform.nudge` | `dx`, `dy` — normalmente llega por el canal de gestos |
 | `transform.value` | `values`: [x,y,z], `angle` en GRADOS legado, o `dimensions`: [x,y,z] finales en unidades Blender para SCALE |
 | `transform.session` | Publica `values` canónico y los roles `center`, `source`, `target`; `angle` y `reference_*` quedan como derivados v2 |

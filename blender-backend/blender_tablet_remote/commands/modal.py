@@ -149,6 +149,8 @@ class _Session:
         self.snap_candidate = None
         self.snap_locked = False
         self.reference_candidate = None
+        self.reference_candidate_role = None
+        self.reference_candidate_locked = False
         self.reference_locked = False
         self.reference_position = None
         self.center_position = None
@@ -806,12 +808,17 @@ class _Session:
                                  if self.reference_role == "SOURCE"
                                  else reference_position.copy())
             reference_position = current_reference
-            if reference_candidate is not None:
-                reference_candidate = dict(reference_candidate, position=list(current_reference))
+            if reference_candidate is not None and self.reference_candidate_locked:
+                candidate_position = (source_position if self.reference_candidate_role == "SOURCE"
+                                      else self.center_position)
+                current_candidate = (self._transform_point(candidate_position, values)
+                                     if self.reference_candidate_role == "SOURCE"
+                                     else candidate_position.copy())
+                reference_candidate = dict(reference_candidate, position=list(current_candidate))
                 try:
                     rv3d = require_rv3d()
                     camera.sync_from_region(rv3d)
-                    projected = camera.project(current_reference, rv3d)
+                    projected = camera.project(current_candidate, rv3d)
                     if projected is not None:
                         reference_candidate["screen"] = list(projected)
                 except CommandError:
@@ -831,11 +838,12 @@ class _Session:
             "snap_candidate": self.snap_candidate,
             "snap_locked": self.snap_locked,
             "reference_candidate": reference_candidate,
-            "reference_locked": self.reference_locked,
+            "reference_locked": (self.reference_candidate_locked
+                                 if reference_candidate is not None else self.reference_locked),
             "reference_position": list(reference_position) if reference_position is not None else None,
             "reference_distance": (source_position - self.center_base()).length
                 if source_position is not None else None,
-            "reference_role": self.reference_role,
+            "reference_role": self.reference_candidate_role or self.reference_role,
             "center_locked": self.center_position is not None,
             "source_locked": source_position is not None,
             "center": list(self.center_base()),
@@ -1046,6 +1054,8 @@ def set_reference_candidate(payload: dict) -> dict:
         raise CommandError("MOVE uses a source reference", code="wrong_reference_role")
     if payload.get("clear"):
         session.reference_candidate = None
+        session.reference_candidate_role = None
+        session.reference_candidate_locked = False
         session.reference_locked = False
         if role == "CENTER":
             session.center_position = None
@@ -1079,10 +1089,12 @@ def set_reference_candidate(payload: dict) -> dict:
                 session.reference_position = base_position
         session.reference_locked = True
         session.reference_role = role
+        session.reference_candidate_locked = True
 
     # END congela exactamente el marcador verde que el usuario estaba viendo. Un
     # segundo raycast con el jitter de ACTION_UP puede elegir otra categoría exacta.
-    if lock and session.reference_candidate is not None:
+    if (lock and session.reference_candidate is not None
+            and session.reference_candidate_role == role):
         lock_candidate(session.reference_candidate)
         return session.status()
     from .snap import query_reference_candidate
@@ -1091,8 +1103,12 @@ def set_reference_candidate(payload: dict) -> dict:
         query_payload["include_objects"] = [o.name for o, _matrix in session.originals]
     elif session.edit_object is not None:
         query_payload["include_objects"] = [session.edit_object.name]
-    candidate = query_reference_candidate(query_payload, session.reference_candidate)
+    previous = (session.reference_candidate
+                if session.reference_candidate_role == role else None)
+    candidate = query_reference_candidate(query_payload, previous)
     session.reference_candidate = candidate if candidate.get("hit") else None
+    session.reference_candidate_role = role if candidate.get("hit") else None
+    session.reference_candidate_locked = bool(candidate.get("hit") and lock)
     if candidate.get("hit") and lock:
         lock_candidate(candidate)
     return session.status()

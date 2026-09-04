@@ -517,9 +517,7 @@ private fun OrientationPicker(
 
 /**
  * Tipo de snap. El desplegable solo contiene los válidos para el modo: los
- * geométricos existen únicamente en MOVE, así que al rotar y escalar solo ofrece
- * libre, incremento y rejilla. Enseñar más sería enseñar algo que el servidor
- * rechaza.
+ * geométricos forman fuente→destino en MOVE y centro→fuente→destino en ROTATE/SCALE.
  */
 @Composable
 private fun SnapPicker(mode: TransformMode, selected: SnapType, onSelect: (SnapType) -> Unit) {
