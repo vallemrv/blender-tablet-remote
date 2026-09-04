@@ -116,8 +116,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   alteraciones funcionales; no se aprovecha ese cambio para "mejorarlo" o refactorizarlo.
 - Rotar se presenta y se edita exclusivamente en grados; los radianes quedan limitados
   al cálculo interno y nunca se ofrecen como unidad en la interfaz.
-- Rotar ofrece Reset dentro de la sesión: restaura la preview a `0°` sin cancelar ni
-  obligar a volver a activar la herramienta.
+- Mover, Rotar y Escalar ofrecen Reset dentro de la sesión: restauran la preview a
+  `0`, `0°` y `100 %` respectivamente sin cancelar ni reactivar la herramienta.
 - Los controles de incremento —paso y botones `−/+`— solo se muestran cuando el Snap
   activo es Incremento, en Mover, Rotar y Escalar.
 - El selector y los pasos de snap viven en `ui/SnapControl.kt`; las bandejas declaran

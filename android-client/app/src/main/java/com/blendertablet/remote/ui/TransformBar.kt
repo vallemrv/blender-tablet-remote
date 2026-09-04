@@ -163,8 +163,13 @@ fun TransformBar(
                     when (session.mode) {
                         // Escalar es un factor: el paso se escribe en % y es el mismo
                         // que mueven los −/+ de cada eje.
-                        TransformMode.SCALE -> if (snapType == SnapType.INCREMENT) {
-                            ScaleStepInput(scaleStepPercent, onScaleStep)
+                        TransformMode.SCALE -> {
+                            IconAction(AppIcons.Reset, "Restablecer escala a 100 %") {
+                                onValue(listOf(1.0, 1.0, 1.0), null, null)
+                            }
+                            if (snapType == SnapType.INCREMENT) {
+                                ScaleStepInput(scaleStepPercent, onScaleStep)
+                            }
                         }
                         TransformMode.ROTATE -> {
                             IconAction(AppIcons.Reset, "Restablecer rotación a 0°") {
@@ -238,6 +243,9 @@ fun MovementControls(
         onConstraint = onConstraint,
         onValue = onValue,
     )
+    IconAction(AppIcons.Reset, "Restablecer movimiento a 0") {
+        onValue(listOf(0.0, 0.0, 0.0), null, null)
+    }
     if (snapType == SnapType.INCREMENT) {
         MoveStepInput(moveStepValue, moveStepUnit, session.referenceLocked, onMoveStep)
     }
