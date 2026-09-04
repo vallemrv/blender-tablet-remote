@@ -146,6 +146,7 @@ class _Session:
         self.axes: list[str] = []
         self.snap = False
         self.snap_type = "NONE"
+        self.snap_to_selection = False
         self.snap_candidate = None
         self.snap_locked = False
         self.reference_candidate = None
@@ -835,6 +836,7 @@ class _Session:
             "axes": list(self.axes),
             "snap": self.snap,
             "snap_type": self.snap_type,
+            "snap_to_selection": self.snap_to_selection,
             "snap_candidate": self.snap_candidate,
             "snap_locked": self.snap_locked,
             "reference_candidate": reference_candidate,
@@ -1007,6 +1009,12 @@ def set_snap(payload: dict) -> dict:
         if snap_type not in {"NONE", "INCREMENT", "VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER"}:
             raise BadPayload("Unknown 'snap_type'")
         session.snap_type = snap_type
+    if "snap_to_selection" in payload:
+        snap_to_selection = bool(payload["snap_to_selection"])
+        if snap_to_selection != session.snap_to_selection:
+            session.snap_candidate = None
+            session.snap_locked = False
+        session.snap_to_selection = snap_to_selection
     step = _parse_step(payload, session.step)
     session.step = step
     session.apply()
@@ -1022,12 +1030,13 @@ def set_snap_candidate(payload: dict) -> dict:
     from .snap import query_candidate
     query_payload = dict(payload)
     query_payload["snap_type"] = payload.get("snap_type", session.snap_type)
-    if session.originals and (session.mode != "MOVE" or session.reference_locked):
-        query_payload["exclude_objects"] = [o.name for o, _matrix in session.originals]
-    elif session.edit_object is not None:
-        query_payload["exclude_elements"] = {
-            session.edit_object.name: {"vertices": list(session.edit_coords)}
-        }
+    if not session.snap_to_selection:
+        if session.originals:
+            query_payload["exclude_objects"] = [o.name for o, _matrix in session.originals]
+        elif session.edit_object is not None:
+            query_payload["exclude_elements"] = {
+                session.edit_object.name: {"vertices": list(session.edit_coords)}
+            }
     candidate = query_candidate(query_payload, session.snap_candidate)
     if not candidate.get("hit"):
         session.snap_candidate = None

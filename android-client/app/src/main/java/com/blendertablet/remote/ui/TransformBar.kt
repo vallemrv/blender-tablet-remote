@@ -94,6 +94,7 @@ fun TransformBar(
     onConstraint: (Constraint) -> Unit,
     onOrientation: (Orientation) -> Unit,
     onSnapType: (SnapType) -> Unit,
+    onSnapToSelection: (Boolean) -> Unit,
     onStep: (Int) -> Unit,
     onValueMode: (ValueMode) -> Unit,
     onReference: (String) -> Unit,
@@ -150,6 +151,7 @@ fun TransformBar(
                         availableOrientations = availableOrientations,
                         onConstraint = onConstraint,
                         onSnapType = onSnapType,
+                        onSnapToSelection = onSnapToSelection,
                         onReference = onReference,
                         onMoveStep = onMoveStep,
                         onValue = onValue,
@@ -193,6 +195,10 @@ fun TransformBar(
                         selected = (referencePicking && referencePickingRole == "SOURCE") || session.sourceLocked,
                     ) { onReference("SOURCE") }
                     SnapPicker(session.mode, snapType, onSnapType)
+                    PillButton(
+                        "Propio",
+                        selected = session.snapToSelection,
+                    ) { onSnapToSelection(!session.snapToSelection) }
                     Divider()
                     OrientationPicker(availableOrientations, orientation, onOrientation)
                 }
@@ -226,6 +232,7 @@ fun MovementControls(
     availableOrientations: List<Orientation>,
     onConstraint: (Constraint) -> Unit,
     onSnapType: (SnapType) -> Unit,
+    onSnapToSelection: (Boolean) -> Unit,
     onReference: (String) -> Unit,
     onMoveStep: (Double, TransformStepUnit) -> Unit,
     onValue: (List<Double>?, Double?, List<Double>?) -> Unit,
@@ -255,6 +262,10 @@ fun MovementControls(
         selected = referencePicking || session.sourceLocked,
     ) { onReference("SOURCE") }
     SnapControl(SnapType.forMode(TransformMode.MOVE), snapType, onSnapType)
+    PillButton(
+        "Propio",
+        selected = session.snapToSelection,
+    ) { onSnapToSelection(!session.snapToSelection) }
     Divider()
     OrientationPicker(availableOrientations, orientation, onOrientation)
 }

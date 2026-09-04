@@ -494,11 +494,12 @@ class WebSocketRemoteBlenderClient(
     override fun transformOrientation(orientation: Orientation) =
         command("transform.orientation", JSONObject().put("orientation", orientation.name))
 
-    override fun transformSnap(snapType: SnapType, step: Double) = command(
+    override fun transformSnap(snapType: SnapType, step: Double, snapToSelection: Boolean) = command(
         "transform.snap",
         JSONObject()
             .put("snap", snapType != SnapType.NONE)
             .put("snap_type", snapType.name)
+            .put("snap_to_selection", snapToSelection)
             .put("step", step),
     )
 

@@ -322,6 +322,7 @@ object StateParser {
             axes = enums(axes, Axis.entries).toSet(),
             snap = json.optBoolean("snap"),
             snapType = enum(json.optString("snap_type"), SnapType.NONE),
+            snapToSelection = json.optBoolean("snap_to_selection", false),
             snapCandidate = candidate(json.optJSONObject("snap_candidate")),
             referenceCandidate = candidate(json.optJSONObject("reference_candidate")),
             referenceLocked = json.optBoolean("reference_locked", false),

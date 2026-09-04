@@ -479,7 +479,7 @@ transformación todavía viva.
 | `transform.begin` | `mode`: `MOVE`\|`ROTATE`\|`SCALE`, `axes[]`/`constraint`, `orientation`, `value_mode`, `snap`, `snap_type`, `step`; en Edit también `proportional`, `radius`, `falloff` |
 | `transform.axes` | `axes[]` — cambia la restricción en vivo |
 | `transform.orientation` | `orientation` — cambia GLOBAL/LOCAL/VIEW/NORMAL sin reiniciar la sesión |
-| `transform.snap` | `snap` (bool), `snap_type`, `step`; en Move no admite `GRID` ni `CURSOR` |
+| `transform.snap` | `snap` (bool), `snap_type`, `step`, `snap_to_selection`; en Move no admite `GRID` ni `CURSOR` |
 | `snap.query` | `u`, `v`, `snap_type`: `VERTEX`\|`EDGE`\|`EDGE_CENTER`\|`FACE`\|`FACE_CENTER`\|`CURSOR`, `threshold` |
 | `transform.snap_candidate` | igual que `snap.query`, `lock` (predeterminado true) |
 | `transform.reference_candidate` | `u`, `v`, `lock`, `role`: `CENTER`/`SOURCE`; o `clear`. MOVE usa source→target; ROTATE/SCALE separan centro, fuente y destino |
@@ -515,6 +515,10 @@ Snap incremental y rejilla en la sesión modal:
 Cada sesión incluye UUID `session_id`, `owner` y `phase`. Solo su conexión propietaria
 puede alterarla; al desconectarse se cancela. Funciona tanto en Object como en Edit y
 reconstruye matrices o coordenadas BMesh desde el snapshot inicial.
+
+`snap_to_selection` es falso al abrir cada transformación. Cuando se activa, el snap
+geométrico admite también como destino el objeto seleccionado en Object Mode o los
+elementos seleccionados en Edit Mode; desactivado los excluye del sondeo de destino.
 
 Al bloquear referencias sobre una preview existente, `SOURCE` se convierte al baseline
 para que la transformación se aplique una sola vez. `CENTER` conserva, en cambio, la

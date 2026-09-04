@@ -248,6 +248,7 @@ data class TransformSession(
     val axes: Set<Axis> = emptySet(),
     val snap: Boolean = false,
     val snapType: SnapType = SnapType.NONE,
+    val snapToSelection: Boolean = false,
     /** El elemento al que se está pegando ahora mismo, si el snap es geométrico. */
     val snapCandidate: SnapCandidate? = null,
     val referenceCandidate: SnapCandidate? = null,

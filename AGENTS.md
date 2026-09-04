@@ -134,6 +134,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   histéresis de uno nunca retiene ni confirma el marcador perteneciente al otro.
 - Al activar snap geométrico en Rotar o Escalar sin Fuente, Android arma su búsqueda
   automáticamente; un toque directo también intenta fijarla en ese mismo punto.
+- Cada transformación inicia sin snap contra su propia selección; el botón `Propio`
+  permite incluirla como destino durante esa sesión.
 - La iconografía se resuelve por intención desde `ui/Iconography.kt`; las pantallas no
   eligen símbolos ni mantienen tablas de iconos propias.
 

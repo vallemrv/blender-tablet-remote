@@ -957,7 +957,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         rememberSnapType(type)
         val session = client.transformSession.value
         if (session.active) {
-            client.transformSnap(snapTypeFor(session.mode), session.step)
+            client.transformSnap(snapTypeFor(session.mode), session.step, session.snapToSelection)
             if (session.mode != TransformMode.MOVE && type.geometric && session.source.isEmpty()) {
                 lastReferencePointer = null
                 local.update { it.copy(referencePicking = true, referenceRole = "SOURCE") }
@@ -973,6 +973,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             client.transformSnap(
                 session.snapType,
                 stepInBlenderUnits(preset, mode, uiState.value.blender.unitScaleLength),
+                session.snapToSelection,
             )
         }
     }
@@ -1023,7 +1024,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (!session.active || session.mode != TransformMode.MOVE) return
         val blenderStep = moveStepInBlenderUnits(value, unit, uiState.value.blender.unitScaleLength)
             ?: ((session.referenceDistance ?: return) * value / 100.0)
-        client.transformSnap(SnapType.INCREMENT, blenderStep)
+        client.transformSnap(SnapType.INCREMENT, blenderStep, session.snapToSelection)
     }
 
     /** Paso de Escalar, en % de factor. Misma regla que [setMoveStep]: una sola fuente. */
@@ -1032,7 +1033,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         local.update { it.copy(scaleStepPercent = percent) }
         val session = client.transformSession.value
         if (!session.active || session.mode != TransformMode.SCALE) return
-        client.transformSnap(session.snapType, percent / 100.0)
+        client.transformSnap(session.snapType, percent / 100.0, session.snapToSelection)
+    }
+
+    fun setSnapToSelection(enabled: Boolean) {
+        val session = client.transformSession.value
+        if (!session.active) return
+        client.transformSnap(session.snapType, session.step, enabled)
     }
 
     fun transformConfirm() = client.transformConfirm()

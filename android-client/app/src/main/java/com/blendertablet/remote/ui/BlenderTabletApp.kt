@@ -402,6 +402,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     onConstraint = vm::setConstraint,
                     onOrientation = vm::setOrientation,
                     onSnapType = vm::setSnapType,
+                    onSnapToSelection = vm::setSnapToSelection,
                     onStep = { vm.setStep(session.mode, it) },
                     onValueMode = vm::setValueMode,
                     onReference = vm::toggleTransformReference,
