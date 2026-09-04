@@ -329,9 +329,7 @@ private fun ParametricAxisInputs(
 ) {
     var scaleUnit by remember(session.mode) { mutableStateOf(TransformStepUnit.M) }
     var scaleLinked by remember(session.sessionId) { mutableStateOf(true) }
-    if (session.mode == TransformMode.ROTATE) {
-        Text("°", color = Ink.Muted, fontSize = 13.sp)
-    } else if (session.mode == TransformMode.SCALE) {
+    if (session.mode == TransformMode.SCALE) {
         Box {
             var expanded by remember { mutableStateOf(false) }
             PillButton(scaleUnit.label) { expanded = true }
