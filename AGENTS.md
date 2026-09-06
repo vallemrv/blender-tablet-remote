@@ -134,6 +134,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   adquiere otro de la misma categoría antes de comparar todas las categorías.
 - REL/Centro y Fuente mantienen separado el rol de su candidato temporal: la
   histéresis de uno nunca retiene ni confirma el marcador perteneciente al otro.
+- En Rotar y Escalar, REL permite elegir centro de selección, punto señalado, origen
+  del objeto o cursor 3D sin reiniciar la sesión.
+- Los marcadores fijados se reproyectan desde su posición 3D durante la sesión para
+  permanecer unidos visualmente al target al cambiar la vista.
 - Al activar snap geométrico en Rotar o Escalar sin Fuente, Android arma su búsqueda
   automáticamente; un toque directo también intenta fijarla en ese mismo punto.
 - Cada transformación inicia sin snap contra su propia selección; el botón `Propio`

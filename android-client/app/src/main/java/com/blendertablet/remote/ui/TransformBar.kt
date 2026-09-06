@@ -101,6 +101,7 @@ fun TransformBar(
     onStep: (Int) -> Unit,
     onValueMode: (ValueMode) -> Unit,
     onReference: (String) -> Unit,
+    onCenterPreset: (String) -> Unit,
     onMoveStep: (Double, TransformStepUnit) -> Unit,
     onScaleStep: (Double) -> Unit,
     onValue: (List<Double>?, Double?, List<Double>?) -> Unit,
@@ -188,11 +189,12 @@ fun TransformBar(
                         TransformMode.MOVE -> Unit
                     }
                     Divider()
-                    PillButton(
-                        if (referencePicking && referencePickingRole == "CENTER") "REL · señala"
-                        else if (session.centerLocked) "REL · pivote" else "REL · centro selección",
-                        selected = (referencePicking && referencePickingRole == "CENTER") || session.centerLocked,
-                    ) { onReference("CENTER") }
+                    CenterReferencePicker(
+                        session = session,
+                        picking = referencePicking && referencePickingRole == "CENTER",
+                        onPick = { onReference("CENTER") },
+                        onPreset = onCenterPreset,
+                    )
                     PillButton(
                         if (referencePicking && referencePickingRole == "SOURCE") "Fuente · señala"
                         else if (session.sourceLocked) "Fuente · fijada" else "Fuente",
@@ -516,6 +518,44 @@ private fun SnapCandidateHint(session: TransformSession) {
     val candidate = session.snapCandidate ?: return
     val target = candidate.objectName?.let { "$it · ${candidate.type.label}" } ?: candidate.type.label
     Text("⇥ $target", color = Ink.Ok, fontSize = 11.sp)
+}
+
+@Composable
+private fun CenterReferencePicker(
+    session: TransformSession,
+    picking: Boolean,
+    onPick: () -> Unit,
+    onPreset: (String) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val label = when {
+        picking -> "REL · señala"
+        session.centerMode == "OBJECT_ORIGIN" -> "REL · origen"
+        session.centerMode == "CURSOR" -> "REL · cursor"
+        session.centerMode == "PICKED" -> "REL · punto"
+        else -> "REL · selección"
+    }
+    Box {
+        PillButton(label, selected = picking || session.centerLocked) { expanded = true }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("Centro de selección") },
+                onClick = { expanded = false; onPreset("SELECTION") },
+            )
+            DropdownMenuItem(
+                text = { Text("Señalar punto") },
+                onClick = { expanded = false; onPick() },
+            )
+            DropdownMenuItem(
+                text = { Text("Origen del objeto") },
+                onClick = { expanded = false; onPreset("OBJECT_ORIGIN") },
+            )
+            DropdownMenuItem(
+                text = { Text("Cursor 3D") },
+                onClick = { expanded = false; onPreset("CURSOR") },
+            )
+        }
+    }
 }
 
 /** Orientación de los ejes. Solo se ofrecen las que el contexto declara válidas. */

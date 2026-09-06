@@ -155,6 +155,7 @@ class _Session:
         self.reference_locked = False
         self.reference_position = None
         self.center_position = None
+        self.center_mode = "SELECTION"
         self.source_position = None
         self.reference_role = None
         self.step = DEFAULT_STEP["MOVE"]
@@ -799,6 +800,17 @@ class _Session:
                     }
             except (CommandError, ReferenceError, RuntimeError):
                 pass
+        snap_candidate = self.snap_candidate
+        if snap_candidate is not None:
+            snap_candidate = dict(snap_candidate)
+            try:
+                rv3d = require_rv3d()
+                camera.sync_from_region(rv3d)
+                projected = camera.project(Vector(snap_candidate["position"]), rv3d)
+                if projected is not None:
+                    snap_candidate["screen"] = list(projected)
+            except (CommandError, KeyError, ReferenceError, RuntimeError, TypeError):
+                pass
         reference_candidate = self.reference_candidate
         source_position = (self.source_position if self.source_position is not None
                            else self.reference_position)
@@ -837,7 +849,7 @@ class _Session:
             "snap": self.snap,
             "snap_type": self.snap_type,
             "snap_to_selection": self.snap_to_selection,
-            "snap_candidate": self.snap_candidate,
+            "snap_candidate": snap_candidate,
             "snap_locked": self.snap_locked,
             "reference_candidate": reference_candidate,
             "reference_locked": (self.reference_candidate_locked
@@ -847,12 +859,13 @@ class _Session:
                 if source_position is not None else None,
             "reference_role": self.reference_candidate_role or self.reference_role,
             "center_locked": self.center_position is not None,
+            "center_mode": self.center_mode,
             "source_locked": source_position is not None,
             "center": list(self.center_base()),
             "source": list(self._transform_point(source_position, values))
                 if source_position is not None else None,
-            "target": list(self.snap_candidate["position"])
-                if self.snap_candidate is not None else None,
+            "target": list(snap_candidate["position"])
+                if snap_candidate is not None else None,
             "motion": self.motion,
             "slide_clamp": self.slide_clamp,
             "slide_factor": self.slide_factor,
@@ -1061,6 +1074,30 @@ def set_reference_candidate(payload: dict) -> dict:
         raise BadPayload("'role' must be CENTER or SOURCE")
     if session.mode == "MOVE" and role == "CENTER":
         raise CommandError("MOVE uses a source reference", code="wrong_reference_role")
+    preset = str(payload.get("preset", "")).upper()
+    if preset:
+        if role != "CENTER" or session.mode not in {"ROTATE", "SCALE"}:
+            raise CommandError("Center presets require ROTATE or SCALE", code="wrong_reference_role")
+        if preset == "SELECTION":
+            session.center_position = None
+        elif preset == "OBJECT_ORIGIN":
+            active = bpy.context.view_layer.objects.active
+            if active is None:
+                raise CommandError("No active object", code="empty_selection")
+            session.center_position = active.matrix_world.translation.copy()
+        elif preset == "CURSOR":
+            session.center_position = bpy.context.scene.cursor.location.copy()
+        else:
+            raise BadPayload("'preset' must be SELECTION, OBJECT_ORIGIN or CURSOR")
+        session.center_mode = preset
+        session.reference_candidate = None
+        session.reference_candidate_role = None
+        session.reference_candidate_locked = False
+        session.reference_locked = session.center_position is not None or session.source_position is not None
+        session.reference_role = "CENTER" if session.center_position is not None else (
+            "SOURCE" if session.source_position is not None else None)
+        session.apply()
+        return session.status()
     if payload.get("clear"):
         session.reference_candidate = None
         session.reference_candidate_role = None
@@ -1068,6 +1105,7 @@ def set_reference_candidate(payload: dict) -> dict:
         session.reference_locked = False
         if role == "CENTER":
             session.center_position = None
+            session.center_mode = "SELECTION"
             session.reference_role = "SOURCE" if session.source_position is not None else None
         else:
             session.source_position = None
@@ -1091,6 +1129,7 @@ def set_reference_candidate(payload: dict) -> dict:
             # el marcador rojo respecto del último verde tras una primera rotación no
             # confirmada. El candidato visible es aquí la referencia canónica.
             session.center_position = current_position
+            session.center_mode = "PICKED"
         else:
             base_position = session._untransform_point(current_position, values)
             session.source_position = base_position

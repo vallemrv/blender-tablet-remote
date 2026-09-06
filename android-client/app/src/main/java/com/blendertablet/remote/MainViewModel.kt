@@ -1026,6 +1026,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setTransformCenterPreset(preset: String) {
+        if (!client.transformSession.value.active) return
+        lastReferencePointer = null
+        local.update { it.copy(referencePicking = false, referenceRole = "CENTER") }
+        client.transformCenterPreset(preset)
+    }
+
     fun setMoveStep(value: Double, unit: TransformStepUnit) {
         if (value <= 0.0) return
         local.update { it.copy(moveStepValue = value, moveStepUnit = unit) }

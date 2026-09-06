@@ -277,6 +277,7 @@ interface RemoteBlenderClient {
     fun transformSnapCandidate(u: Double, v: Double, snapType: SnapType, lock: Boolean = true)
     fun transformReferenceCandidate(u: Double, v: Double, lock: Boolean = false, role: String = "SOURCE")
     fun transformReferenceClear(role: String = "SOURCE")
+    fun transformCenterPreset(preset: String)
 
     /** Valor exacto: [values] para mover/escalar, [angleDegrees] para rotar. */
     fun transformValue(values: List<Double>?, angleDegrees: Double?, dimensions: List<Double>? = null)

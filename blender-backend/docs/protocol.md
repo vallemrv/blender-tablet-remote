@@ -482,7 +482,7 @@ transformación todavía viva.
 | `transform.snap` | `snap` (bool), `snap_type`, `step`, `snap_to_selection`; en Move no admite `GRID` ni `CURSOR` |
 | `snap.query` | `u`, `v`, `snap_type`: `VERTEX`\|`EDGE`\|`EDGE_CENTER`\|`FACE`\|`FACE_CENTER`\|`CURSOR`, `threshold` |
 | `transform.snap_candidate` | igual que `snap.query`, `lock` (predeterminado true) |
-| `transform.reference_candidate` | `u`, `v`, `lock`, `role`: `CENTER`/`SOURCE`; o `clear`. MOVE usa source→target; ROTATE/SCALE separan centro, fuente y destino |
+| `transform.reference_candidate` | `u`, `v`, `lock`, `role`: `CENTER`/`SOURCE`; `clear`; o `preset`: `SELECTION`/`OBJECT_ORIGIN`/`CURSOR` para CENTER. MOVE usa source→target; ROTATE/SCALE separan centro, fuente y destino |
 
 El snap exacto de MOVE/ROTATE/SCALE ofrece `VERTEX`, `EDGE_CENTER` y `FACE_CENTER`. Sus radios
 táctiles predeterminados son respectivamente `0.080`, `0.070` y `0.065`, idénticos
@@ -519,6 +519,9 @@ reconstruye matrices o coordenadas BMesh desde el snapshot inicial.
 `snap_to_selection` es falso al abrir cada transformación. Cuando se activa, el snap
 geométrico admite también como destino el objeto seleccionado en Object Mode o los
 elementos seleccionados en Edit Mode; desactivado los excluye del sondeo de destino.
+
+En ROTATE/SCALE, `center_mode` publica `SELECTION`, `PICKED`, `OBJECT_ORIGIN` o
+`CURSOR`. Los presets de centro cambian el pivote de la preview sin reiniciar la sesión.
 
 Al bloquear referencias sobre una preview existente, `SOURCE` se convierte al baseline
 para que la transformación se aplique una sola vez. `CENTER` conserva, en cambio, la

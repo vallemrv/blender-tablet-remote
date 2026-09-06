@@ -517,6 +517,11 @@ class WebSocketRemoteBlenderClient(
         "transform.reference_candidate", JSONObject().put("clear", true).put("role", role),
     )
 
+    override fun transformCenterPreset(preset: String) = command(
+        "transform.reference_candidate",
+        JSONObject().put("role", "CENTER").put("preset", preset),
+    )
+
     override fun editSettings(parameters: Map<String, Any?>) =
         command("edit.settings_set", JSONObject(parameters))
 

@@ -255,6 +255,7 @@ data class TransformSession(
     val referenceLocked: Boolean = false,
     val referenceRole: String? = null,
     val centerLocked: Boolean = false,
+    val centerMode: String = "SELECTION",
     val sourceLocked: Boolean = false,
     val referencePosition: List<Float> = emptyList(),
     val referenceDistance: Double? = null,

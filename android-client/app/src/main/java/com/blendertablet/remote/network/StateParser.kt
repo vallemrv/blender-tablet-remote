@@ -328,6 +328,7 @@ object StateParser {
             referenceLocked = json.optBoolean("reference_locked", false),
             referenceRole = json.optString("reference_role").takeIf { it.isNotBlank() },
             centerLocked = json.optBoolean("center_locked", false),
+            centerMode = json.optString("center_mode", "SELECTION"),
             sourceLocked = json.optBoolean("source_locked", false),
             referencePosition = floats(json.optJSONArray("reference_position")),
             referenceDistance = json.optDouble("reference_distance").takeIf { !it.isNaN() },

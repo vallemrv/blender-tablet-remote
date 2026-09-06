@@ -407,6 +407,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     onStep = { vm.setStep(session.mode, it) },
                     onValueMode = vm::setValueMode,
                     onReference = vm::toggleTransformReference,
+                    onCenterPreset = vm::setTransformCenterPreset,
                     onMoveStep = vm::setMoveStep,
                     onScaleStep = vm::setScaleStep,
                     onValue = vm::transformValue,
