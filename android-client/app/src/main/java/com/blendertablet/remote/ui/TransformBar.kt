@@ -113,6 +113,10 @@ fun TransformBar(
     modifier: Modifier = Modifier,
 ) {
     if (!session.active) return
+    val defaultScaleUnit = sceneLengthUnit.transformStepUnit()
+    var scaleUnit by remember(session.sessionId, defaultScaleUnit) {
+        mutableStateOf(defaultScaleUnit)
+    }
     FloatingPanel(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             // Rótulo a la izquierda, como EditToolTray: el modo ya lo eligió el rail.
@@ -165,7 +169,7 @@ fun TransformBar(
                     ParametricAxisInputs(
                         session, unitScaleLength, moveStepValue, moveStepUnit,
                         scaleStepPercent, stepIndex, constraint, snapType,
-                        sceneLengthUnit.transformStepUnit(), onConstraint, onValue,
+                        scaleUnit, onConstraint, onValue,
                     )
                     when (session.mode) {
                         // Escalar es un factor: el paso se escribe en % y es el mismo
@@ -175,7 +179,11 @@ fun TransformBar(
                                 onValue(listOf(1.0, 1.0, 1.0), null, null)
                             }
                             if (snapType == SnapType.INCREMENT) {
-                                ScaleStepInput(scaleStepPercent, onScaleStep)
+                                ScaleStepInput(scaleStepPercent, onScaleStep) {
+                                    ScaleUnitPicker(scaleUnit) { scaleUnit = it }
+                                }
+                            } else {
+                                ScaleUnitPicker(scaleUnit) { scaleUnit = it }
                             }
                         }
                         TransformMode.ROTATE -> {
@@ -253,7 +261,7 @@ fun MovementControls(
         stepIndex = 0,
         constraint = constraint,
         snapType = snapType,
-        defaultScaleUnit = moveStepUnit,
+        scaleUnit = moveStepUnit,
         onConstraint = onConstraint,
         onValue = onValue,
     )
@@ -280,24 +288,46 @@ fun MovementControls(
 /**
  * Paso de Escalar, escrito en porcentaje.
  *
- * Escalar es un factor, así que su paso es siempre un %: no hay desplegable de unidad
- * que elegir. Antes solo se podía ciclar entre cuatro porcentajes fijos, y quien
- * necesitaba un 0,5 % no tenía dónde escribirlo.
+ * El porcentaje va dentro del campo. A su lado vive el selector de las unidades
+ * de dimensión de XYZ; cambiarlo no modifica el factor del incremento.
  */
 @Composable
-private fun ScaleStepInput(percent: Double, onChange: (Double) -> Unit) {
-    var text by remember(percent) { mutableStateOf(format(percent, 3)) }
+private fun ScaleStepInput(
+    percent: Double,
+    onChange: (Double) -> Unit,
+    unitPicker: @Composable () -> Unit,
+) {
+    var text by remember(percent) { mutableStateOf("${format(percent, 3)} %") }
     fun commit(raw: String = text) {
-        raw.replace(',', '.').removeSuffix("%").toDoubleOrNull()
-            ?.takeIf { it > 0.0 }?.let(onChange)
+        raw.replace(',', '.').trim().removeSuffix("%").trim().toDoubleOrNull()
+            ?.takeIf { it > 0.0 }?.let {
+                text = "${format(it, 3)} %"
+                onChange(it)
+            }
     }
     PillButton("−") { onChange((percent - 1.0).coerceAtLeast(0.001)) }
     CompactNumericField(
-        value = text, onValueChange = { text = it }, modifier = Modifier.width(58.dp),
+        value = text, onValueChange = { text = it }, modifier = Modifier.width(72.dp),
         textAlign = TextAlign.End, placeholder = "Paso", onDone = { commit() },
     )
+    unitPicker()
     PillButton("+") { onChange(percent + 1.0) }
-    Text("%", color = Ink.Muted, fontSize = 13.sp)
+}
+
+@Composable
+private fun ScaleUnitPicker(unit: TransformStepUnit, onSelect: (TransformStepUnit) -> Unit) {
+    Box {
+        var expanded by remember { mutableStateOf(false) }
+        PillButton(unit.label) { expanded = true }
+        DropdownMenu(expanded, { expanded = false }) {
+            TransformStepUnit.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.label) },
+                    onClick = { onSelect(option); expanded = false },
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -317,7 +347,6 @@ private fun MoveStepInput(
         value = text, onValueChange = { text = it }, modifier = Modifier.width(58.dp),
         textAlign = TextAlign.End, placeholder = "Paso", onDone = { commit() },
     )
-    PillButton("+") { onChange(value + 1.0, unit) }
     Box {
         PillButton(unit.label) { expanded = true }
         DropdownMenu(expanded, { expanded = false }) {
@@ -330,6 +359,7 @@ private fun MoveStepInput(
             }
         }
     }
+    PillButton("+") { onChange(value + 1.0, unit) }
 }
 
 @Composable
@@ -342,27 +372,12 @@ private fun ParametricAxisInputs(
     stepIndex: Int,
     constraint: Constraint,
     snapType: SnapType,
-    defaultScaleUnit: TransformStepUnit,
+    scaleUnit: TransformStepUnit,
     onConstraint: (Constraint) -> Unit,
     onValue: (List<Double>?, Double?, List<Double>?) -> Unit,
 ) {
-    var scaleUnit by remember(session.sessionId, defaultScaleUnit) {
-        mutableStateOf(defaultScaleUnit)
-    }
     var scaleLinked by remember(session.sessionId) { mutableStateOf(true) }
     if (session.mode == TransformMode.SCALE) {
-        Box {
-            var expanded by remember { mutableStateOf(false) }
-            PillButton(scaleUnit.label) { expanded = true }
-            DropdownMenu(expanded, { expanded = false }) {
-                TransformStepUnit.entries.forEach { unit ->
-                    DropdownMenuItem(
-                        text = { Text(unit.label) },
-                        onClick = { scaleUnit = unit; expanded = false },
-                    )
-                }
-            }
-        }
         IconAction(
             icon = if (scaleLinked) Icons.Default.Link else Icons.Default.LinkOff,
             description = if (scaleLinked) "Dimensiones vinculadas" else "Dimensiones independientes",
