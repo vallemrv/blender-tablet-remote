@@ -409,7 +409,7 @@ FEATURES = {
                   "topology_modes": ["EDGE", "FACE"],
                   "linked": True, "shortest_path": True,
                   "tweak": {"phases": ["BEGIN", "UPDATE", "END", "CANCEL"],
-                            "selection_modes": ["VERTEX", "EDGE"],
+                            "selection_modes": ["VERTEX", "EDGE", "FACE"],
                             "miss_behavior": "ORBIT",
                             "motion": ["FREE", "SLIDE"],
                             "snap_types": ["NONE", "INCREMENT", "VERTEX", "EDGE",

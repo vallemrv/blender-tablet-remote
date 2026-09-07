@@ -156,7 +156,7 @@ fun TweakToolButton(
                     enabled = enabled,
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = { vm.activateTweak() },
+                    onClick = { if (selected) vm.selectTool() else vm.activateTweak() },
                     onLongClick = { if (configurable) expanded = true },
                 ),
             contentAlignment = Alignment.Center,

@@ -323,6 +323,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         closeSessions()
         local.update { it.copy(
             shapeTool = ShapeTool.NONE,
+            activeTool = if (mode != BlenderMode.EDIT && it.activeTool == ActiveTool.TWEAK)
+                ActiveTool.SELECT else it.activeTool,
             shortestPathActive = if (mode == BlenderMode.EDIT) it.shortestPathActive else false,
         ) }
         client.setMode(mode)
@@ -335,7 +337,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun closeSessions() {
-        if (client.transformSession.value.active) client.transformCancel()
+        val cancellingTweak = cancelTweakGesture()
+        if (!cancellingTweak && client.transformSession.value.active) client.transformCancel()
         if (client.toolSession.value.active) client.toolCancel()
         loopCutArmed = false
         local.update { it.copy(loopCutAwaitingTap = false) }
@@ -897,6 +900,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * termina con [transformConfirm] o [transformCancel].
      */
     fun transformBegin(mode: TransformMode) {
+        if (local.value.activeTool == ActiveTool.TWEAK) {
+            cancelTweakGesture()
+            local.update { it.copy(activeTool = ActiveTool.SELECT) }
+        }
         // Una transformación y una herramienta paramétrica no conviven: cerrar la otra.
         if (client.toolSession.value.active) client.toolCancel()
         loopCutArmed = false
@@ -932,25 +939,51 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun activateTweak() {
-        if (client.transformSession.value.active) client.transformCancel()
+        val cancellingTweak = cancelTweakGesture()
+        if (!cancellingTweak && client.transformSession.value.active) client.transformCancel()
         if (client.toolSession.value.active || client.toolSession.value.armed) client.toolCancel()
-        local.update { it.copy(activeTool = ActiveTool.TWEAK, loopCutAwaitingTap = false) }
+        loopCutArmed = false
+        local.update { it.copy(activeTool = ActiveTool.TWEAK, loopCutAwaitingTap = false,
+            shapeTool = ShapeTool.NONE, referencePicking = false) }
+    }
+
+    private var tweakGestureActive = false
+
+    private fun cancelTweakGesture(): Boolean {
+        if (!tweakGestureActive) return false
+        tweakGestureActive = false
+        client.selectionTweak(GesturePhase.CANCEL, 0.0, 0.0, 0.0, 0.0, null)
+        return true
     }
 
     fun tweakGesture(phase: GesturePhase, u: Float, v: Float, dx: Float, dy: Float) {
+        if (local.value.activeTool != ActiveTool.TWEAK) {
+            cancelTweakGesture()
+            return
+        }
+        if (phase == GesturePhase.BEGIN) tweakGestureActive = true
+        else if (!tweakGestureActive) return
         // Los ajustes solo acompañan al BEGIN: el servidor los conserva hasta soltar.
-        val settings = if (phase == GesturePhase.BEGIN) local.value.tweak else null
+        val settings = if (phase == GesturePhase.BEGIN) local.value.tweak.let {
+            if (uiState.value.blender.selectionMode == SelectionMode.FACE)
+                it.copy(motion = TweakMotion.FREE) else it
+        } else null
         client.selectionTweak(phase, u.toDouble(), v.toDouble(), dx.toDouble(), dy.toDouble(), settings)
-        if (phase == GesturePhase.END || phase == GesturePhase.CANCEL) client.requestState()
+        if (phase == GesturePhase.END || phase == GesturePhase.CANCEL) {
+            tweakGestureActive = false
+            client.requestState()
+        }
     }
 
     /** Modo de movimiento del Tweak; elegirlo también deja el Tweak como herramienta. */
     fun setTweakMotion(motion: TweakMotion) {
-        local.update { it.copy(activeTool = ActiveTool.TWEAK, tweak = it.tweak.copy(motion = motion)) }
+        activateTweak()
+        local.update { it.copy(tweak = it.tweak.copy(motion = motion)) }
     }
 
     fun setTweakSnapType(snapType: SnapType) {
-        local.update { it.copy(activeTool = ActiveTool.TWEAK, tweak = it.tweak.copy(snapType = snapType)) }
+        activateTweak()
+        local.update { it.copy(tweak = it.tweak.copy(snapType = snapType)) }
     }
 
     fun setTweakSnapStep(step: Double) {

@@ -301,12 +301,17 @@ solo considera elementos de la cara visible impactada y exige que vértices/aris
 estén dentro del umbral táctil normalizado (`threshold`, 0.035 por defecto). Devuelve
 `{"hit": false}` si el rayo no da con nada (y deselecciona si `mode` es `SET`).
 
-`selection.tweak` está disponible solo en Edit y submodos VERTEX/EDGE. BEGIN hace un
-pick SET bajo el punto inicial y abre una transformación MOVE reversible; UPDATE
+`selection.tweak` está disponible en Edit y submodos VERTEX/EDGE/FACE. BEGIN selecciona
+el elemento bajo el punto inicial (conserva el grupo si ya estaba seleccionado) y
+abre una transformación MOVE reversible; UPDATE
 acumula deltas normalizados en el plano de la vista; END confirma un único undo y
 CANCEL restaura las coordenadas originales. Un BEGIN sin impacto no abre sesión MOVE:
 los UPDATE siguientes orbitan la cámara (`miss_behavior: ORBIT`) hasta END/CANCEL. Un
 toque sin desplazamiento conserva la selección pero no crea un undo de movimiento.
+Android distingue toque de arrastre mediante el umbral del dedo/stylus y confirma
+la última muestra estable, ignorando el salto de posición de ACTION_UP. Pulsar otra
+herramienta o repetir el botón Tweak permite salir; cancelar un gesto ya cerrado no
+cancela la nueva transformación. En FACE el movimiento siempre es FREE.
 
 El BEGIN configura el gesto entero y esos ajustes se conservan hasta END/CANCEL:
 

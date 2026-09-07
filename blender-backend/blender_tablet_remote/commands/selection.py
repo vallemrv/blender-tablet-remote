@@ -236,6 +236,15 @@ _tweak_owner = None
 _tweak_missed = False
 # El BEGIN configura el gesto entero; los UPDATE llegan sin repetir los ajustes.
 _tweak_snap_type = "NONE"
+_tweak_session_id = None
+
+
+def _reset_tweak():
+    global _tweak_owner, _tweak_missed, _tweak_snap_type, _tweak_session_id
+    _tweak_owner = None
+    _tweak_missed = False
+    _tweak_snap_type = "NONE"
+    _tweak_session_id = None
 
 TWEAK_SNAP_TYPES = {"NONE", "INCREMENT", "VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER"}
 GEOMETRIC_SNAP_TYPES = {"VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER"}
@@ -268,8 +277,8 @@ def _tweak_settings(payload: dict) -> tuple[str, str, float | None, bool]:
 @command("selection.tweak", mutating=True)
 def tweak(payload: dict) -> dict:
     """Selecciona bajo el apoyo y mueve directamente hasta soltar el gesto."""
-    from . import modal
-    global _tweak_owner, _tweak_missed, _tweak_snap_type
+    from . import modal, tools
+    global _tweak_owner, _tweak_missed, _tweak_snap_type, _tweak_session_id
 
     phase = str(payload.get("phase", "")).upper()
     if phase not in {"BEGIN", "UPDATE", "END", "CANCEL"}:
@@ -281,32 +290,67 @@ def tweak(payload: dict) -> dict:
         if obj.mode != "EDIT":
             raise CommandError("Tweak requires Edit Mode", code="wrong_mode")
         selection_mode = tuple(bpy.context.scene.tool_settings.mesh_select_mode)
-        if not (selection_mode[0] or selection_mode[1]) or selection_mode[2]:
-            raise CommandError("Tweak requires Vertex or Edge selection mode", code="wrong_selection")
-        motion, snap_type, step, clamp = _tweak_settings(payload)
+        # Una cara se traslada libremente; SLIDE solo tiene rieles de vértices/aristas.
+        settings = dict(payload, motion="FREE") if selection_mode[2] else payload
+        motion, snap_type, step, clamp = _tweak_settings(settings)
+        if tools.tool_session.active:
+            tools.tool_session.require(owner)
         if modal.session.active:
+            modal.session.require(owner)
             modal.session.restore_safely()
             modal.session.reset()
-        # ADD sirve aquí como sondeo no destructivo: un miss no borra la selección
-        # existente. Solo cuando hay impacto repetimos con SET para conservar la
-        # semántica de Tweak de trabajar sobre un único elemento.
+        from .sessions import cancel_tool
+        cancel_tool(restore=True)
+        _reset_tweak()
+        bm = edit_bmesh(obj)
+        selected = {kind: {e.index for e in seq if e.select}
+                    for kind, seq in (("vert", bm.verts), ("edge", bm.edges), ("face", bm.faces))}
+        # Un único picking. Tocar algo seleccionado arrastra el grupo; tocar otro
+        # elemento lo selecciona en exclusiva. Un miss conserva la selección.
         picked = pick(dict(payload, mode="ADD"))
         if picked.get("hit"):
-            picked = pick(dict(payload, mode="SET"))
+            kind, index = picked["element"], picked["index"]
+            if index not in selected[kind]:
+                bm.select_history.clear()
+                for seq in (bm.verts, bm.edges, bm.faces):
+                    for elem in seq:
+                        elem.select = False
+                seq = {"vert": bm.verts, "edge": bm.edges, "face": bm.faces}[kind]
+                seq.ensure_lookup_table()
+                seq[index].select = True
+                bm.select_history.add(seq[index])
+                bm.select_flush_mode()
+                flush_bmesh(obj, bm, destructive=False)
+            picked = _with_state({key: picked[key] for key in
+                                  ("hit", "object", "element", "index", "distance") if key in picked})
         _tweak_owner = owner
         _tweak_missed = not picked.get("hit")
         _tweak_snap_type = snap_type
         if not picked.get("hit"):
             return picked
-        modal.session.begin("MOVE", [], snap_type != "NONE", step, owner_id=owner,
-                            orientation="GLOBAL", value_mode="RELATIVE", snap_type=snap_type,
-                            motion=motion, slide_clamp=clamp)
+        try:
+            modal.session.begin("MOVE", [], snap_type != "NONE", step, owner_id=owner,
+                                orientation="GLOBAL", value_mode="RELATIVE", snap_type=snap_type,
+                                motion=motion, slide_clamp=clamp)
+        except Exception:
+            modal.session.restore_safely()
+            modal.session.reset()
+            _reset_tweak()
+            raise
+        _tweak_session_id = modal.session.session_id
         return dict(picked, tweak=True, session_id=modal.session.session_id,
                     motion=motion, snap_type=snap_type)
 
+    # Un END/CANCEL retrasado tras cambiar de herramienta nunca toca la sesión nueva.
+    if ((_tweak_missed and (modal.session.active or tools.tool_session.active)) or
+            (not _tweak_missed and (not modal.session.active or
+                                   modal.session.session_id != _tweak_session_id))):
+        _reset_tweak()
+        return {"tweak": True, "moved": False}
+    if owner != _tweak_owner:
+        raise CommandError("Tweak gesture belongs to another client", code="session_owned")
+
     if _tweak_missed:
-        if owner != _tweak_owner:
-            raise CommandError("Tweak gesture belongs to another client", code="session_owned")
         if phase == "UPDATE":
             # Tweak es también la herramienta de navegación de un dedo: si BEGIN no
             # encontró geometría, el mismo flujo de deltas orbita sin esperar una
@@ -317,9 +361,7 @@ def tweak(payload: dict) -> dict:
             orbit_delta(dx, dy)
             return {"hit": False, "tweak": True, "orbit": True, "moved": bool(dx or dy)}
         if phase in {"END", "CANCEL"}:
-            _tweak_owner = None
-            _tweak_missed = False
-            _tweak_snap_type = "NONE"
+            _reset_tweak()
         return {"hit": False, "tweak": True, "orbit": True, "moved": False}
 
     modal.session.require(owner)
@@ -346,9 +388,7 @@ def tweak(payload: dict) -> dict:
         result = modal.cancel(payload)
     else:
         result = modal.confirm(payload)
-    _tweak_owner = None
-    _tweak_missed = False
-    _tweak_snap_type = "NONE"
+    _reset_tweak()
     return dict(result, tweak=True, moved=moved and phase == "END")
 
 

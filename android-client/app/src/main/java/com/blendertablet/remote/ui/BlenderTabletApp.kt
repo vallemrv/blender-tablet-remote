@@ -111,6 +111,7 @@ import com.blendertablet.remote.model.SnapAction
 import com.blendertablet.remote.model.ToolSession
 import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.TransformSession
+import com.blendertablet.remote.model.TweakMotion
 import com.blendertablet.remote.model.bottomTrayVisible
 
 /**
@@ -288,8 +289,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             knifeActive = toolSession.active && toolSession.tool == EditTool.KNIFE &&
                 state.blender.features.knifeDrag,
             tweakActive = state.activeTool == ActiveTool.TWEAK &&
-                state.blender.mode == BlenderMode.EDIT &&
-                state.blender.selectionMode != SelectionMode.FACE,
+                state.blender.mode == BlenderMode.EDIT,
             longPressEnabled = viewportLongPressEnabled(session.active, toolSession.active),
             // Los marcadores de transformación ya forman parte del fotograma.
             snapCandidate = toolSession.snapCandidate,
@@ -850,11 +850,13 @@ private fun RailContent(
     )
     if (inEdit && state.blender.features.selectionTweak) {
         TweakToolButton(
-            settings = state.tweak,
-            motions = state.blender.features.tweakMotions,
+            settings = if (state.blender.selectionMode == SelectionMode.FACE)
+                state.tweak.copy(motion = TweakMotion.FREE) else state.tweak,
+            motions = if (state.blender.selectionMode == SelectionMode.FACE)
+                listOf(TweakMotion.FREE) else state.blender.features.tweakMotions,
             snapTypes = state.blender.features.tweakSnapTypes,
             selected = state.activeTool == ActiveTool.TWEAK,
-            enabled = state.blender.selectionMode != SelectionMode.FACE,
+            enabled = true,
             vm = vm,
         )
     }

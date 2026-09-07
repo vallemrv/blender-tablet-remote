@@ -178,8 +178,13 @@ private class GestureView(
     var knifeActive: Boolean = false
     var onKnifeDrag: (GesturePhase, Float, Float) -> Unit = { _, _, _ -> }
     var tweakActive: Boolean = false
+        set(value) {
+            if (!value) cancelTweak()
+            field = value
+        }
     var onTweakDrag: (GesturePhase, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> }
     private var tweakDrawing = false
+    private var suppressSingleAfterTweak = false
     var navigationOrbitEnabled: Boolean = false
     var onShape: (ShapeTool, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> }
     /** Puntos del Knife (normalizados) para el overlay. */
@@ -247,6 +252,7 @@ private class GestureView(
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                suppressSingleAfterTweak = false
                 parent?.requestDisallowInterceptTouchEvent(true)
                 lastX = event.x; lastY = event.y
                 startX = event.x; startY = event.y
@@ -316,8 +322,7 @@ private class GestureView(
                     invalidate()
                 }
                 if (tweakDrawing) {
-                    onTweakDrag(GesturePhase.CANCEL, nx(lastX), ny(lastY), 0f, 0f)
-                    tweakDrawing = false
+                    cancelTweak()
                 }
                 if (cancelPickOnNavigation && toolActive) {
                     onToolGesture(GesturePhase.CANCEL, 0f, 0f)
@@ -343,6 +348,8 @@ private class GestureView(
                     invalidate()
                 } else if (tweakDrawing) {
                     handleTweak(event)
+                } else if (suppressSingleAfterTweak) {
+                    // Tras cancelar Tweak, el dedo restante no inicia otra edición.
                 } else if (shapeDrawing) {
                     shapeCurrentX = event.x; shapeCurrentY = event.y
                     invalidate()
@@ -375,7 +382,7 @@ private class GestureView(
                 }
                 if (tweakDrawing) {
                     flushTweak(event)
-                    onTweakDrag(GesturePhase.END, nx(event.x), ny(event.y), 0f, 0f)
+                    onTweakDrag(GesturePhase.END, nx(lastX), ny(lastY), 0f, 0f)
                     tweakDrawing = false
                     parent?.requestDisallowInterceptTouchEvent(false)
                     return true
@@ -384,7 +391,7 @@ private class GestureView(
                 endToolGesture()
                 endNavigationOrbit()
                 endViewGesture()
-                if (!wasNavigationOrbit && !moved && !longPressFired) handleTap(event)
+                if (!suppressSingleAfterTweak && !wasNavigationOrbit && !moved && !longPressFired) handleTap(event)
                 parent?.requestDisallowInterceptTouchEvent(false)
             }
 
@@ -393,8 +400,7 @@ private class GestureView(
                 shapeDrawing = false
                 if (knifeDrawing) onKnifeDrag(GesturePhase.CANCEL, nx(shapeCurrentX), ny(shapeCurrentY))
                 knifeDrawing = false
-                if (tweakDrawing) onTweakDrag(GesturePhase.CANCEL, nx(lastX), ny(lastY), 0f, 0f)
-                tweakDrawing = false
+                cancelTweak()
                 invalidate()
                 cancelGestures()
                 parent?.requestDisallowInterceptTouchEvent(false)
@@ -407,19 +413,33 @@ private class GestureView(
         pendingDx += e.x - lastX
         pendingDy += e.y - lastY
         lastX = e.x; lastY = e.y
-        moved = moved || hypot(e.x - startX, e.y - startY) > systemTouchSlop
+        val slop = if (isStylus(downToolType)) stylusTouchSlop else systemTouchSlop
+        moved = moved || hypot(e.x - startX, e.y - startY) > slop
         if (e.eventTime - lastDispatchAt >= DISPATCH_MS) flushTweak(e)
     }
 
     private fun flushTweak(e: MotionEvent) {
-        if (pendingDx != 0f || pendingDy != 0f) {
+        if (moved && (pendingDx != 0f || pendingDy != 0f)) {
             onTweakDrag(
-                GesturePhase.UPDATE, nx(e.x), ny(e.y),
+                GesturePhase.UPDATE, nx(lastX), ny(lastY),
                 nx(pendingDx), ny(pendingDy),
             )
             pendingDx = 0f; pendingDy = 0f
             lastDispatchAt = e.eventTime
         }
+    }
+
+    private fun cancelTweak() {
+        if (!tweakDrawing) return
+        tweakDrawing = false
+        suppressSingleAfterTweak = true
+        resetPending()
+        onTweakDrag(GesturePhase.CANCEL, nx(lastX), ny(lastY), 0f, 0f)
+    }
+
+    override fun onDetachedFromWindow() {
+        cancelTweak()
+        super.onDetachedFromWindow()
     }
 
     private fun handleSingle(e: MotionEvent) {

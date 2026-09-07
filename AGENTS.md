@@ -28,6 +28,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Los threads de red solo encolan mensajes; `bpy` y `bmesh` se usan exclusivamente
   en el hilo principal mediante `bridge._pump()`.
 - Android tiene una única superficie de entrada en `ui/InputSurface.kt`.
+- Tweak en Edit selecciona y arrastra vértices, aristas o caras con un gesto; conserva
+  el grupo al tocar un elemento seleccionado. Un toque sin arrastre no mueve ni crea
+  undo. Otra herramienta o repetir su botón desactiva Tweak; sus eventos pendientes
+  nunca modifican una transformación posterior. En caras usa movimiento libre.
 - H.264 se decodifica sobre una `Surface`; MJPEG se decodifica a Bitmap.
 - El contrato canónico está en `blender-backend/docs/protocol.md`.
 
