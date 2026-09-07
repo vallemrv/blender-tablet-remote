@@ -563,14 +563,15 @@ private fun ParamStepper(
     unitScaleLength: Double,
     onCommit: (Double) -> Unit,
 ) {
-    var text by remember { mutableStateOf("") }
+    // null muestra el valor remoto; "" es un borrado intencional durante la edición.
+    var text by remember(spec.key) { mutableStateOf<String?>(null) }
     val formatted = format(value, spec.isInt)
 
     fun commit() {
-        val parsed = ValueParser.parse(text, spec.mode) ?: return
+        val parsed = ValueParser.parse(text ?: return, spec.mode) ?: return
         val wire = if (spec.mode == TransformMode.MOVE) parsed / unitScaleLength else parsed
         onCommit(clampParam(wire, spec.isInt, spec.min, spec.max))
-        text = ""
+        text = null
     }
 
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -579,7 +580,7 @@ private fun ParamStepper(
             onCommit(stepParam(value, spec.step, -1, spec.isInt, spec.min, spec.max))
         }
         CompactNumericField(
-            value = if (text.isEmpty()) formatted else text,
+            value = text ?: formatted,
             onValueChange = { text = it },
             onDone = { commit() },
             modifier = Modifier.width(64.dp),
