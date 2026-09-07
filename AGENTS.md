@@ -79,6 +79,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Mover sin snap sigue al dedo continuamente; con Incremento avanza en saltos táctiles
   perceptibles y no reutiliza la misma sensibilidad del movimiento libre.
 - Un preset de escala de trabajo nunca reescala geometría ni modifica `scale_length`.
+- Al crear primitivas, `primitive_size` expresa metros y se divide por el
+  `scale_length` vigente antes de llamar a Blender. El cubo de Pequeña mide 10 mm,
+  también en archivos donde una unidad Blender equivale a un milímetro.
 - Al abrir una escena, el preset mostrado se deduce de su `length_unit`; nunca se
   anuncia Mediana por defecto si el `.blend` está en milímetros o metros.
 - La cámara remota no escribe en `rv3d`.

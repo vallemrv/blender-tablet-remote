@@ -221,7 +221,10 @@ def _sized_kwargs(op, kwargs: dict) -> dict:
     """
     from .units import current_scale
 
-    size = float(current_scale().get("primitive_size") or 0.0)
+    scale = current_scale()
+    # El preset expresa metros físicos; los operadores reciben unidades Blender.
+    # En un archivo con 1 BU = 1 mm, 10 mm son 10 BU, no 0.01 BU.
+    size = float(scale.get("primitive_size") or 0.0) / scale["scale_length"]
     if size <= 0.0:
         return kwargs
     try:

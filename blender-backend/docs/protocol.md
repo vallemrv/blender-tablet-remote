@@ -218,6 +218,9 @@ el recorrido en saltos táctiles deliberados: una pantalla completa recorre 40 p
 de modo que un incremento de 1 mm tenga una zona perceptible antes del siguiente salto.
 
 `object.add` usa `primitive_size` para que las primitivas nazcan a la escala elegida.
+Ese tamaño está en metros físicos y se convierte a unidades Blender dividiéndolo
+por el `scale_length` vigente. El cubo de Pequeña mide 10 mm, el de Mediana 50 cm y
+el de Grande 2 m, independientemente de la escala interna del archivo.
 Cada operador de Blender nombra su tamaño distinto (`size`, `radius`, los dos radios del
 toro), así que se consulta el RNA; un tamaño explícito en el payload siempre gana.
 
