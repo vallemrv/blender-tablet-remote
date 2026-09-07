@@ -1,0 +1,209 @@
+{
+  "capability": {
+    "version": 1,
+    "planes": [
+      "XY",
+      "XZ",
+      "YZ"
+    ],
+    "entities": [
+      "LINE",
+      "RECTANGLE",
+      "CIRCLE"
+    ],
+    "features": [
+      "EXTRUDE"
+    ],
+    "length_unit": "METERS"
+  },
+  "commands": [
+    {
+      "command": "mode.set",
+      "payload": {
+        "mode": "CAD"
+      }
+    },
+    {
+      "command": "cad.state",
+      "payload": {}
+    },
+    {
+      "command": "cad.sketch.create",
+      "payload": {
+        "plane": "XY"
+      }
+    },
+    {
+      "command": "cad.sketch.activate",
+      "payload": {
+        "sketch_id": "sketch_fixture"
+      }
+    },
+    {
+      "command": "cad.sketch.finish",
+      "payload": {}
+    },
+    {
+      "command": "cad.entity.begin",
+      "payload": {
+        "type": "RECTANGLE",
+        "u": 0.3,
+        "v": 0.3
+      }
+    },
+    {
+      "command": "cad.entity.update",
+      "payload": {
+        "u": 0.6,
+        "v": 0.6
+      }
+    },
+    {
+      "command": "cad.session.confirm",
+      "payload": {}
+    },
+    {
+      "command": "cad.session.cancel",
+      "payload": {}
+    },
+    {
+      "command": "cad.entity.set",
+      "payload": {
+        "entity_id": "entity_fixture",
+        "values": {
+          "width": 0.08,
+          "height": 0.045
+        }
+      }
+    },
+    {
+      "command": "cad.entity.delete",
+      "payload": {
+        "entity_id": "entity_fixture"
+      }
+    },
+    {
+      "command": "cad.select",
+      "payload": {
+        "kind": "PROFILE",
+        "id": "profile_entity_fixture"
+      }
+    },
+    {
+      "command": "cad.extrude.begin",
+      "payload": {
+        "profile_id": "profile_entity_fixture",
+        "depth": 0.02
+      }
+    },
+    {
+      "command": "cad.extrude.update",
+      "payload": {
+        "depth": 0.03
+      }
+    },
+    {
+      "command": "cad.feature.set",
+      "payload": {
+        "feature_id": "feature_fixture",
+        "enabled": true,
+        "depth": 0.02
+      }
+    },
+    {
+      "command": "cad.feature.delete",
+      "payload": {
+        "feature_id": "feature_fixture"
+      }
+    },
+    {
+      "command": "cad.convert",
+      "payload": {
+        "feature_id": "feature_fixture"
+      }
+    }
+  ],
+  "state": {
+    "version": 1,
+    "workspace": true,
+    "document": {
+      "version": 1,
+      "revision": 3,
+      "id": "doc_fixture",
+      "sketches": [
+        {
+          "id": "sketch_fixture",
+          "name": "Sketch 1",
+          "plane": "XY",
+          "entities": [
+            {
+              "id": "entity_fixture",
+              "type": "RECTANGLE",
+              "x": 0,
+              "y": 0,
+              "width": 0.08,
+              "height": 0.045
+            }
+          ],
+          "profiles": [
+            {
+              "id": "profile_entity_fixture",
+              "entity_id": "entity_fixture",
+              "label": "Rectángulo"
+            }
+          ]
+        }
+      ],
+      "features": [
+        {
+          "id": "feature_fixture",
+          "name": "Extrusión 1",
+          "type": "EXTRUDE",
+          "sketch_id": "sketch_fixture",
+          "profile_id": "profile_entity_fixture",
+          "depth": 0.02,
+          "enabled": true
+        }
+      ]
+    },
+    "active_sketch_id": null,
+    "selection": {
+      "kind": "FEATURE",
+      "id": "feature_fixture"
+    },
+    "session": {
+      "active": false,
+      "id": null,
+      "operation": null,
+      "depth": null,
+      "can_confirm": false
+    },
+    "overlay": [
+      {
+        "id": "entity_fixture",
+        "points": [
+          [
+            0.3,
+            0.3
+          ],
+          [
+            0.6,
+            0.3
+          ],
+          [
+            0.6,
+            0.6
+          ],
+          [
+            0.3,
+            0.6
+          ]
+        ],
+        "closed": true,
+        "selected": false
+      }
+    ],
+    "error": null,
+    "isolated": true
+  }
+}

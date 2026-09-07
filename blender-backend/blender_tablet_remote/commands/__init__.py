@@ -28,6 +28,7 @@ def command(name: str, mutating: bool = False):
 def load_all() -> None:
     """Importa los módulos de comandos (rellena REGISTRY por efecto secundario)."""
     from . import (  # noqa: F401
+        cad,
         file,
         history,
         mesh,

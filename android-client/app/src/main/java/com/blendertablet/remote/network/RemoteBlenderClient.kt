@@ -37,6 +37,8 @@ data class StreamEndpoint(
 data class StreamAlternative(val format: String, val path: String)
 
 interface RemoteBlenderClient {
+    fun cadCommand(name: String, payload: Map<String, Any?> = emptyMap())
+
     val connection: StateFlow<ConnectionStatus>
     val state: StateFlow<BlenderState>
     val errors: StateFlow<String?>

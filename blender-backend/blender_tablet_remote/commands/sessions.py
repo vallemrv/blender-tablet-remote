@@ -1,4 +1,4 @@
-"""Coordinación perezosa de las dos sesiones globales.
+"""Coordinación perezosa de las sesiones globales de transformación, tool y CAD.
 
 Los imports viven dentro de cada función para no crear el ciclo
 ``modal -> tools -> mesh -> ...`` durante el registro de comandos.
@@ -6,6 +6,7 @@ Los imports viven dentro de cada función para no crear el ciclo
 
 
 def cancel_transform(*, restore=True):
+    cancel_cad(restore=restore)
     from .modal import session
     if not session.active:
         return
@@ -16,6 +17,7 @@ def cancel_transform(*, restore=True):
 
 
 def cancel_tool(*, restore=True):
+    cancel_cad(restore=restore)
     from .tools import tool_session
     if tool_session.active:
         if restore:
@@ -28,3 +30,9 @@ def cancel_tool(*, restore=True):
 def cancel_all(*, restore=True):
     cancel_transform(restore=restore)
     cancel_tool(restore=restore)
+    cancel_cad(restore=restore)
+
+
+def cancel_cad(*, restore=True):
+    from ..cad.runtime import runtime
+    runtime.cancel(restore=restore)

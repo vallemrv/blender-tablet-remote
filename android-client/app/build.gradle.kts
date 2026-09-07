@@ -17,6 +17,7 @@ android {
     }
 
     buildFeatures { compose = true }
+    sourceSets.getByName("test").resources.srcDir("${rootDir}/blender-backend/tests/fixtures")
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -45,5 +46,7 @@ dependencies {
     // 4.12 usa la implementación WebSocket madura anterior.
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20231013")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

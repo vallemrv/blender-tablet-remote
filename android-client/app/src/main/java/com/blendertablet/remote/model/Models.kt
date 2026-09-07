@@ -80,6 +80,7 @@ data class ServerFeatures(
     val tweakSnapTypes: List<SnapType> = emptyList(),
     /** `scene.scale`: presets de escala de trabajo. Sin ellos no se ofrece el menú. */
     val sceneScale: Boolean = false,
+    val cad: CadCapabilities = CadCapabilities(),
 )
 
 data class EditSettings(
@@ -409,7 +410,10 @@ data class RemoteFileEntry(
     val name: String,
     val path: String,
     val type: RemoteFileType,
-)
+) {
+    /** Symlinks can share the server's canonical path/token but remain distinct rows. */
+    val rowKey: String get() = "${name.length}:$name$path"
+}
 
 data class RemoteLocation(
     val id: String,
@@ -439,6 +443,7 @@ data class Transform(
 
 data class BlenderState(
     val mode: BlenderMode = BlenderMode.OBJECT,
+    val cad: CadState = CadState(),
     val activeObject: String? = null,
     val selectedObjects: List<String> = emptyList(),
     val selectionMode: SelectionMode = SelectionMode.VERTEX,
@@ -515,6 +520,7 @@ data class AppUiState(
     val retryAttempt: Int = 0,
     val blender: BlenderState = BlenderState(),
     val activeTool: ActiveTool = ActiveTool.SELECT,
+    val cadTool: String? = null,
     val controlsVisible: Boolean = true,
     val debugVisible: Boolean = false,
     val error: String? = null,

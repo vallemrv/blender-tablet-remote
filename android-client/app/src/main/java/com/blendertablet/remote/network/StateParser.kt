@@ -76,6 +76,7 @@ object StateParser {
     fun state(json: JSONObject): BlenderState {
         val selected = json.optJSONArray("selected_objects") ?: JSONArray()
         return BlenderState(
+            cad = CadParser.state(json.optJSONObject("cad")),
             mode = if (json.optString("mode").startsWith("EDIT")) BlenderMode.EDIT else BlenderMode.OBJECT,
             activeObject = json.optString("active_object").takeIf { it.isNotBlank() && it != "null" },
             selectedObjects = List(selected.length()) { selected.optString(it) },
@@ -161,6 +162,7 @@ object StateParser {
             tweakMotions(selection?.optJSONObject("tweak")),
             tweakSnapTypes(selection?.optJSONObject("tweak")),
             f.optJSONObject("scene_scale") != null,
+            CadParser.capabilities(f.optJSONObject("cad")),
         )
     }
 

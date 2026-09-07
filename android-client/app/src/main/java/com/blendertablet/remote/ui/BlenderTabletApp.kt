@@ -174,8 +174,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     // Acción pendiente de confirmar porque descarta cambios sin guardar.
     var pendingDiscard by remember { mutableStateOf<PendingDiscard?>(null) }
     var modifiersOpen by remember { mutableStateOf(false) }
-    LaunchedEffect(state.blender.activeObject, state.blender.mode, state.blender.features.modifiers) {
-        if (!state.blender.features.modifiers || state.blender.mode != BlenderMode.OBJECT || state.blender.activeObjectType != "MESH") modifiersOpen = false
+    LaunchedEffect(state.blender.activeObject, state.blender.mode, state.blender.features.modifiers, state.blender.cad.workspace) {
+        if (state.blender.cad.workspace || !state.blender.features.modifiers || state.blender.mode != BlenderMode.OBJECT || state.blender.activeObjectType != "MESH") modifiersOpen = false
     }
 
     // El toast de error se auto-descarta: un aviso que no caduca es ruido permanente.
@@ -234,7 +234,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     // Hay una bandeja horizontal inferior ocupando el borde de abajo: la de
     // transformación, la de herramienta paramétrica o el aviso de Loop Cut esperando
     // toque. Mientras exista, el teclado de vistas se eleva para no solaparse.
-    val trayPresent = bottomTrayVisible(
+    val trayPresent = state.blender.cad.workspace || bottomTrayVisible(
         session.active, toolSession.active, state.activeTool, state.loopCutAwaitingTap,
         toolSessionArmed = toolSession.armed,
     )
@@ -264,6 +264,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             onToolPointer = vm::toolPointer,
             onKnifeDrag = vm::knifeDrag,
             onTweakDrag = vm::tweakGesture,
+            onCadGesture = vm::cadGesture,
             onViewGestureLive = { g, phase, dx, dy, factor ->
                 vm.viewGesture(g, phase, dx, dy, factor)
                 if (phase != GesturePhase.BEGIN && phase != GesturePhase.UPDATE) vm.requestState()
@@ -283,18 +284,20 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             h264Active = h264Active,
             h264Size = h264Size,
             input = viewportInput,
-            shapeTool = state.shapeTool,
+            cadDrawingEnabled = state.connection == ConnectionStatus.CONNECTED && state.blender.cad.workspace && state.blender.cad.activeSketchId != null && state.cadTool != null,
+            cadOverlay = if (state.blender.cad.workspace) state.blender.cad.overlay else emptyList(),
+            shapeTool = if (state.blender.cad.workspace) ShapeTool.NONE else state.shapeTool,
             fixedCircleRadius = state.circleRadius,
             knifePoints = knifeScreenPoints,
-            knifeActive = toolSession.active && toolSession.tool == EditTool.KNIFE &&
+            knifeActive = !state.blender.cad.workspace && toolSession.active && toolSession.tool == EditTool.KNIFE &&
                 state.blender.features.knifeDrag,
-            tweakActive = state.activeTool == ActiveTool.TWEAK &&
+            tweakActive = !state.blender.cad.workspace && state.activeTool == ActiveTool.TWEAK &&
                 state.blender.mode == BlenderMode.EDIT,
-            longPressEnabled = viewportLongPressEnabled(session.active, toolSession.active),
+            longPressEnabled = !state.blender.cad.workspace && viewportLongPressEnabled(session.active, toolSession.active),
             // Los marcadores de transformación ya forman parte del fotograma.
-            snapCandidate = toolSession.snapCandidate,
+            snapCandidate = if (state.blender.cad.workspace) null else toolSession.snapCandidate,
             cancelPickOnNavigation = toolSession.input == "FACE_PAIR",
-            proportionalCircle = session.proportionalCircle,
+            proportionalCircle = if (state.blender.cad.workspace) null else session.proportionalCircle,
             navigationOrbitEnabled = navigationOrbitVisible(
                 session.active,
                 toolSession.active,
@@ -351,6 +354,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     modifier = Modifier.align(Alignment.TopStart).padding(Metrics.EdgeMargin),
                 )
 
+                if (!state.blender.cad.workspace) {
                 val modifiersAvailable = state.blender.features.modifiers &&
                     state.blender.mode == BlenderMode.OBJECT && state.blender.activeObjectType == "MESH"
 
@@ -465,10 +469,13 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                         .padding(Metrics.EdgeMargin),
                 )
 
+                }
+                if (state.blender.cad.workspace) CadWorkspace(state, vm)
+
                 ViewFooter(
                     projection = state.blender.view.perspective,
                     activeAxisView = state.blender.view.axisView,
-                    inEdit = state.blender.mode == BlenderMode.EDIT,
+                    inEdit = !state.blender.cad.workspace && state.blender.mode == BlenderMode.EDIT,
                     selectionMode = state.blender.selectionMode,
                     showEditShortcuts = state.blender.features.editCatalog.available,
                     editToolbarAvailable = state.blender.features.editToolbar.available,
@@ -661,6 +668,7 @@ class ViewportInput(
     val onToolPointer: (Float, Float) -> Unit,
     val onKnifeDrag: (GesturePhase, Float, Float) -> Unit,
     val onTweakDrag: (GesturePhase, Float, Float, Float, Float) -> Unit,
+    val onCadGesture: (GesturePhase, Float, Float) -> Unit,
     /** Con vídeo activo: al soltar el gesto se refresca el estado. */
     val onViewGestureLive: (Gesture, GesturePhase, Float, Float, Float) -> Unit,
     /** Sin vídeo: solo navega, no hay nada que refrescar aún. */
@@ -688,6 +696,8 @@ private fun ViewportLayer(
     input: ViewportInput,
     shapeTool: ShapeTool,
     fixedCircleRadius: Float?,
+    cadDrawingEnabled: Boolean,
+    cadOverlay: List<com.blendertablet.remote.model.CadOverlay>,
     knifeActive: Boolean,
     tweakActive: Boolean,
     longPressEnabled: Boolean,
@@ -719,6 +729,9 @@ private fun ViewportLayer(
                     onViewGesture = input.onViewGestureLive,
                     onTap = input.onTap,
                     onDoubleTap = input.onDoubleTap,
+                    cadDrawingEnabled = cadDrawingEnabled,
+                    onCadGesture = input.onCadGesture,
+                    cadOverlay = cadOverlay,
                     knifeActive = knifeActive,
                     onKnifeDrag = input.onKnifeDrag,
                     tweakActive = tweakActive,
@@ -747,6 +760,9 @@ private fun ViewportLayer(
                 onViewGesture = input.onViewGesturePlain,
                 onTap = input.onTap,
                 onDoubleTap = input.onDoubleTap,
+                cadDrawingEnabled = cadDrawingEnabled,
+                onCadGesture = input.onCadGesture,
+                cadOverlay = cadOverlay,
                 knifeActive = knifeActive,
                 onKnifeDrag = input.onKnifeDrag,
                 tweakActive = tweakActive,
@@ -789,6 +805,9 @@ private fun ViewportLayer(
                 onViewGesture = input.onViewGestureLive,
                 onTap = input.onTap,
                 onDoubleTap = input.onDoubleTap,
+                cadDrawingEnabled = cadDrawingEnabled,
+                onCadGesture = input.onCadGesture,
+                cadOverlay = cadOverlay,
                 knifeActive = knifeActive,
                 onKnifeDrag = input.onKnifeDrag,
                 tweakActive = tweakActive,

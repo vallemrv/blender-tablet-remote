@@ -64,7 +64,7 @@ fun FileBrowserDialog(
                 }
                 Text(files.path.ifBlank { "Cargando…" }, color = Ink.Faint, fontSize = 11.sp)
                 LazyColumn(Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 360.dp)) {
-                    items(files.entries, key = { it.path }) { entry ->
+                    items(files.entries, key = { it.rowKey }) { entry ->
                         FileRow(entry) {
                             if (entry.type == RemoteFileType.DIRECTORY) onBrowse(entry.path)
                             else if (mode == FileBrowserMode.OPEN) onOpen(entry.path)

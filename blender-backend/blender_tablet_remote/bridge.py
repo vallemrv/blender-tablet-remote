@@ -91,6 +91,8 @@ def start(
         raise RuntimeError("Server already running")
 
     commands.load_all()
+    from .cad.lifecycle import register_handlers
+    register_handlers()
     log.set_level(2 if verbose else 1)
 
     _token = token or ""
@@ -148,6 +150,10 @@ def stop() -> None:
     if _server is not None:
         _server.stop()
         _server = None
+    from .cad.runtime import runtime
+    from .cad.lifecycle import unregister_handlers
+    runtime.leave()
+    unregister_handlers()
     _gestures.reset()
     while not _inbox.empty():
         try:
@@ -176,6 +182,8 @@ def reset_session() -> None:
     # No restaurar sobre el archivo recién cargado; solo liberar el backup viejo.
     tool_session.close()
     _last_modal_status = None
+    from .cad.runtime import runtime
+    runtime.reset()
     _watcher.reset()
     _gestures.reset()
     _camera.reset()
@@ -373,6 +381,7 @@ def _broadcast_events() -> None:
     try:
         _broadcast_modal()
         _broadcast_alignment()
+        _broadcast_cad()
     except Exception:  # noqa: BLE001 - estado modal inválido no mata el pump
         log.error("modal broadcast failed:\n%s", traceback.format_exc())
 
@@ -392,6 +401,18 @@ def _broadcast_modal() -> None:
         return
     _last_modal_status = status
     _server.broadcast({"type": "event", "event": "transform.session", "payload": status})
+
+
+_last_cad_status = None
+
+
+def _broadcast_cad():
+    global _last_cad_status
+    from .cad.runtime import runtime
+    status = runtime.status()
+    if status != _last_cad_status:
+        _last_cad_status = status
+        _server.broadcast({"type": "event", "event": "cad.state", "payload": status})
 
 
 def _broadcast_alignment() -> None:
@@ -418,6 +439,11 @@ def _handle(client: WSClient, msg: dict) -> None:
         session.owner_disconnected(msg["client_id"])
         from .commands.tools import tool_session
         tool_session.owner_disconnected(msg["client_id"])
+        from .cad.runtime import runtime
+        if runtime.session and runtime.session["owner"] == msg["client_id"]:
+            runtime.cancel()
+        if runtime.workspace_owner == msg["client_id"]:
+            runtime.leave()
         return
     if kind == "_send_state":
         client.send_json({"type": "event", "event": "scene.changed", "payload": state.snapshot()})
@@ -500,6 +526,16 @@ def _handle_command(client: WSClient, msg: dict) -> None:
 
     log.info("command %s", name)
     try:
+        if name.startswith("mesh.") and name not in {"mesh.info", "mesh.loop_probe"}:
+            from .cad.runtime import FEATURE_KEY
+            obj = bpy.context.view_layer.objects.active
+            if obj and obj.get(FEATURE_KEY):
+                raise CommandError("Convierte la pieza CAD a malla antes de editar su topología", code="cad_mesh_protected")
+        # CAD owns an independent preview. Existing tools retain their own paths;
+        # only the coordinator closes CAD before another geometry intention.
+        if name in {"transform.begin", "tool.begin"}:
+            from .commands.sessions import cancel_cad
+            cancel_cad()
         result = func(payload)
         from .commands import history as command_history
         command_history.remember(name, payload)

@@ -11,10 +11,36 @@ from . import command
 VALID_MODES = {
     "OBJECT",
     "EDIT",
+    "CAD",
 }
 
 
-def _set_mode(target: str) -> dict:
+def _set_mode(target: str, owner=None) -> dict:
+    from ..cad.runtime import runtime, FEATURE_KEY
+    from .sessions import cancel_all, cancel_cad
+    cancel_cad()
+    if target == "CAD":
+        doc = runtime.doc()
+        entering = not runtime.workspace
+        cancel_all()
+        obj = bpy.context.view_layer.objects.active
+        if obj and obj.mode != "OBJECT":
+            with view3d_override():
+                bpy.ops.object.mode_set(mode="OBJECT")
+        runtime.workspace = True
+        runtime.workspace_owner = owner
+        runtime.isolate()
+        if entering and doc['sketches']:
+            sketch = next((s for s in doc['sketches'] if s['id'] == runtime.active_sketch_id),
+                          doc['sketches'][0])
+            runtime.focus(sketch)
+        return {"mode": "CAD", "cad": runtime.status()}
+    obj = bpy.context.view_layer.objects.active
+    if target == "EDIT" and obj and obj.get(FEATURE_KEY):
+        raise CommandError("Esta pieza es paramétrica: edita su sketch o conviértela a malla", code="cad_mesh_protected")
+    runtime.leave()
+    if target == "OBJECT" and obj is None:
+        return {"mode": "OBJECT"}
     obj = active_object()
     if obj.mode == target:
         return {"mode": target}
@@ -43,7 +69,7 @@ def mode_set(payload: dict) -> dict:
     target = str(payload.get("mode", "")).upper()
     if target not in VALID_MODES:
         raise BadPayload(f"'mode' must be one of {', '.join(sorted(VALID_MODES))}")
-    return _set_mode(target)
+    return _set_mode(target, payload.get("_client_id"))
 
 
 @command("mode.toggle", mutating=False)

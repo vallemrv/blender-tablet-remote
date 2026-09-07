@@ -3,7 +3,7 @@
 PROTOCOL_VERSION = "2.0"
 
 ENUMS = {
-    "mode": ["OBJECT", "EDIT"],
+    "mode": ["OBJECT", "EDIT", "CAD"],
     "selection_mode": ["VERTEX", "EDGE", "FACE"],
     "tool": ["SELECT", "MOVE", "ROTATE", "SCALE", "EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE", "BISECT"],
     "modifier_type": ["SUBSURF", "ARRAY", "BEVEL", "SOLIDIFY", "BOOLEAN", "MIRROR"],
@@ -392,6 +392,10 @@ EDIT_CATALOG = {
 }
 
 FEATURES = {
+    "cad": {"version": 1, "planes": ["XY", "XZ", "YZ"],
+            "entities": ["LINE", "RECTANGLE", "CIRCLE"], "features": ["EXTRUDE"],
+            "length_unit": "METERS", "kernel": "BLENDER_NATIVE_MESH",
+            "document_version": 1, "owned_sessions": True, "persistent": True},
     "history": {"version": 1, "repeat_last": True},
     "context": {"version": 1, "events": ["context.changed"], "selection_counts": True},
     "transform_modal": {"version": 3, "modes": ["OBJECT", "EDIT"],

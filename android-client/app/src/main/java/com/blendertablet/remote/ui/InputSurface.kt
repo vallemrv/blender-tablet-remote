@@ -48,6 +48,9 @@ fun InputSurface(
     onViewGesture: (Gesture, GesturePhase, Float, Float, Float) -> Unit,
     onTap: (Float, Float, Boolean) -> Unit,
     onDoubleTap: () -> Unit,
+    cadDrawingEnabled: Boolean = false,
+    onCadGesture: (GesturePhase, Float, Float) -> Unit = { _, _, _ -> },
+    cadOverlay: List<com.blendertablet.remote.model.CadOverlay> = emptyList(),
     knifeActive: Boolean = false,
     onKnifeDrag: (GesturePhase, Float, Float) -> Unit = { _, _, _ -> },
     tweakActive: Boolean = false,
@@ -77,6 +80,9 @@ fun InputSurface(
             view.onLongPress = onLongPress
             view.shapeTool = shapeTool
             view.fixedCircleRadius = fixedCircleRadius
+            view.cadDrawingEnabled = cadDrawingEnabled
+            view.onCadGesture = onCadGesture
+            view.cadOverlay = cadOverlay
             view.knifeActive = knifeActive
             view.onKnifeDrag = onKnifeDrag
             view.tweakActive = tweakActive
@@ -188,6 +194,22 @@ private class GestureView(
     var navigationOrbitEnabled: Boolean = false
     var onShape: (ShapeTool, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> }
     /** Puntos del Knife (normalizados) para el overlay. */
+    var cadDrawingEnabled = false
+        set(value) {
+            if (field && !value && cadDrawing) {
+                onCadGesture(GesturePhase.CANCEL, nx(shapeCurrentX), ny(shapeCurrentY))
+                cadDrawing = false
+                suppressSingleAfterTweak = true
+            }
+            field = value
+        }
+    var onCadGesture: (GesturePhase, Float, Float) -> Unit = { _, _, _ -> }
+    var cadOverlay: List<com.blendertablet.remote.model.CadOverlay> = emptyList()
+    private var cadDrawing = false
+    private val cadPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        style = android.graphics.Paint.Style.STROKE
+        strokeWidth = 2.5f * resources.displayMetrics.density
+    }
     var knifePoints: List<List<Pair<Float, Float>>> = emptyList()
     var snapCandidate: SnapCandidate? = null
     var cancelPickOnNavigation: Boolean = false
@@ -267,6 +289,13 @@ private class GestureView(
                     invalidate()
                     return true
                 }
+                if (cadDrawingEnabled) {
+                    cadDrawing = true
+                    shapeCurrentX = event.x; shapeCurrentY = event.y
+                    lastDispatchAt = event.eventTime
+                    onCadGesture(GesturePhase.BEGIN, nx(event.x), ny(event.y))
+                    return true
+                }
                 if (knifeActive) {
                     knifeDrawing = true
                     shapeStartX = event.x; shapeStartY = event.y
@@ -312,6 +341,11 @@ private class GestureView(
             MotionEvent.ACTION_POINTER_DOWN -> if (event.pointerCount >= 2) {
                 removeCallbacks(longPressRunnable)
                 // Un segundo dedo significa navegar: se suelta la herramienta y la forma.
+                if (cadDrawing) {
+                    onCadGesture(GesturePhase.CANCEL, nx(shapeCurrentX), ny(shapeCurrentY))
+                    cadDrawing = false
+                    suppressSingleAfterTweak = true
+                }
                 if (shapeDrawing) {
                     shapeDrawing = false
                     invalidate()
@@ -339,7 +373,13 @@ private class GestureView(
             // tres dedos para la captura de pantalla y nunca llega completo.
             MotionEvent.ACTION_MOVE ->
                 if (event.pointerCount >= 2) handlePair(event)
-                else if (knifeDrawing) {
+                else if (cadDrawing) {
+                    shapeCurrentX = event.x; shapeCurrentY = event.y
+                    if (event.eventTime - lastDispatchAt >= KNIFE_DISPATCH_MS) {
+                        onCadGesture(GesturePhase.UPDATE, nx(shapeCurrentX), ny(shapeCurrentY))
+                        lastDispatchAt = event.eventTime
+                    }
+                } else if (knifeDrawing) {
                     shapeCurrentX = event.x; shapeCurrentY = event.y
                     if (event.eventTime - lastDispatchAt >= KNIFE_DISPATCH_MS) {
                         onKnifeDrag(GesturePhase.UPDATE, nx(event.x), ny(event.y))
@@ -364,6 +404,14 @@ private class GestureView(
 
             MotionEvent.ACTION_UP -> {
                 removeCallbacks(longPressRunnable)
+                if (cadDrawing) {
+                    // Flush the last MOVE sample; never raycast the pressure-release coordinates.
+                    onCadGesture(GesturePhase.UPDATE, nx(shapeCurrentX), ny(shapeCurrentY))
+                    onCadGesture(GesturePhase.END, nx(shapeCurrentX), ny(shapeCurrentY))
+                    cadDrawing = false
+                    parent?.requestDisallowInterceptTouchEvent(false)
+                    return true
+                }
                 if (shapeDrawing) {
                     shapeDrawing = false
                     finishShape()
@@ -397,6 +445,8 @@ private class GestureView(
 
             MotionEvent.ACTION_CANCEL -> {
                 removeCallbacks(longPressRunnable)
+                if (cadDrawing) onCadGesture(GesturePhase.CANCEL, nx(shapeCurrentX), ny(shapeCurrentY))
+                cadDrawing = false
                 shapeDrawing = false
                 if (knifeDrawing) onKnifeDrag(GesturePhase.CANCEL, nx(shapeCurrentX), ny(shapeCurrentY))
                 knifeDrawing = false
@@ -672,6 +722,15 @@ private class GestureView(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        cadOverlay.forEach { stroke ->
+            cadPaint.color = if (stroke.selected) 0xffffb347.toInt() else 0xff57dfe6.toInt()
+            val path = android.graphics.Path()
+            stroke.points.forEachIndexed { index, (u, v) ->
+                if (index == 0) path.moveTo(u * width, v * height) else path.lineTo(u * width, v * height)
+            }
+            if (stroke.closed) path.close()
+            canvas.drawPath(path, cadPaint)
+        }
         if (navigationOrbitEnabled) drawNavigationOrbit(canvas)
         if (shapeDrawing) {
             if (shapeTool == ShapeTool.BOX) {

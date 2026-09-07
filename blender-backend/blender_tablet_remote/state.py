@@ -32,6 +32,9 @@ def selection_mode() -> str:
 
 
 def current_mode() -> str:
+    from .cad.runtime import runtime
+    if runtime.workspace:
+        return "CAD"
     obj = bpy.context.view_layer.objects.active
     return obj.mode if obj is not None else "OBJECT"
 
@@ -54,6 +57,8 @@ def snapshot(include_view: bool = True) -> dict:
     from .commands.modal import edit_settings_state
     state["edit_settings"] = edit_settings_state()
     state.update(context_snapshot())
+    from .cad.runtime import runtime
+    state["cad"] = runtime.status()
 
     if active is not None:
         state["active"] = object_info(active)

@@ -4,7 +4,8 @@
 
 La tablet Android es una interfaz táctil para Blender, no un escritorio remoto.
 Blender conserva el motor 3D; Android muestra una cámara remota y envía intención
-adaptada a dedo y stylus. El alcance actual es Object Mode y Edit Mode.
+adaptada a dedo y stylus. El alcance actual es Object Mode, Edit Mode y el primer
+núcleo del workspace CAD paramétrico descrito en `docs/cad-workspace.md`.
 
 ## Estructura
 
@@ -50,6 +51,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Alinear caras en Object: contacto entre caras, orientación de caras y copia de
   rotación del objeto destino, con preview reversible.
 - H.264 preferido con fallback MJPEG.
+- CAD v1: planos XY/XZ/YZ, líneas abiertas, rectángulos y círculos, parámetros de
+  ancho/alto/diámetro y extrusión asociativa con huecos simples. Documento JSON
+  persistente en `.blend`, árbol, preview reversible y conversión explícita a malla.
 
 ## Invariantes técnicos
 
@@ -61,6 +65,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Las sesiones `transform.*` y `tool.*` son mutuamente excluyentes.
 - Undo, redo y borrados cierran primero cualquier sesión activa.
 - Las referencias RNA inválidas nunca deben detener el pump ni el broadcast.
+- El explorador identifica cada fila por nombre y ruta: varios enlaces simbólicos
+  pueden compartir un destino canónico sin ser la misma entrada de la lista.
 - Knife acumula puntos interiores y divide una cara una sola vez en dos n-gons. No se
   sustituye por triangulación punto a punto.
 - El snap táctil filtra primero por geometría visible y después clasifica el candidato.
@@ -70,6 +76,18 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Al abrir una escena, el preset mostrado se deduce de su `length_unit`; nunca se
   anuncia Mediana por defecto si el `.blend` está en milímetros o metros.
 - La cámara remota no escribe en `rv3d`.
+- CAD es un workspace; Blender permanece en Object. Sus longitudes son metros y
+  se convierten a unidades Blender al materializar. IDs y revisión pertenecen al
+  documento; la malla evaluada no es la fuente ni admite Edit sin conversión explícita.
+- Las previews CAD también son excluyentes con `transform.*` y `tool.*`; confirmación
+  crea un undo, cancelación/desconexión restaura y guardar descarta la preview.
+- CAD usa la misma entrada y vídeo. El overlay de sketches se proyecta en backend
+  y se dibuja en el rectángulo del vídeo en Android; no persiste píxeles como geometría.
+- La vista CAD aísla temporalmente sus resultados y restaura la visibilidad previa
+  al salir. Los `.blend` y estados de undo conservan la visibilidad de la escena.
+- El kernel CAD v1 es nativo y limitado a perfiles rectangulares/circulares simples.
+  No anuncia BREP, STEP, solver general ni operaciones avanzadas. La evaluación de
+  OCP/CadQuery, build123d y FreeCAD vive en `docs/cad-kernel-evaluation.md`.
 
 ## Sistema de trabajo
 
@@ -103,7 +121,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Sus controles se describen en el estado de herramienta y se dibujan en la bandeja
   común. Las caras fuente/destino y el candidato se dibujan en GPUOffScreen. Navegar
   con dos dedos cancela el sondeo temporal, sin fijar otra cara.
-- Debajo del ojo hay un selector horizontal Object/Edit/Sculpt. Sculpt y el menú superior
+- Debajo del ojo hay un selector horizontal Object/Edit/CAD/Sculpt; CAD solo aparece
+  si el backend lo anuncia. Sculpt y el menú superior
   Layouts son por ahora únicamente presencia visual y no envían comandos.
 - En Edit, Vértices/Aristas/Caras se sitúa a la izquierda del selector de modo, en
   la misma fila bajo el ojo; no aparece en la barra superior.

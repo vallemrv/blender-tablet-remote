@@ -78,6 +78,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val h264Active: StateFlow<Boolean> = _h264Active
     private val h264Stream = H264ViewportStream(viewModelScope) { fallbackToMjpeg() }
     val h264Size = h264Stream.size
+    private var cadStroke = false
     private var loopCutArmed = false
     private var facePickRole: String? = null
     private var lastFacePointer: Pair<Float, Float>? = null
@@ -132,6 +133,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
+        viewModelScope.launch {
+            combine(client.connection, client.state) { connection, state ->
+                connection == ConnectionStatus.CONNECTED && state.features.cad.available
+            }.distinctUntilChanged().collect { ready ->
+                cadStroke = false
+                local.update { it.copy(cadTool = null) }
+                if (ready) client.cadCommand("cad.state")
+            }
+        }
+
         viewModelScope.launch {
             client.state.collect { state ->
                 if (loopCutArmed && state.mode == BlenderMode.EDIT && state.context.selectionCounts.edges > 0) {
@@ -319,7 +330,47 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * respondería `session_invalidated` a mitad de un arrastre. Se descarta antes de
      * cambiar, que es la salida no destructiva.
      */
+    fun enterCad() {
+        if (!client.state.value.features.cad.available) return
+        closeSessions()
+        local.update { it.copy(activeTool = ActiveTool.SELECT, shapeTool = ShapeTool.NONE,
+            referencePicking = false, cadTool = null, shortestPathActive = false) }
+        client.cadCommand("mode.set", mapOf("mode" to "CAD"))
+    }
+    fun cadCommand(name: String, payload: Map<String, Any?> = emptyMap()) {
+        if (!client.state.value.cad.workspace) return
+        cancelCadStroke()
+        client.cadCommand(name, payload)
+    }
+    fun cadTool(type: String?) {
+        cancelCadStroke()
+        local.update { it.copy(cadTool = type?.takeIf { candidate -> candidate in client.state.value.features.cad.entities }) }
+    }
+    private fun cancelCadStroke() {
+        if (cadStroke) { cadStroke = false; client.cadCommand("cad.session.cancel") }
+    }
+    fun cadGesture(phase: GesturePhase, u: Float, v: Float) {
+        if (!client.state.value.cad.workspace) { cadStroke = false; return }
+        when (phase) {
+            GesturePhase.BEGIN -> {
+                val type = local.value.cadTool ?: return
+                if (client.state.value.cad.activeSketchId == null) return
+                cadStroke = true
+                client.cadCommand("cad.entity.begin", mapOf("type" to type, "u" to u, "v" to v))
+            }
+            GesturePhase.UPDATE -> if (cadStroke) client.cadCommand("cad.entity.update", mapOf("u" to u, "v" to v))
+            GesturePhase.END -> if (cadStroke) {
+                cadStroke = false
+                client.cadCommand("cad.session.confirm")
+                local.update { it.copy(cadTool = null) }
+            }
+            GesturePhase.CANCEL -> cancelCadStroke()
+        }
+    }
+
     fun setMode(mode: BlenderMode) {
+        cancelCadStroke()
+        local.update { it.copy(cadTool = null) }
         closeSessions()
         local.update { it.copy(
             shapeTool = ShapeTool.NONE,
@@ -368,8 +419,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updateInput(input: InputDebug) {
         _inputDebug.value = input
     }
-    fun undo() = client.undo()
-    fun redo() = client.redo()
+    fun undo() { cancelCadStroke(); client.undo() }
+    fun redo() { cancelCadStroke(); client.redo() }
     fun repeatLast() = client.repeatLast()
     fun delete() = client.delete()
     fun duplicate() = client.duplicate()
@@ -385,6 +436,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * es la forma corta de decir a dónde va.
      */
     fun pick(u: Float, v: Float, stylus: Boolean = false) {
+        if (client.state.value.cad.workspace) {
+            client.cadCommand("cad.select", mapOf("u" to u, "v" to v)); return
+        }
         val surfaceTool = client.toolSession.value
         if (surfaceTool.active && surfaceTool.input == "FACE_PAIR") {
             client.toolFacePick(u.toDouble(), v.toDouble(),
@@ -696,6 +750,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Seguimiento absoluto del dedo para snap geométrico durante el arrastre. */
     fun toolPointer(u: Float, v: Float) {
+        if (client.state.value.cad.workspace) return
         val surfaceTool = client.toolSession.value
         if (surfaceTool.active && surfaceTool.input == "FACE_PAIR") {
             lastFacePointer = u to v
@@ -1148,6 +1203,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * El servidor lo agrupa y cierra un único paso de undo al soltar.
      */
     fun toolGesture(phase: GesturePhase, dx: Float, dy: Float) {
+        if (client.state.value.cad.workspace) {
+            client.gesture(Gesture.ORBIT, phase, dx.toDouble(), dy.toDouble())
+            return
+        }
         val surfaceTool = client.toolSession.value
         if (surfaceTool.active && surfaceTool.input == "FACE_PAIR") {
             if (phase == GesturePhase.BEGIN) {

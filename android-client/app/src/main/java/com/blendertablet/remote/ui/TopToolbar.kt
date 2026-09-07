@@ -49,7 +49,7 @@ fun TopToolbar(
     modifier: Modifier = Modifier,
 ) {
     val blender = state.blender
-    val inEdit = blender.mode == BlenderMode.EDIT
+    val inEdit = !blender.cad.workspace && blender.mode == BlenderMode.EDIT
 
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         // Esta barra vive fuera del chrome porque tiene que sobrevivir al ojo, pero
@@ -78,14 +78,16 @@ fun TopToolbar(
                             vm.toggleAutoMerge()
                         }
                     }
+                    if (!blender.cad.workspace) {
                     PillButton("Mayús", selected = state.selectionOp == SelectionOp.TOGGLE && !state.shortestPathActive) { vm.toggleSelectionOp(SelectionOp.TOGGLE) }
                     if (inEdit && blender.features.selectionShortestPath) {
                         PillButton("Ctrl", selected = state.shortestPathActive) { vm.toggleShortestPath() }
                     }
                     PillButton("Alt", selected = state.selectionOp == SelectionOp.REMOVE) { vm.toggleSelectionOp(SelectionOp.REMOVE) }
+                    }
                     IconAction(Icons.AutoMirrored.Filled.Undo, "Deshacer") { vm.undo() }
                     IconAction(Icons.AutoMirrored.Filled.Redo, "Rehacer") { vm.redo() }
-                    if (blender.features.repeatLast) {
+                    if (!blender.cad.workspace && blender.features.repeatLast) {
                         PillButton("⇧R") { vm.repeatLast() }
                     }
                 }
@@ -107,7 +109,7 @@ fun TopToolbar(
 fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier) {
     val blender = state.blender
     val editable = blender.activeObject != null
-    val inEdit = blender.mode == BlenderMode.EDIT
+    val inEdit = !blender.cad.workspace && blender.mode == BlenderMode.EDIT
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         if (inEdit) {
             FloatingPanel {
@@ -131,13 +133,14 @@ fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 IconAction(
                     Icons.Default.ViewInAr, "Object Mode",
-                    selected = !inEdit,
+                    selected = !inEdit && !blender.cad.workspace,
                 ) { vm.setMode(BlenderMode.OBJECT) }
                 IconAction(
                     Icons.Default.Straighten, "Edit Mode",
                     selected = inEdit,
                     enabled = editable,
                 ) { vm.setMode(BlenderMode.EDIT) }
+                if (blender.features.cad.available) PillButton("CAD", selected = blender.cad.workspace) { vm.enterCad() }
                 IconAction(
                     Icons.Default.Brush, "Sculpt Mode · próximamente",
                     onClick = {},

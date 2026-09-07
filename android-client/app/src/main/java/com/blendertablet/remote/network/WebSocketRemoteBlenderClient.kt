@@ -217,6 +217,12 @@ class WebSocketRemoteBlenderClient(
     }
 
     private fun open(destination: Target) {
+        // Capabilities belong to this connection; a previous CAD server must not
+        // enable commands against an older backend during the next handshake.
+        _state.value = _state.value.copy(
+            cad = com.blendertablet.remote.model.CadState(),
+            features = _state.value.features.copy(cad = com.blendertablet.remote.model.CadCapabilities()),
+        )
         val generation = this.generation.incrementAndGet()
         retryJob?.cancel()
         retryJob = null
@@ -245,6 +251,12 @@ class WebSocketRemoteBlenderClient(
             delay(wait)
             if (target == destination) open(destination)
         }
+    }
+
+    override fun cadCommand(name: String, payload: Map<String, Any?>) {
+        if (!_state.value.features.cad.available) return
+        require(name.startsWith("cad.") || (name == "mode.set" && payload["mode"] == "CAD"))
+        command(name, JSONObject(payload))
     }
 
     private fun command(name: String, payload: JSONObject = JSONObject()) {
@@ -789,6 +801,10 @@ class WebSocketRemoteBlenderClient(
                         else if (command == "tool.drag_line") Unit
                         else _errors.value = message.optString("error", "Error remoto")
                     }
+                    command != null && command.startsWith("cad.") -> result?.let {
+                        _state.value = _state.value.copy(cad = CadParser.state(it))
+                    }
+                    command == "mode.set" && _state.value.features.cad.available -> cadCommand("cad.state")
                     command == "scene.get_state" -> result?.let(::updateState)
                     command == "server.capabilities" -> result?.let { caps ->
                         _state.value = _state.value.copy(
@@ -913,6 +929,8 @@ class WebSocketRemoteBlenderClient(
                     // estado completo: sería un viaje por cada fotograma del gesto.
                     message.optString("event") == "transform.session" ->
                         acceptTransformSession(StateParser.session(payload))
+                    message.optString("event") == "cad.state" ->
+                        _state.value = _state.value.copy(cad = CadParser.state(payload))
                     message.optString("event") == "tool.session" ->
                         _toolSession.value = StateParser.toolSession(payload)
                     message.optString("event") == "modifiers.changed" -> payload?.let {
@@ -1008,6 +1026,7 @@ class WebSocketRemoteBlenderClient(
         // sabíamos en vez de rebobinar la proyección y el wireframe.
         _state.value = parsed.copy(
             features = old.features,
+            cad = if (json.has("cad")) parsed.cad else old.cad,
             modifierOptions = old.modifierOptions,
             view = if (json.has("view") || json.has("shading")) parsed.view else old.view,
             unitScaleLength = json.optJSONObject("scene_scale")?.let { scale ->

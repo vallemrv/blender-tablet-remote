@@ -189,7 +189,11 @@ def info(payload: dict) -> dict:
 @command("file.new", mutating=True)
 def new(payload: dict) -> dict:
     """`empty=True` da una escena vacía; por defecto se usa el archivo de inicio."""
+    from .sessions import cancel_cad
+    cancel_cad()
     try:
+        from ..cad.runtime import runtime
+        runtime.leave()
         bpy.ops.wm.read_homefile(use_empty=bool(payload.get("empty", False)))
     except RuntimeError as exc:
         raise CommandError(f"Cannot start a new file: {exc}")
@@ -199,12 +203,16 @@ def new(payload: dict) -> dict:
 
 @command("file.open", mutating=True)
 def open_file(payload: dict) -> dict:
+    from .sessions import cancel_cad
+    cancel_cad()
     path = _blend_path(payload)
     if not os.path.isfile(path):
         raise CommandError(f"File not found: {path}", code="not_found")
     if not path.lower().endswith(".blend"):
         raise CommandError(f"Not a Blender file: {path}", code="not_blend")
     try:
+        from ..cad.runtime import runtime
+        runtime.leave()
         bpy.ops.wm.open_mainfile(filepath=path)
     except RuntimeError as exc:
         raise CommandError(f"Cannot open '{path}': {exc}")
@@ -214,11 +222,15 @@ def open_file(payload: dict) -> dict:
 
 @command("file.save", mutating=True)
 def save(payload: dict) -> dict:
+    from .sessions import cancel_cad
+    cancel_cad()
     if not bpy.data.filepath:
         # No inventamos una ruta: que el cliente pida nombre y llame a file.save_as.
         raise CommandError("This file has never been saved", code="no_path")
     try:
-        bpy.ops.wm.save_mainfile()
+        from ..cad.runtime import runtime
+        with runtime.saving():
+            bpy.ops.wm.save_mainfile()
     except RuntimeError as exc:
         raise CommandError(f"Cannot save: {exc}")
     return _info()
@@ -226,6 +238,8 @@ def save(payload: dict) -> dict:
 
 @command("file.save_as", mutating=True)
 def save_as(payload: dict) -> dict:
+    from .sessions import cancel_cad
+    cancel_cad()
     path = _save_as_path(payload)
     if not path.lower().endswith(".blend"):
         path += ".blend"
@@ -233,7 +247,9 @@ def save_as(payload: dict) -> dict:
     if folder and not os.path.isdir(folder):
         raise CommandError(f"Folder not found: {folder}", code="not_found")
     try:
-        bpy.ops.wm.save_as_mainfile(filepath=path)
+        from ..cad.runtime import runtime
+        with runtime.saving():
+            bpy.ops.wm.save_as_mainfile(filepath=path)
     except RuntimeError as exc:
         raise CommandError(f"Cannot save to '{path}': {exc}")
     return _info()
