@@ -34,7 +34,7 @@ def remember(name: str, payload: dict) -> None:
 
 def remember_tool(name: str, parameters: dict) -> None:
     global _last_action, _last_tool
-    if name in {"KNIFE", "BISECT"}:
+    if name in {"KNIFE", "BISECT", "ALIGN"}:
         return
     _last_tool = (name, dict(parameters))
     _last_action = None

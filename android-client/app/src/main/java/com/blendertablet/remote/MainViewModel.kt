@@ -79,6 +79,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val h264Stream = H264ViewportStream(viewModelScope) { fallbackToMjpeg() }
     val h264Size = h264Stream.size
     private var loopCutArmed = false
+    private var facePickRole: String? = null
+    private var lastFacePointer: Pair<Float, Float>? = null
     private var lastReferencePointer: Pair<Float, Float>? = null
     // Debe inicializarse antes de `init`: StateFlow emite su valor actual en cuanto
     // empieza el collect y Main.immediate puede ejecutar esa emisión durante el
@@ -380,6 +382,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * es la forma corta de decir a dónde va.
      */
     fun pick(u: Float, v: Float, stylus: Boolean = false) {
+        val surfaceTool = client.toolSession.value
+        if (surfaceTool.active && surfaceTool.input == "FACE_PAIR") {
+            client.toolFacePick(u.toDouble(), v.toDouble(),
+                surfaceTool.parameters["pick_role"] as? String ?: "SOURCE", "TAP")
+            return
+        }
         if (local.value.referencePicking && client.transformSession.value.active) {
             client.transformReferenceCandidate(u.toDouble(), v.toDouble(), lock = true)
             local.update { it.copy(referencePicking = false) }
@@ -663,6 +671,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } else client.toolBegin(tool, toolDefaultParameters(tool))
     }
 
+    fun beginAlignment(objectName: String?) {
+        if (uiState.value.blender.mode != BlenderMode.OBJECT) return
+        local.update { it.copy(activeTool = ActiveTool.SELECT, referencePicking = false, shapeTool = ShapeTool.NONE) }
+        facePickRole = null
+        lastFacePointer = null
+        client.toolBegin(EditTool.ALIGN, objectName?.let { mapOf("object" to it) } ?: emptyMap())
+    }
+
     fun setToolParameter(key: String, value: Any?) {
         when (key) {
             "snap_type" -> (value as? String)?.let { wire ->
@@ -677,6 +693,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Seguimiento absoluto del dedo para snap geométrico durante el arrastre. */
     fun toolPointer(u: Float, v: Float) {
+        val surfaceTool = client.toolSession.value
+        if (surfaceTool.active && surfaceTool.input == "FACE_PAIR") {
+            lastFacePointer = u to v
+            client.toolFacePick(u.toDouble(), v.toDouble(), facePickRole ?:
+                (surfaceTool.parameters["pick_role"] as? String ?: "SOURCE"), "UPDATE")
+            return
+        }
         if (local.value.referencePicking && client.transformSession.value.active) {
             lastReferencePointer = u to v
             client.transformReferenceCandidate(
@@ -785,6 +808,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         EditTool.SUBDIVIDE -> mapOf("cuts" to 1.0)
         EditTool.LOOP_CUT -> mapOf("cuts" to 1.0, "smoothness" to 0.0, "factor" to 0.0, "snap_type" to "NONE")
         EditTool.BRIDGE_EDGE_LOOPS -> mapOf("twist_offset" to 0.0, "merge_factor" to 0.0, "snap_type" to "NONE")
+        EditTool.ALIGN -> emptyMap()
         EditTool.KNIFE -> mapOf("snap" to 1.0)
         EditTool.BISECT -> mapOf("clear_inner" to 0.0, "clear_outer" to 0.0, "fill" to 0.0, "snap" to 1.0)
     })
@@ -1091,6 +1115,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * El servidor lo agrupa y cierra un único paso de undo al soltar.
      */
     fun toolGesture(phase: GesturePhase, dx: Float, dy: Float) {
+        val surfaceTool = client.toolSession.value
+        if (surfaceTool.active && surfaceTool.input == "FACE_PAIR") {
+            if (phase == GesturePhase.BEGIN) {
+                facePickRole = surfaceTool.parameters["pick_role"] as? String ?: "SOURCE"
+                lastFacePointer = null
+            } else if (phase == GesturePhase.END || phase == GesturePhase.CANCEL) {
+                val pointer = lastFacePointer ?: (0f to 0f)
+                client.toolFacePick(pointer.first.toDouble(), pointer.second.toDouble(), facePickRole ?:
+                    (surfaceTool.parameters["pick_role"] as? String ?: "SOURCE"), phase.name)
+                facePickRole = null
+                lastFacePointer = null
+            }
+            return
+        }
         // Con una herramienta paramétrica abierta, el arrastre la alimenta a ella:
         // sube/baja el parámetro primario (offset, grosor o cortes) y no orbita.
         val tool = client.toolSession.value

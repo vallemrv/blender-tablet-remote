@@ -269,6 +269,13 @@ object StateParser {
                     if (item.has("default") && !item.isNull("default")) item.get("default") else null,
                     strings(item.optJSONArray("values")),
                     strings(item.optJSONArray("applies_to")),
+                    labels = item.optJSONObject("labels")?.let { labels ->
+                        labels.keys().asSequence().associateWith { labels.optString(it) }
+                    } ?: emptyMap(),
+                    unit = item.optString("unit"),
+                    step = item.optDouble("step", 0.01),
+                    min = item.optDouble("min").takeIf { it.isFinite() },
+                    max = item.optDouble("max").takeIf { it.isFinite() },
                 )
             } }
 
@@ -416,6 +423,10 @@ object StateParser {
         }
         return ToolSession(
             active = active, armed = armed, tool = tool, parameters = values,
+            input = json.optString("input", "PARAMETRIC"),
+            controls = editParameters(json.optJSONArray("controls")),
+            instruction = json.optString("instruction"),
+            canConfirm = json.optBoolean("can_confirm", true),
             points = points, strokes = pointGroups("strokes", 3),
             projectedPoints = projected, projectedStrokes = pointGroups("projected_strokes", 2),
             closed = json.optBoolean("closed"), line = line,

@@ -4,7 +4,7 @@ import math
 
 import gpu
 from gpu_extras.batch import batch_for_shader
-from mathutils import Matrix
+from mathutils import Matrix, Vector
 
 from ..camera import camera
 
@@ -48,7 +48,22 @@ def draw_transform_markers(rv3d, width, height):
     from ..commands.modal import session
 
     markers = transform_markers(session.status())
-    if not markers:
+    from ..commands.tools import tool_session
+    paths = []
+    if tool_session.alignment is not None and tool_session.status().get("active"):
+        for kind, vertices in tool_session.alignment.outlines():
+            projected = [camera.project(point, rv3d) for point in vertices]
+            if all(point is not None for point in projected):
+                points = [(p[0]*width, (1-p[1])*height) for p in projected]
+                paths.append((kind, [p for i, point in enumerate(points)
+                                    for p in (point, points[(i+1) % len(points)])]))
+            markers.append((kind, sum(vertices, Vector()) / len(vertices)))
+    for kind, position in markers:
+        screen = camera.project(position, rv3d)
+        if screen is not None and 0 <= screen[0] <= 1 and 0 <= screen[1] <= 1:
+            paths.append((kind, marker_segments(kind, screen[0]*width, (1-screen[1])*height,
+                                                max(5.0, width/128.0))))
+    if not paths:
         return
     shader = gpu.shader.from_builtin("POLYLINE_UNIFORM_COLOR")
     old_blend = gpu.state.blend_get()
@@ -65,12 +80,7 @@ def draw_transform_markers(rv3d, width, height):
             gpu.matrix.load_projection_matrix(Matrix.Identity(4))
             shader.bind()
             shader.uniform_float("viewportSize", (width, height))
-            for kind, position in markers:
-                screen = camera.project(position, rv3d)
-                if screen is None or not (0 <= screen[0] <= 1 and 0 <= screen[1] <= 1):
-                    continue
-                radius = max(5.0, width / 128.0)
-                points = marker_segments(kind, screen[0] * width, (1-screen[1]) * height, radius)
+            for kind, points in paths:
                 coords = [(x * 2 / width - 1, y * 2 / height - 1, 0) for x, y in points]
                 batch = batch_for_shader(shader, "LINES", {"pos": coords})
                 # Contorno oscuro: se ve tanto sobre superficies claras como oscuras.

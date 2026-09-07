@@ -293,6 +293,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             longPressEnabled = viewportLongPressEnabled(session.active, toolSession.active),
             // Los marcadores de transformación ya forman parte del fotograma.
             snapCandidate = toolSession.snapCandidate,
+            cancelPickOnNavigation = toolSession.input == "FACE_PAIR",
             proportionalCircle = session.proportionalCircle,
             navigationOrbitEnabled = navigationOrbitVisible(
                 session.active,
@@ -429,6 +430,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     onConfirm = vm::confirmTool,
                     onCancel = vm::cancelTool,
                     onLoopPop = vm::loopCutPop,
+                    lengthUnit = state.blender.sceneScale.lengthUnit,
                     awaitingPick = state.activeTool == ActiveTool.LOOP_CUT &&
                         !toolSession.active && state.loopCutAwaitingTap,
                     modifier = Modifier
@@ -693,6 +695,7 @@ private fun ViewportLayer(
     knifePoints: List<List<Pair<Float, Float>>>,
     snapCandidate: com.blendertablet.remote.model.SnapCandidate?,
     proportionalCircle: com.blendertablet.remote.model.ProportionalCircle?,
+    cancelPickOnNavigation: Boolean,
     navigationOrbitEnabled: Boolean,
     onShape: (ShapeTool, Float, Float, Float, Float) -> Unit,
     onLongPress: (px: Float, py: Float, u: Float, v: Float) -> Unit,
@@ -728,6 +731,7 @@ private fun ViewportLayer(
                     navigationOrbitEnabled = navigationOrbitEnabled,
                     knifePoints = knifePoints,
                     snapCandidate = snapCandidate,
+                    cancelPickOnNavigation = cancelPickOnNavigation,
                     proportionalCircle = proportionalCircle,
                     onShape = onShape,
                 )
@@ -754,6 +758,7 @@ private fun ViewportLayer(
                 fixedCircleRadius = fixedCircleRadius,
                 knifePoints = knifePoints,
                 snapCandidate = snapCandidate,
+                cancelPickOnNavigation = cancelPickOnNavigation,
                 proportionalCircle = proportionalCircle,
                 onShape = onShape,
             )
@@ -795,6 +800,7 @@ private fun ViewportLayer(
                 fixedCircleRadius = fixedCircleRadius,
                 knifePoints = knifePoints,
                 snapCandidate = snapCandidate,
+                cancelPickOnNavigation = cancelPickOnNavigation,
                 proportionalCircle = proportionalCircle,
                 onShape = onShape,
             )
@@ -889,6 +895,7 @@ private fun RailContent(
         // `empty_selection`; se apaga el botón en vez de dejar que falle.
         val counts = state.blender.context
         for (tool in EditTool.entries) {
+            if (tool == EditTool.ALIGN) continue
             if (counts.availableTools.isNotEmpty() && ActiveTool.valueOf(tool.name) !in counts.availableTools) continue
             val ready = when (tool) {
                 EditTool.EXTRUDE -> counts.countFor(state.blender.selectionMode) > 0
@@ -901,6 +908,7 @@ private fun RailContent(
                 // Bisect es de edit_toolbar (B4): un servidor sin esa feature no lo
                 // anuncia en available_tools y este rail legacy nunca lo ofrece.
                 EditTool.BISECT -> true
+                EditTool.ALIGN -> false
             }
             IconAction(
                 icon = AppIcons.editTool(tool),
@@ -1025,12 +1033,13 @@ private fun quickActions(
                 QuickAction("Escala", Icons.Default.AspectRatio, onClick = { vm.applyTransform(false, false, true) }),
             ),
         )
-        ActionId.SET_ORIGIN -> QuickAction(
-            label, Icons.Default.MyLocation,
+        ActionId.PLACE_OBJECT -> QuickAction(
+            label, AppIcons.action(id),
             children = listOf(
-                QuickAction("Al cursor", Icons.Default.MyLocation) { vm.snap(SnapAction.ORIGIN_TO_CURSOR) },
-                QuickAction("A geometría", Icons.Default.CenterFocusStrong) { vm.snap(SnapAction.ORIGIN_TO_GEOMETRY) },
-                QuickAction("Centro masas", Icons.Default.Adjust) { vm.snap(SnapAction.ORIGIN_TO_MASS) },
+                QuickAction("Alinear caras", AppIcons.editTool(EditTool.ALIGN)) { vm.beginAlignment(context.objectName) },
+                QuickAction("Origen al cursor", Icons.Default.MyLocation) { vm.snap(SnapAction.ORIGIN_TO_CURSOR) },
+                QuickAction("Origen a geometría", Icons.Default.CenterFocusStrong) { vm.snap(SnapAction.ORIGIN_TO_GEOMETRY) },
+                QuickAction("Origen al centro de masas", Icons.Default.Adjust) { vm.snap(SnapAction.ORIGIN_TO_MASS) },
             ),
         )
         // Borrar es el destructivo: rojo y siempre el último del anillo.

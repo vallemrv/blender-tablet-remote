@@ -114,7 +114,7 @@ class WebSocketRemoteBlenderClient(
             "tool.begin", "tool.parameter", "tool.nudge", "tool.status",
             "tool.loop_pick", "tool.loop_pop", "tool.knife_drag", "tool.knife_point", "tool.knife_pop",
             "tool.knife_new_stroke", "tool.knife_close",
-            "tool.drag_line", "tool.snap_candidate",
+            "tool.drag_line", "tool.snap_candidate", "tool.face_pick",
         )
     }
 
@@ -559,6 +559,10 @@ class WebSocketRemoteBlenderClient(
                 .put("parameters", JSONObject(parameters)),
         )
 
+    override fun toolFacePick(u: Double, v: Double, role: String, phase: String) = command(
+        "tool.face_pick", JSONObject().put("u", u).put("v", v).put("role", role).put("phase", phase),
+    )
+
     override fun toolParameter(parameters: Map<String, Any?>) =
         command("tool.parameter", JSONObject().put("parameters", JSONObject(parameters)))
 
@@ -909,6 +913,8 @@ class WebSocketRemoteBlenderClient(
                     // estado completo: sería un viaje por cada fotograma del gesto.
                     message.optString("event") == "transform.session" ->
                         acceptTransformSession(StateParser.session(payload))
+                    message.optString("event") == "tool.session" ->
+                        _toolSession.value = StateParser.toolSession(payload)
                     message.optString("event") == "modifiers.changed" -> payload?.let {
                         _state.value = _state.value.copy(modifiers = StateParser.modifiers(it.optJSONArray("modifiers")))
                     }

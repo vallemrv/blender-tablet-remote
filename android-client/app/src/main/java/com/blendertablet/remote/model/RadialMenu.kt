@@ -82,7 +82,7 @@ object RadialMenu {
                 if (context.objectShadingAvailable) add(ActionId.SHADE_OBJECT)
                 add(ActionId.DUPLICATE)
                 add(ActionId.APPLY_TRANSFORMS)
-                add(ActionId.SET_ORIGIN)
+                add(ActionId.PLACE_OBJECT)
             }
             // En el vacío no hay nada sobre lo que operar: añadir y operaciones de
             // conjunto. Agregar va primero porque es lo que más pide un tap al hueco;

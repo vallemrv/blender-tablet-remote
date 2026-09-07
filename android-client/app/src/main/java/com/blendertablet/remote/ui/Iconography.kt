@@ -75,6 +75,7 @@ object AppIcons {
     val Reset: ImageVector = Icons.Default.RestartAlt
 
     fun action(id: ActionId): ImageVector = when (id) {
+        ActionId.PLACE_OBJECT -> Icons.AutoMirrored.Filled.CompareArrows
         ActionId.ADD_OBJECT -> Icons.Default.Add
         ActionId.TOOL_BOX, ActionId.SELECT_ALL -> Icons.Default.SelectAll
         ActionId.TOOL_CIRCLE -> Icons.Default.BlurOn
@@ -93,7 +94,6 @@ object AppIcons {
         ActionId.DELETE -> Icons.Default.Delete
         ActionId.DISSOLVE -> Icons.Default.DeleteSweep
         ActionId.APPLY_TRANSFORMS -> Icons.Default.Transform
-        ActionId.SET_ORIGIN -> Icons.Default.MyLocation
         ActionId.EDIT_MESH_TOOLS -> Icons.Default.GridOn
         else -> Fallback
     }
@@ -129,6 +129,7 @@ object AppIcons {
         EditTool.BISECT -> editCatalog("BISECT")
         EditTool.BRIDGE_EDGE_LOOPS -> editCatalog("BRIDGE_EDGE_LOOPS")
         EditTool.KNIFE -> editCatalog("KNIFE")
+        EditTool.ALIGN -> action(ActionId.PLACE_OBJECT)
     }
 
     fun toolbarFamily(id: String): ImageVector = editCatalog(id)

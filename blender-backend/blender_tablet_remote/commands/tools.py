@@ -15,7 +15,7 @@ from . import command
 from . import knife as knife_commands
 from . import mesh as mesh_commands
 
-SUPPORTED = {"EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE", "BISECT"}
+SUPPORTED = {"EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE", "BISECT", "ALIGN"}
 
 # Herramientas cuya sesión puede quedar ARMED (elegidas pero sin backup ni preview
 # todavía) porque su primer dato lo da un toque/arrastre en el viewport, no la
@@ -61,6 +61,7 @@ class ToolSession:
         self.closed = False
         self.line = None  # {"start": [u, v], "end": [u, v]} de la sesión Bisect
         self.snap_candidate = None
+        self.alignment = None
         # Armado: familia/variante elegida, aún sin backup ni preview (B1/B3/B4).
         self.armed_tool = None
         self.armed_owner = None
@@ -74,6 +75,26 @@ class ToolSession:
         self.armed_tool, self.armed_owner, self.armed_params = None, None, {}
 
     def begin(self, tool, owner, params):
+        if tool == "ALIGN":
+            from .alignment import Alignment, parameters
+            params = dict(params)
+            name = params.pop("object", None)
+            obj = bpy.data.objects.get(name) if name else active_object()
+            if obj is None or obj.mode != "OBJECT" or obj.type != "MESH":
+                raise CommandError("Alinear caras necesita una malla en Object Mode", code="wrong_mode")
+            settings = parameters(params)
+            if self.active:
+                self.require(owner)
+                self.restore()
+                self.close()
+            elif self.armed_tool:
+                self.require_armed_owner(owner)
+                self.disarm()
+            alignment = Alignment(obj)
+            self.active, self.session_id, self.owner_id = True, str(uuid.uuid4()), owner
+            self.tool, self.params, self.obj = tool, settings, obj
+            self.alignment = alignment
+            return
         obj = active_object()
         if obj.mode != "EDIT" or obj.type != "MESH":
             raise CommandError("Parametric tools require mesh Edit Mode", code="wrong_mode")
@@ -126,10 +147,13 @@ class ToolSession:
         if owner is not None and self.owner_id is not None and owner != self.owner_id:
             raise CommandError("Tool session belongs to another client", code="session_owned")
         try:
-            valid = self.obj.name in bpy.data.objects and self.obj.mode == "EDIT"
+            valid = (self.alignment.valid() if self.alignment is not None else
+                     self.obj.name in bpy.data.objects and self.obj.mode == "EDIT")
         except ReferenceError:
             valid = False
         if not valid:
+            if self.alignment is not None:
+                self.restore_safely()
             self.close()
             raise CommandError("Tool session invalidated", code="session_invalidated")
 
@@ -150,6 +174,9 @@ class ToolSession:
 
     def restore(self):
         """Restaura el estado anterior a toda la sesión, también con loops acumulados."""
+        if self.alignment is not None:
+            self.alignment.restore()
+            return
         self._restore_mesh(self.original_backup or self.backup)
 
     def restore_preview_base(self):
@@ -164,6 +191,10 @@ class ToolSession:
             return False
 
     def preview(self):
+        if self.alignment is not None:
+            self.alignment.restore()
+            self.alignment.preview(self.params)
+            return
         self.restore_preview_base()
         if self.tool == "KNIFE":
             # Solo los trazos que el usuario finalizó con «Nuevo corte» se aplican a
@@ -235,6 +266,8 @@ class ToolSession:
             state["snap_type"] = str(self.params.get("snap_type", "NONE")).upper()
             state["snap_step"] = float(self.params.get("snap_step", 0.1))
             state["snap_candidate"] = self.snap_candidate
+            if self.alignment is not None:
+                state.update(self.alignment.status(self.params))
             if self.tool == "KNIFE":
                 state["points"] = [list(p) for p in self.points]
                 state["strokes"] = [[list(p) for p in stroke] for stroke in self.knife_strokes]
@@ -302,6 +335,22 @@ def parameter(payload):
         tool_session.armed_params.update(params)
         return tool_session.status()
     tool_session.require(owner)
+    if tool_session.alignment is not None:
+        from .alignment import parameters
+        changes = payload.get("parameters", payload.get("parameter"))
+        if not isinstance(changes, dict):
+            raise BadPayload("'parameters' must be an object")
+        old = tool_session.params
+        tool_session.params = parameters(changes, old)
+        if "pick_role" in changes:
+            tool_session.alignment.candidate = tool_session.alignment.candidate_role = None
+        try:
+            tool_session.preview()
+        except Exception:
+            tool_session.params = old
+            tool_session.preview()
+            raise
+        return tool_session.status()
     if tool_session.tool == "KNIFE":
         # Solo el snap es un parámetro real de Knife; el resto son puntos.
         params = payload.get("parameters", payload.get("parameter"))
@@ -319,6 +368,25 @@ def parameter(payload):
     if str(tool_session.params.get("snap_type", "NONE")).upper() not in {"VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER", "CURSOR"}:
         tool_session.snap_candidate = None
     tool_session.preview()
+    return tool_session.status()
+
+
+@command("tool.face_pick", mutating=True)
+def face_pick(payload):
+    tool_session.require(payload.get("_client_id"))
+    alignment = tool_session.alignment
+    if alignment is None:
+        raise CommandError("This tool does not accept face pairs", code="wrong_tool")
+    old, old_params = dict(alignment.__dict__), dict(tool_session.params)
+    try:
+        alignment.pick(payload, tool_session.params)
+        if str(payload.get("phase", "TAP")).upper() in {"END", "TAP"}:
+            tool_session.preview()
+    except Exception:
+        alignment.__dict__.update(old)
+        tool_session.params = old_params
+        tool_session.preview()
+        raise
     return tool_session.status()
 
 
@@ -805,6 +873,8 @@ def loop_pop(payload):
 @command("tool.nudge", mutating=True)
 def nudge(payload):
     tool_session.require(payload.get("_client_id"))
+    if tool_session.alignment is not None:
+        raise CommandError("Alinear caras usa dos caras, no arrastre de valores", code="wrong_tool")
     if tool_session.tool == "KNIFE":
         raise CommandError("Knife is not nudged; place points with knife_point", code="wrong_tool")
     if tool_session.tool == "BISECT":
@@ -833,6 +903,8 @@ def nudge(payload):
 @command("tool.confirm", mutating=True)
 def confirm(payload):
     tool_session.require(payload.get("_client_id"))
+    if tool_session.alignment is not None and not tool_session.alignment.status(tool_session.params)["can_confirm"]:
+        raise CommandError("Elige la cara fuente y la cara destino", code="missing_faces")
     if (tool_session.tool == "KNIFE" and len(tool_session.points) < 2
             and not tool_session.knife_strokes):
         raise CommandError("Knife needs at least two points", code="empty_selection")

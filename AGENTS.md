@@ -43,6 +43,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Herramientas Edit paramétricas: Extrude, Bevel, Inset, Subdivide, Loop Cut, Bridge,
   Knife y Bisect.
 - Catálogo contextual Edit, modificadores, sombreado, aislamiento y escala de trabajo.
+- Alinear caras en Object: contacto entre caras, orientación de caras y copia de
+  rotación del objeto destino, con preview reversible.
 - H.264 preferido con fallback MJPEG.
 
 ## Invariantes técnicos
@@ -88,6 +90,15 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   Mover/Rotar/Escalar viven ahí; en Edit añade Tweak.
 - Duplicar vive en el radial. En Object conserva normal/enlazado y en Edit duplica la
   selección efectiva.
+- En Object, el radial agrupa Alinear caras y las acciones de origen bajo Colocar,
+  conservando ocho sectores y el acceso a Borrar.
+- Alinear caras pertenece a `tool.*`: mueve únicamente el objeto fuente, conserva
+  tamaño, fija el destino y reconstruye desde su matriz inicial. Contacto enfrenta
+  normales y hace coincidir centros; orientar y copiar rotación conservan el origen
+  de la fuente. Confirmar crea un undo; cancelar o desconectar restaura la matriz.
+- Sus controles se describen en el estado de herramienta y se dibujan en la bandeja
+  común. Las caras fuente/destino y el candidato se dibujan en GPUOffScreen. Navegar
+  con dos dedos cancela el sondeo temporal, sin fijar otra cara.
 - Debajo del ojo hay un selector horizontal Object/Edit/Sculpt. Sculpt y el menú superior
   Layouts son por ahora únicamente presencia visual y no envían comandos.
 - El panel de modificadores queda limitado entre ese selector de modos y el selector

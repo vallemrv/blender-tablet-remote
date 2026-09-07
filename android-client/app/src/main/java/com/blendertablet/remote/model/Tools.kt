@@ -15,7 +15,8 @@ enum class EditTool(val wire: String, val label: String, val requirement: String
     LOOP_CUT("LOOP_CUT", "Loop Cut", "necesita una arista"),
     BRIDGE_EDGE_LOOPS("BRIDGE_EDGE_LOOPS", "Bridge Edge Loops", "necesita dos loops de aristas"),
     KNIFE("KNIFE", "Cuchillo", "necesita una malla"),
-    BISECT("BISECT", "Bisect", "necesita una malla");
+    BISECT("BISECT", "Bisect", "necesita una malla"),
+    ALIGN("ALIGN", "Alinear caras", "necesita dos objetos");
 
     companion object {
         fun fromWire(value: String?): EditTool? = entries.firstOrNull { it.wire == value }
@@ -96,6 +97,10 @@ data class ToolSession(
     val snapStep: Double = 0.1,
     val snapCandidate: SnapCandidate? = null,
     val loopCount: Int = 0,
+    val input: String = "PARAMETRIC",
+    val controls: List<EditCatalogParameter> = emptyList(),
+    val instruction: String = "",
+    val canConfirm: Boolean = true,
 ) {
     /**
      * Solo las previews paramétricas aceptan arrastre vertical como `tool.nudge`.
@@ -103,7 +108,7 @@ data class ToolSession(
      * enviarles nudges no tiene significado y puede reconstruir la malla en vano.
      */
     val acceptsViewportNudge: Boolean
-        get() = active && tool != EditTool.KNIFE && tool != EditTool.BISECT
+        get() = active && input == "PARAMETRIC" && tool != EditTool.KNIFE && tool != EditTool.BISECT
 
     val primaryKey: String
         get() = when (tool) {
@@ -112,7 +117,7 @@ data class ToolSession(
             EditTool.SUBDIVIDE -> "cuts"
             EditTool.LOOP_CUT -> "factor"
             EditTool.BRIDGE_EDGE_LOOPS -> "twist_offset"
-            EditTool.KNIFE, EditTool.BISECT -> ""
+            EditTool.KNIFE, EditTool.BISECT, EditTool.ALIGN -> ""
         }
 
     fun double(key: String): Double? = (parameters[key] as? Number)?.toDouble()

@@ -3,6 +3,7 @@ package com.blendertablet.remote.ui
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -79,6 +80,7 @@ private fun specsFor(tool: EditTool): List<ParamSpec> = when (tool) {
         ParamSpec("twist_offset", "Desfase", 1.0, true, TransformMode.SCALE),
         ParamSpec("merge_factor", "Fusión", 0.01, false, TransformMode.SCALE),
     )
+    EditTool.ALIGN -> emptyList()
     EditTool.KNIFE -> emptyList()
     EditTool.BISECT -> emptyList()
 }
@@ -123,12 +125,26 @@ fun EditToolTray(
     onLoopPop: () -> Unit,
     modifier: Modifier = Modifier,
     awaitingPick: Boolean = false,
+    lengthUnit: com.blendertablet.remote.model.LengthUnit = com.blendertablet.remote.model.LengthUnit.CENTIMETERS,
 ) {
     if (!session.active && !awaitingPick) return
     // Knife y Bisect tienen su propia bandeja (puntos/pop/cerrar, o el aviso de
     // arrastre y clear inner/outer/fill).
     if (session.tool == EditTool.KNIFE || session.tool == EditTool.BISECT) return
     FloatingPanel(modifier) {
+        if (session.controls.isNotEmpty()) {
+            Column {
+                Text(session.instruction, color = Ink.Muted, fontSize = 12.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SchemaToolParameters(session.controls, session.parameters, lengthUnit, unitScaleLength,
+                        onParameter, Modifier.weight(1f))
+                    RoundAction(Icons.Default.Close, "Descartar", Ink.Bad, onCancel)
+                    RoundAction(Icons.Default.Check, "Confirmar", if (session.canConfirm) Ink.Ok else Ink.Faint,
+                        onClick = { if (session.canConfirm) onConfirm() })
+                }
+            }
+            return@FloatingPanel
+        }
         if (!session.active) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(

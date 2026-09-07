@@ -124,6 +124,11 @@ data class EditCatalogParameter(
     val values: List<String> = emptyList(),
     /** Variantes a las que se aplica; vacío = todas. */
     val appliesTo: List<String> = emptyList(),
+    val labels: Map<String, String> = emptyMap(),
+    val unit: String = "",
+    val step: Double = 0.01,
+    val min: Double? = null,
+    val max: Double? = null,
 )
 
 /** Gestos continuos del protocolo. El nombre en minúsculas es el que viaja por el cable. */

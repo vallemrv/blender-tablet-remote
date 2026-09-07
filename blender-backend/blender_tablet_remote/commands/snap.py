@@ -60,6 +60,22 @@ def query_reference_candidate(payload: dict, previous: dict | None = None) -> di
     return _query_geometric(payload, REFERENCE_THRESHOLDS, previous)
 
 
+def query_face_frame(payload: dict) -> dict | None:
+    """Cara visible evaluada, con ancla local y contorno para herramientas de colocación."""
+    hit = query_candidate(dict(payload, snap_type="FACE"))
+    if not hit.get("hit"):
+        return None
+    obj = bpy.data.objects.get(hit["object"])
+    evaluated = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    mesh = evaluated.data
+    index = hit["element"]
+    if not 0 <= index < len(mesh.polygons):
+        return None
+    face = mesh.polygons[index]
+    return dict(hit, center=list(face.center), normal=list(face.normal),
+                vertices=[list(mesh.vertices[i].co) for i in face.vertices])
+
+
 def query_candidate(payload: dict, previous: dict | None = None,
                     release_threshold: float | None = None) -> dict:
     """Devuelve el candidato visible más cercano bajo coordenadas normalizadas."""

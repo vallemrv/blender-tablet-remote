@@ -34,6 +34,7 @@ _token: str = ""
 _timer_registered = False
 _last_event_poll = 0.0
 _last_modal_status: dict | None = None
+_last_alignment_status: dict | None = None
 _stats = {"commands": 0, "gestures": 0, "errors": 0, "started_at": 0.0}
 
 DEFAULT_STREAM_PORT = 8766
@@ -64,6 +65,9 @@ IMMEDIATE_FRAME_COMMANDS = {
     # Colocar el corte con el toque es una acción discreta: su preview no debe
     # esperar al siguiente hueco de fps.
     "tool.begin",
+    "tool.face_pick",
+    "tool.confirm",
+    "tool.cancel",
     "tool.loop_pick",
     "tool.knife_point",
     "tool.knife_pop",
@@ -309,7 +313,9 @@ def _pump() -> float | None:
             break
         processed += 1
         if (str(msg.get("type", "")).lower() == "command"
-                and msg.get("command") in IMMEDIATE_FRAME_COMMANDS):
+                and msg.get("command") in IMMEDIATE_FRAME_COMMANDS
+                and (msg.get("command") != "tool.face_pick" or
+                     str((msg.get("payload") or {}).get("phase", "TAP")).upper() in {"TAP", "END"})):
             ran_command = True
         try:
             _handle(client, msg)
@@ -366,6 +372,7 @@ def _broadcast_events() -> None:
             log.error("broadcast of %s failed:\n%s", event.get("event"), traceback.format_exc())
     try:
         _broadcast_modal()
+        _broadcast_alignment()
     except Exception:  # noqa: BLE001 - estado modal inválido no mata el pump
         log.error("modal broadcast failed:\n%s", traceback.format_exc())
 
@@ -385,6 +392,18 @@ def _broadcast_modal() -> None:
         return
     _last_modal_status = status
     _server.broadcast({"type": "event", "event": "transform.session", "payload": status})
+
+
+def _broadcast_alignment() -> None:
+    """Publica también invalidaciones de la herramienta de colocación."""
+    global _last_alignment_status
+    from .commands.tools import tool_session
+    if tool_session.alignment is None and not (_last_alignment_status or {}).get("active"):
+        return
+    status = tool_session.status()
+    if status != _last_alignment_status:
+        _last_alignment_status = status
+        _server.broadcast({"type": "event", "event": "tool.session", "payload": status})
 
 
 # ------------------------------------------------------------------ dispatch

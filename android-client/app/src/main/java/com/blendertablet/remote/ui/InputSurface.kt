@@ -66,6 +66,7 @@ fun InputSurface(
     /** Puntos del Knife en pantalla, para dibujarlos sobre el vídeo. */
     knifePoints: List<List<Pair<Float, Float>>> = emptyList(),
     snapCandidate: SnapCandidate? = null,
+    cancelPickOnNavigation: Boolean = false,
     proportionalCircle: ProportionalCircle? = null,
 ) {
     AndroidView(
@@ -85,6 +86,7 @@ fun InputSurface(
             view.onShape = onShape
             view.knifePoints = knifePoints
             view.snapCandidate = snapCandidate
+            view.cancelPickOnNavigation = cancelPickOnNavigation
             view.proportionalCircle = proportionalCircle
             view.invalidate()
         },
@@ -183,6 +185,7 @@ private class GestureView(
     /** Puntos del Knife (normalizados) para el overlay. */
     var knifePoints: List<List<Pair<Float, Float>>> = emptyList()
     var snapCandidate: SnapCandidate? = null
+    var cancelPickOnNavigation: Boolean = false
     var proportionalCircle: ProportionalCircle? = null
     private val proportionalPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = android.graphics.Color.parseColor("#B3FFFFFF")
@@ -316,7 +319,11 @@ private class GestureView(
                     onTweakDrag(GesturePhase.CANCEL, nx(lastX), ny(lastY), 0f, 0f)
                     tweakDrawing = false
                 }
-                endToolGesture()
+                if (cancelPickOnNavigation && toolActive) {
+                    onToolGesture(GesturePhase.CANCEL, 0f, 0f)
+                    toolActive = false
+                    resetPending()
+                } else endToolGesture()
                 endNavigationOrbit()
                 // La sesión de navegación NO se cierra: solo se reancla. Cerrarla
                 // cortaría el gesto en seco al apoyar un dedo de más.

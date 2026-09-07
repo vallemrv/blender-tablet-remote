@@ -541,6 +541,46 @@ para que la transformación se aplique una sola vez. `CENTER` conserva, en cambi
 posición visible exacta: desde ese instante es un pivote estacionario, no un punto que
 deba desrotarse o desescalarse con la selección.
 
+### Alinear caras en Object Mode
+
+`tool.begin` con `tool: "ALIGN"` abre una sesión reversible sobre la malla activa,
+o sobre `parameters.object` si se proporciona su nombre. Comparte exclusión modal,
+propietario, cancelación, desconexión y confirmación con las herramientas `tool.*`.
+Solo se transforma el objeto fuente. El destino debe ser otro objeto que no dependa
+jerárquicamente de la fuente. Las caras se sondean sobre la geometría evaluada visible.
+
+`tool.face_pick` recibe `u`, `v`, `role: SOURCE|TARGET` y `phase: TAP|UPDATE|END|CANCEL`.
+`UPDATE` muestra un candidato; `END` fija exclusivamente ese candidato, sin raycast.
+`TAP` sondea y fija en una operación. `CANCEL` descarta el candidato, conservando las
+caras fijadas. Cada rol es independiente. Tras fijar fuente se arma destino. Fuente
+solo sondea su objeto; destino lo excluye para acceder a la otra pieza.
+
+Parámetros editables mediante `tool.parameter`:
+
+| Parámetro | Valores / comportamiento |
+|---|---|
+| `pick_role` | `SOURCE`, `TARGET`: permite volver a elegir una cara |
+| `mode` | `CONTACT` (predeterminado): centros coincidentes y normales enfrentadas; `ORIENT`: misma orientación de caras, manteniendo el origen fuente; `COPY_ROTATION`: copia la orientación mundial del objeto destino, manteniendo origen y tamaño fuente |
+| `twist` | `"0"`, `"90"`, `"180"`, `"270"`, en grados alrededor de la normal destino; no se aplica en `COPY_ROTATION` |
+| `gap` | Separación no negativa, en unidades Blender, a lo largo de la normal destino; solo en `CONTACT` |
+
+La alineación orienta también una arista de cada cara para resolver el giro restante.
+Usa las caras planas completas y no reescala la fuente: con caras de tamaños distintos
+coinciden centros y planos, no necesariamente todos los bordes. El objeto fuente no
+puede tener restricciones activas que gobiernen su transformación; una jerarquía que
+no permita representar el resultado exacto produce error y conserva la preview previa.
+
+El estado añade `input: "FACE_PAIR"`, `instruction`, `can_confirm`, `source_object`,
+`target_object` y `controls[]`. Cada control usa `id`, `label`, `type`, `values`,
+`labels` (etiquetas de enum), `unit`, `step`, `min` y `max`, según corresponda.
+Android dibuja esos descriptores en la bandeja compartida; `unit: "length"` convierte
+con `scale_length` y la unidad del preset. `tool.session` publica cambios de estado e
+invalidaciones. Confirmar exige ambas caras y deja un único paso de undo; `ALIGN` no
+se repite mediante `history.repeat_last` porque sus referencias son propias de la sesión.
+
+Fuente (ámbar), destino (azul) y candidato (verde) muestran su contorno y su marcador
+en el propio vídeo, reproyectados en cada frame. APK y add-on deben actualizarse juntos.
+
 ### Ajustes globales de Edit
 
 `edit.settings` devuelve `edit_settings`; el mismo bloque también viaja en
