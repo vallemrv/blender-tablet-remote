@@ -1051,6 +1051,7 @@ private fun quickActions(
                 QuickAction("Posición", Icons.Default.OpenWith, onClick = { vm.applyTransform(true, false, false) }),
                 QuickAction("Rotación", Icons.AutoMirrored.Filled.RotateRight, onClick = { vm.applyTransform(false, true, false) }),
                 QuickAction("Escala", Icons.Default.AspectRatio, onClick = { vm.applyTransform(false, false, true) }),
+                QuickAction("Todas", AppIcons.action(ActionId.APPLY_TRANSFORMS), onClick = { vm.applyTransform(true, true, true) }),
             ),
         )
         ActionId.PLACE_OBJECT -> QuickAction(
