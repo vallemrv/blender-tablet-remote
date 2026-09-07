@@ -32,9 +32,7 @@ import com.blendertablet.remote.model.Shading
  *
  * Agrupa lo que se usa a cada toque sin abrir el rail: wireframe (toggle), los
  * modificadores Mayús/Ctrl/Alt (alternar/añadir/quitar de la selección) y undo/redo,
- * que salen del rail para quedarse aquí con iconos. En Edit Mode, en el
- * lado derecho de la misma barra, se muestran los submodos vértice/arista/cara
- * para cambiar de selección sin abrir nada. La selección por caja B y círculo C
+ * que salen del rail para quedarse aquí con iconos. La selección por caja B y círculo C
  * vive en el long-click (RADIAL); armada, un chip sobre el viewport la señala y
  * la desarma.
  *
@@ -92,25 +90,6 @@ fun TopToolbar(
                     }
                 }
             }
-
-            if (inEdit) {
-                FloatingPanel {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                        IconAction(
-                            Icons.Default.ScatterPlot, "Vértices",
-                            selected = blender.selectionMode == SelectionMode.VERTEX,
-                        ) { vm.setSelectionMode(SelectionMode.VERTEX) }
-                        IconAction(
-                            Icons.Default.LinearScale, "Aristas",
-                            selected = blender.selectionMode == SelectionMode.EDGE,
-                        ) { vm.setSelectionMode(SelectionMode.EDGE) }
-                        IconAction(
-                            Icons.Default.CropSquare, "Caras",
-                            selected = blender.selectionMode == SelectionMode.FACE,
-                        ) { vm.setSelectionMode(SelectionMode.FACE) }
-                    }
-                }
-            }
         }
 
         FloatingPanel {
@@ -123,26 +102,47 @@ fun TopToolbar(
     }
 }
 
-/** Selector horizontal de modo colocado directamente debajo del ojo. */
+/** Modo bajo el ojo; en Edit, los submodos quedan a su izquierda en la misma fila. */
 @Composable
 fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier) {
-    val editable = state.blender.activeObject != null
-    val inEdit = state.blender.mode == BlenderMode.EDIT
-    FloatingPanel(modifier) {
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            IconAction(
-                Icons.Default.ViewInAr, "Object Mode",
-                selected = !inEdit,
-            ) { vm.setMode(BlenderMode.OBJECT) }
-            IconAction(
-                Icons.Default.Straighten, "Edit Mode",
-                selected = inEdit,
-                enabled = editable,
-            ) { vm.setMode(BlenderMode.EDIT) }
-            IconAction(
-                Icons.Default.Brush, "Sculpt Mode · próximamente",
-                onClick = {},
-            )
+    val blender = state.blender
+    val editable = blender.activeObject != null
+    val inEdit = blender.mode == BlenderMode.EDIT
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (inEdit) {
+            FloatingPanel {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    IconAction(
+                        Icons.Default.ScatterPlot, "Vértices",
+                        selected = blender.selectionMode == SelectionMode.VERTEX,
+                    ) { vm.setSelectionMode(SelectionMode.VERTEX) }
+                    IconAction(
+                        Icons.Default.LinearScale, "Aristas",
+                        selected = blender.selectionMode == SelectionMode.EDGE,
+                    ) { vm.setSelectionMode(SelectionMode.EDGE) }
+                    IconAction(
+                        Icons.Default.CropSquare, "Caras",
+                        selected = blender.selectionMode == SelectionMode.FACE,
+                    ) { vm.setSelectionMode(SelectionMode.FACE) }
+                }
+            }
+        }
+        FloatingPanel {
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                IconAction(
+                    Icons.Default.ViewInAr, "Object Mode",
+                    selected = !inEdit,
+                ) { vm.setMode(BlenderMode.OBJECT) }
+                IconAction(
+                    Icons.Default.Straighten, "Edit Mode",
+                    selected = inEdit,
+                    enabled = editable,
+                ) { vm.setMode(BlenderMode.EDIT) }
+                IconAction(
+                    Icons.Default.Brush, "Sculpt Mode · próximamente",
+                    onClick = {},
+                )
+            }
         }
     }
 }

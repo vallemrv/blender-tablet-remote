@@ -500,8 +500,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             }
         }
 
-        // Barra de tools junto al ojo (wireframe, B/C, Ctrl/Alt, undo/redo) y, en
-        // Edit Mode, los submodos de selección a su derecha. Vive fuera del chrome
+        // Barra de tools junto al ojo (wireframe, Ctrl/Alt, undo/redo). Vive fuera del chrome
         // solo para que el ojo siga accesible: la propia barra se esconde con el
         // resto y deja el viewport limpio, sin controles y sin rejilla (§70).
         TopToolbar(

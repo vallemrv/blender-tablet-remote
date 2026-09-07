@@ -105,6 +105,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   con dos dedos cancela el sondeo temporal, sin fijar otra cara.
 - Debajo del ojo hay un selector horizontal Object/Edit/Sculpt. Sculpt y el menú superior
   Layouts son por ahora únicamente presencia visual y no envían comandos.
+- En Edit, Vértices/Aristas/Caras se sitúa a la izquierda del selector de modo, en
+  la misma fila bajo el ojo; no aparece en la barra superior.
 - El panel de modificadores queda limitado entre ese selector de modos y el selector
   inferior de vistas/atajos, con un pequeño margen respecto a ambos y sin invadirlos.
 - El botón cerrado de modificadores se sitúa 10 dp debajo del selector de modos para
