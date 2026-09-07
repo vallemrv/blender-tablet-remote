@@ -169,9 +169,8 @@ val RotateSteps = listOf(
     StepPreset("45°", Math.toRadians(45.0)),
 )
 
-// La etiqueta se lee en porcentaje (lo que piensa quien escala) pero por el cable
-// viaja el factor, que es lo que usa el servidor. La barra ya no los cicla: el paso
-// de Escalar se escribe a mano (`scaleStepPercent`) y esta lista solo fija el arranque.
+// Presets de factor para Escalar. La barra usa `scaleStepValue` y `scaleUnit`
+// como fuente del paso, también cuando se seleccionan longitudes.
 val ScaleSteps = listOf(
     StepPreset("1%", 0.01),
     StepPreset("5%", 0.05),
@@ -542,8 +541,9 @@ data class AppUiState(
     /** Paso de mover, en la unidad en que se escribe. Arranca en el más fino: 1 mm. */
     val moveStepValue: Double = 1.0,
     val moveStepUnit: TransformStepUnit = TransformStepUnit.MM,
-    /** Paso de escalar, en % de factor. Escalar no tiene unidad de longitud. */
-    val scaleStepPercent: Double = 5.0,
+    /** Unidad común de dimensiones, paso, botones y snap de Escalar. */
+    val scaleUnit: TransformStepUnit = TransformStepUnit.CM,
+    val scaleStepValue: Double = 1.0,
     /** Mayús alterna como el Shift+click de Blender; Alt resta. */
     val selectionOp: SelectionOp = SelectionOp.SET,
     /** Ctrl armado para que el siguiente toque seleccione el camino más corto. */

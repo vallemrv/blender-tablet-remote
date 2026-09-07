@@ -266,11 +266,12 @@ interface RemoteBlenderClient {
         snapType: SnapType = SnapType.NONE,
         orientation: Orientation = Orientation.GLOBAL,
         valueMode: ValueMode = ValueMode.RELATIVE,
+        scaleStepUnit: String? = null,
     )
 
     fun transformAxes(axes: Set<Axis>)
     fun transformOrientation(orientation: Orientation)
-    fun transformSnap(snapType: SnapType, step: Double, snapToSelection: Boolean)
+    fun transformSnap(snapType: SnapType, step: Double, snapToSelection: Boolean, scaleStepUnit: String? = null)
 
     /**
      * Engancha el movimiento al elemento que haya en [u], [v]. Solo vale en MOVE: el

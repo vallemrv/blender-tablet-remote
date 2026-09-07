@@ -159,6 +159,8 @@ class _Session:
         self.source_position = None
         self.reference_role = None
         self.step = DEFAULT_STEP["MOVE"]
+        self.scale_step_unit = "FACTOR"
+        self.scale_exact = False
         # Sentido según el modo: metros, radianes o factor.
         self.values = Vector((0.0, 0.0, 0.0))
         self.rotation_axis = Vector((0.0, 0.0, 1.0))
@@ -207,7 +209,7 @@ class _Session:
     def begin(self, mode: str, axes: list[str], snap: bool, step: float | None,
               owner_id=None, orientation="GLOBAL", value_mode="RELATIVE", snap_type="NONE",
               proportional=None, proportional_radius=None, proportional_falloff=None,
-              motion="FREE", slide_clamp=True) -> None:
+              motion="FREE", slide_clamp=True, scale_step_unit="FACTOR") -> None:
         active = bpy.context.view_layer.objects.active
         edit = active is not None and active.mode == "EDIT" and active.type == "MESH"
         objs = selected_objects()
@@ -228,6 +230,7 @@ class _Session:
         self.motion = motion
         self.slide_clamp = bool(slide_clamp)
         self.step = DEFAULT_STEP[mode] if step is None else step
+        self.scale_step_unit = scale_step_unit
         tool_settings = bpy.context.scene.tool_settings
         self.proportional = bool(tool_settings.use_proportional_edit if proportional is None else proportional)
         self.proportional_radius = float(tool_settings.proportional_size if proportional_radius is None else proportional_radius)
@@ -581,6 +584,7 @@ class _Session:
         elif self.mode == "ROTATE":
             self.values[self._rotation_value_index()] -= dx * ROTATE_SENSITIVITY
         else:
+            self.scale_exact = False
             factor = 1.0 + dx * SCALE_SENSITIVITY
             self.values = Vector(max(MIN_SCALE, v * factor) for v in self.values)
 
@@ -618,6 +622,8 @@ class _Session:
     def set_values(self, values) -> None:
         """Entrada numérica: fija el delta en vez de sumarlo."""
         self.values = Vector((float(values[0]), float(values[1]), float(values[2])))
+        if self.mode == "SCALE":
+            self.scale_exact = True
 
     def _rotation_value_index(self) -> int:
         """Componente canónica del giro escalar compatible con el contrato v2."""
@@ -645,12 +651,22 @@ class _Session:
                     if name not in self.axes:
                         values[index] = 0.0
         elif self.mode == "SCALE":
+            indices = [AXIS_INDEX[name] for name in self.axes] if self.axes else list(range(3))
+            if (not self.scale_exact and self.snap
+                    and self.snap_type in {"INCREMENT", "GRID"} and self.step > 0):
+                step = self.step
+                if self.scale_step_unit == "LENGTH":
+                    # Un factor común conserva proporciones. Con restricción usa
+                    # ese eje; libre/plano mide el incremento en la dimensión mayor.
+                    baseline = max(self.base_dimensions[index] for index in indices)
+                    step = self.step / baseline if baseline > 1e-12 else 0.0
+                if step > 0.0:
+                    for index in indices:
+                        values[index] = max(MIN_SCALE, 1.0 + round((values[index] - 1.0) / step) * step)
             if self.axes:
                 for name, index in AXIS_INDEX.items():
                     if name not in self.axes:
                         values[index] = 1.0
-            if self.snap and self.snap_type in {"INCREMENT", "GRID"} and self.step > 0:
-                values = Vector(max(MIN_SCALE, round(v / self.step) * self.step) for v in values)
         else:
             if self.snap and self.snap_type in {"INCREMENT", "GRID"} and self.step > 0:
                 index = self._rotation_value_index()
@@ -868,6 +884,7 @@ class _Session:
             "slide_clamp": self.slide_clamp,
             "slide_factor": self.slide_factor,
             "step": self.step,
+            "scale_step_unit": self.scale_step_unit,
             "base_dimensions": list(self.base_dimensions),
             "dimensions": list(Vector(
                 abs(self.base_dimensions[index] * values[index])
@@ -926,6 +943,13 @@ def _parse_step(payload: dict, default=None):
     return step
 
 
+def _parse_scale_step_unit(payload: dict, default="FACTOR") -> str:
+    unit = str(payload.get("scale_step_unit", default)).upper()
+    if unit not in {"FACTOR", "LENGTH"}:
+        raise BadPayload("'scale_step_unit' must be FACTOR or LENGTH")
+    return unit
+
+
 @command("transform.begin", mutating=True)
 def begin(payload: dict) -> dict:
     """Abre una transformación modal sobre selección Object o Edit."""
@@ -961,6 +985,8 @@ def begin(payload: dict) -> dict:
     if proportional_radius <= 0.0:
         raise BadPayload("'proportional_radius' must be greater than zero")
 
+    scale_step_unit = _parse_scale_step_unit(payload)
+
     # Una sesión abierta se descarta: empezar a mover con algo a medias sería
     # acumular dos transformaciones sin que el usuario lo pidiera.
     from .sessions import cancel_tool
@@ -975,7 +1001,7 @@ def begin(payload: dict) -> dict:
     session.begin(mode, _parse_axes(payload), bool(payload.get("snap", False)), step,
                   payload.get("_client_id"), orientation, value_mode, snap_type,
                   payload.get("proportional"), proportional_radius,
-                  proportional_falloff)
+                  proportional_falloff, scale_step_unit=scale_step_unit)
     session.apply()
     return session.status()
 
@@ -1027,6 +1053,7 @@ def set_snap(payload: dict) -> dict:
             session.snap_locked = False
         session.snap_to_selection = snap_to_selection
     step = _parse_step(payload, session.step)
+    session.scale_step_unit = _parse_scale_step_unit(payload, session.scale_step_unit)
     session.step = step
     session.apply()
     return session.status()

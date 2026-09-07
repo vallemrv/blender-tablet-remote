@@ -167,9 +167,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   `0`, `0°` y `100 %` respectivamente sin cancelar ni reactivar la herramienta.
 - Los controles de incremento —paso y botones `−/+`— solo se muestran cuando el Snap
   activo es Incremento, en Mover, Rotar y Escalar.
-- En Mover y Escalar, el selector de unidades va inmediatamente después del campo
-  de incremento, antes de `+`. En Escalar el paso conserva su cálculo porcentual y
-  muestra `%` dentro del campo; mm/cm/m sigue gobernando las dimensiones de XYZ.
+- En Mover, el selector de unidades va inmediatamente después del campo de incremento,
+  antes de `+`. En Escalar, mm/cm/m/% junto a XYZ gobierna dimensiones, paso,
+  botones y snap; `Paso` muestra la misma unidad. Cada botón cambia la dimensión de
+  su eje; con cadena conserva proporciones. El gesto métrico usa el eje restringido
+  o la dimensión mayor de los ejes activos. Los valores escritos y Reset son exactos.
 - El selector y los pasos de snap viven en `ui/SnapControl.kt`; las bandejas declaran
   opciones y reciben valores, pero no vuelven a implementar su interfaz.
 - Cada tipo de Snap obtiene su símbolo semántico desde `AppIcons.snap`; la marca de

@@ -49,13 +49,12 @@ import com.blendertablet.remote.model.SnapType
 import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.TransformSession
 import com.blendertablet.remote.model.TransformStepUnit
-import com.blendertablet.remote.model.LengthUnit
-import com.blendertablet.remote.model.transformStepUnit
 import com.blendertablet.remote.model.moveValueForDisplay
 import com.blendertablet.remote.model.moveValueInBlenderUnits
 import com.blendertablet.remote.model.ValueMode
 import com.blendertablet.remote.model.ValueParser
 import com.blendertablet.remote.model.stepsFor
+import com.blendertablet.remote.model.scaleAxisStep
 import com.blendertablet.remote.model.scaleValuesAfterAxisEdit
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -81,7 +80,6 @@ private val AxisColors = mapOf(
 fun TransformBar(
     session: TransformSession,
     unitScaleLength: Double,
-    sceneLengthUnit: LengthUnit,
     editSettings: EditSettings,
     stepIndex: Int,
     snapType: SnapType,
@@ -92,7 +90,8 @@ fun TransformBar(
     referencePickingRole: String,
     moveStepValue: Double,
     moveStepUnit: TransformStepUnit,
-    scaleStepPercent: Double,
+    scaleStepValue: Double,
+    scaleUnit: TransformStepUnit,
     availableOrientations: List<Orientation>,
     onConstraint: (Constraint) -> Unit,
     onOrientation: (Orientation) -> Unit,
@@ -103,7 +102,7 @@ fun TransformBar(
     onReference: (String) -> Unit,
     onCenterPreset: (String) -> Unit,
     onMoveStep: (Double, TransformStepUnit) -> Unit,
-    onScaleStep: (Double) -> Unit,
+    onScaleStep: (Double, TransformStepUnit) -> Unit,
     onValue: (List<Double>?, Double?, List<Double>?) -> Unit,
     onProportionalRadius: (Double) -> Unit,
     onProportionalRadiusValue: (Double) -> Unit,
@@ -113,10 +112,6 @@ fun TransformBar(
     modifier: Modifier = Modifier,
 ) {
     if (!session.active) return
-    val defaultScaleUnit = sceneLengthUnit.transformStepUnit()
-    var scaleUnit by remember(session.sessionId, defaultScaleUnit) {
-        mutableStateOf(defaultScaleUnit)
-    }
     FloatingPanel(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             // Rótulo a la izquierda, como EditToolTray: el modo ya lo eligió el rail.
@@ -168,22 +163,18 @@ fun TransformBar(
                 } else {
                     ParametricAxisInputs(
                         session, unitScaleLength, moveStepValue, moveStepUnit,
-                        scaleStepPercent, stepIndex, constraint, snapType,
+                        scaleStepValue, stepIndex, constraint, snapType,
                         scaleUnit, onConstraint, onValue,
                     )
                     when (session.mode) {
-                        // Escalar es un factor: el paso se escribe en % y es el mismo
-                        // que mueven los −/+ de cada eje.
                         TransformMode.SCALE -> {
+                            ScaleUnitPicker(scaleUnit) { onScaleStep(scaleStepValue, it) }
                             IconAction(AppIcons.Reset, "Restablecer escala a 100 %") {
                                 onValue(listOf(1.0, 1.0, 1.0), null, null)
                             }
                             if (snapType == SnapType.INCREMENT) {
-                                ScaleStepInput(scaleStepPercent, onScaleStep) {
-                                    ScaleUnitPicker(scaleUnit) { scaleUnit = it }
-                                }
-                            } else {
-                                ScaleUnitPicker(scaleUnit) { scaleUnit = it }
+                                Divider()
+                                ScaleStepInput(scaleStepValue, scaleUnit) { onScaleStep(it, scaleUnit) }
                             }
                         }
                         TransformMode.ROTATE -> {
@@ -257,7 +248,7 @@ fun MovementControls(
         unitScaleLength = unitScaleLength,
         stepValue = moveStepValue,
         stepUnit = moveStepUnit,
-        scaleStepPercent = 0.0,
+        scaleStepValue = 0.0,
         stepIndex = 0,
         constraint = constraint,
         snapType = snapType,
@@ -283,51 +274,6 @@ fun MovementControls(
     ) { onSnapToSelection(!session.snapToSelection) }
     Divider()
     OrientationPicker(availableOrientations, orientation, onOrientation)
-}
-
-/**
- * Paso de Escalar, escrito en porcentaje.
- *
- * El porcentaje va dentro del campo. A su lado vive el selector de las unidades
- * de dimensión de XYZ; cambiarlo no modifica el factor del incremento.
- */
-@Composable
-private fun ScaleStepInput(
-    percent: Double,
-    onChange: (Double) -> Unit,
-    unitPicker: @Composable () -> Unit,
-) {
-    var text by remember(percent) { mutableStateOf("${format(percent, 3)} %") }
-    fun commit(raw: String = text) {
-        raw.replace(',', '.').trim().removeSuffix("%").trim().toDoubleOrNull()
-            ?.takeIf { it > 0.0 }?.let {
-                text = "${format(it, 3)} %"
-                onChange(it)
-            }
-    }
-    PillButton("−") { onChange((percent - 1.0).coerceAtLeast(0.001)) }
-    CompactNumericField(
-        value = text, onValueChange = { text = it }, modifier = Modifier.width(72.dp),
-        textAlign = TextAlign.End, placeholder = "Paso", onDone = { commit() },
-    )
-    unitPicker()
-    PillButton("+") { onChange(percent + 1.0) }
-}
-
-@Composable
-private fun ScaleUnitPicker(unit: TransformStepUnit, onSelect: (TransformStepUnit) -> Unit) {
-    Box {
-        var expanded by remember { mutableStateOf(false) }
-        PillButton(unit.label) { expanded = true }
-        DropdownMenu(expanded, { expanded = false }) {
-            TransformStepUnit.entries.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option.label) },
-                    onClick = { onSelect(option); expanded = false },
-                )
-            }
-        }
-    }
 }
 
 @Composable
@@ -368,7 +314,7 @@ private fun ParametricAxisInputs(
     unitScaleLength: Double,
     stepValue: Double,
     stepUnit: TransformStepUnit,
-    scaleStepPercent: Double,
+    scaleStepValue: Double,
     stepIndex: Int,
     constraint: Constraint,
     snapType: SnapType,
@@ -412,7 +358,7 @@ private fun ParametricAxisInputs(
             }
         }
         var editing by remember(session.active, axis) { mutableStateOf(false) }
-        var text by remember(session.active, axis) {
+        var text by remember(session.active, axis, if (session.mode == TransformMode.SCALE) scaleUnit else null) {
             mutableStateOf(format(displayed, 4))
         }
         LaunchedEffect(displayed, editing) {
@@ -424,10 +370,10 @@ private fun ParametricAxisInputs(
             } else session.values.toMutableList().also { it[index] = value }
             onValue(next, null, null)
         }
-        // Escalar avanza siempre por el paso escrito en la barra, sea cual sea la
-        // unidad en que se lean los ejes: el factor es el mismo y la unidad solo
-        // decide si el campo enseña la dimensión resultante o el porcentaje.
-        val axisStep = if (session.mode == TransformMode.SCALE) scaleStepPercent / 100.0 else step
+        val axisStep = if (session.mode == TransformMode.SCALE) scaleAxisStep(
+            scaleStepValue, scaleUnit, unitScaleLength,
+            session.baseDimensions.getOrElse(index) { 0.0 },
+        ) else step
         Row(verticalAlignment = Alignment.CenterVertically) {
             val active = axis in constraint.axes
             Box(

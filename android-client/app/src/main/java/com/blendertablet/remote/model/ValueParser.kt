@@ -58,11 +58,11 @@ object ValueParser {
         unitScaleLength: Double,
         baseDimension: Double,
     ): Double? {
-        if (baseDimension <= 1e-12 || unitScaleLength <= 1e-12) return null
         if (unit == TransformStepUnit.PERCENT) {
             val number = input.trim().replace(',', '.').removeSuffix("%").toDoubleOrNull() ?: return null
             return (number / 100.0).takeIf { it > 0.0 }
         }
+        if (baseDimension <= 1e-12 || unitScaleLength <= 1e-12) return null
         val explicit = split(input)?.second?.isNotEmpty() == true
         val physicalMeters = (if (explicit) parseMove(input) else {
             val number = input.trim().replace(',', '.').toDoubleOrNull() ?: return null
@@ -104,3 +104,17 @@ fun scaleValuesAfterAxisEdit(
     else values[axisIndex] = factor
     return values
 }
+
+/** Paso transmitido: longitud en unidades Blender o incremento del factor. */
+fun scaleStepForWire(value: Double, unit: TransformStepUnit, scaleLength: Double): Double =
+    if (unit == TransformStepUnit.PERCENT) value / 100.0
+    else moveValueInBlenderUnits(value, unit, scaleLength)
+
+val TransformStepUnit.scaleStepWireUnit: String
+    get() = if (this == TransformStepUnit.PERCENT) "FACTOR" else "LENGTH"
+
+/** Cada botón avanza la dimensión de SU eje usando el mismo paso visible. */
+fun scaleAxisStep(value: Double, unit: TransformStepUnit, scaleLength: Double, baseline: Double): Double =
+    if (unit == TransformStepUnit.PERCENT) value / 100.0
+    else if (baseline > 1e-12) scaleStepForWire(value, unit, scaleLength) / baseline
+    else 0.0

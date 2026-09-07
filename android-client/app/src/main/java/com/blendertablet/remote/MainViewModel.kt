@@ -40,6 +40,8 @@ import com.blendertablet.remote.model.TransformSession
 import com.blendertablet.remote.model.TransformStepUnit
 import com.blendertablet.remote.model.TweakMotion
 import com.blendertablet.remote.model.ValueMode
+import com.blendertablet.remote.model.scaleStepForWire
+import com.blendertablet.remote.model.scaleStepWireUnit
 import com.blendertablet.remote.model.moveStepInBlenderUnits
 import com.blendertablet.remote.model.transformStepUnit
 import com.blendertablet.remote.model.stepsFor
@@ -170,11 +172,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (ready) client.viewOverlays(local.value.controlsVisible)
             }
         }
-        // La unidad visible de Mover sigue al preset real de la escena. Se observa
+        // Las unidades de Mover y Escalar siguen al preset real de la escena. Se observa
         // también al abrir otro .blend, no solo cuando el usuario toca el menú.
         viewModelScope.launch {
             client.state.map { it.sceneScale.lengthUnit }.distinctUntilChanged().collect { unit ->
                 local.update { it.copy(moveStepUnit = unit.transformStepUnit()) }
+                setScaleStep(local.value.scaleStepValue, unit.transformStepUnit())
             }
         }
         // El catálogo de escalas no viaja en el snapshot (es fijo) y el menú Escena
@@ -961,6 +964,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (client.toolSession.value.active) client.toolCancel()
         loopCutArmed = false
         local.update { it.copy(loopCutAwaitingTap = false) }
+        if (mode == TransformMode.SCALE) {
+            local.update { it.copy(scaleUnit = client.state.value.sceneScale.lengthUnit.transformStepUnit()) }
+        }
         val preset = stepsFor(mode)[localStepIndex(mode)]
         val scaleLength = uiState.value.blender.unitScaleLength
         // MOVE y SCALE leen el paso del campo de la barra, que es el que el usuario ve
@@ -969,7 +975,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val step = when (mode) {
             TransformMode.MOVE ->
                 moveStepInBlenderUnits(local.value.moveStepValue, local.value.moveStepUnit, scaleLength)
-            TransformMode.SCALE -> local.value.scaleStepPercent / 100.0
+            TransformMode.SCALE -> scaleStepForWire(local.value.scaleStepValue, local.value.scaleUnit, scaleLength)
             TransformMode.ROTATE -> null
         } ?: stepInBlenderUnits(preset, mode, scaleLength)
         val constraint = if (mode == TransformMode.ROTATE && local.value.constraint.axes.size > 1) {
@@ -988,6 +994,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             snapType = snapType,
             orientation = local.value.orientation,
             valueMode = local.value.valueMode,
+            scaleStepUnit = if (mode == TransformMode.SCALE) local.value.scaleUnit.scaleStepWireUnit else null,
         )
     }
 
@@ -1111,6 +1118,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 snapType = session.snapType,
                 orientation = session.orientation,
                 valueMode = valueMode,
+                scaleStepUnit = if (session.mode == TransformMode.SCALE) local.value.scaleUnit.scaleStepWireUnit else null,
             )
         }
     }
@@ -1153,13 +1161,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         client.transformSnap(SnapType.INCREMENT, blenderStep, session.snapToSelection)
     }
 
-    /** Paso de Escalar, en % de factor. Misma regla que [setMoveStep]: una sola fuente. */
-    fun setScaleStep(percent: Double) {
-        if (percent <= 0.0) return
-        local.update { it.copy(scaleStepPercent = percent) }
+    /** Una sola unidad para dimensiones, botones e incremento de Escalar. */
+    fun setScaleStep(value: Double, unit: TransformStepUnit) {
+        if (!value.isFinite() || value <= 0.0) return
+        local.update { it.copy(scaleStepValue = value, scaleUnit = unit) }
         val session = client.transformSession.value
         if (!session.active || session.mode != TransformMode.SCALE) return
-        client.transformSnap(session.snapType, percent / 100.0, session.snapToSelection)
+        client.transformSnap(
+            session.snapType,
+            scaleStepForWire(value, unit, client.state.value.unitScaleLength),
+            session.snapToSelection, unit.scaleStepWireUnit,
+        )
     }
 
     fun setSnapToSelection(enabled: Boolean) {

@@ -495,10 +495,10 @@ transformación todavía viva.
 
 | Comando | Payload |
 |---|---|
-| `transform.begin` | `mode`: `MOVE`\|`ROTATE`\|`SCALE`, `axes[]`/`constraint`, `orientation`, `value_mode`, `snap`, `snap_type`, `step`; en Edit también `proportional`, `radius`, `falloff` |
+| `transform.begin` | `mode`: `MOVE`\|`ROTATE`\|`SCALE`, `axes[]`/`constraint`, `orientation`, `value_mode`, `snap`, `snap_type`, `step`, `scale_step_unit`; en Edit también `proportional`, `radius`, `falloff` |
 | `transform.axes` | `axes[]` — cambia la restricción en vivo |
 | `transform.orientation` | `orientation` — cambia GLOBAL/LOCAL/VIEW/NORMAL sin reiniciar la sesión |
-| `transform.snap` | `snap` (bool), `snap_type`, `step`, `snap_to_selection`; en Move no admite `GRID` ni `CURSOR` |
+| `transform.snap` | `snap` (bool), `snap_type`, `step`, `snap_to_selection`, `scale_step_unit`; en Move no admite `GRID` ni `CURSOR` |
 | `snap.query` | `u`, `v`, `snap_type`: `VERTEX`\|`EDGE`\|`EDGE_CENTER`\|`FACE`\|`FACE_CENTER`\|`CURSOR`, `threshold` |
 | `transform.snap_candidate` | igual que `snap.query`, `lock` (predeterminado true) |
 | `transform.reference_candidate` | `u`, `v`, `lock`, `role`: `CENTER`/`SOURCE`; `clear`; o `preset`: `SELECTION`/`OBJECT_ORIGIN`/`CURSOR` para CENTER. MOVE usa source→target; ROTATE/SCALE separan centro, fuente y destino |
@@ -523,6 +523,19 @@ Solo atraviesa los objetos excluidos explícitamente por la sesión.
 | `transform.session` | Publica `values` canónico y los roles `center`, `source`, `target`; `angle` y `reference_*` quedan como derivados v2 |
 | `transform.confirm` | — cierra con un único paso de undo |
 | `transform.cancel` | — restaura las matrices originales |
+
+En SCALE, `scale_step_unit` indica cómo interpretar `step`: `FACTOR` (predeterminado,
+porcentaje dividido entre 100) o `LENGTH` (mm/cm/m convertidos a unidades Blender,
+incluyendo `scale_length`). Se fija en `transform.begin`, puede cambiarse en
+`transform.snap` y se publica en la sesión; omitirlo en `transform.snap` conserva
+su valor. Android usa un único selector para dimensiones X/Y/Z, paso y botones.
+Cada botón suma/resta la longitud elegida en su eje y convierte desde su dimensión
+base; con cadena replica el factor para conservar las proporciones del baseline.
+El gesto con paso métrico toma la dimensión base mayor entre los ejes activos
+(o el único eje restringido) y usa un factor común. Los incrementos parten de 100 %;
+los ejes excluidos permanecen a 100 %. `transform.value` en SCALE respeta el valor
+exacto, incluidos los botones y Reset, sin redondearlo otra vez; el siguiente gesto
+vuelve a aplicar el snap. Una dimensión base nula no admite incremento métrico.
 
 Snap incremental y rejilla en la sesión modal:
 

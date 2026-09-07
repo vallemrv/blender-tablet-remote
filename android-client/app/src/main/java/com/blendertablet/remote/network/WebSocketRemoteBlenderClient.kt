@@ -485,6 +485,7 @@ class WebSocketRemoteBlenderClient(
         snapType: SnapType,
         orientation: Orientation,
         valueMode: ValueMode,
+        scaleStepUnit: String?,
     ) =
         command(
             "transform.begin",
@@ -497,7 +498,8 @@ class WebSocketRemoteBlenderClient(
                 .put("snap_type", snapType.name)
                 .put("step", step)
                 .put("orientation", orientation.name)
-                .put("value_mode", valueMode.name),
+                .put("value_mode", valueMode.name)
+                .apply { scaleStepUnit?.let { put("scale_step_unit", it) } },
         )
 
     override fun transformAxes(axes: Set<Axis>) =
@@ -506,13 +508,14 @@ class WebSocketRemoteBlenderClient(
     override fun transformOrientation(orientation: Orientation) =
         command("transform.orientation", JSONObject().put("orientation", orientation.name))
 
-    override fun transformSnap(snapType: SnapType, step: Double, snapToSelection: Boolean) = command(
+    override fun transformSnap(snapType: SnapType, step: Double, snapToSelection: Boolean, scaleStepUnit: String?) = command(
         "transform.snap",
         JSONObject()
             .put("snap", snapType != SnapType.NONE)
             .put("snap_type", snapType.name)
             .put("snap_to_selection", snapToSelection)
-            .put("step", step),
+            .put("step", step)
+            .apply { scaleStepUnit?.let { put("scale_step_unit", it) } },
     )
 
     override fun transformSnapCandidate(u: Double, v: Double, snapType: SnapType, lock: Boolean) {

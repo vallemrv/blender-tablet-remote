@@ -2,6 +2,7 @@ package com.blendertablet.remote.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -15,7 +16,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
+import com.blendertablet.remote.model.TransformStepUnit
 import com.blendertablet.remote.model.SnapType
 import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.TweakMotion
@@ -94,3 +98,42 @@ internal fun tweakSnapSteps(motion: TweakMotion): List<Pair<String, Double>> =
     } else {
         DistanceSnapSteps
     }
+
+/** El paso comparte la unidad seleccionada para las dimensiones de Escalar. */
+@Composable
+internal fun ScaleStepInput(value: Double, unit: TransformStepUnit, onChange: (Double) -> Unit) {
+    var text by remember(value, unit) { mutableStateOf("${formatScaleStep(value)} ${unit.label}") }
+    fun commit() {
+        text.replace(',', '.').trim().removeSuffix(unit.label).trim().toDoubleOrNull()
+            ?.takeIf { it.isFinite() && it > 0.0 }?.let {
+                text = "${formatScaleStep(it)} ${unit.label}"
+                onChange(it)
+            }
+    }
+    Text("Paso", color = Ink.Faint, fontSize = 11.sp)
+    PillButton("−") { onChange((value - 1.0).coerceAtLeast(0.001)) }
+    CompactNumericField(
+        value = text, onValueChange = { text = it }, modifier = Modifier.width(84.dp),
+        textAlign = TextAlign.End, placeholder = "Paso", onDone = { commit() },
+    )
+    PillButton("+") { onChange(value + 1.0) }
+}
+
+@Composable
+internal fun ScaleUnitPicker(unit: TransformStepUnit, onSelect: (TransformStepUnit) -> Unit) {
+    Box {
+        var expanded by remember { mutableStateOf(false) }
+        PillButton(unit.label) { expanded = true }
+        DropdownMenu(expanded, { expanded = false }) {
+            TransformStepUnit.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.label) },
+                    onClick = { onSelect(option); expanded = false },
+                )
+            }
+        }
+    }
+}
+
+private fun formatScaleStep(value: Double): String =
+    value.toBigDecimal().stripTrailingZeros().toPlainString()
