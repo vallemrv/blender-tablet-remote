@@ -27,65 +27,37 @@ from . import command
 
 GEOMETRIC_TYPES = {"VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER"}
 
-# Política táctil común. El candidato entra con el radio propio de su categoría,
-# pero no se suelta hasta salir bastante más lejos. Dentro de esa corona otro punto
-# solo lo reemplaza si es inequívocamente mejor; así el jitter del stylus no hace
-# alternar dos vértices o un vértice y el centro de su arista.
+# Distancias en fracciones del ancho de imagen, con corrección de aspecto.
+# La corona de salida solo retiene el MISMO id; nunca adquiere otro punto.
 STICKY_RELEASE_FACTOR = 1.55
 STICKY_RELEASE_PADDING = 0.012
 STICKY_SWITCH_MARGIN = 0.014
-
-# REL/Fuente compara varias categorías a la vez. Sus radios de entrada son más
-# pequeños que los del snap explícito para que sus zonas no se tapen entre sí:
-# vértice es el más accesible, después centro de cara y por último centro de arista.
-# Los radios de salida conservan exactamente la pegajosidad anterior.
-REFERENCE_THRESHOLDS = {
-    "VERTEX": (0.055, 0.080 * STICKY_RELEASE_FACTOR + STICKY_RELEASE_PADDING),
-    "EDGE_CENTER": (0.045, 0.070 * STICKY_RELEASE_FACTOR + STICKY_RELEASE_PADDING),
-    "FACE_CENTER": (0.050, 0.065 * STICKY_RELEASE_FACTOR + STICKY_RELEASE_PADDING),
-}
+REFERENCE_THRESHOLDS = {"VERTEX": 0.055, "FACE_CENTER": 0.050, "EDGE_CENTER": 0.045}
 
 
 def choose_sticky_candidate(candidates: list[dict], previous: dict | None,
                             acquire_threshold: float,
                             release_threshold: float | None = None) -> dict | None:
-    """Elige un candidato con histéresis, independiente de la herramienta usuaria."""
-    if not candidates:
-        return None
-    best = min(candidates, key=lambda item: item["distance"])
+    """Una competición común, también entre categorías con radios distintos."""
     previous_id = previous.get("id") if isinstance(previous, dict) else None
-    incumbent = next((item for item in candidates if item.get("id") == previous_id), None)
-    if release_threshold is None:
-        release_threshold = acquire_threshold * STICKY_RELEASE_FACTOR + STICKY_RELEASE_PADDING
-    if incumbent is not None and incumbent["distance"] <= release_threshold:
-        if (best.get("id") != incumbent.get("id")
-                and best["distance"] + STICKY_SWITCH_MARGIN < incumbent["distance"]):
-            return best
-        return incumbent
-    return best if best["distance"] <= acquire_threshold else None
+    incumbent = next((c for c in candidates if c.get("id") == previous_id), None)
+    eligible = [c for c in candidates
+                if c["distance"] <= c.get("acquire_threshold", acquire_threshold)]
+    best = min(eligible, key=lambda c: c["distance"], default=None)
+    if incumbent is not None:
+        acquire = incumbent.get("acquire_threshold", acquire_threshold)
+        release = (release_threshold if release_threshold is not None else
+                   acquire * STICKY_RELEASE_FACTOR + STICKY_RELEASE_PADDING)
+        if incumbent["distance"] <= release:
+            if (best is not None and best.get("id") != previous_id
+                    and best["distance"] + STICKY_SWITCH_MARGIN < incumbent["distance"]):
+                return best
+            return incumbent
+    return best
 
 
 def query_reference_candidate(payload: dict, previous: dict | None = None) -> dict:
-    """Referencia táctil automática: destinos exactos por prioridad."""
-    previous_type = previous.get("snap_type") if isinstance(previous, dict) else None
-    # La categoría activa recibe primero su radio de salida. Solo cuando se pierde
-    # vuelve a entrar en juego la prioridad Vértice > Medio > Centro de cara.
-    if previous_type in REFERENCE_THRESHOLDS:
-        acquire, release = REFERENCE_THRESHOLDS[previous_type]
-        candidate = query_candidate(
-            dict(payload, snap_type=previous_type, threshold=acquire), previous, release,
-        )
-        # Esta pasada existe exclusivamente para retener EL MISMO punto. Si salió
-        # del radio, no debe adquirir otro punto de la misma clase saltándose la
-        # comparación general de categorías.
-        if candidate.get("hit") and candidate.get("id") == previous.get("id"):
-            return candidate
-    for snap_type in ("VERTEX", "FACE_CENTER", "EDGE_CENTER"):
-        acquire, _release = REFERENCE_THRESHOLDS[snap_type]
-        candidate = query_candidate(dict(payload, snap_type=snap_type, threshold=acquire))
-        if candidate.get("hit"):
-            return candidate
-    return {"hit": False, "snap_type": "NONE"}
+    return _query_geometric(payload, REFERENCE_THRESHOLDS, previous)
 
 
 def query_candidate(payload: dict, previous: dict | None = None,
@@ -93,218 +65,205 @@ def query_candidate(payload: dict, previous: dict | None = None,
     """Devuelve el candidato visible más cercano bajo coordenadas normalizadas."""
     snap_type = str(payload.get("snap_type", payload.get("type", "VERTEX"))).upper()
     if snap_type == "CURSOR":
+        found = find_view3d()
+        if found is None:
+            raise CommandError("No 3D viewport available", code="no_viewport")
+        camera.sync_from_region(found[3])
         return {"hit": True, "snap_type": "CURSOR", "id": "CURSOR",
                 "position": list(_cursor().location),
-                "screen": [float(payload.get("u", 0.5)), float(payload.get("v", 0.5))],
-                "distance": 0.0}
+                "screen": camera.project(_cursor().location, found[3]) or [], "distance": 0.0}
     if snap_type not in GEOMETRIC_TYPES:
         raise BadPayload("Unsupported geometric 'snap_type'")
+    default = {"VERTEX": 0.080, "EDGE_CENTER": 0.070, "FACE_CENTER": 0.065,
+               "EDGE": 0.042}.get(snap_type, 0.060)
+    threshold = get_float(payload, "threshold", default)
+    if not 0.0 < threshold <= 0.25:
+        raise BadPayload("'threshold' must be in (0, 0.25]")
+    return _query_geometric(payload, {snap_type: threshold}, previous, release_threshold)
+
+
+def _ray_hit(depsgraph, origin, direction, exclude, distance=1e30, viewport=None):
+    """Respeta oclusores; solo atraviesa objetos excluidos explícitamente (Propio)."""
+    remaining = distance
+    for _ in range(64):
+        hit, location, _normal, face, obj, _matrix = bpy.context.scene.ray_cast(
+            depsgraph, origin, direction, distance=remaining)
+        if not hit:
+            return None
+        original = getattr(obj, "original", obj)
+        if original.name not in exclude and original.visible_get(viewport=viewport):
+            return location, face, original
+        advance = (location - origin).length + 1e-5
+        remaining -= advance
+        if remaining <= 0:
+            return None
+        origin = location + direction * 1e-5
+    # Demasiadas superficies: no asumir que el destino está libre.
+    raise CommandError("Too many occluding surfaces", code="snap_occlusion_limit")
+
+
+def _visible(position, screen, depsgraph, rv3d, exclude, viewport=None):
+    origin, direction = camera.ray(screen[0], screen[1], rv3d)
+    distance = (position - origin).dot(direction)
+    if distance <= 0:
+        return False
+    tolerance = max(1e-6, distance * 1e-5)
+    return _ray_hit(depsgraph, origin, direction, exclude,
+                    max(0.0, distance - tolerance), viewport) is None
+
+
+def _query_geometric(payload, thresholds, previous=None, release_threshold=None):
     found = find_view3d()
     if found is None:
         raise CommandError("No 3D viewport available", code="no_viewport")
-    rv3d = found[3]
+    region, rv3d = found[2], found[3]
+    viewport = found[1].spaces.active if found[1] is not None else None
     camera.sync_from_region(rv3d)
+    aspect = max(1, region.width) / max(1, region.height)
     u, v = get_float(payload, "u", 0.5), get_float(payload, "v", 0.5)
-    # Radios táctiles por categoría. Vértice es deliberadamente más pegajoso: con
-    # stylus el jitter alrededor de una esquina era suficiente para soltarlo.
-    default_threshold = {
-        "VERTEX": 0.080,
-        "EDGE_CENTER": 0.070,
-        "FACE_CENTER": 0.065,
-        "EDGE": 0.042,
-    }.get(snap_type, 0.060)
-    threshold = get_float(payload, "threshold", default_threshold)
-    if not 0.0 < threshold <= 0.25:
-        raise BadPayload("'threshold' must be in (0, 0.25]")
-    origin, direction = camera.ray(u, v, rv3d)
+    touch = Vector((u, v))
     include = {str(name) for name in payload.get("include_objects", [])}
     exclude = {str(name) for name in payload.get("exclude_objects", [])}
     depsgraph = bpy.context.evaluated_depsgraph_get()
-    # El objeto móvil puede quedar delante del destino. Avanzar el rayo después de
-    # cada objeto excluido permite seguir viendo el cubo de detrás sin ocultar RNA.
-    hit = False
-    location = None
-    face_index = -1
-    obj = None
-    ray_origin = origin
-    for _attempt in range(16):
-        hit, location, _normal, face_index, obj, _matrix = bpy.context.scene.ray_cast(
-            depsgraph, ray_origin, direction)
-        if not hit or obj is None:
-            break
-        original = getattr(obj, "original", obj)
-        if (not include or original.name in include) and original.name not in exclude:
-            break
-        ray_origin = location + direction * 1e-5
-        hit = False
-    # ``scene.ray_cast`` golpea la geometría evaluada. Con Subdivision Surface el
-    # índice de cara puede no existir en ``obj.data`` (la malla original), pero para
-    # FACE el propio hit ya es la respuesta exacta que necesitamos. Además se devuelve
-    # el original seleccionable: Android compara este nombre con selected_objects.
-    if snap_type == "FACE":
-        if not hit or obj is None or obj.type != "MESH":
-            return {"hit": False, "snap_type": snap_type}
-        original = getattr(obj, "original", obj)
-        return {"hit": True, "snap_type": snap_type, "id": f"{original.name}:FACE:{face_index}",
-                "object": original.name, "element": face_index, "position": list(location),
+    missing = {"hit": False, "snap_type": next(iter(thresholds)) if len(thresholds) == 1 else "NONE"}
+    if "FACE" in thresholds:
+        origin, direction = camera.ray(u, v, rv3d)
+        result = _ray_hit(depsgraph, origin, direction, exclude, viewport=viewport)
+        if result is None:
+            return missing
+        position, face, obj = result
+        if obj.type != "MESH" or (include and obj.name not in include):
+            return missing
+        return {"hit": True, "snap_type": "FACE", "id": f"{obj.name}:FACE:{face}",
+                "object": obj.name, "element": face, "position": list(position),
                 "screen": [u, v], "distance": 0.0}
 
-    target = _snap_target_object(hit, obj, include, exclude)
-    if target is None:
-        return {"hit": False, "snap_type": snap_type}
-    object_name = target.name
+    previous_id = previous.get("id") if isinstance(previous, dict) else None
+    radius = max(thresholds.values()) * STICKY_RELEASE_FACTOR + STICKY_RELEASE_PADDING
+    if release_threshold is not None:
+        radius = max(radius, release_threshold)
     excluded = payload.get("exclude_elements", {})
-    excluded_vertices = {
-        int(index) for index in excluded.get(object_name, {}).get("vertices", [])
-    } if isinstance(excluded, dict) else set()
-
-    touch = Vector((u, v))
-    candidates = _screen_candidates(
-        target, snap_type, rv3d, touch, direction, excluded_vertices)
-    if not candidates:
-        return {"hit": False, "snap_type": snap_type}
-    ranked = [
-        {"hit": True, "snap_type": snap_type,
-         "id": f"{object_name}:{snap_type}:{element}", "object": object_name,
-         "element": element, "position": list(position),
-         "screen": list(camera.project(position, rv3d) or (u, v)), "distance": distance}
-        for distance, element, position in candidates
-    ]
-    chosen = choose_sticky_candidate(ranked, previous, threshold, release_threshold)
+    ranked = []
+    # El radio de pantalla incluye siluetas y mallas sin caras, aunque el rayo
+    # central no toque ningún objeto. Las cajas evitan recorrer mallas lejanas.
+    for obj in bpy.context.view_layer.objects:
+        if (obj.type != "MESH" or obj.name in exclude or not obj.visible_get(viewport=viewport)
+                or (include and obj.name not in include)):
+            continue
+        if obj.mode != "EDIT":
+            bounds = [camera.project(obj.matrix_world @ Vector(corner), rv3d)
+                      for corner in obj.bound_box]
+            if all(b is not None for b in bounds):
+                if (u < min(b[0] for b in bounds) - radius or u > max(b[0] for b in bounds) + radius
+                        or v < min(b[1] for b in bounds) - radius * aspect
+                        or v > max(b[1] for b in bounds) + radius * aspect):
+                    continue
+        vertices = {int(i) for i in excluded.get(obj.name, {}).get("vertices", [])} if isinstance(excluded, dict) else set()
+        for kind, acquire in thresholds.items():
+            for distance, element, position in _screen_candidates(obj, kind, rv3d, touch, aspect, vertices):
+                candidate_id = f"{obj.name}:{kind}:{element}"
+                release = (release_threshold if release_threshold is not None else
+                           acquire * STICKY_RELEASE_FACTOR + STICKY_RELEASE_PADDING)
+                limit = release if candidate_id == previous_id else acquire
+                if distance > limit:
+                    continue
+                screen = camera.project(position, rv3d)
+                if screen is None or not (0 <= screen[0] <= 1 and 0 <= screen[1] <= 1):
+                    continue
+                ranked.append({"hit": True, "snap_type": kind, "id": candidate_id,
+                               "object": obj.name, "element": element, "position": list(position),
+                               "screen": screen, "distance": distance, "acquire_threshold": acquire})
+    # Visibilidad antes de competir: basta comprobar el incumbente y el candidato
+    # nuevo visible más cercano. No se lanza un rayo por cada vértice de la escena.
+    visible = []
+    incumbent = next((c for c in ranked if c["id"] == previous_id), None)
+    if incumbent and _visible(Vector(incumbent["position"]), incumbent["screen"], depsgraph, rv3d, exclude, viewport):
+        visible.append(incumbent)
+    for c in sorted(ranked, key=lambda c: c["distance"]):
+        if c["id"] == previous_id:
+            continue
+        if _visible(Vector(c["position"]), c["screen"], depsgraph, rv3d, exclude, viewport):
+            visible.append(c)
+            break
+    chosen = choose_sticky_candidate(visible, previous, max(thresholds.values()), release_threshold)
     if chosen is None:
-        nearest = min(ranked, key=lambda item: item["distance"])
-        return {"hit": False, "snap_type": snap_type, "distance": nearest["distance"]}
-    return chosen
+        return missing
+    return {k: value for k, value in chosen.items() if k != "acquire_threshold"}
 
 
-def _snap_target_object(hit: bool, obj, include: set[str], exclude: set[str]):
-    """Objeto sobre el que buscar candidatos.
-
-    El rayo manda cuando golpea algo. Si no golpea se cae al objeto en edición: el
-    dedo cae a menudo junto a la silueta, o sobre el hueco que deja la geometría que
-    se está moviendo, y ahí sigue habiendo destinos válidos a la vista.
-    """
-    if hit and obj is not None and obj.type == "MESH":
-        return getattr(obj, "original", obj)
-    active = bpy.context.view_layer.objects.active
-    if (active is not None and active.type == "MESH" and active.mode == "EDIT"
-            and (not include or active.name in include) and active.name not in exclude):
-        return active
-    return None
-
-
-def _screen_candidates(obj, snap_type: str, rv3d, touch: Vector, view_direction: Vector,
-                       excluded_vertices: set[int]) -> list[tuple[float, object, Vector]]:
-    """Candidatos del objeto puntuados por distancia EN PANTALLA al toque.
-
-    Blender busca el snap en un radio de pantalla; limitarse a la cara que cruza el
-    rayo hacía inalcanzables casi todos los destinos: el centro de arista que se ve
-    pegado al dedo rara vez pertenece a esa cara, y al mover un loop las caras que lo
-    rodean están todas excluidas. Se descarta lo que da la espalda a la cámara para
-    no engancharse a la parte de atrás de la malla.
-    """
+def _screen_candidates(obj, snap_type, rv3d, touch, aspect, excluded_vertices):
+    """Distancia circular en pantalla y puntos de arista correctos en perspectiva."""
     matrix = obj.matrix_world
-    normals = matrix.to_3x3().inverted_safe().transposed()
-    in_edit = obj.mode == "EDIT"
-
-    def collect(frontfacing) -> list[tuple[float, object, Vector]]:
-        sources = (_edit_sources(obj, snap_type, excluded_vertices, frontfacing) if in_edit
-                   else _mesh_sources(obj, snap_type, excluded_vertices, frontfacing))
-        scored: list[tuple[float, object, Vector]] = []
-        for element, points in sources:
-            if len(points) == 1:
-                position = matrix @ points[0]
-                projected = camera.project(position, rv3d)
-                if projected is not None:
-                    scored.append(((Vector(projected) - touch).length, element, position))
-                continue
-            # EDGE engancha al punto del segmento más próximo al dedo, no a un extremo.
-            a, b = matrix @ points[0], matrix @ points[1]
-            pa, pb = camera.project(a, rv3d), camera.project(b, rv3d)
-            if pa is None or pb is None:
-                continue
-            segment = Vector(pb) - Vector(pa)
-            t = 0.0 if segment.length_squared <= 1e-12 else max(
-                0.0, min(1.0, (touch - Vector(pa)).dot(segment) / segment.length_squared))
-            scored.append(((touch - (Vector(pa) + segment * t)).length, element, a.lerp(b, t)))
-        return scored
-
-    scored = collect(lambda normal: (normals @ normal).dot(view_direction) < 0.0)
-    # Una malla abierta mirada por su reverso (el plano visto desde abajo) no tiene
-    # ni una cara de cara a la cámara, y se ve entera. Si el filtro no deja nada,
-    # es que no había nada que ocultar: se repite sin él.
-    return scored or collect(lambda _normal: True)
+    sources = (_edit_sources(obj, snap_type, excluded_vertices) if obj.mode == "EDIT"
+               else _mesh_sources(obj, snap_type, excluded_vertices))
+    def metric(point):
+        return Vector((point[0], point[1] / aspect))
+    scaled_touch = metric(touch)
+    for element, points in sources:
+        if len(points) == 1:
+            position = matrix @ points[0]
+            projected = camera.project(position, rv3d)
+            if projected is not None:
+                yield (metric(projected) - scaled_touch).length, element, position
+            continue
+        a, b = matrix @ points[0], matrix @ points[1]
+        pa, pb = camera.project(a, rv3d), camera.project(b, rv3d)
+        if pa is None or pb is None:
+            continue
+        start, segment = metric(pa), metric(pb) - metric(pa)
+        t = 0.0 if segment.length_squared <= 1e-12 else max(
+            0.0, min(1.0, (scaled_touch - start).dot(segment) / segment.length_squared))
+        projection = camera.perspective_matrix(rv3d)
+        wa = (projection @ a.to_4d()).w
+        wb = (projection @ b.to_4d()).w
+        world_t = t * wa / max((1.0 - t) * wb + t * wa, 1e-12)
+        yield (scaled_touch - (start + segment * t)).length, element, a.lerp(b, world_t)
 
 
-def _edit_sources(obj, snap_type: str, excluded: set[int], frontfacing):
+def _edit_sources(obj, snap_type: str, excluded: set[int]):
     """Elementos del BMesh vivo: en Edit Mode `obj.data` va por detrás del gesto."""
     bm = bmesh.from_edit_mesh(obj.data)
     if snap_type == "FACE_CENTER":
         for face in bm.faces:
             if face.hide or any(vert.index in excluded for vert in face.verts):
                 continue
-            if frontfacing(face.normal):
-                yield face.index, (face.calc_center_median(),)
+            yield face.index, (face.calc_center_median(),)
         return
     if snap_type == "VERTEX":
         for vert in bm.verts:
             if vert.hide or vert.index in excluded:
                 continue
-            if not vert.link_faces or any(frontfacing(f.normal) for f in vert.link_faces):
-                yield vert.index, (vert.co.copy(),)
+            yield vert.index, (vert.co.copy(),)
         return
     for edge in bm.edges:
         if edge.hide or any(vert.index in excluded for vert in edge.verts):
-            continue
-        if edge.link_faces and not any(frontfacing(f.normal) for f in edge.link_faces):
             continue
         a, b = edge.verts[0].co, edge.verts[1].co
         element = "-".join(str(index) for index in sorted(v.index for v in edge.verts))
         yield element, ((a.lerp(b, 0.5),) if snap_type == "EDGE_CENTER" else (a.copy(), b.copy()))
 
 
-def _mesh_sources(obj, snap_type: str, excluded: set[int], frontfacing):
+def _mesh_sources(obj, snap_type: str, excluded: set[int]):
     mesh = obj.data
     if snap_type == "FACE_CENTER":
         for polygon in mesh.polygons:
             if polygon.hide or any(index in excluded for index in polygon.vertices):
                 continue
-            if frontfacing(polygon.normal):
-                yield polygon.index, (polygon.center.copy(),)
+            yield polygon.index, (polygon.center.copy(),)
         return
-    # Un vértice/arista es visible si toca alguna cara orientada a la cámara. Sin
-    # caras (mallas de solo aristas) no hay nada que ocluya y entran todos.
-    vertices, edges = _frontfacing_keys(mesh, frontfacing)
     if snap_type == "VERTEX":
         for vert in mesh.vertices:
             if vert.hide or vert.index in excluded:
                 continue
-            if vertices is None or vert.index in vertices:
-                yield vert.index, (vert.co.copy(),)
+            yield vert.index, (vert.co.copy(),)
         return
     for edge in mesh.edges:
         key = tuple(sorted(edge.vertices))
         if edge.hide or any(index in excluded for index in key):
             continue
-        if edges is not None and key not in edges:
-            continue
         a, b = mesh.vertices[key[0]].co, mesh.vertices[key[1]].co
         element = f"{key[0]}-{key[1]}"
         yield element, ((a.lerp(b, 0.5),) if snap_type == "EDGE_CENTER" else (a.copy(), b.copy()))
-
-
-def _frontfacing_keys(mesh, frontfacing):
-    """(vértices, aristas) que tocan alguna cara orientada a la cámara. None si no hay caras."""
-    if not mesh.polygons:
-        return None, None
-    vertices: set[int] = set()
-    edges: set[tuple[int, int]] = set()
-    for polygon in mesh.polygons:
-        if polygon.hide or not frontfacing(polygon.normal):
-            continue
-        vertices.update(polygon.vertices)
-        edges.update(polygon.edge_keys)
-    return vertices, edges
 
 
 @command("snap.query")

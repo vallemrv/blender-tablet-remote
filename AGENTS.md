@@ -132,12 +132,20 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   REL/Fuente, Tweak, Extrude y Knife no definen pegajosidad propia.
 - En REL/Fuente, retener un candidato solo conserva su mismo `id`: si se pierde no se
   adquiere otro de la misma categoría antes de comparar todas las categorías.
+- REL/Fuente compara todas las categorías por distancia incluso durante la retención;
+  un nuevo candidato siempre debe entrar en su radio de adquisición. El radio de
+  pantalla corrige el aspecto y la oclusión se comprueba antes de competir.
+- La búsqueda de snap incluye las siluetas y mallas de aristas, aunque el rayo central
+  no golpee una cara. Solo los objetos excluidos por la sesión se atraviesan.
 - REL/Centro y Fuente mantienen separado el rol de su candidato temporal: la
   histéresis de uno nunca retiene ni confirma el marcador perteneciente al otro.
 - En Rotar y Escalar, REL permite elegir centro de selección, punto señalado, origen
   del objeto o cursor 3D sin reiniciar la sesión.
 - Los marcadores fijados se reproyectan desde su posición 3D durante la sesión para
   permanecer unidos visualmente al target al cambiar la vista.
+- Centro, fuente, destino y candidato temporal de transformación se dibujan dentro
+  de GPUOffScreen, sincronizados con el vídeo; Android no duplica estos marcadores.
+  La fuente acompaña la transformación y el centro conserva su pivote estacionario.
 - Al activar snap geométrico en Rotar o Escalar sin Fuente, Android arma su búsqueda
   automáticamente; un toque directo también intenta fijarla en ese mismo punto.
 - Cada transformación inicia sin snap contra su propia selección; el botón `Propio`

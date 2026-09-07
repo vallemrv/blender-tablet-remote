@@ -66,8 +66,6 @@ fun InputSurface(
     /** Puntos del Knife en pantalla, para dibujarlos sobre el vídeo. */
     knifePoints: List<List<Pair<Float, Float>>> = emptyList(),
     snapCandidate: SnapCandidate? = null,
-    referenceCandidate: SnapCandidate? = null,
-    referenceLocked: Boolean = false,
     proportionalCircle: ProportionalCircle? = null,
 ) {
     AndroidView(
@@ -87,8 +85,6 @@ fun InputSurface(
             view.onShape = onShape
             view.knifePoints = knifePoints
             view.snapCandidate = snapCandidate
-            view.referenceCandidate = referenceCandidate
-            view.referenceLocked = referenceLocked
             view.proportionalCircle = proportionalCircle
             view.invalidate()
         },
@@ -187,8 +183,6 @@ private class GestureView(
     /** Puntos del Knife (normalizados) para el overlay. */
     var knifePoints: List<List<Pair<Float, Float>>> = emptyList()
     var snapCandidate: SnapCandidate? = null
-    var referenceCandidate: SnapCandidate? = null
-    var referenceLocked: Boolean = false
     var proportionalCircle: ProportionalCircle? = null
     private val proportionalPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = android.graphics.Color.parseColor("#B3FFFFFF")
@@ -199,11 +193,6 @@ private class GestureView(
         color = android.graphics.Color.parseColor("#66E3A4")
         style = Paint.Style.STROKE
         strokeWidth = 2.5f * resources.displayMetrics.density
-    }
-    private val lockedReferencePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.parseColor("#FF5D68")
-        style = Paint.Style.STROKE
-        strokeWidth = 3f * resources.displayMetrics.density
     }
     private val knifePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = android.graphics.Color.parseColor("#FFB84C")
@@ -709,9 +698,6 @@ private class GestureView(
     }
 
     private fun drawSnapCandidate(canvas: Canvas) {
-        referenceCandidate?.let {
-            drawCandidate(canvas, it, if (referenceLocked) lockedReferencePaint else candidatePaint)
-        }
         snapCandidate?.let { drawCandidate(canvas, it, candidatePaint) }
     }
 

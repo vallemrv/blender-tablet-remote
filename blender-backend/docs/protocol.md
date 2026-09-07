@@ -485,16 +485,20 @@ transformación todavía viva.
 | `transform.reference_candidate` | `u`, `v`, `lock`, `role`: `CENTER`/`SOURCE`; `clear`; o `preset`: `SELECTION`/`OBJECT_ORIGIN`/`CURSOR` para CENTER. MOVE usa source→target; ROTATE/SCALE separan centro, fuente y destino |
 
 El snap exacto de MOVE/ROTATE/SCALE ofrece `VERTEX`, `EDGE_CENTER` y `FACE_CENTER`. Sus radios
-táctiles predeterminados son respectivamente `0.080`, `0.070` y `0.065`, idénticos
-para elegir el ancla fuente y para seguir el destino.
+táctiles predeterminados para el destino son respectivamente `0.080`, `0.070` y `0.065`.
+Las distancias se miden en fracciones del ancho de imagen, corrigiendo el eje vertical
+por la relación de aspecto; el radio de adquisición es circular en pantalla.
 El sondeo continuo aplica una histéresis común: adquiere dentro del radio de cada tipo,
 conserva el candidato hasta un radio de salida mayor y solo cambia antes si el nuevo
 candidato mejora claramente la distancia. Esta política también se usa en REL/Fuente,
 Tweak, Extrude y Knife; `END` conserva el último candidato visual estable.
 REL/Fuente usa radios de entrada separados (`VERTEX` 0.055, `FACE_CENTER` 0.050 y
-`EDGE_CENTER` 0.045) para reducir el solapamiento, pero mantiene los radios de salida
-anteriores. Retener una categoría nunca permite adquirir otro punto de esa categoría
-sin volver a comparar las tres.
+`EDGE_CENTER` 0.045). Compara las tres categorías en una sola competición por distancia.
+El radio de salida es `entrada * 1.55 + 0.012`; un nuevo punto debe estar dentro de su
+radio de entrada y mejorar al retenido en más de `0.014`. La retención pertenece al
+`id`, no a la categoría. La búsqueda incluye siluetas y mallas de aristas aunque el
+rayo central no golpee una cara, y descarta candidatos ocluidos antes de elegir.
+Solo atraviesa los objetos excluidos explícitamente por la sesión.
 | `transform.nudge` | `dx`, `dy` — normalmente llega por el canal de gestos |
 | `transform.value` | `values`: [x,y,z], `angle` en GRADOS legado, o `dimensions`: [x,y,z] finales en unidades Blender para SCALE |
 | `transform.session` | Publica `values` canónico y los roles `center`, `source`, `target`; `angle` y `reference_*` quedan como derivados v2 |
@@ -522,6 +526,15 @@ elementos seleccionados en Edit Mode; desactivado los excluye del sondeo de dest
 
 En ROTATE/SCALE, `center_mode` publica `SELECTION`, `PICKED`, `OBJECT_ORIGIN` o
 `CURSOR`. Los presets de centro cambian el pivote de la preview sin reiniciar la sesión.
+
+Los marcadores de transformación se dibujan en GPUOffScreen antes de codificar cada
+fotograma H.264/MJPEG. Android no los superpone de nuevo desde `transform.session`.
+Centro (cruz roja), fuente (rombo ámbar), destino (círculo azul) y candidato temporal
+(verde) son independientes; sus símbolos permiten distinguir posiciones coincidentes.
+Se proyectan con la cámara de ese fotograma. Fuera de pantalla o detrás de la cámara
+no se dibujan, pero la referencia 3D permanece fijada. Los campos de estado se conservan
+para los controles; `screen` queda vacío cuando no se puede proyectar un punto fijado.
+Este cambio requiere instalar APK y add-on de la misma entrega.
 
 Al bloquear referencias sobre una preview existente, `SOURCE` se convierte al baseline
 para que la transformación se aplique una sola vez. `CENTER` conserva, en cambio, la

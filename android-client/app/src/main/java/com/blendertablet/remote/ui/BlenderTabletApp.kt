@@ -291,9 +291,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 state.blender.mode == BlenderMode.EDIT &&
                 state.blender.selectionMode != SelectionMode.FACE,
             longPressEnabled = viewportLongPressEnabled(session.active, toolSession.active),
-            snapCandidate = toolSession.snapCandidate ?: session.snapCandidate,
-            referenceCandidate = session.referenceCandidate,
-            referenceLocked = session.referenceLocked,
+            // Los marcadores de transformación ya forman parte del fotograma.
+            snapCandidate = toolSession.snapCandidate,
             proportionalCircle = session.proportionalCircle,
             navigationOrbitEnabled = navigationOrbitVisible(
                 session.active,
@@ -693,8 +692,6 @@ private fun ViewportLayer(
     longPressEnabled: Boolean,
     knifePoints: List<List<Pair<Float, Float>>>,
     snapCandidate: com.blendertablet.remote.model.SnapCandidate?,
-    referenceCandidate: com.blendertablet.remote.model.SnapCandidate?,
-    referenceLocked: Boolean,
     proportionalCircle: com.blendertablet.remote.model.ProportionalCircle?,
     navigationOrbitEnabled: Boolean,
     onShape: (ShapeTool, Float, Float, Float, Float) -> Unit,
@@ -731,8 +728,6 @@ private fun ViewportLayer(
                     navigationOrbitEnabled = navigationOrbitEnabled,
                     knifePoints = knifePoints,
                     snapCandidate = snapCandidate,
-                    referenceCandidate = referenceCandidate,
-                    referenceLocked = referenceLocked,
                     proportionalCircle = proportionalCircle,
                     onShape = onShape,
                 )
@@ -759,8 +754,6 @@ private fun ViewportLayer(
                 fixedCircleRadius = fixedCircleRadius,
                 knifePoints = knifePoints,
                 snapCandidate = snapCandidate,
-                referenceCandidate = referenceCandidate,
-                referenceLocked = referenceLocked,
                 proportionalCircle = proportionalCircle,
                 onShape = onShape,
             )
@@ -802,8 +795,6 @@ private fun ViewportLayer(
                 fixedCircleRadius = fixedCircleRadius,
                 knifePoints = knifePoints,
                 snapCandidate = snapCandidate,
-                referenceCandidate = referenceCandidate,
-                referenceLocked = referenceLocked,
                 proportionalCircle = proportionalCircle,
                 onShape = onShape,
             )

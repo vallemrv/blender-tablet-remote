@@ -807,10 +807,9 @@ class _Session:
                 rv3d = require_rv3d()
                 camera.sync_from_region(rv3d)
                 projected = camera.project(Vector(snap_candidate["position"]), rv3d)
-                if projected is not None:
-                    snap_candidate["screen"] = list(projected)
+                snap_candidate["screen"] = list(projected) if projected is not None else []
             except (CommandError, KeyError, ReferenceError, RuntimeError, TypeError):
-                pass
+                snap_candidate["screen"] = []
         reference_candidate = self.reference_candidate
         source_position = (self.source_position if self.source_position is not None
                            else self.reference_position)
@@ -832,10 +831,9 @@ class _Session:
                     rv3d = require_rv3d()
                     camera.sync_from_region(rv3d)
                     projected = camera.project(current_candidate, rv3d)
-                    if projected is not None:
-                        reference_candidate["screen"] = list(projected)
-                except CommandError:
-                    pass
+                    reference_candidate["screen"] = list(projected) if projected is not None else []
+                except (CommandError, ReferenceError, RuntimeError, TypeError):
+                    reference_candidate["screen"] = []
         return {
             "active": True,
             "session_id": self.session_id,

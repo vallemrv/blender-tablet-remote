@@ -21,6 +21,7 @@ from .. import log
 from ..camera import camera
 from .encoder import VideoEncoder
 from .frames import FrameBuffer
+from .markers import draw_transform_markers
 
 # Tras varios fallos seguidos dejamos de intentarlo: si no hay GPU o no hay VIEW_3D,
 # reintentar 30 veces por segundo solo llena la consola de trazas idénticas.
@@ -198,6 +199,7 @@ class ViewportCapture:
                 camera.projection_matrix(rv3d),
                 do_color_management=True,
             )
+            draw_transform_markers(rv3d, width, height)
             buffer = fb.read_color(0, 0, width, height, 4, 0, "UBYTE")
 
         # `buffer` es un gpu.types.Buffer; bytes() lo copia y deja que el resto del
