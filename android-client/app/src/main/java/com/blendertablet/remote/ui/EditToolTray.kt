@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.blendertablet.remote.model.EditTool
 import com.blendertablet.remote.model.LoopFalloff
+import com.blendertablet.remote.model.LengthUnit
 import com.blendertablet.remote.model.SelectionMode
 import com.blendertablet.remote.model.ToolSession
 import com.blendertablet.remote.model.SnapType
@@ -189,7 +190,7 @@ fun EditToolTray(
                 } else if (session.tool == EditTool.EXTRUDE) {
                     ExtrudeParams(session, unitScaleLength, onParameter)
                 } else if (session.tool == EditTool.INSET) {
-                    InsetParams(session, unitScaleLength, onParameter)
+                    InsetParams(session, unitScaleLength, lengthUnit, onParameter)
                 } else if (session.tool == EditTool.BEVEL) {
                     BevelParams(session, selectionMode, unitScaleLength, onParameter)
                 } else {
@@ -248,19 +249,23 @@ private fun LoopCutParams(
     SnapToggle(session, onParameter)
 }
 
-/**
- * Snap de incremento real (B5/F5): NONE <-> INCREMENT con el paso por defecto del
- * servidor (`snap_step`, 0.1). Cuadra el valor antes de aplicar la operación, así
- * que cambia el resultado geométrico, no solo lo que se enseña.
- */
+/** Selector de snap y control de paso declarado por la bandeja. */
 @Composable
-private fun SnapToggle(session: ToolSession, onParameter: (String, Any?) -> Unit) {
+private fun SnapToggle(
+    session: ToolSession,
+    onParameter: (String, Any?) -> Unit,
+    stepControl: (@Composable () -> Unit)? = null,
+) {
     val options = session.availableSnapTypes
     if (options.isEmpty()) return
     val selected = session.snapType
     SnapControl(options, selected, onSelect = { onParameter("snap_type", it.name) })
     if (selected == SnapType.INCREMENT || selected == SnapType.GRID) {
-        val distance = session.tool in setOf(EditTool.EXTRUDE, EditTool.INSET, EditTool.BEVEL)
+        if (stepControl != null) {
+            stepControl()
+            return
+        }
+        val distance = session.tool in setOf(EditTool.EXTRUDE, EditTool.BEVEL)
         SnapStepControl(
             selected = session.snapStep,
             presets = if (distance) DistanceSnapSteps else FactorSnapSteps,
@@ -305,7 +310,12 @@ private fun ExtrudeParams(session: ToolSession, unitScaleLength: Double, onParam
 
 /** Parámetros de Inset: grosor, profundidad y snap de incremento real (F2/F5). */
 @Composable
-private fun InsetParams(session: ToolSession, unitScaleLength: Double, onParameter: (String, Any?) -> Unit) {
+private fun InsetParams(
+    session: ToolSession,
+    unitScaleLength: Double,
+    lengthUnit: LengthUnit,
+    onParameter: (String, Any?) -> Unit,
+) {
     for (spec in specsFor(EditTool.INSET)) {
         ParamStepper(
             spec = spec,
@@ -318,7 +328,11 @@ private fun InsetParams(session: ToolSession, unitScaleLength: Double, onParamet
     PillButton("Costura fija", selected = !boundary) {
         onParameter("boundary", toggledInsetBoundary(boundary))
     }
-    SnapToggle(session, onParameter)
+    SnapToggle(session, onParameter) {
+        DistanceSnapStepInput(session.snapStep, unitScaleLength, lengthUnit) {
+            onParameter("snap_step", it)
+        }
+    }
 }
 
 internal fun toggledInsetBoundary(boundary: Boolean): Boolean = !boundary

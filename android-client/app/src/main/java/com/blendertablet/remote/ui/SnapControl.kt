@@ -20,6 +20,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import com.blendertablet.remote.model.TransformStepUnit
+import com.blendertablet.remote.model.LengthUnit
+import com.blendertablet.remote.model.transformStepUnit
+import com.blendertablet.remote.model.moveValueForDisplay
+import com.blendertablet.remote.model.moveValueInBlenderUnits
 import com.blendertablet.remote.model.SnapType
 import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.TweakMotion
@@ -84,6 +88,43 @@ fun SnapStepControl(
 
 val DistanceSnapSteps = listOf("1mm" to .001, "1cm" to .01, "10cm" to .1, "1m" to 1.0)
 val FactorSnapSteps = listOf("1%" to .01, "5%" to .05, "10%" to .1, "25%" to .25)
+
+/** Cantidad libre y unidad métrica; el consumidor recibe el paso en unidades Blender. */
+@Composable
+internal fun DistanceSnapStepInput(
+    step: Double,
+    unitScaleLength: Double,
+    defaultUnit: LengthUnit,
+    onChange: (Double) -> Unit,
+) {
+    var unit by remember(defaultUnit) { mutableStateOf(defaultUnit.transformStepUnit()) }
+    var expanded by remember { mutableStateOf(false) }
+    var text by remember(unit, unitScaleLength) { mutableStateOf<String?>(null) }
+    val displayed = moveValueForDisplay(step, unit, unitScaleLength)
+    fun commit() {
+        val number = text?.trim()?.replace(',', '.')?.toDoubleOrNull()
+            ?.takeIf { it.isFinite() && it > 0.0 } ?: return
+        onChange(moveValueInBlenderUnits(number, unit, unitScaleLength))
+        text = null
+    }
+    Text("Paso", color = Ink.Faint, fontSize = 11.sp)
+    CompactNumericField(
+        value = text ?: displayed.toBigDecimal().stripTrailingZeros().toPlainString(),
+        onValueChange = { text = it }, modifier = Modifier.width(84.dp),
+        textAlign = TextAlign.End, placeholder = "Cantidad", onDone = { commit() },
+    )
+    Box {
+        PillButton(unit.label) { expanded = true }
+        DropdownMenu(expanded, { expanded = false }) {
+            listOf(TransformStepUnit.MM, TransformStepUnit.CM, TransformStepUnit.M).forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.label) },
+                    onClick = { commit(); unit = option; expanded = false },
+                )
+            }
+        }
+    }
+}
 
 /** Opciones de Tweak derivadas por el mismo módulo que representa el snap. */
 internal fun tweakSnapOptions(announced: List<SnapType>, motion: TweakMotion): List<SnapType> {

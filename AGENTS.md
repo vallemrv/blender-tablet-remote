@@ -174,6 +174,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   o la dimensión mayor de los ejes activos. Los valores escritos y Reset son exactos.
 - El selector y los pasos de snap viven en `ui/SnapControl.kt`; las bandejas declaran
   opciones y reciben valores, pero no vuelven a implementar su interfaz.
+- En Inset, el incremento ofrece una cantidad editable y un selector mm/cm/m;
+  comienza en la unidad del preset y convierte el paso según `scale_length`.
 - Cada tipo de Snap obtiene su símbolo semántico desde `AppIcons.snap`; la marca de
   selección es un indicador aparte y no sustituye el icono del tipo.
 - El sondeo geométrico del backend permanece centralizado en `commands/snap.py`.
