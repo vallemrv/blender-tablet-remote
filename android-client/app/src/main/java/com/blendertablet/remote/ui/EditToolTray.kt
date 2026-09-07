@@ -4,6 +4,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -15,6 +16,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material3.Text
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -220,9 +223,8 @@ private fun LoopCutParams(
     onParameter: (String, Any?) -> Unit,
 ) {
     PositionStepper(
-        factor = session.double("factor") ?: 0.0,
-        clamp = session.flag("clamp", true),
-        onFactor = { onParameter("factor", it) },
+        session = session,
+        onParameter = onParameter,
     )
     for (spec in specsFor(EditTool.LOOP_CUT)) {
         ParamStepper(
@@ -509,42 +511,47 @@ fun BisectTray(
     }
 }
 
-/** factor (−1..1, o ±2 sin fijar) <-> posición 0..100%. */
-private fun factorToPercent(factor: Double): Int = (((factor + 1.0) / 2.0) * 100.0).roundToInt()
-private fun percentToFactor(percent: Double): Double = (percent / 100.0) * 2.0 - 1.0
-
-/**
- * Posición del corte como porcentaje (0 = extremo, 50 = centro, 100 = el otro
- * extremo), con steppers numéricos y valor editable. Es el equivalente del slider
- * anterior, pero numérico; el arrastre fino sigue siendo deslizar el lápiz por el
- * viewport (`tool.nudge`). Con "Fijar" desactivado el corte puede salirse del borde y
- * el rango se ensancha a −50%..150%.
- */
+/** 50 % es el centro; las unidades métricas expresan desplazamiento desde él. */
 @Composable
-private fun PositionStepper(factor: Double, clamp: Boolean, onFactor: (Double) -> Unit) {
-    var text by remember { mutableStateOf("") }
-    val percent = factorToPercent(factor)
-    val min = if (clamp) 0 else -50
-    val max = if (clamp) 100 else 150
-    val shown = if (text.isEmpty()) "$percent" else text
-
-    fun commit() {
-        val parsed = text.trim().replace(',', '.').removeSuffix("%").toDoubleOrNull() ?: return
-        onFactor(percentToFactor(parsed.coerceIn(min.toDouble(), max.toDouble())))
+private fun PositionStepper(session: ToolSession, onParameter: (String, Any?) -> Unit) {
+    var unit by remember { mutableStateOf("%") }
+    var menu by remember { mutableStateOf(false) }
+    val factor = session.double("factor") ?: 0.0
+    val metric = unit != "%" && session.slideRange > 0.0
+    val metersPerUnit = when (unit) { "mm" -> 0.001; "cm" -> 0.01; else -> 1.0 }
+    val value = if (metric) session.slideDistance / metersPerUnit else (factor + 1.0) * 50.0
+    var text by remember(value, unit) { mutableStateOf("") }
+    val limit = if (session.flag("clamp", true)) 1.0 else 2.0
+    val minimum = if (metric) -limit * session.slideRange / metersPerUnit else (1.0 - limit) * 50.0
+    val maximum = if (metric) limit * session.slideRange / metersPerUnit else (1.0 + limit) * 50.0
+    fun send(number: Double) {
+        if (!number.isFinite()) return
+        val bounded = number.coerceIn(minimum, maximum)
+        if (metric) onParameter("slide_distance", bounded * metersPerUnit)
+        else onParameter("factor", bounded / 50.0 - 1.0)
         text = ""
     }
-
+    fun commit() { text.trim().replace(',', '.').toDoubleOrNull()?.let(::send) }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Posición", color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.padding(end = 4.dp))
-        StepperButton("−") { onFactor(percentToFactor((percent - 1).coerceAtLeast(min).toDouble())) }
+        Text(if (metric) "Desde centro" else "Posición", color = Ink.Faint, fontSize = 11.sp)
+        StepperButton("−") { send(value - 1.0) }
         CompactNumericField(
-            value = shown,
-            onValueChange = { text = it },
-            onDone = { commit() },
-            modifier = Modifier.width(44.dp),
+            value = text.ifEmpty { format(value, false) },
+            onValueChange = { text = it }, onDone = { commit() },
+            modifier = Modifier.width(72.dp),
         )
-        StepperButton("+") { onFactor(percentToFactor((percent + 1).coerceAtMost(max).toDouble())) }
-        Text("%", color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.padding(start = 2.dp))
+        Box {
+            PillButton(unit) { menu = true }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                val units = if (session.slideRange > 0.0) listOf("%", "mm", "cm", "m") else listOf("%")
+                units.forEach { option ->
+                    DropdownMenuItem(text = { Text(option) }, onClick = { unit = option; menu = false; text = "" })
+                }
+            }
+        }
+        StepperButton("+") { send(value + 1.0) }
+        PillButton("Aplicar", enabled = text.isNotBlank()) { commit() }
+        PillButton("Centro") { onParameter("factor", 0.0); text = "" }
     }
 }
 

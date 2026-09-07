@@ -64,6 +64,12 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   salvo un centro de Rotate/Scale que deba permanecer estacionario.
 - Las sesiones `transform.*` y `tool.*` son mutuamente excluyentes.
 - Undo, redo y borrados cierran primero cualquier sesión activa.
+- Círculo de LoopTools ejecutado desde el pump registra explícitamente un undo;
+  deshacerlo conserva los Loop Cut ya confirmados.
+- El toque de Loop Cut elige el anillo y crea el corte centrado (50 %); cada nuevo
+  corte comienza sin desplazamiento. La bandeja permite porcentaje o mm/cm/m desde
+  el centro, además de volver a Centro. Las medidas físicas incluyen la escala del
+  objeto y de escena; los cortes múltiples conservan su espaciado al desplazarse.
 - Las referencias RNA inválidas nunca deben detener el pump ni el broadcast.
 - El explorador identifica cada fila por nombre y ruta: varios enlaces simbólicos
   pueden compartir un destino canónico sin ser la misma entrada de la lista.

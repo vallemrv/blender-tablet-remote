@@ -187,8 +187,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (ready) client.requestSceneScales()
             }
         }
-        // Colocación por toque: el sondeo responde con la arista y el factor, y
-        // con ellos arranca la sesión donde cayó el dedo. Un sondeo fallido
+        // El toque elige el anillo; el corte comienza centrado. Un sondeo fallido
         // simplemente deja el hint vivo para el próximo toque.
         viewModelScope.launch {
             client.loopProbe.collect { probe ->
@@ -200,7 +199,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         client.toolBegin(
                             EditTool.LOOP_CUT,
                             toolDefaultParameters(EditTool.LOOP_CUT) +
-                                mapOf("edge" to probe.edge.toDouble(), "factor" to probe.factor),
+                                mapOf("edge" to probe.edge.toDouble(), "factor" to 0.0),
                         )
                     }
                 }
@@ -460,8 +459,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             client.toolSnapCandidate(u.toDouble(), v.toDouble(), knife.snapType, lock = true)
             return
         }
-        // Loop Cut activo: el toque COLOCA el corte (primer toque) o lo re-ubica
-        // (sesión ya abierta). Es el hover+click del Ctrl+R, con el dedo.
+        // Loop Cut: el toque elige el anillo y crea su corte centrado.
         if (local.value.activeTool == ActiveTool.LOOP_CUT) {
             val blender = uiState.value.blender
             if (blender.mode == BlenderMode.EDIT) {

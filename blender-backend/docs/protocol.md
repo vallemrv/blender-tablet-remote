@@ -386,7 +386,7 @@ Ctrl+Plus / Ctrl+Minus del numpad). Solo Edit Mode (`wrong_mode` fuera).
 | `mesh.inset` | `thickness` (def. 0.1), `depth`, `individual` (bool), `boundary` (bool, def. true; false conserva costuras abiertas/Mirror) |
 | `mesh.bevel` | `offset` (def. 0.1), `segments` (def. 1), `profile` (0..1, def. 0.5), `miter_outer`: `SHARP`\|`PATCH`\|`ARC` (def. `SHARP`), `affect`, `clamp` |
 | `mesh.subdivide` | `cuts` |
-| `mesh.loop_cut` | `edge` (opcional), `cuts` (def. 1), `smoothness`, `factor`, `falloff`, `even`, `flip`, `clamp` |
+| `mesh.loop_cut` | `edge` (opcional), `cuts` (def. 1), `smoothness`, `factor`, `slide_distance` (metros, opcional), `falloff`, `even`, `flip`, `clamp` |
 | `mesh.loop_probe` | `u`, `v` — sondeo read-only para colocar un corte con el toque |
 | `mesh.delete` | `what`: `VERTS`\|`EDGES`\|`FACES`\|`ONLY_FACES` |
 | `mesh.make_edge_face` | —; crea arista/cara en Vértice o rellena un borde cerrado en Arista |
@@ -416,12 +416,23 @@ el deslizamiento en longitud real (el corte recorre la misma distancia absoluta 
 cada arista del anillo, aunque midan distinto), y `flip` lo espeja (`t → 1−t`).
 Valores fuera de rango responden `bad_payload`.
 
+La serie de cortes se desplaza conservando su separación: el factor desplaza
+`factor / (cuts + 1)` de cada arista. En `even` usa longitud física uniforme.
+`slide_distance` expresa metros desde la posición centrada, activa `even` y tiene
+prioridad sobre `factor`. El recorrido métrico de referencia `slide_range` es la
+longitud física de la arista más corta del anillo dividida entre `cuts + 1`;
+incluye `matrix_world` y `scale_length`. El estado de herramienta y su preview
+publican `slide_range` y `slide_distance`; `factor = slide_distance / slide_range`.
+Sin esos campos Android ofrece únicamente porcentaje. Un cambio explícito de
+`factor` descarta la distancia anterior; el arrastre mantiene la modalidad métrica.
+Una medida inválida conserva la preview anterior. `flip` invierte el sentido visual.
+
 `mesh.loop_probe` no toca nada: lanza el rayo del toque, toma la arista más cercana
 de la cara impactada (distancia en pantalla, sin umbral: cualquier toque sobre la
 malla elige algo) y proyecta el punto sobre ella. Devuelve
-`{hit, object, edge, factor, ring}`, donde `factor` (−1..1) coloca el corte del
-medio exactamente donde cayó el dedo (válido para cualquier número de cortes: el
-corte central siempre parte de la mitad). Sin impacto, `{hit: false}`. Requiere
+`{hit, object, edge, factor, ring}`, donde `factor` (−1..1) describe la posición
+sondeada sobre la arista. Loop Cut usa la arista y comienza centrado, sin aplicar
+ese factor del toque. Sin impacto, `{hit: false}`. Requiere
 viewport (`no_viewport` en background) y Edit Mode (`wrong_mode`).
 
 ### Historial
@@ -636,7 +647,8 @@ sesión lleva `clamp: false`). No es `mesh.subdivide` (eso corta la selección) 
 `tool.loop_pick` (`u`, `v`, `add` opcional) coloca (desde `ARMED`) o re-ubica (con sesión `ACTIVE`) el
 corte de `LOOP_CUT`: restaura la copia original si la había, sondea con la semántica
 de `mesh.loop_probe` (los índices de `edge` son de la malla original, no del preview)
-y fija/actualiza `edge` y `factor` en un solo paso. Responde con el estado de la
+y fija `edge` y reinicia `factor` a 0 (centro), descartando la distancia anterior.
+La posición del dedo nunca desplaza el primer corte. Responde con el estado de la
 sesión más `pick`. Sin sesión activa ni armada responde `no_session`; con sesión
 activa de otra tool, `wrong_tool`. Sin impacto bajo el dedo, `ARMED` se queda como
 estaba y `ACTIVE` conserva el corte anterior.
@@ -648,7 +660,7 @@ cortes se confirman con un solo undo y cancelar restaura la malla anterior a la 
 historial responde `empty_history`.
 
 La feature `edit_tools.loop_cut` anuncia `pick`, `probe`, `falloff`, `even`, `flip`,
-`multiple`, `pop` y
+`multiple`, `pop`, `centered_pick`, `distance` y
 `clamp`; un cliente debe usar el flujo de colocación por toque solo si `pick` está
 anunciado.
 
@@ -778,6 +790,10 @@ menos tres vértices seleccionados y no tiene una aproximación geométrica prop
 servidor. La regla estable se declara en `edit_catalog.conditional_actions` con
 `availability: "OPERATOR_REGISTERED"`; Android solo representa las acciones que estén
 materializadas en `groups`.
+
+La llamada remota a LoopTools desactiva el undo implícito del operador y registra
+explícitamente un único paso después de finalizar. Undo restaura el estado anterior
+a Círculo sin eliminar el Loop Cut confirmado previamente; redo recupera Círculo.
 
 ### Barra de tools activas de Edit (`edit_toolbar`)
 

@@ -323,8 +323,16 @@ def loop_cut(payload: dict) -> dict:
     if not -limit <= factor <= limit:
         raise BadPayload(f"'factor' must be between -{limit:g} and {limit:g}" + (" (clamp off allows more)" if clamp else ""))
     segments = _oriented_ring_segments(seed, ring)
-    lengths = [(end - start).length for start, end in segments]
-    average = sum(lengths) / len(lengths) if lengths else 0.0
+    metric_lengths = [(obj.matrix_world.to_3x3() @ (end - start)).length *
+                      bpy.context.scene.unit_settings.scale_length for start, end in segments]
+    slide_range = min(metric_lengths) / (cuts + 1)
+    if slide_range <= 1e-12:
+        raise BadPayload('El anillo contiene una arista sin longitud')
+    if 'slide_distance' in payload:
+        factor = _apply_scalar_snap(get_float(payload, 'slide_distance', 0.0) / slide_range, payload)
+        even = True
+        if not -limit <= factor <= limit:
+            raise BadPayload('El desplazamiento supera el recorrido disponible del corte')
     # Lo nuevo queda al final de las secuencias (subdivide no borra elementos), así
     # que basta con el tramo posicional final: construir set(bm.verts)+set(bm.edges)
     # enteros costaba dos hashes de toda la malla por cada corte y por cada preview.
@@ -350,14 +358,10 @@ def loop_cut(payload: dict) -> dict:
             index, start, end, t = _closest_segment(vert.co, segments)
             if start is None:
                 continue
-            # t parte de la posición que dejó subdivide (el corte central nace en
-            # 0.5 para cualquier número de cortes). El factor empuja hacia los
-            # extremos; con `even` se mide en longitud real para que el corte
-            # recorra la misma distancia absoluta en cada arista del anillo.
-            effective = factor
-            if even and average > 1e-12:
-                effective = factor * (average / max(lengths[index], 1e-12))
-            t = t + effective * (1.0 - t) if effective >= 0.0 else t * (1.0 + effective)
+            # Desplazar la serie completa conserva el espaciado entre cortes.
+            # Uniforme/distancia mide metros de mundo, también con escala no uniforme.
+            t += (factor * slide_range / metric_lengths[index] if even else
+                  factor / (cuts + 1))
             if flip:
                 t = 1.0 - t
             # Clamp: dentro del borde (el classic). Sin él, extrapolar siguiendo la
@@ -385,6 +389,7 @@ def loop_cut(payload: dict) -> dict:
     flush_bmesh(obj, bm)
     _undo(payload, "Remote loop cut")
     return {"cuts": cuts, "factor": factor, "smoothness": smoothness, "falloff": falloff,
+            "slide_range": slide_range, "slide_distance": factor * slide_range,
             "even": even, "flip": flip, "clamp": clamp, "edges": len(ring),
             "new_verts": len(new_verts)}
 
@@ -818,14 +823,16 @@ def looptools_circle(payload: dict) -> dict:
         raise CommandError("LoopTools is not installed and enabled",
                            code="dependency_unavailable") from exc
     try:
-        result = operator()
+        result = operator('EXEC_DEFAULT', False)
     except RuntimeError as exc:
         raise CommandError("LoopTools Circle cannot process this selection",
                            code="topology_incompatible") from exc
     if "FINISHED" not in result:
         raise CommandError("LoopTools Circle did not finish",
                            code="topology_incompatible")
-    # El operador de LoopTools crea su propio paso de undo, igual que Split/Separate.
+    # Desde el pump no hay un operador UI que cierre la acción remota.
+    # Desactivar su undo implícito y registrar exactamente el resultado confirmado.
+    _undo(payload, 'Remote LoopTools Circle')
     return {"object": obj.name, "vertices": len(selected_verts)}
 
 

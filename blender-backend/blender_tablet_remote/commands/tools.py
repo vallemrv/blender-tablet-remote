@@ -240,6 +240,9 @@ class ToolSession:
                     "BRIDGE_EDGE_LOOPS": mesh_commands.bridge_edge_loops,
                     "BISECT": mesh_commands.bisect}
         self.result = handlers[self.tool](payload)
+        if self.tool == 'LOOP_CUT':
+            self.params['factor'] = self.result['factor']
+            self.params['even'] = self.result['even']
 
     def close(self):
         backups = {mesh for mesh in [self.backup, self.original_backup] if mesh is not None}
@@ -290,6 +293,8 @@ class ToolSession:
                 state["line"] = self.line
             if self.tool == "LOOP_CUT":
                 state["loop_count"] = len(self.loop_history) + 1
+                state['slide_range'] = self.result['slide_range']
+                state['slide_distance'] = self.result['slide_distance']
             return state
         if self.armed_tool:
             return {"active": False, "armed": True, "phase": "ARMED", "tool": self.armed_tool,
@@ -364,6 +369,18 @@ def parameter(payload):
     params = payload.get("parameters", payload.get("parameter"))
     if not isinstance(params, dict):
         raise BadPayload("'parameters' must be an object")
+    if tool_session.tool == 'LOOP_CUT':
+        old = dict(tool_session.params)
+        if 'factor' in params or params.get('even') is False:
+            tool_session.params.pop('slide_distance', None)
+        tool_session.params.update(params)
+        try:
+            tool_session.preview()
+        except Exception:
+            tool_session.params = old
+            tool_session.preview()
+            raise
+        return tool_session.status()
     tool_session.params.update(params)
     if str(tool_session.params.get("snap_type", "NONE")).upper() not in {"VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER", "CURSOR"}:
         tool_session.snap_candidate = None
@@ -793,8 +810,8 @@ def loop_pick(payload):
     """Coloca o re-ubica el corte de Loop Cut tocando la malla.
 
     Con la familia solo armada (B3), este es el primer toque: resuelve la arista
-    bajo el dedo y recién ahí crea el backup y activa la sesión. Con sesión ya
-    activa, re-ubica igual que antes.
+    bajo el dedo y crea el backup y la preview centrada. Con sesión ya activa,
+    elige otro anillo y vuelve al centro; el desplazamiento se edita después.
 
     Los índices de `edge` son de la malla ORIGINAL (la copia que restaura cada
     preview), no del preview en pantalla: sondear contra el preview daría índices
@@ -826,7 +843,8 @@ def loop_pick(payload):
         bm.to_mesh(new_base)
         tool_session.loop_history.append((tool_session.backup, dict(tool_session.params)))
         tool_session.backup = new_base
-        tool_session.params.update({"edge": probe["edge"], "factor": probe["factor"]})
+        tool_session.params.pop('slide_distance', None)
+        tool_session.params.update({"edge": probe["edge"], "factor": 0.0})
         tool_session.preview()
         return dict(tool_session.status(), pick=probe)
 
@@ -837,7 +855,8 @@ def loop_pick(payload):
             # Sin arista bajo el dedo la sesión queda como estaba.
             tool_session.preview()
             return dict(tool_session.status(), pick=probe)
-        tool_session.params.update({"edge": probe["edge"], "factor": probe["factor"]})
+        tool_session.params.pop('slide_distance', None)
+        tool_session.params.update({"edge": probe["edge"], "factor": 0.0})
         tool_session.preview()
         return dict(tool_session.status(), pick=probe)
 
@@ -845,7 +864,8 @@ def loop_pick(payload):
     probe = mesh_commands.loop_probe(dict(payload))
     if not probe.get("hit"):
         return dict(tool_session.status(), pick=probe)
-    params = dict(tool_session.armed_params, edge=probe["edge"], factor=probe["factor"])
+    params = dict(tool_session.armed_params, edge=probe["edge"], factor=0.0)
+    params.pop('slide_distance', None)
     owner_id = tool_session.armed_owner
     tool_session.disarm()
     tool_session._activate("LOOP_CUT", owner_id, params)
@@ -896,6 +916,8 @@ def nudge(payload):
         limit = 1.999 if not tool_session.params.get("clamp", True) else 0.999
         nxt = max(-limit, min(limit, nxt))
     tool_session.params[primary] = nxt
+    if primary == 'factor' and 'slide_distance' in tool_session.params:
+        tool_session.params['slide_distance'] = nxt * tool_session.result['slide_range']
     tool_session.preview()
     return tool_session.status()
 

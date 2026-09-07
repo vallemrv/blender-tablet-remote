@@ -97,6 +97,9 @@ data class ToolSession(
     val snapStep: Double = 0.1,
     val snapCandidate: SnapCandidate? = null,
     val loopCount: Int = 0,
+    /** Recorrido y desplazamiento de Loop Cut en metros físicos. */
+    val slideRange: Double = 0.0,
+    val slideDistance: Double = 0.0,
     val input: String = "PARAMETRIC",
     val controls: List<EditCatalogParameter> = emptyList(),
     val instruction: String = "",

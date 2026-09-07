@@ -436,6 +436,8 @@ object StateParser {
             snapStep = json.optDouble("snap_step", params.optDouble("snap_step", 0.1)),
             snapCandidate = candidate(json.optJSONObject("snap_candidate")),
             loopCount = json.optInt("loop_count", if (active && tool == EditTool.LOOP_CUT) 1 else 0),
+            slideRange = json.optDouble("slide_range", 0.0),
+            slideDistance = json.optDouble("slide_distance", 0.0),
         )
     }
 
