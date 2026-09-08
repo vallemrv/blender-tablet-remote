@@ -571,24 +571,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleProportional() {
         val enabled = !client.state.value.editSettings.proportional
         client.editSettings(mapOf("proportional" to enabled))
-        client.transformSession.value.takeIf { it.active }?.let { transformBegin(it.mode) }
     }
 
     fun toggleAutoMerge() {
         client.editSettings(mapOf("auto_merge" to !client.state.value.editSettings.autoMerge))
     }
 
-    fun scaleProportionalRadius(factor: Double) {
-        val current = client.state.value
-        setProportionalRadius(
-            current.editSettings.radius + current.sceneScale.proportionalRadiusStep * factor
-        )
-    }
-
     fun setProportionalRadius(value: Double) {
-        val radius = value.coerceIn(0.0001, 1_000.0)
-        client.editSettings(mapOf("radius" to radius))
-        client.transformSession.value.takeIf { it.active }?.let { transformBegin(it.mode) }
+        if (value.isFinite() && value > 0.0) client.editSettings(mapOf("radius" to value))
     }
 
     fun cycleProportionalFalloff() {
@@ -596,7 +586,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val current = client.state.value.editSettings.falloff
         val next = options[(options.indexOf(current).coerceAtLeast(0) + 1) % options.size]
         client.editSettings(mapOf("falloff" to next))
-        client.transformSession.value.takeIf { it.active }?.let { transformBegin(it.mode) }
     }
 
     /** Aísla la selección (el `/` del footer de vistas). Optimista: no hay push. */

@@ -67,7 +67,8 @@ def apply_scale(name: str) -> dict:
 
     camera.set_clipping(scale["clip_start"], scale["clip_end"])
     _apply_grid(scale["grid_scale"])
-    bpy.context.scene.tool_settings.proportional_size = scale["proportional_radius"]
+    bpy.context.scene.tool_settings.proportional_size = (
+        scale["proportional_radius"] / max(unit_settings.scale_length, 1e-12))
     return current_scale()
 
 

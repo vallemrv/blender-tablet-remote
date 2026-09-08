@@ -658,10 +658,19 @@ en el propio vídeo, reproyectados en cada frame. APK y add-on deben actualizars
 (bool), `falloff` (`SMOOTH|SPHERE|ROOT|SHARP|LINEAR|CONSTANT|INVERSE_SQUARE`),
 `radius` (> 0), `auto_merge` (bool) y `merge_threshold` (>= 0). Son ajustes globales
 respaldados por `ToolSettings` de Blender y se conservan entre transformaciones.
-Cambiar el preset aplica su `proportional_radius`; la tablet ajusta −/+ mediante
-`proportional_radius_step`. Una sesión proporcional Edit publica además
+`radius` y `transform.proportional_radius` usan unidades Blender. Cambiar el preset
+aplica su `proportional_radius` (metros) dividido por `scale_length`; la tablet
+convierte igualmente el `proportional_radius_step` físico para sus −/+. El campo
+muestra mm/cm/m según el preset y los números sin sufijo usan esa unidad.
+Una sesión proporcional Edit publica además
 `proportional_circle: {center:[u,v], radius}` en coordenadas normalizadas del viewport,
 proyectado por la misma cámara que produce el vídeo.
+
+Con una transformación Edit activa, `edit.settings_set` actualiza radio, perfil o
+activación sobre el baseline original sin reiniciarla ni cambiar sus valores,
+referencias o `session_id`. La respuesta incluye la sesión actualizada en `transform`,
+además del snapshot de escena. Reducir el radio restaura los vértices que salen de la
+influencia; cambiar ajustes no añade undo y confirmar mantiene un único paso.
 
 La edición proporcional afecta a los vértices visibles dentro del radio durante
 MOVE/ROTATE/SCALE, con peso según el perfil elegido; cancelar restaura todas las

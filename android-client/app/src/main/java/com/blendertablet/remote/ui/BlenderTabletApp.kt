@@ -411,7 +411,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 if (state.activeTool != ActiveTool.TWEAK) TransformBar(
                     session = session,
                     unitScaleLength = state.blender.unitScaleLength,
-                    editSettings = state.blender.editSettings,
+                    proportionalUnit = state.blender.sceneScale.lengthUnit,
+                    proportionalRadiusStep = state.blender.sceneScale.proportionalRadiusStep,
                     stepIndex = vm.stepIndex(session.mode),
                     snapType = snapType,
                     constraint = constraint,
@@ -439,7 +440,6 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     onScaleStep = vm::setScaleStep,
                     onValue = vm::transformValue,
                     onFlatten = vm::flattenScaleAxis,
-                    onProportionalRadius = vm::scaleProportionalRadius,
                     onProportionalRadiusValue = vm::setProportionalRadius,
                     onProportionalFalloff = vm::cycleProportionalFalloff,
                     onConfirm = vm::transformConfirm,

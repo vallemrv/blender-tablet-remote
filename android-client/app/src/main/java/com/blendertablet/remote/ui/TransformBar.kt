@@ -29,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,7 +44,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.blendertablet.remote.model.Axis
 import com.blendertablet.remote.model.Constraint
-import com.blendertablet.remote.model.EditSettings
+import com.blendertablet.remote.model.LengthUnit
+import com.blendertablet.remote.model.ProportionalRadius
+import com.blendertablet.remote.model.transformStepUnit
 import com.blendertablet.remote.model.Orientation
 import com.blendertablet.remote.model.SnapType
 import com.blendertablet.remote.model.TransformMode
@@ -80,7 +83,8 @@ private val AxisColors = mapOf(
 fun TransformBar(
     session: TransformSession,
     unitScaleLength: Double,
-    editSettings: EditSettings,
+    proportionalUnit: LengthUnit,
+    proportionalRadiusStep: Double,
     stepIndex: Int,
     snapType: SnapType,
     constraint: Constraint,
@@ -108,7 +112,6 @@ fun TransformBar(
     onScaleStep: (Double, TransformStepUnit) -> Unit,
     onFlatten: (String) -> Unit,
     onValue: (List<Double>?, Double?, List<Double>?) -> Unit,
-    onProportionalRadius: (Double) -> Unit,
     onProportionalRadiusValue: (Double) -> Unit,
     onProportionalFalloff: () -> Unit,
     onConfirm: () -> Unit,
@@ -136,14 +139,11 @@ fun TransformBar(
                         onClick = onChooseSelection)
                 }
                 if (session.proportional) {
-                    PillButton("Radio −") { onProportionalRadius(-1.0) }
-                    ProportionalRadiusInput(
-                        editSettings.radius,
-                        unitScaleLength,
-                        onProportionalRadiusValue,
-                    )
-                    PillButton("Radio +") { onProportionalRadius(1.0) }
-                    PillButton("Perfil: ${falloffLabel(editSettings.falloff)}") {
+                    key(session.sessionId) {
+                        ProportionalRadiusInput(session.proportionalRadius, unitScaleLength,
+                            proportionalUnit, proportionalRadiusStep, onProportionalRadiusValue)
+                    }
+                    PillButton("Perfil: ${falloffLabel(session.proportionalFalloff)}") {
                         onProportionalFalloff()
                     }
                 }
@@ -455,23 +455,43 @@ private fun ParametricAxisInputs(
 private fun ProportionalRadiusInput(
     radius: Double,
     unitScaleLength: Double,
+    unit: LengthUnit,
+    stepMeters: Double,
     onRadius: (Double) -> Unit,
 ) {
-    val physicalRadius = radius * unitScaleLength
-    var text by remember(radius, unitScaleLength) { mutableStateOf(format(physicalRadius, 3)) }
-    fun commit() {
-        val parsed = ValueParser.parse(text, TransformMode.MOVE)
-        if (parsed != null && parsed > 0.0) onRadius(parsed / unitScaleLength)
-        else text = format(physicalRadius, 3)
+    var text by remember(unit, unitScaleLength) { mutableStateOf<String?>(null) }
+    var pending by remember(unitScaleLength) { mutableStateOf<Double?>(null) }
+    val tolerance = maxOf(1e-7, abs(radius) * 1e-6)
+    LaunchedEffect(radius) {
+        if (pending?.let { abs(it-radius) <= tolerance } == true) pending = null
     }
+    val shown = pending ?: radius
+    val displayed = moveValueForDisplay(shown, unit.transformStepUnit(), unitScaleLength)
+    fun readDraft(): Double? = if (text == null) shown else ProportionalRadius.parse(text!!, unit, unitScaleLength)
+    fun send(value: Double) {
+        pending = if (abs(value-radius) <= tolerance) null else value
+        text = null
+        onRadius(value)
+    }
+    fun commit() {
+        if (text != null) ProportionalRadius.parse(text!!, unit, unitScaleLength)?.let(::send)
+    }
+    fun adjust(direction: Int) {
+        val current = readDraft() ?: return
+        send(ProportionalRadius.step(current, direction, stepMeters, unitScaleLength))
+    }
+    Text("Radio", color = Ink.Muted, fontSize = 11.sp)
+    PillButton("−") { adjust(-1) }
     CompactNumericField(
-        value = text,
+        value = text ?: formatToolDistance(displayed, 3),
         onValueChange = { text = it },
-        placeholder = "25cm",
+        placeholder = unit.short,
         textAlign = TextAlign.End,
         onDone = ::commit,
         modifier = Modifier.width(64.dp),
     )
+    Text(unit.short, color = Ink.Muted, fontSize = 11.sp)
+    PillButton("+") { adjust(1) }
 }
 
 private fun falloffLabel(value: String) = when (value) {

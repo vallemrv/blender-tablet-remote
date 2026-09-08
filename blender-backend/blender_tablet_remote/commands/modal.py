@@ -247,26 +247,7 @@ class _Session:
                 raise CommandError("Nothing selected", code="empty_selection")
             self.edit_object = active
             selected_indices = frozenset(v.index for v in selected)
-            if self.proportional:
-                tree = KDTree(len(selected))
-                for tree_index, vert in enumerate(selected):
-                    tree.insert(active.matrix_world @ vert.co, tree_index)
-                tree.balance()
-                for vert in bm.verts:
-                    if vert.hide:
-                        continue
-                    if vert.index in selected_indices:
-                        weight = 1.0
-                    else:
-                        _co, _index, distance = tree.find(active.matrix_world @ vert.co)
-                        weight = _falloff_weight(
-                            self.proportional_falloff, distance, self.proportional_radius)
-                    if weight > 0.0:
-                        self.edit_coords[vert.index] = vert.co.copy()
-                        self.edit_weights[vert.index] = weight
-            else:
-                self.edit_coords = {v.index: v.co.copy() for v in selected}
-                self.edit_weights = {v.index: 1.0 for v in selected}
+            self._collect_edit_weights(bm, active, selected, selected_indices)
             self.edit_topology = (len(bm.verts), len(bm.edges), len(bm.faces))
             self.selection_signature = selected_indices
             self._edit_sel_counts = (active.data.total_vert_sel, active.data.total_edge_sel,
@@ -294,6 +275,45 @@ class _Session:
         self.orientation_basis = self._resolve_orientation_basis()
         self.rotation_axis = self._resolve_rotation_axis()
         self.base_dimensions = self._measure_base_dimensions()
+
+    def _collect_edit_weights(self, bm, obj, selected, selected_indices):
+        """Calcula la influencia sobre la geometría del baseline, nunca la preview."""
+        self.edit_coords = {}
+        self.edit_weights = {}
+        if not self.proportional:
+            self.edit_coords = {v.index: v.co.copy() for v in selected}
+            self.edit_weights = {v.index: 1.0 for v in selected}
+            return
+        tree = KDTree(len(selected))
+        for tree_index, vert in enumerate(selected):
+            tree.insert(obj.matrix_world @ vert.co, tree_index)
+        tree.balance()
+        for vert in bm.verts:
+            if vert.hide:
+                continue
+            if vert.index in selected_indices:
+                weight = 1.0
+            else:
+                _co, _index, distance = tree.find(obj.matrix_world @ vert.co)
+                weight = _falloff_weight(self.proportional_falloff, distance, self.proportional_radius)
+            if weight > 0.0:
+                self.edit_coords[vert.index] = vert.co.copy()
+                self.edit_weights[vert.index] = weight
+
+    def update_proportional(self, settings, changes):
+        """Edita la influencia conservando sesión, valores, pivote y referencias."""
+        self.restore()
+        if 'proportional' in changes:
+            self.proportional = bool(settings.use_proportional_edit)
+        if 'radius' in changes:
+            self.proportional_radius = float(settings.proportional_size)
+        if 'falloff' in changes:
+            self.proportional_falloff = str(settings.proportional_edit_falloff)
+        bm = bmesh.from_edit_mesh(self.edit_object.data)
+        selected = [bm.verts[index] for index in self.selection_signature]
+        self._collect_edit_weights(bm, self.edit_object, selected, self.selection_signature)
+        self.mirror_clips = _mirror_clip_planes(self.edit_object, self.edit_coords)
+        self.apply()
 
     # ------------------------------------------------------- deslizar por aristas
 
@@ -1376,6 +1396,10 @@ def get_edit_settings(payload: dict) -> dict:
 @command("edit.settings_set", mutating=True)
 def set_edit_settings(payload: dict) -> dict:
     settings = bpy.context.scene.tool_settings
+    update_session = (session.active and session.edit_object is not None and
+                      bool({'proportional', 'radius', 'falloff'} & payload.keys()))
+    if update_session:
+        session.require(payload.get('_client_id'))
     if "proportional" in payload:
         settings.use_proportional_edit = bool(payload["proportional"])
     if "falloff" in payload:
@@ -1388,7 +1412,7 @@ def set_edit_settings(payload: dict) -> dict:
             radius = float(payload["radius"])
         except (TypeError, ValueError):
             raise BadPayload("'radius' must be a number")
-        if radius <= 0.0:
+        if not math.isfinite(radius) or radius <= 0.0:
             raise BadPayload("'radius' must be greater than zero")
         settings.proportional_size = radius
     if "auto_merge" in payload:
@@ -1401,4 +1425,9 @@ def set_edit_settings(payload: dict) -> dict:
         if threshold <= 0.0:
             raise BadPayload("'merge_threshold' must be greater than zero")
         settings.double_threshold = threshold
-    return dict(state.snapshot(include_view=False), edit_settings=edit_settings_state())
+    if update_session:
+        session.update_proportional(settings, payload)
+    result = dict(state.snapshot(include_view=False), edit_settings=edit_settings_state())
+    if update_session:
+        result['transform'] = session.status()
+    return result

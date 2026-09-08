@@ -209,6 +209,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   La cadena sigue siendo proporcional para valores distintos de cero; Reset recupera el baseline.
 - El selector y los pasos de snap viven en `ui/SnapControl.kt`; las bandejas declaran
   opciones y reciben valores, pero no vuelven a implementar su interfaz.
+- El radio proporcional muestra y acepta la unidad del preset (mm/cm/m); sus −/+
+  acumulan el paso físico anunciado convertido por `scale_length` (1 mm en Pequeña).
+  Cambiar radio, perfil o activación actualiza la influencia desde el baseline sin
+  reiniciar la transformación, sus valores ni sus referencias. Reducir el radio
+  restaura los vértices excluidos; confirmar sigue creando un único undo.
 - Extruir, Inset y Bisel comparten incremento editable y selector mm/cm/m; comienzan
   en la unidad del preset y convierten el paso según `scale_length`. Su arrastre con
   Incremento/Rejilla recorre un paso por el 4 % de altura, conserva fracciones y

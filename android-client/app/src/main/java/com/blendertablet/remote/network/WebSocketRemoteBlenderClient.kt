@@ -876,7 +876,12 @@ class WebSocketRemoteBlenderClient(
                         val shading = if (r.optString("shading") == "WIREFRAME") Shading.WIREFRAME else Shading.SOLID
                         _state.value = _state.value.copy(view = _state.value.view.copy(shading = shading))
                     }
-                    command == "edit.settings_set" -> result?.let(::updateState)
+                    command == "edit.settings_set" -> result?.let {
+                        updateState(it)
+                        it.optJSONObject("transform")?.let { transform ->
+                            acceptTransformSession(StateParser.session(transform), allowReplace = false)
+                        }
+                    }
                     command == "file.locations" -> updateFileLocations(result)
                     command == "file.browse" -> updateFileBrowser(result)
                     command == "file.default_folder" -> {
