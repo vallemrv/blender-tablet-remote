@@ -80,6 +80,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   cóncavos de cortes previos; cada segmento recorre la superficie y nunca el volumen.
 - El cierre de Tweak identifica `tweak_finished`; Android retira únicamente esa
   sesión MOVE interna y conserva cualquier transformación posterior.
+- Las respuestas UPDATE de Tweak describen una transformación (`mode: MOVE`), no
+  una escena. Android solo actualiza la escena desde sus snapshots explícitos;
+  el arrastre nunca cambia el selector Edit/Object ni cancela su propia entrada.
 - El snap táctil filtra primero por geometría visible y después clasifica el candidato.
 - Mover sin snap sigue al dedo continuamente; con Incremento avanza en saltos táctiles
   perceptibles y no reutiliza la misma sensibilidad del movimiento libre.

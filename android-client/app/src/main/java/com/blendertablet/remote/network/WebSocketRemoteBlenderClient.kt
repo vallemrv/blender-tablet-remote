@@ -876,7 +876,7 @@ class WebSocketRemoteBlenderClient(
                         if (finished != null && finished == _transformSession.value.sessionId) {
                             _transformSession.value = TransformSession()
                         }
-                        if (result?.has("mode") == true && result.has("objects")) updateState(result)
+                        tweakSceneSnapshot(result)?.let(::updateState)
                     }
                     command in MODAL_COMMANDS -> {
                         acceptTransformSession(
@@ -1047,6 +1047,11 @@ class WebSocketRemoteBlenderClient(
             sceneScale = if (json.has("scene_scale")) parsed.sceneScale else old.sceneScale,
         )
     }
+}
+
+/** BEGIN/END pueden traer escena; UPDATE trae una transformación con mode=MOVE. */
+internal fun tweakSceneSnapshot(result: JSONObject?): JSONObject? = result?.takeIf {
+    it.has("active_object") && it.optString("mode") in setOf("EDIT", "EDIT_MESH", "OBJECT")
 }
 
 internal fun shouldAcceptTransformSession(
