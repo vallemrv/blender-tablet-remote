@@ -70,6 +70,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   corte comienza sin desplazamiento. La bandeja permite porcentaje o mm/cm/m desde
   el centro, además de volver a Centro. Las medidas físicas incluyen la escala del
   objeto y de escena; los cortes múltiples conservan su espaciado al desplazarse.
+- El campo de posición de Loop Cut permite un borrador vacío en % y mm/cm/m;
+  las actualizaciones remotas no lo rellenan mientras se escribe. Vacío no envía valor.
 - Las referencias RNA inválidas nunca deben detener el pump ni el broadcast.
 - El explorador identifica cada fila por nombre y ruta: varios enlaces simbólicos
   pueden compartir un destino canónico sin ser la misma entrada de la lista.

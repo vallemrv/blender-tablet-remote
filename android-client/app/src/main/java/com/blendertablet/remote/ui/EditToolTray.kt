@@ -533,7 +533,8 @@ private fun PositionStepper(session: ToolSession, onParameter: (String, Any?) ->
     val metric = unit != "%" && session.slideRange > 0.0
     val metersPerUnit = when (unit) { "mm" -> 0.001; "cm" -> 0.01; else -> 1.0 }
     val value = if (metric) session.slideDistance / metersPerUnit else (factor + 1.0) * 50.0
-    var text by remember(value, unit) { mutableStateOf("") }
+    // null muestra el valor remoto; vacío conserva el borrado mientras se escribe.
+    var text by remember(unit) { mutableStateOf<String?>(null) }
     val limit = if (session.flag("clamp", true)) 1.0 else 2.0
     val minimum = if (metric) -limit * session.slideRange / metersPerUnit else (1.0 - limit) * 50.0
     val maximum = if (metric) limit * session.slideRange / metersPerUnit else (1.0 + limit) * 50.0
@@ -542,14 +543,14 @@ private fun PositionStepper(session: ToolSession, onParameter: (String, Any?) ->
         val bounded = number.coerceIn(minimum, maximum)
         if (metric) onParameter("slide_distance", bounded * metersPerUnit)
         else onParameter("factor", bounded / 50.0 - 1.0)
-        text = ""
+        text = null
     }
-    fun commit() { text.trim().replace(',', '.').toDoubleOrNull()?.let(::send) }
+    fun commit() { text?.trim()?.replace(',', '.')?.toDoubleOrNull()?.let(::send) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(if (metric) "Desde centro" else "Posición", color = Ink.Faint, fontSize = 11.sp)
         StepperButton("−") { send(value - 1.0) }
         CompactNumericField(
-            value = text.ifEmpty { format(value, false) },
+            value = text ?: format(value, false),
             onValueChange = { text = it }, onDone = { commit() },
             modifier = Modifier.width(72.dp),
         )
@@ -558,13 +559,13 @@ private fun PositionStepper(session: ToolSession, onParameter: (String, Any?) ->
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 val units = if (session.slideRange > 0.0) listOf("%", "mm", "cm", "m") else listOf("%")
                 units.forEach { option ->
-                    DropdownMenuItem(text = { Text(option) }, onClick = { unit = option; menu = false; text = "" })
+                    DropdownMenuItem(text = { Text(option) }, onClick = { unit = option; menu = false; text = null })
                 }
             }
         }
         StepperButton("+") { send(value + 1.0) }
-        PillButton("Aplicar", enabled = text.isNotBlank()) { commit() }
-        PillButton("Centro") { onParameter("factor", 0.0); text = "" }
+        PillButton("Aplicar", enabled = !text.isNullOrBlank()) { commit() }
+        PillButton("Centro") { onParameter("factor", 0.0); text = null }
     }
 }
 
