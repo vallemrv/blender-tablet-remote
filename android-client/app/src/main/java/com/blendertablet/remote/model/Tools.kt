@@ -144,7 +144,7 @@ data class ToolSession(
     /** Tipos que el contrato admite realmente para esta sesión concreta. */
     val availableSnapTypes: List<SnapType>
         get() = when {
-            tool == EditTool.EXTRUDE && (parameters["variant"] as? String ?: "REGION") == "REGION" ->
+            tool == EditTool.EXTRUDE && (parameters["variant"] as? String ?: "REGION") in setOf("REGION", "MANIFOLD") ->
                 SnapType.entries
             "snap_type" in parameters -> listOf(SnapType.NONE, SnapType.INCREMENT, SnapType.GRID)
             else -> emptyList()

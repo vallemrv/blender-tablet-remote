@@ -267,9 +267,7 @@ private fun SnapToggle(
         if (session.tool in setOf(EditTool.EXTRUDE, EditTool.INSET, EditTool.BEVEL)) {
             DistanceSnapStepInput(
                 session.snapStep, unitScaleLength, lengthUnit,
-                onNudge = if (session.tool == EditTool.EXTRUDE) { delta ->
-                    onParameter("offset", (session.double("offset") ?: 0.0) + delta)
-                } else null,
+                showSteppers = session.tool == EditTool.EXTRUDE,
             ) {
                 onParameter("snap_step", it)
             }
@@ -281,7 +279,7 @@ private fun SnapToggle(
 
 /**
  * Parámetros de Extrude: distancia + bloqueo de eje (Libre/X/Y/Z) y orientación
- * (Global/Local/Vista) cuando la variante es REGION. Las otras variantes no exponen
+ * (Global/Local/Vista) en Región y Manifold. Las otras variantes no exponen
  * eje: el backend lo rechaza y aquí se oculta.
  */
 @Composable
@@ -297,7 +295,7 @@ private fun ExtrudeParams(session: ToolSession, unitScaleLength: Double, lengthU
         )
     }
     val variant = (session.parameters["variant"] as? String) ?: "REGION"
-    if (variant != "REGION") {
+    if (variant !in setOf("REGION", "MANIFOLD")) {
         SnapToggle(session, onParameter, unitScaleLength, lengthUnit)
         return
     }

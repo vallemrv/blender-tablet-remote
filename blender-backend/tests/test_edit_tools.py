@@ -154,6 +154,75 @@ class EditToolsTests(unittest.TestCase):
             self.assertEqual(raised.exception.code,'insufficient_selection')
             undo.assert_not_called()
 
+    def test_manifold_dissolves_coplanar_sides_and_rebuilds_from_baseline(self):
+        state = self.begin('EXTRUDE', variant='MANIFOLD', offset=.25)
+        self.assertEqual(state['parameters']['variant'], 'MANIFOLD')
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        self.assertEqual((len(bm.verts),len(bm.faces)),(8,6))
+        self.assertAlmostEqual(max(v.co.z for v in bm.verts),1.25)
+        with patch.object(mesh,'undo_push') as preview_undo:
+            tools.parameter({'parameters':{'offset':.5}})
+            tools.parameter({'parameters':{'offset':.75}})
+            preview_undo.assert_not_called()
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        self.assertEqual((len(bm.verts),len(bm.faces)),(8,6))
+        self.assertAlmostEqual(max(v.co.z for v in bm.verts),1.75)
+        tools.cancel({})
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        self.assertEqual((len(bm.verts),len(bm.faces)),(8,6))
+        self.assertAlmostEqual(max(v.co.z for v in bm.verts),1)
+
+    def test_extrude_keeps_source_fixed_and_selects_only_new_geometry(self):
+        for mode, coords in (
+            ((True,False,False), [(0,0,0)]),
+            ((False,True,False), [(0,0,0),(1,0,0)]),
+            ((False,False,True), [(0,0,0),(1,0,0),(1,1,0),(0,1,0)]),
+        ):
+            with self.subTest(mode=mode):
+                sessions.cancel_all()
+                bm = bmesh.from_edit_mesh(self.obj.data)
+                bm.clear()
+                verts = [bm.verts.new(co) for co in coords]
+                if mode[1]:
+                    bm.edges.new(verts).select_set(True)
+                elif mode[2]:
+                    bm.faces.new(verts).select_set(True)
+                else:
+                    verts[0].select_set(True)
+                bpy.context.scene.tool_settings.mesh_select_mode = mode
+                bm.normal_update()
+                bmesh.update_edit_mesh(self.obj.data)
+                self.begin('EXTRUDE', offset=1, constraint='Z')
+                for distance in (1,2,.5):
+                    tools.parameter({'parameters': {'offset': distance}})
+                    bm = bmesh.from_edit_mesh(self.obj.data)
+                    self.assertEqual(len(bm.verts),len(coords)*2)
+                    self.assertEqual(sum(abs(v.co.z) < 1e-6 for v in bm.verts),len(coords))
+                    selected = [v for v in bm.verts if v.select]
+                    self.assertEqual(len(selected),len(coords))
+                    self.assertTrue(all(abs(v.co.z-distance) < 1e-6 for v in selected))
+                    if mode[1]:
+                        self.assertEqual((len(bm.edges),len(bm.faces)),(4,1))
+                tools.cancel({})
+                self.assertEqual(len(bmesh.from_edit_mesh(self.obj.data).verts),len(coords))
+
+    def test_manifold_starts_at_zero_and_supports_inward_distance(self):
+        self.begin('EXTRUDE', variant='MANIFOLD', offset=0)
+        tools.parameter({'parameters':{'offset':-.5}})
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        self.assertAlmostEqual(max(v.co.z for v in bm.verts),.5)
+        self.assertTrue(all(e.is_manifold for e in bm.edges))
+
+    def test_extrude_step_change_preserves_preview_until_next_gesture(self):
+        self.begin('EXTRUDE', offset=.2, snap_type='INCREMENT', snap_step=.1)
+        before = [tuple(v.co) for v in bmesh.from_edit_mesh(self.obj.data).verts]
+        state = tools.parameter({'parameters': {'snap_step': .3}})
+        self.assertAlmostEqual(state['parameters']['offset'],.2)
+        self.assertAlmostEqual(state['snap_step'],.3)
+        self.assertEqual(before,[tuple(v.co) for v in bmesh.from_edit_mesh(self.obj.data).verts])
+        state = tools.nudge({'delta': .1})
+        self.assertAlmostEqual(state['parameters']['offset'],.3)
+
     def test_increment_accumulates_small_samples_and_reports_visual_value(self):
         for tool, primary in [('EXTRUDE','offset'),('INSET','thickness'),('BEVEL','offset')]:
             with self.subTest(tool=tool):
@@ -186,14 +255,17 @@ class EditToolsTests(unittest.TestCase):
     def test_extrude_candidate_respects_constraint_and_object_scale(self):
         self.obj.scale = (2,3,4)
         bpy.context.view_layer.update()
-        self.begin('EXTRUDE', offset=0, constraint='Z', orientation='GLOBAL')
-        candidate = dict(hit=True,position=[5,4,8],id='target',snap_type='VERTEX')
-        with patch.object(snap,'query_candidate',return_value=candidate):
-            state = tools.snap_candidate(dict(u=.5,v=.5,lock=False))
-        self.assertAlmostEqual(state['parameters']['offset'],1)
-        bm = bmesh.from_edit_mesh(self.obj.data)
-        self.assertAlmostEqual(max(v.co.z for v in bm.verts),2)
-        self.assertAlmostEqual(max(v.co.x for v in bm.verts),1)
+        for variant in ('REGION', 'MANIFOLD'):
+            with self.subTest(variant=variant):
+                self.begin('EXTRUDE', variant=variant, offset=0, constraint='Z', orientation='GLOBAL')
+                candidate = dict(hit=True,position=[5,4,8],id='target',snap_type='VERTEX')
+                with patch.object(snap,'query_candidate',return_value=candidate):
+                    state = tools.snap_candidate(dict(u=.5,v=.5,lock=False))
+                self.assertAlmostEqual(state['parameters']['offset'],1)
+                bm = bmesh.from_edit_mesh(self.obj.data)
+                self.assertAlmostEqual(max(v.co.z for v in bm.verts),2)
+                self.assertAlmostEqual(max(v.co.x for v in bm.verts),1)
+                tools.cancel({})
 
     def test_knife_snap_mode_and_end_confirm_last_candidate(self):
         self.begin('KNIFE', snap=True)

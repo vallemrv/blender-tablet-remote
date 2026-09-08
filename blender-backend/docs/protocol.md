@@ -388,7 +388,7 @@ Ctrl+Plus / Ctrl+Minus del numpad). Solo Edit Mode (`wrong_mode` fuera).
 
 | Comando | Payload |
 |---|---|
-| `mesh.extrude` | `offset` (def. 0.0), `direction` [x,y,z] opcional, `variant`: `REGION`\|`ALONG_NORMALS`\|`INDIVIDUAL` |
+| `mesh.extrude` | `offset` (def. 0.0), `direction` [x,y,z] opcional, `variant`: `REGION`\|`MANIFOLD`\|`ALONG_NORMALS`\|`INDIVIDUAL` |
 | `mesh.inset` | `thickness` (def. 0.1), `depth`, `individual` (bool), `boundary` (bool, def. true; false conserva costuras abiertas/Mirror) |
 | `mesh.bevel` | `offset` (def. 0.1), `segments` (def. 1), `profile` (0..1, def. 0.5), `miter_outer`: `SHARP`\|`PATCH`\|`ARC` (def. `SHARP`), `affect`, `clamp` |
 | `mesh.subdivide` | `cuts` |
@@ -413,6 +413,9 @@ nuevo según su normal y `INDIVIDUAL` crea una copia desconectada por cada cara;
 requieren el submodo Cara (`incompatible_selection` fuera de él). `direction` no se
 combina con `ALONG_NORMALS`. Aristas y vértices sólo admiten `REGION`, que conserva la
 semántica existente: aristas → solo aristas y vértices → vértices individuales.
+`MANIFOLD` también requiere Cara y ejecuta `mesh.extrude_manifold` nativo, con
+disolución de bordes coplanares e intersección de los nuevos. Comparte los ejes,
+orientación, distancia y snap de Región, dentro de la misma sesión reversible.
 
 `mesh.loop_cut` replica el modal Ctrl+R con parámetros explícitos. `factor` es el
 deslizamiento: 0 deja el corte en la mitad del anillo, ±1 lo lleva a los extremos.
@@ -540,6 +543,9 @@ El gesto con paso métrico toma la dimensión base mayor entre los ejes activos
 los ejes excluidos permanecen a 100 %. `transform.value` en SCALE respeta el valor
 exacto, incluidos los botones y Reset, sin redondearlo otra vez; el siguiente gesto
 vuelve a aplicar el snap. Una dimensión base nula no admite incremento métrico.
+Los valores y dimensiones SCALE admiten cero exacto para aplanar, incluso con snap.
+Los ejes excluidos conservan su escala; en Android la cadena sigue replicando el
+factor, por lo que para aplanar un solo eje se restringe ese eje o se desactiva la cadena.
 
 Snap incremental y rejilla en la sesión modal:
 
@@ -688,12 +694,16 @@ Extruir, Inset y Bisel comparten el paso métrico editable de snap. Android conv
 mm/cm/m según `scale_length` y, con Incremento/Rejilla, traduce el 4 % de arrastre
 vertical a un paso. El backend conserva el acumulador continuo pero publica en
 `parameters` el valor de la preview redondeada. `tool.snap_candidate` actualiza la
-preview de Extrude REGION también con `lock: false`; respeta su eje y convierte el
+preview de Extrude REGION/MANIFOLD también con `lock: false`; respeta su eje y convierte el
 destino de mundo al espacio local del objeto antes de extruir. Extruir muestra Paso
-con botones −/+ también sin snap; cada pulsación modifica `offset` en esa cantidad.
+con botones −/+ también sin snap; cada pulsación cambia `snap_step` en una unidad
+de la unidad métrica elegida (mínimo 0.001). Editar solo el paso conserva la distancia
+y la preview actuales; el siguiente gesto usa el nuevo paso.
 La edición de `offset` descarta el candidato geométrico anterior para aplicar el valor
 paramétrico. Su campo Distancia muestra unidades y acepta cantidades con o sin sufijo
 (en este último caso usa la unidad del preset).
+Extrude Región mueve y selecciona únicamente los vértices nuevos: las conexiones
+con la base no incluyen sus vértices originales en el desplazamiento ni la selección.
 
 Knife coloca puntos con `tool.knife_drag` (`phase` `BEGIN|UPDATE|END|CANCEL`, `u`,`v`).
 BEGIN y UPDATE solo mueven el candidato sin mutar la malla; END fija exactamente un
@@ -755,7 +765,7 @@ Snap real de incremento/rejilla en parámetros escalares de sesión: `EXTRUDE.of
 `GRID` se trata como `INCREMENT` igual que en `transform_modal`) y `snap_step`
 (paso, por defecto `0.1`). Cuadran el valor antes de aplicar el corte, así que cambian
 el resultado geométrico real, no solo lo que se enseña. `INSET` e `EXTRUDE` también
-aceptan `variant` (`REGION`\|`INDIVIDUAL` para Inset; `REGION`\|`ALONG_NORMALS`\|`INDIVIDUAL`
+aceptan `variant` (`REGION`\|`INDIVIDUAL` para Inset; `REGION`\|`MANIFOLD`\|`ALONG_NORMALS`\|`INDIVIDUAL`
 para Extrude) como parámetro de sesión — cambiarlo reconstruye desde el backup, no
 acumula. Los pasos de Extrude/Bevel/Inset son distancias en Blender Units (la UI los
 presenta en cm/m usando `units.scale_length`); Loop Cut y merge son factores
@@ -765,7 +775,7 @@ Inset REGION acepta además `boundary` (def. `true`), equivalente a Boundary de
 Blender. Con `false`, los bordes abiertos no se desplazan: una costura sobre el plano
 de un modificador Mirror permanece pegada al espejo durante el inset.
 
-Extrude `REGION` admite snap geométrico. Durante el arrastre el cliente llama
+Extrude `REGION` y `MANIFOLD` admiten snap geométrico. Durante el arrastre el cliente llama
 `tool.snap_candidate` con `u`, `v`, `snap_type` (`VERTEX|EDGE|EDGE_CENTER|FACE|FACE_CENTER|CURSOR`),
 `threshold` y `lock`. `tool.status` publica `snap_type`, `snap_step` y
 `snap_candidate` (o null), cuya forma común es
@@ -817,7 +827,7 @@ disjuntos de igual longitud. Sus parámetros son `twist_offset` (int, 0), `merge
 (bool, false) y `merge_factor` (float, 0..1, 0). La preview se reconstruye desde el
 backup igual que las demás sesiones y el catálogo fija el mínimo rápido de seis aristas;
 el backend valida la topología completa.
-Extrude anuncia `REGION` en los tres grupos; `ALONG_NORMALS` e `INDIVIDUAL` sólo se
+Extrude anuncia `REGION` en los tres grupos; `MANIFOLD`, `ALONG_NORMALS` e `INDIVIDUAL` sólo se
 habilitan en Cara. El cliente debe respetar `enabled` y no deducir compatibilidades.
 
 `LOOPTOOLS_CIRCLE` es una entrada condicional de los grupos VERTEX y EDGE. El servidor

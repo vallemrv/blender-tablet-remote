@@ -119,6 +119,41 @@ class ScaleUnitsTests(unittest.TestCase):
         modal.nudge(dict(dx=.03, dy=0))
         self.assertDimensions([20, 40, 0])
 
+    def test_zero_on_each_axis_flattens_exactly_and_reset_restores(self):
+        for edit in (False, True):
+            for axis in range(3):
+                with self.subTest(edit=edit, axis=axis):
+                    start = self.begin(edit=edit)
+                    values = [1, 1, 1]
+                    values[axis] = 0
+                    result = modal.set_value({'values': values})
+                    expected = [20, 40, 10]
+                    expected[axis] = 0
+                    self.assertDimensions(expected)
+                    self.assertEqual(result['values'][axis], 0)
+                    self.assertEqual(result['session_id'], start['session_id'])
+                    modal.set_value({'values': [1, 1, 1]})
+                    self.assertDimensions([20, 40, 10])
+
+    def test_zero_metric_dimension_is_exact_and_cancel_restores(self):
+        for edit in (False, True):
+            for scene_scale in (1.0, .001):
+                self.begin(scene_scale, edit)
+                dimensions = [.020 / scene_scale, 0, .010 / scene_scale]
+                modal.set_value({'dimensions': dimensions})
+                self.assertDimensions([20, 0, 10])
+                with patch.object(modal.state, 'snapshot', return_value={}):
+                    modal.cancel({})
+                self.assertDimensions([20, 40, 10])
+
+    def test_flatten_confirm_keeps_exact_zero_with_one_undo(self):
+        self.begin(edit=True, axes=['Z'])
+        modal.set_value({'values': [0, 0, 0]})
+        with patch.object(modal, 'undo_push') as undo, patch.object(modal.state, 'snapshot', return_value={}):
+            modal.confirm({})
+            undo.assert_called_once_with('Remote scale')
+        self.assertDimensions([20, 40, 0])
+
     def test_invalid_step_unit_is_rejected(self):
         with self.assertRaises(BadPayload):
             modal.begin(dict(mode='SCALE', scale_step_unit='MM'))

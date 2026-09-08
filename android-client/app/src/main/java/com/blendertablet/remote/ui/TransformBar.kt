@@ -401,7 +401,7 @@ private fun ParametricAxisInputs(
             if (snapType == SnapType.INCREMENT) {
                 PillButton("−") {
                     val next = current - axisStep
-                    send(if (session.mode == TransformMode.SCALE && next <= 0.0) current else next)
+                    send(if (session.mode == TransformMode.SCALE && next < 0.0) current else next)
                 }
             }
             CompactNumericField(

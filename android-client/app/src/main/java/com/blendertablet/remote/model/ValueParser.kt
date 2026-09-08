@@ -60,9 +60,9 @@ object ValueParser {
     ): Double? {
         if (unit == TransformStepUnit.PERCENT) {
             val number = input.trim().replace(',', '.').removeSuffix("%").toDoubleOrNull() ?: return null
-            return (number / 100.0).takeIf { it > 0.0 }
+            return (number / 100.0).takeIf { it.isFinite() && it >= 0.0 }
         }
-        if (baseDimension <= 1e-12 || unitScaleLength <= 1e-12) return null
+        if (unitScaleLength <= 1e-12) return null
         val explicit = split(input)?.second?.isNotEmpty() == true
         val physicalMeters = (if (explicit) parseMove(input) else {
             val number = input.trim().replace(',', '.').toDoubleOrNull() ?: return null
@@ -73,7 +73,10 @@ object ValueParser {
                 TransformStepUnit.PERCENT -> return null
             }
         }) ?: return null
-        return (physicalMeters / unitScaleLength / baseDimension).takeIf { it > 0.0 }
+        if (!physicalMeters.isFinite() || physicalMeters < 0.0) return null
+        if (physicalMeters == 0.0) return 0.0
+        if (baseDimension <= 1e-12) return null
+        return (physicalMeters / unitScaleLength / baseDimension).takeIf { it.isFinite() && it > 0.0 }
     }
 
     /** Separa el número de su sufijo: `"25cm"` -> `(25.0, "cm")`. */

@@ -1230,8 +1230,11 @@ def set_value(payload: dict) -> dict:
                 for index, dimension in enumerate(dimensions):
                     target = float(dimension)
                     baseline = session.base_dimensions[index]
-                    if target <= 0.0:
-                        raise BadPayload("dimensions must be greater than zero")
+                    if not math.isfinite(target) or target < 0.0:
+                        raise BadPayload("dimensions must be finite and non-negative")
+                    if target == 0.0:
+                        factors.append(0.0)
+                        continue
                     if baseline <= 1e-12:
                         raise CommandError("Scale dimension is degenerate", code="degenerate_reference")
                     factors.append(target / baseline)

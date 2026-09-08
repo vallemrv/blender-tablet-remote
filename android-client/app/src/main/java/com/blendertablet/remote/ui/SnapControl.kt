@@ -113,24 +113,33 @@ internal fun DistanceSnapStepInput(
     step: Double,
     unitScaleLength: Double,
     defaultUnit: LengthUnit,
-    onNudge: ((Double) -> Unit)? = null,
+    showSteppers: Boolean = false,
     onChange: (Double) -> Unit,
 ) {
     var unit by remember(defaultUnit) { mutableStateOf(defaultUnit.transformStepUnit()) }
     var expanded by remember { mutableStateOf(false) }
     var text by remember(unit, unitScaleLength) { mutableStateOf<String?>(null) }
     val displayed = moveValueForDisplay(step, unit, unitScaleLength)
-    fun commit(): Double? {
+    fun readStep(): Double? {
         if (text == null) return step
         val number = text?.trim()?.replace(',', '.')?.toDoubleOrNull()
             ?.takeIf { it.isFinite() && it > 0.0 } ?: return null
-        val wire = moveValueInBlenderUnits(number, unit, unitScaleLength)
+        return moveValueInBlenderUnits(number, unit, unitScaleLength)
+    }
+    fun commit() {
+        if (text == null) return
+        val wire = readStep() ?: return
         onChange(wire)
         text = null
-        return wire
+    }
+    fun adjustStep(delta: Double) {
+        val current = readStep() ?: return
+        val next = (moveValueForDisplay(current, unit, unitScaleLength) + delta).coerceAtLeast(0.001)
+        onChange(moveValueInBlenderUnits(next, unit, unitScaleLength))
+        text = null
     }
     Text("Paso", color = Ink.Faint, fontSize = 11.sp)
-    if (onNudge != null) PillButton("−") { commit()?.let { onNudge(-it) } }
+    if (showSteppers) PillButton("−") { adjustStep(-1.0) }
     CompactNumericField(
         value = text ?: displayed.toBigDecimal().stripTrailingZeros().toPlainString(),
         onValueChange = { text = it }, modifier = Modifier.width(84.dp),
@@ -147,7 +156,7 @@ internal fun DistanceSnapStepInput(
             }
         }
     }
-    if (onNudge != null) PillButton("+") { commit()?.let(onNudge) }
+    if (showSteppers) PillButton("+") { adjustStep(1.0) }
 }
 
 /** Opciones de Tweak derivadas por el mismo módulo que representa el snap. */

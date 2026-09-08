@@ -48,6 +48,22 @@ class ScaleUnitsTest {
         assertEquals(1.07, ValueParser.parseScaleDimension("107 %", TransformStepUnit.PERCENT, 0.001, 0.0)!!, 1e-9)
     }
 
+    @Test fun zeroFlattensAnIndependentAxisInEveryUnit() {
+        for (unit in TransformStepUnit.entries) {
+            for (sceneScale in listOf(1.0, .001)) {
+                val factor = ValueParser.parseScaleDimension("0", unit, sceneScale, .02 / sceneScale)!!
+                assertEquals(0.0, factor, 0.0)
+                for (axis in 0..2) {
+                    val values = scaleValuesAfterAxisEdit(listOf(1.0, 1.0, 1.0), axis, factor, false)
+                    for (i in 0..2) assertEquals(if (i == axis) 0.0 else 1.0, values[i], 0.0)
+                }
+            }
+        }
+        assertEquals(0.0, ValueParser.parseScaleDimension("0mm", TransformStepUnit.CM, .001, 20.0)!!, 0.0)
+        assertEquals(0.0, ValueParser.parseScaleDimension("0", TransformStepUnit.MM, 1.0, 0.0)!!, 0.0)
+        assertNull(ValueParser.parseScaleDimension("-1", TransformStepUnit.MM, 1.0, 1.0))
+    }
+
     @Test fun flatAxisCannotGainThicknessByScaling() {
         assertEquals(0.0, scaleAxisStep(1.0, TransformStepUnit.MM, 1.0, 0.0), 0.0)
         assertNull(ValueParser.parseScaleDimension("1", TransformStepUnit.MM, 1.0, 0.0))

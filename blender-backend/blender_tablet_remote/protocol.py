@@ -107,12 +107,13 @@ def _selection(mode, **minimum):
 _EXTRUDE_VARIANTS = [
     {"id": "REGION", "label": "Región", "enabled": True},
     {"id": "ALONG_NORMALS", "label": "A lo largo de normales", "enabled": True},
+    {"id": "MANIFOLD", "label": "Manifold", "enabled": True},
     {"id": "INDIVIDUAL", "label": "Individual", "enabled": True},
 ]
 
 
 def _extrude_variants(face_mode=False):
-    """Sólo las caras admiten las dos variantes no regionales."""
+    """Las variantes distintas de Región requieren caras."""
     return _EXTRUDE_VARIANTS if face_mode else [
         dict(variant, enabled=variant["id"] == "REGION") for variant in _EXTRUDE_VARIANTS
     ]
@@ -133,9 +134,9 @@ _TOOL_PARAMETERS = {
     "EXTRUDE": [
         {"id": "offset", "label": "Desplazamiento", "type": "float", "default": 0.0},
         {"id": "constraint", "label": "Eje", "type": "enum", "default": "FREE",
-         "values": ["FREE", "X", "Y", "Z"], "applies_to": ["REGION"]},
+         "values": ["FREE", "X", "Y", "Z"], "applies_to": ["REGION", "MANIFOLD"]},
         {"id": "orientation", "label": "Orientación", "type": "enum", "default": "GLOBAL",
-         "values": ["GLOBAL", "LOCAL", "VIEW"], "applies_to": ["REGION"]},
+         "values": ["GLOBAL", "LOCAL", "VIEW"], "applies_to": ["REGION", "MANIFOLD"]},
         *_scalar_snap(["offset"], 0.1),
     ],
     "BEVEL": [
@@ -241,6 +242,7 @@ EDIT_TOOLBAR = {
             "EXTRUDE", "Extrude", "REGION",
             variants=[
                 _toolbar_variant("REGION", "Región", requirements=_selection("VERTEX", verts={"min": 1})),
+                _toolbar_variant("MANIFOLD", "Manifold", requirements=_selection("FACE", faces={"min": 1})),
                 _toolbar_variant("ALONG_NORMALS", "A lo largo de normales",
                                  requirements=_selection("FACE", faces={"min": 1})),
                 _toolbar_variant("INDIVIDUAL", "Individual", requirements=_selection("FACE", faces={"min": 1})),

@@ -129,13 +129,13 @@ def extrude(payload: dict) -> dict:
 
     `constraint` (FREE|X|Y|Z) + `orientation` (GLOBAL|LOCAL|VIEW) restringen el
     desplazamiento de la variante REGION a un solo eje, igual que pulsar X/Y/Z tras
-    Extrude en Blender. Solo REGION lo admite; FREE conserva el comportamiento anterior.
+    Extrude en Blender. REGION y MANIFOLD lo admiten; FREE sigue la normal media.
     """
     obj, bm = _bm_and_obj()
     offset = _apply_scalar_snap(get_float(payload, "offset", 0.0), payload)
     variant = str(payload.get("variant", "REGION")).upper()
-    if variant not in {"REGION", "ALONG_NORMALS", "INDIVIDUAL"}:
-        raise BadPayload("'variant' must be REGION, ALONG_NORMALS or INDIVIDUAL")
+    if variant not in {"REGION", "MANIFOLD", "ALONG_NORMALS", "INDIVIDUAL"}:
+        raise BadPayload("'variant' must be REGION, MANIFOLD, ALONG_NORMALS or INDIVIDUAL")
     vert_mode, edge_mode, face_mode = _select_mode()
     if variant != "REGION" and not face_mode:
         raise CommandError(f"{variant} requires face selection", code="incompatible_selection")
@@ -144,11 +144,12 @@ def extrude(payload: dict) -> dict:
 
     axis = _resolve_extrude_direction(payload, obj)
     if axis is not None:
-        if variant != "REGION":
-            raise CommandError("'constraint' only applies to REGION", code="incompatible_parameter")
+        if variant not in {"REGION", "MANIFOLD"}:
+            raise CommandError("'constraint' only applies to REGION or MANIFOLD", code="incompatible_parameter")
         if _custom_direction(payload) is not None:
             raise BadPayload("'direction' and 'constraint' are mutually exclusive")
 
+    original_verts = set(bm.verts)
     if face_mode:
         faces = [f for f in bm.faces if f.select]
         if not faces:
@@ -158,14 +159,35 @@ def extrude(payload: dict) -> dict:
             normal += f.normal
         normal = normal.normalized() if normal.length > 0 else Vector((0.0, 0.0, 1.0))
 
+        if variant == "MANIFOLD":
+            delta = obj.matrix_world.to_3x3() @ ((axis or _custom_direction(payload) or normal) * offset)
+            try:
+                result = bpy.ops.mesh.extrude_manifold(
+                    'EXEC_DEFAULT', False,
+                    MESH_OT_extrude_region={"use_dissolve_ortho_edges": True},
+                    TRANSFORM_OT_translate={"value": tuple(delta), "orient_type": 'GLOBAL',
+                                            "use_proportional_edit": False, "snap": False,
+                                            "use_automerge_and_split": True},
+                )
+            except RuntimeError as exc:
+                raise CommandError("Manifold no puede extruir esta selección", code="topology_incompatible") from exc
+            if "FINISHED" not in result:
+                raise CommandError("Manifold no puede extruir esta selección", code="topology_incompatible")
+            # El operador ya actualiza el BMesh; su undo está desactivado y la
+            # sesión reconstruye desde su baseline antes de cada ejecución.
+            bm = bmesh.from_edit_mesh(obj.data)
+            _undo(payload, "Remote extrude manifold")
+            return {"extruded": "faces", "new_verts": sum(v.select for v in bm.verts),
+                    "offset": offset, "variant": variant,
+                    "constraint": str(payload.get("constraint", "FREE")).upper(),
+                    "orientation": str(payload.get("orientation", "GLOBAL")).upper()}
+
         if variant == "INDIVIDUAL":
             # ``extrude_discrete_faces`` crea una copia independiente de cada cara: no
             # comparte paredes laterales ni vértices entre caras contiguas.
-            ret = bmesh.ops.extrude_discrete_faces(bm, faces=faces)
-            new_geom = list(ret.get("faces", []))
+            bmesh.ops.extrude_discrete_faces(bm, faces=faces)
         else:
-            ret = bmesh.ops.extrude_face_region(bm, geom=faces)
-            new_geom = ret["geom"]
+            bmesh.ops.extrude_face_region(bm, geom=faces)
             bmesh.ops.delete(bm, geom=faces, context="FACES")
         kind = "faces"
     elif edge_mode:
@@ -173,22 +195,19 @@ def extrude(payload: dict) -> dict:
         if not edges:
             raise CommandError("No edges selected", code="empty_selection")
         normal = _average_vert_normal([v for e in edges for v in e.verts])
-        ret = bmesh.ops.extrude_edge_only(bm, edges=edges)
-        new_geom = ret["geom"]
+        bmesh.ops.extrude_edge_only(bm, edges=edges)
         kind = "edges"
     else:
         verts = [v for v in bm.verts if v.select]
         if not verts:
             raise CommandError("No vertices selected", code="empty_selection")
         normal = _average_vert_normal(verts)
-        ret = bmesh.ops.extrude_vert_indiv(bm, verts=verts)
-        new_geom = list(ret["verts"]) + list(ret["edges"])
+        bmesh.ops.extrude_vert_indiv(bm, verts=verts)
         kind = "verts"
 
-    new_verts = list({vert for geom in new_geom for vert in (
-        [geom] if isinstance(geom, bmesh.types.BMVert) else
-        list(geom.verts) if isinstance(geom, (bmesh.types.BMEdge, bmesh.types.BMFace)) else []
-    )})
+    # Los laterales devueltos por extrude incluyen vértices de la base.
+    # Solo el extremo nuevo se desplaza y queda seleccionado para continuar.
+    new_verts = [vert for vert in bm.verts if vert not in original_verts]
     if offset:
         direction = _custom_direction(payload)
         if variant == "ALONG_NORMALS":
@@ -199,7 +218,7 @@ def extrude(payload: dict) -> dict:
             bmesh.ops.translate(bm, verts=new_verts, vec=(axis or direction or normal) * offset)
 
     _deselect_all(bm)
-    _select_geom(bm, new_geom)
+    _select_geom(bm, new_verts)
     flush_bmesh(obj, bm)
     _undo(payload, "Remote extrude")
     return {"extruded": kind, "new_verts": len(new_verts), "offset": offset,

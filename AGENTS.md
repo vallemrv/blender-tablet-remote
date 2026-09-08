@@ -188,14 +188,23 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   botones y snap; `Paso` muestra la misma unidad. Cada botón cambia la dimensión de
   su eje; con cadena conserva proporciones. El gesto métrico usa el eje restringido
   o la dimensión mayor de los ejes activos. Los valores escritos y Reset son exactos.
+- Escalar admite `0` exacto en % y mm/cm/m para aplanar, también con snap activo.
+  Restringir un eje conserva los demás; la cadena mantiene su comportamiento proporcional.
 - El selector y los pasos de snap viven en `ui/SnapControl.kt`; las bandejas declaran
   opciones y reciben valores, pero no vuelven a implementar su interfaz.
 - Extruir, Inset y Bisel comparten incremento editable y selector mm/cm/m; comienzan
   en la unidad del preset y convierten el paso según `scale_length`. Su arrastre con
   Incremento/Rejilla recorre un paso por el 4 % de altura, conserva fracciones y
-  publica el valor visual redondeado. Extruir muestra siempre Paso con −/+ que restan
-  o suman esa distancia a su valor editable; una edición numérica sustituye al destino
-  geométrico sondeado. Knife usa el mismo desplegable de Snap.
+  publica el valor visual redondeado. Extruir muestra siempre Paso con −/+ que editan
+  el paso en la unidad elegida, conservando la distancia y la preview actuales;
+  el siguiente gesto usa ese paso. Editar Distancia sustituye al destino geométrico
+  sondeado. Knife usa el mismo desplegable de Snap.
+- Extruir Región desplaza y selecciona únicamente los vértices nuevos. Los vértices
+  originales de las aristas/caras de conexión permanecen fijos, también al continuar
+  otra extrusión desde el extremo seleccionado.
+- Extruir ofrece Manifold en Caras con la operación nativa de Blender: disuelve
+  bordes coplanares e intersecta los nuevos. Comparte distancia, paso, ejes y snap
+  de Región; cada preview parte del baseline y confirmar crea un único undo.
 - Cada tipo de Snap obtiene su símbolo semántico desde `AppIcons.snap`; la marca de
   selección es un indicador aparte y no sustituye el icono del tipo.
 - El sondeo geométrico del backend permanece centralizado en `commands/snap.py`.

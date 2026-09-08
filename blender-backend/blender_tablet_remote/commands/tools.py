@@ -238,8 +238,8 @@ class ToolSession:
         if str(payload.get("snap_type", "NONE")).upper() in {"VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER", "CURSOR"}:
             payload["snap_type"] = "NONE"  # aún no hay candidato o ya se resuelve abajo
         if self.tool == "EXTRUDE" and self.snap_candidate is not None:
-            if str(payload.get("variant", "REGION")).upper() != "REGION":
-                raise CommandError("Geometric snap requires Extrude REGION", code="incompatible_parameter")
+            if str(payload.get("variant", "REGION")).upper() not in {"REGION", "MANIFOLD"}:
+                raise CommandError("Geometric snap requires Extrude REGION or MANIFOLD", code="incompatible_parameter")
             bm = bmesh.from_edit_mesh(self.obj.data)
             selected = [v.co.copy() for v in bm.verts if v.select and not v.hide]
             if not selected:
@@ -414,6 +414,13 @@ def parameter(payload):
             tool_session.preview()
             raise
         return tool_session.status()
+    if tool_session.tool == "EXTRUDE" and set(params) == {"snap_step"}:
+        mesh_commands._apply_scalar_snap(0.0, dict(params, snap_type="INCREMENT"))
+        tool_session.params.update(params)
+        # Editar la ayuda no desplaza la extrusión que ya se está mostrando.
+        # El siguiente gesto parte de ella y usa el nuevo paso.
+        tool_session.params["offset"] = tool_session.result["offset"]
+        return tool_session.status()
     tool_session.params.update(params)
     if tool_session.tool == "EXTRUDE" and "offset" in params:
         tool_session.snap_candidate = None  # El valor paramétrico sustituye al destino sondeado.
@@ -444,10 +451,10 @@ def face_pick(payload):
 
 @command("tool.snap_candidate", mutating=True)
 def snap_candidate(payload):
-    """Sondea y opcionalmente bloquea un candidato geométrico para Extrude REGION."""
+    """Sondea y opcionalmente bloquea un candidato para Extrude REGION o MANIFOLD."""
     tool_session.require(payload.get("_client_id"))
-    if tool_session.tool != "EXTRUDE" or str(tool_session.params.get("variant", "REGION")).upper() != "REGION":
-        raise CommandError("Geometric snap requires Extrude REGION", code="wrong_tool")
+    if tool_session.tool != "EXTRUDE" or str(tool_session.params.get("variant", "REGION")).upper() not in {"REGION", "MANIFOLD"}:
+        raise CommandError("Geometric snap requires Extrude REGION or MANIFOLD", code="wrong_tool")
     snap_type = str(payload.get("snap_type", tool_session.params.get("snap_type", "VERTEX"))).upper()
     if snap_type not in {"VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER", "CURSOR"}:
         raise BadPayload("Unsupported geometric 'snap_type'")
