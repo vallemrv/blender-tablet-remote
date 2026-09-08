@@ -97,7 +97,7 @@ def zoom(payload: dict) -> dict:
 
 
 def _bounds(objects):
-    """Centro y radio que engloban a los objetos, en coordenadas de mundo."""
+    """Centro y esquinas que engloban a los objetos, en coordenadas de mundo."""
     corners = []
     for obj in objects:
         if obj.bound_box and obj.type != "EMPTY":
@@ -105,15 +105,12 @@ def _bounds(objects):
         else:
             corners.append(obj.matrix_world.translation.copy())
     if not corners:
-        return Vector((0.0, 0.0, 0.0)), 1.0
+        return Vector((0.0, 0.0, 0.0)), [Vector((0.0, 0.0, 0.0))]
 
     lo = Vector((min(c.x for c in corners), min(c.y for c in corners), min(c.z for c in corners)))
     hi = Vector((max(c.x for c in corners), max(c.y for c in corners), max(c.z for c in corners)))
     center = (lo + hi) * 0.5
-    # Nada de mínimos macroscópicos: en una escena donde 1 BU = 1 mm, imponer 25 cm
-    # convierte una pieza de 5 cm en un punto al encuadrarla.
-    radius = max((hi - lo).length * 0.5, 1e-6)
-    return center, radius
+    return center, corners
 
 
 @command("view.frame_selected")
@@ -124,26 +121,26 @@ def frame_selected(payload: dict) -> dict:
     seleccionado. Sin este respaldo, un doble toque nada más abrir no haría nada y
     parecería que la app se ha colgado.
     """
-    _region_view()
+    rv3d = _region_view()
     view_layer = bpy.context.view_layer
     selected = [o for o in view_layer.objects if o.select_get()]
     targets = selected or [o for o in view_layer.objects if o.visible_get()]
     if not targets:
         raise CommandError("Nothing to frame", code="empty_scene")
 
-    center, radius = _bounds(targets)
-    camera.look_at(center, radius)
+    center, corners = _bounds(targets)
+    camera.look_at(center, corners, rv3d)
     return dict(camera.as_dict(), framed="selected" if selected else "all")
 
 
 @command("view.frame_all")
 def frame_all(payload: dict) -> dict:
-    _region_view()
+    rv3d = _region_view()
     targets = [o for o in bpy.context.view_layer.objects if o.visible_get()]
     if not targets:
         raise CommandError("Nothing to frame", code="empty_scene")
-    center, radius = _bounds(targets)
-    camera.look_at(center, radius)
+    center, corners = _bounds(targets)
+    camera.look_at(center, corners, rv3d)
     return camera.as_dict()
 
 

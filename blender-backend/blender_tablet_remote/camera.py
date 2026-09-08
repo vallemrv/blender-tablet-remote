@@ -46,6 +46,7 @@ class RemoteCamera:
         self.location = Vector((0.0, 0.0, 0.0))
         self.rotation = Quaternion((1.0, 0.0, 0.0, 0.0))
         self.distance = 10.0
+        self._ortho_depth = self.distance * 4.0
         self._synced = False
         self.perspective = "PERSP"
         self.axis_view = None
@@ -67,6 +68,7 @@ class RemoteCamera:
         self.location = rv3d.view_location.copy()
         self.rotation = rv3d.view_rotation.copy()
         self.distance = float(rv3d.view_distance)
+        self._ortho_depth = self.distance * 4.0
         self._synced = True
         self._frame_cache = None
 
@@ -94,20 +96,34 @@ class RemoteCamera:
         pantalla y no para la escala de la pieza (ver `DEFAULT_CLIP_START`). Solo se
         reescribe la fila de profundidad, así que el FOV heredado queda intacto.
         """
+        persp = self._perspective_window(rv3d)
         if self.perspective == "PERSP":
-            return self._reclipped(rv3d.window_matrix)
+            return self._reclipped(persp)
         # Proyección ortográfica propia: conserva el encuadre que tenía la vista
         # perspectiva en el plano del pivote, por lo que el cambio no da saltos.
-        persp = rv3d.window_matrix
         width = 2.0 * self.distance / max(abs(persp[0][0]), 1e-9)
         height = 2.0 * self.distance / max(abs(persp[1][1]), 1e-9)
-        # La ortográfica no hereda nada y reparte la profundidad linealmente, así que
-        # no sufre el z-fighting de la perspectiva: conserva su rango amplio.
-        near, far = 0.001, MAX_DISTANCE * 2.0
+        # El zoom ortográfico cambia la ampliación, no atraviesa la pieza. El rango
+        # de profundidad se centra en el pivote y conserva el volumen encuadrado.
+        depth = max(self.clip_end, self._ortho_depth, self.distance * 4.0)
+        near, far = self.distance - depth, self.distance + depth
         return Matrix(((2.0 / width, 0.0, 0.0, 0.0),
                        (0.0, 2.0 / height, 0.0, 0.0),
                        (0.0, 0.0, -2.0 / (far - near), -(far + near) / (far - near)),
                        (0.0, 0.0, 0.0, 1.0)))
+
+    def _perspective_window(self, rv3d) -> Matrix:
+        """FOV de la ventana, también cuando el PC muestra una vista ortográfica."""
+        window = rv3d.window_matrix
+        if abs(window[3][2]) > 1e-9:
+            return window
+        # m00/m11 ortográficos incluyen el zoom del PC. Recuperar el FOV evita
+        # multiplicar ese zoom otra vez por la distancia de la tablet.
+        distance = max(float(rv3d.view_distance), MIN_DISTANCE)
+        return Matrix(((window[0][0] * distance, 0.0, 0.0, 0.0),
+                       (0.0, window[1][1] * distance, 0.0, 0.0),
+                       (0.0, 0.0, -1.0, -1.0),
+                       (0.0, 0.0, -1.0, 0.0)))
 
     def _reclipped(self, window: Matrix) -> Matrix:
         """La matriz de la ventana con `clip_start`/`clip_end` en vez de los suyos."""
@@ -120,12 +136,8 @@ class RemoteCamera:
         if far <= near:
             return window.copy()
         matrix = window.copy()
-        if abs(window[3][2]) > 1e-9:  # perspectiva: w sale de -z
-            matrix[2][2] = -(far + near) / (far - near)
-            matrix[2][3] = -2.0 * far * near / (far - near)
-        else:  # la ventana del PC está en ortográfica
-            matrix[2][2] = -2.0 / (far - near)
-            matrix[2][3] = -(far + near) / (far - near)
+        matrix[2][2] = -(far + near) / (far - near)
+        matrix[2][3] = -2.0 * far * near / (far - near)
         return matrix
 
     def set_clipping(self, start: float, end: float) -> None:
@@ -223,10 +235,20 @@ class RemoteCamera:
         self.axis_view = None
         self._invalidate()
 
-    def look_at(self, center, radius: float, fov: float = 0.85) -> None:
-        """Encuadra una esfera sin cambiar la orientación."""
+    def look_at(self, center, points, rv3d) -> None:
+        """Encuadra los límites en el 85 % de la vista sin cambiar la orientación."""
         self.location = Vector(center)
-        self.distance = max(MIN_DISTANCE, min(MAX_DISTANCE, max(radius, 1e-3) / max(1e-3, math.sin(fov / 2))))
+        inverse_rotation = self.rotation.inverted()
+        offsets = [inverse_rotation @ (Vector(point) - self.location) for point in points]
+        window = self._perspective_window(rv3d)
+        x_scale, y_scale = abs(window[0][0]) / .85, abs(window[1][1]) / .85
+        distance = max((max(abs(p.x) * x_scale, abs(p.y) * y_scale) +
+                        (p.z if self.perspective == 'PERSP' else 0.0) for p in offsets), default=MIN_DISTANCE)
+        if self.perspective == 'PERSP':
+            near = max(self.clip_start, self.clip_end / 10_000.0, distance * 4.0 / 10_000.0)
+            distance = max(distance, max((p.z for p in offsets), default=0.0) + near * 2.0)
+        self.distance = max(MIN_DISTANCE, min(MAX_DISTANCE, distance))
+        self._ortho_depth = max((p.length * 2.0 for p in offsets), default=self.distance * 4.0)
         self._invalidate()
 
     def set_axis_view(self, name: str) -> None:

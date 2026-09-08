@@ -93,6 +93,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Al abrir una escena, el preset mostrado se deduce de su `length_unit`; nunca se
   anuncia Mediana por defecto si el `.blend` está en milímetros o metros.
 - La cámara remota no escribe en `rv3d`.
+- El zoom ortográfico conserva la profundidad alrededor del pivote: acercarse no
+  recorta la cara delantera al atravesar la posición nominal de la cámara. El doble
+  toque encuadra los límites del objeto al 85 % de la vista según orientación y
+  proyección reales, también si el PC está en ortográfica.
 - CAD es un workspace; Blender permanece en Object. Sus longitudes son metros y
   se convierten a unidades Blender al materializar. IDs y revisión pertenecen al
   documento; la malla evaluada no es la fuente ni admite Edit sin conversión explícita.

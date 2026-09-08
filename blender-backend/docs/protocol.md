@@ -204,6 +204,12 @@ que se ve y la ventana del PC no se toca.
 `clip_end` es un mínimo, no una pared: al alejar la cámara la perspectiva amplía el
 fondo hasta `max(clip_end, camera.distance*4)` y ajusta el near para conservar el
 cociente cercano a 10.000. Así el objeto no desaparece por cambiar el encuadre.
+En ortográfica el rango de profundidad se centra en el pivote y conserva el volumen
+encuadrado: el zoom cambia la ampliación sin cortar la cara delantera al acercarse.
+`view.frame_selected` (doble toque) y `view.frame_all` ajustan los límites de los
+objetos al 85 % de la vista con su orientación y proyección, sin modificar la del PC.
+Si la ventana del PC está en ortográfica, se recupera su FOV equivalente antes de
+construir la proyección remota para evitar aplicar dos veces su zoom.
 
 `scale_length` de la escena **no** se modifica: multiplica el tamaño del mundo y
 cambiaría el significado de la geometría existente. `length_unit` sí, porque solo decide
