@@ -667,6 +667,32 @@ def _custom_direction(payload: dict) -> Vector | None:
     return vec.normalized() if vec.length > 0 else None
 
 
+@command("mesh.connect_vertices", mutating=True)
+def connect_vertices(payload: dict) -> dict:
+    """J nativo: conecta el camino seleccionado y divide las caras atravesadas."""
+    from . import modal, tools, sessions
+    owner = payload.get("_client_id")
+    if modal.session.active:
+        modal.session.require(owner)
+    if tools.tool_session.active:
+        tools.tool_session.require(owner)
+    sessions.cancel_all()
+    obj, bm = _bm_and_obj()
+    if not _select_mode()[0]:
+        raise CommandError("Selecciona el modo Vértices", code="incompatible_selection")
+    selected = [v for v in bm.verts if v.select and not v.hide]
+    if len(selected) < 2:
+        raise CommandError("Selecciona al menos dos vértices", code="insufficient_selection")
+    try:
+        result = bpy.ops.mesh.vert_connect_path('EXEC_DEFAULT', False)
+    except RuntimeError as exc:
+        raise CommandError("No se pueden conectar estos vértices", code="topology_incompatible") from exc
+    if "FINISHED" not in result:
+        raise CommandError("No se pueden conectar estos vértices", code="topology_incompatible")
+    _undo(payload, "Remote connect vertex path")
+    return {"object": obj.name, "vertices": len(selected)}
+
+
 @command("mesh.make_edge_face", mutating=True)
 def make_edge_face(payload: dict) -> dict:
     """Equivalente discreto de ``F`` para los submodos Vértice y Arista.

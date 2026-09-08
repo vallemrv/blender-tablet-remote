@@ -75,6 +75,7 @@ enum class ActionId {
     // Página Edit del footer. No son entradas del menú contextual: el catálogo
     // remoto decide allí qué operaciones existen; estas fijan su única superficie.
     EDIT_MAKE_EDGE_FACE,
+    EDIT_CONNECT_VERTICES,
     EDIT_KNIFE,
     EDIT_SEPARATE,
     EDIT_SPLIT,
@@ -182,6 +183,7 @@ object SurfaceCatalog {
         ActionEntry(ActionId.SELECT_LESS, ActionSurface.FOOTER_VIEWS, "Decrecer selección"),
 
         ActionEntry(ActionId.EDIT_MAKE_EDGE_FACE, ActionSurface.FOOTER_EDIT, "Crear arista/cara"),
+        ActionEntry(ActionId.EDIT_CONNECT_VERTICES, ActionSurface.FOOTER_EDIT, "Conectar vértices"),
         ActionEntry(ActionId.EDIT_KNIFE, ActionSurface.FOOTER_EDIT, "Cuchillo"),
         ActionEntry(ActionId.EDIT_SEPARATE, ActionSurface.FOOTER_EDIT, "Separar a objeto"),
         ActionEntry(ActionId.EDIT_SPLIT, ActionSurface.FOOTER_EDIT, "Split"),

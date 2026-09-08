@@ -46,6 +46,7 @@ fun ViewFooter(
     showEditShortcuts: Boolean,
     /** Cuchillo vive en la barra de tools activas cuando `edit_toolbar` existe (F1). */
     editToolbarAvailable: Boolean = false,
+    connectVerticesEnabled: Boolean = false,
     showGrow: Boolean,
     onAxis: (String) -> Unit,
     onOrbit: (Float, Float) -> Unit,
@@ -83,7 +84,7 @@ fun ViewFooter(
                         }
                     }
                     if (editPage && inEdit && showEditShortcuts) {
-                        EditKeys(selectionMode, editToolbarAvailable, normalsPage, { normalsPage = it }, onEditAction)
+                        EditKeys(selectionMode, editToolbarAvailable, connectVerticesEnabled, normalsPage, { normalsPage = it }, onEditAction)
                     } else {
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         NumKey("7", "Superior / inferior", activeAxisView in setOf("TOP", "BOTTOM")) { opposite("TOP", "BOTTOM") }
@@ -134,6 +135,7 @@ fun ViewFooter(
 private fun EditKeys(
     selectionMode: SelectionMode,
     editToolbarAvailable: Boolean,
+    connectVerticesEnabled: Boolean,
     normalsPage: Boolean,
     setNormalsPage: (Boolean) -> Unit,
     onAction: (EditFooterAction) -> Unit,
@@ -160,6 +162,9 @@ private fun EditKeys(
             NumKey("Y", "Split") { onAction(EditFooterAction.SPLIT) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            NumKey("J", "Conectar vértices", enabled = connectVerticesEnabled && selectionMode == SelectionMode.VERTEX) {
+                onAction(EditFooterAction.CONNECT_VERTICES)
+            }
             NumKey("N", "Normales", enabled = selectionMode == SelectionMode.FACE) { setNormalsPage(true) }
         }
     }

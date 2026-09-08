@@ -154,6 +154,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - La cabecera muestra preset y unidad activos cuando Blender está conectado, por ejemplo
   `Conectado · Mediana · cm`.
 - Los comandos discretos viven en menús contextuales.
+- Los atajos de Edit incluyen J para conectar vértices con la operación nativa
+  `mesh.vert_connect_path`; requiere modo Vértices y al menos dos seleccionados,
+  divide las caras atravesadas y registra un único undo.
 - Los parámetros viven en una bandeja común.
 - Las nuevas herramientas deben describirse mediante catálogo/esquema siempre que sea
   posible, evitando nuevas ramas específicas en Compose.

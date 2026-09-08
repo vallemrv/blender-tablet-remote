@@ -103,6 +103,7 @@ object AppIcons {
 
     fun editCatalog(id: String): ImageVector = when (id) {
         "MAKE_EDGE_FACE" -> Icons.Default.CropFree
+        "CONNECT_VERTICES" -> Icons.Default.LinearScale
         "SELECT_SHORTEST_PATH" -> Icons.Default.LinearScale
         "SELECT_LOOP" -> Icons.Default.Timeline
         "SELECT_RING" -> Icons.Default.Rowing

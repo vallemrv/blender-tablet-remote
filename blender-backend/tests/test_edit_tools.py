@@ -10,7 +10,7 @@ import bmesh
 from mathutils import Matrix, Quaternion, Vector
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from blender_tablet_remote.commands import knife, tools, snap, sessions
+from blender_tablet_remote.commands import knife, tools, snap, sessions, mesh
 from blender_tablet_remote.camera import camera
 from blender_tablet_remote.errors import CommandError
 
@@ -117,6 +117,42 @@ class EditToolsTests(unittest.TestCase):
 
     def begin(self, tool, **params):
         return tools.begin(dict(tool=tool,parameters=params))
+
+    def test_j_connects_across_faces_with_one_undo(self):
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        bm.clear()
+        verts = [bm.verts.new((x,y,0)) for y in (-1,1) for x in (-1,0,1)]
+        bm.faces.new([verts[i] for i in (0,1,4,3)])
+        bm.faces.new([verts[i] for i in (1,2,5,4)])
+        bpy.context.scene.tool_settings.mesh_select_mode = (True,False,False)
+        for vertex in (verts[0],verts[5]):
+            vertex.select_set(True)
+            bm.select_history.add(vertex)
+        bm.normal_update()
+        bmesh.update_edit_mesh(self.obj.data)
+        with patch.object(mesh,'undo_push') as undo:
+            mesh.connect_vertices({})
+            undo.assert_called_once_with('Remote connect vertex path')
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        self.assertEqual(len(bm.faces),4)
+        self.assertEqual(len(bm.verts),7)
+        self.assertTrue(any(v.co.length < 1e-6 for v in bm.verts))
+        self.assertAlmostEqual(sum(f.calc_area() for f in bm.faces),4)
+
+    def test_j_requires_vertices_and_at_least_two_selected(self):
+        with patch.object(mesh,'undo_push') as undo:
+            with self.assertRaises(CommandError) as raised:
+                mesh.connect_vertices({})
+            self.assertEqual(raised.exception.code,'incompatible_selection')
+            bpy.context.scene.tool_settings.mesh_select_mode = (True,False,False)
+            bm = bmesh.from_edit_mesh(self.obj.data)
+            for seq in (bm.faces,bm.edges,bm.verts):
+                for element in seq:element.select = False
+            next(iter(bm.verts)).select = True
+            with self.assertRaises(CommandError) as raised:
+                mesh.connect_vertices({})
+            self.assertEqual(raised.exception.code,'insufficient_selection')
+            undo.assert_not_called()
 
     def test_increment_accumulates_small_samples_and_reports_visual_value(self):
         for tool, primary in [('EXTRUDE','offset'),('INSET','thickness'),('BEVEL','offset')]:

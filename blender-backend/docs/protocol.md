@@ -395,6 +395,7 @@ Ctrl+Plus / Ctrl+Minus del numpad). Solo Edit Mode (`wrong_mode` fuera).
 | `mesh.loop_cut` | `edge` (opcional), `cuts` (def. 1), `smoothness`, `factor`, `slide_distance` (metros, opcional), `falloff`, `even`, `flip`, `clamp` |
 | `mesh.loop_probe` | `u`, `v` — sondeo read-only para colocar un corte con el toque |
 | `mesh.delete` | `what`: `VERTS`\|`EDGES`\|`FACES`\|`ONLY_FACES` |
+| `mesh.connect_vertices` | —; J nativo en Vértices: conecta al menos dos seleccionados y divide las caras atravesadas; un undo |
 | `mesh.make_edge_face` | —; crea arista/cara en Vértice o rellena un borde cerrado en Arista |
 | `mesh.separate` | —; separa la selección en un objeto nuevo |
 | `mesh.split` | —; separa la selección dentro de la misma malla |

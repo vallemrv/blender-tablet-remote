@@ -495,6 +495,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     selectionMode = state.blender.selectionMode,
                     showEditShortcuts = state.blender.features.editCatalog.available,
                     editToolbarAvailable = state.blender.features.editToolbar.available,
+                    connectVerticesEnabled = state.blender.features.editCatalog.actionsFor(SelectionMode.VERTEX)
+                        .any { it.id == "CONNECT_VERTICES" && it.enabled },
                     showGrow = state.blender.features.selectionGrow,
                     onAxis = vm::viewAxis,
                     onOrbit = vm::viewOrbitStep,

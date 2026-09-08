@@ -793,6 +793,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun editFooterAction(action: EditFooterAction) {
         val id = when (action) {
             EditFooterAction.MAKE_EDGE_FACE -> "MAKE_EDGE_FACE"
+            EditFooterAction.CONNECT_VERTICES -> "CONNECT_VERTICES"
             EditFooterAction.KNIFE -> "KNIFE"
             EditFooterAction.SEPARATE -> "SEPARATE"
             EditFooterAction.SPLIT -> "SPLIT"
@@ -818,6 +819,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             client.toolBegin(tool, withGlobalSnap(tool, params))
             return
         }
+        if (action.id == "CONNECT_VERTICES") selectTool()
         client.editCatalogCommand(action.command, action.payload)
     }
     fun confirmTool() {

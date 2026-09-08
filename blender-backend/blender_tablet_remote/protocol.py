@@ -317,6 +317,8 @@ EDIT_CATALOG = {
                          selection=_selection("VERTEX", verts={"min": 1})),
             _edit_action("MAKE_EDGE_FACE", "Crear arista/cara", command="mesh.make_edge_face",
                          selection=_selection("VERTEX", verts={"min": 2})),
+            _edit_action("CONNECT_VERTICES", "Conectar vértices", command="mesh.connect_vertices",
+                         selection=_selection("VERTEX", verts={"min": 2})),
             _edit_action("EXTRUDE", "Extruir", command="tool.begin", execution="SESSION", payload={"tool": "EXTRUDE"},
                          selection=_selection("VERTEX", verts={"min": 1}), variants=_extrude_variants(),
                          parameters=_TOOL_PARAMETERS["EXTRUDE"]),
