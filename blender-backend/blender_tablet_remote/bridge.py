@@ -69,6 +69,7 @@ IMMEDIATE_FRAME_COMMANDS = {
     "tool.confirm",
     "tool.cancel",
     "tool.loop_pick",
+    "tool.extrude_cursor",
     "tool.knife_point",
     "tool.knife_pop",
     "tool.knife_close",

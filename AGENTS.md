@@ -205,6 +205,12 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Extruir ofrece Manifold en Caras con la operación nativa de Blender: disuelve
   bordes coplanares e intersecta los nuevos. Comparte distancia, paso, ejes y snap
   de Región; cada preview parte del baseline y confirmar crea un único undo.
+- Extruir «A toque» reproduce Ctrl+clic derecho en el plano de la cámara remota,
+  a la profundidad de la selección (del cursor 3D si no hay selección). Cada toque
+  crea y confirma un tramo, selecciona el extremo nuevo y registra un undo; salir
+  conserva los tramos. Girar origen reparte el giro entre origen y extremo nuevo.
+  Se anuncia como `REPEAT_TAP`: los toques consecutivos nunca encuadran por doble
+  toque y navegar con dos dedos no extruye. Sus controles usan la bandeja por esquema.
 - Cada tipo de Snap obtiene su símbolo semántico desde `AppIcons.snap`; la marca de
   selección es un indicador aparte y no sustituye el icono del tipo.
 - El sondeo geométrico del backend permanece centralizado en `commands/snap.py`.

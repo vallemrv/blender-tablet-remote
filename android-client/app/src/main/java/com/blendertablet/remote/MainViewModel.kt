@@ -450,6 +450,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             client.cadCommand("cad.select", mapOf("u" to u, "v" to v)); return
         }
         val surfaceTool = client.toolSession.value
+        if (surfaceTool.armed && surfaceTool.input == "REPEAT_TAP") {
+            client.toolExtrudeCursor(u.toDouble(), v.toDouble())
+            return
+        }
         if (surfaceTool.active && surfaceTool.input == "FACE_PAIR") {
             client.toolFacePick(u.toDouble(), v.toDouble(),
                 surfaceTool.parameters["pick_role"] as? String ?: "SOURCE", "TAP")
@@ -1221,6 +1225,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * El servidor lo agrupa y cierra un único paso de undo al soltar.
      */
     fun toolGesture(phase: GesturePhase, dx: Float, dy: Float) {
+        if (client.toolSession.value.armed && client.toolSession.value.input == "REPEAT_TAP") return
         if (client.state.value.cad.workspace) {
             client.gesture(Gesture.ORBIT, phase, dx.toDouble(), dy.toDouble())
             return

@@ -241,6 +241,7 @@ EDIT_TOOLBAR = {
         _toolbar_family(
             "EXTRUDE", "Extrude", "REGION",
             variants=[
+                _toolbar_variant("CURSOR", "A toque", input="REPEAT_TAP"),
                 _toolbar_variant("REGION", "Región", requirements=_selection("VERTEX", verts={"min": 1})),
                 _toolbar_variant("MANIFOLD", "Manifold", requirements=_selection("FACE", faces={"min": 1})),
                 _toolbar_variant("ALONG_NORMALS", "A lo largo de normales",

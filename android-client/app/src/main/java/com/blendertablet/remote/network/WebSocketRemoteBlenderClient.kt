@@ -115,6 +115,7 @@ class WebSocketRemoteBlenderClient(
             "tool.loop_pick", "tool.loop_pop", "tool.knife_drag", "tool.knife_point", "tool.knife_pop",
             "tool.knife_new_stroke", "tool.knife_close",
             "tool.drag_line", "tool.snap_candidate", "tool.face_pick",
+            "tool.extrude_cursor",
         )
     }
 
@@ -577,6 +578,9 @@ class WebSocketRemoteBlenderClient(
     override fun toolFacePick(u: Double, v: Double, role: String, phase: String) = command(
         "tool.face_pick", JSONObject().put("u", u).put("v", v).put("role", role).put("phase", phase),
     )
+
+    override fun toolExtrudeCursor(u: Double, v: Double) =
+        command("tool.extrude_cursor", JSONObject().put("u", u).put("v", v))
 
     override fun toolParameter(parameters: Map<String, Any?>) =
         command("tool.parameter", JSONObject().put("parameters", JSONObject(parameters)))

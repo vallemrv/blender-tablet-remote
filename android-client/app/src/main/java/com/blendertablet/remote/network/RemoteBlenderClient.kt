@@ -291,6 +291,7 @@ interface RemoteBlenderClient {
 
     /** Herramientas paramétricas de Edit Mode (preview → confirmar/cancelar). */
     fun toolBegin(tool: EditTool, parameters: Map<String, Any?>)
+    fun toolExtrudeCursor(u: Double, v: Double)
     fun toolFacePick(u: Double, v: Double, role: String, phase: String)
     fun toolParameter(parameters: Map<String, Any?>)
     fun toolNudge(delta: Double)

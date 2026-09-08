@@ -120,6 +120,9 @@ class ToolSession:
             # uniforme) o rotación sin aplicar sale torcido o desproporcionado.
             _flatten_transform(obj)
         bm = bmesh.from_edit_mesh(obj.data)
+        if tool == "EXTRUDE" and params.get("variant") == "CURSOR":
+            self.arm(tool, owner, {"variant": "CURSOR", "rotate_source": params.get("rotate_source", True)})
+            return
         if tool == "LOOP_CUT" and "edge" not in params:
             seed = next((edge for edge in bm.edges if edge.select and not edge.hide), None)
             if seed is None:
@@ -326,8 +329,13 @@ class ToolSession:
                 state['slide_distance'] = self.result['slide_distance']
             return state
         if self.armed_tool:
-            return {"active": False, "armed": True, "phase": "ARMED", "tool": self.armed_tool,
-                    "owner": self.armed_owner, "parameters": self.armed_params}
+            result = {"active": False, "armed": True, "phase": "ARMED", "tool": self.armed_tool,
+                      "owner": self.armed_owner, "parameters": self.armed_params}
+            if self.armed_tool == "EXTRUDE" and self.armed_params.get("variant") == "CURSOR":
+                result.update(input="REPEAT_TAP", can_confirm=False,
+                              instruction="Toca para extruir · cada toque crea un tramo · Deshacer retira el último",
+                              controls=[{"id": "rotate_source", "label": "Girar origen", "type": "bool", "default": True}])
+            return result
         return {"active": False, "armed": False, "phase": "IDLE"}
 
     def owner_disconnected(self, owner):
@@ -339,6 +347,22 @@ class ToolSession:
 
 
 tool_session = ToolSession()
+
+
+@command("tool.extrude_cursor", mutating=True)
+def extrude_cursor(payload):
+    tool_session.require_armed_owner(payload.get("_client_id"))
+    if tool_session.armed_tool != "EXTRUDE" or tool_session.armed_params.get("variant") != "CURSOR":
+        raise CommandError("Extruir A toque no está activo", code="wrong_tool")
+    obj = active_object()
+    if obj != tool_session.obj or obj.mode != "EDIT" or obj.type != "MESH":
+        tool_session.disarm()
+        raise CommandError("La selección de edición ha cambiado", code="session_invalidated")
+    from . import extrude_cursor as cursor_commands
+    result = cursor_commands.apply(obj, payload, bool(tool_session.armed_params.get("rotate_source", True)))
+    if result["changed"]:
+        undo_push("Remote extrude to cursor")
+    return dict(tool_session.status(), result=result)
 
 
 @command("tool.begin", mutating=True)

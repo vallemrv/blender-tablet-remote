@@ -705,6 +705,23 @@ paramétrico. Su campo Distancia muestra unidades y acepta cantidades con o sin 
 Extrude Región mueve y selecciona únicamente los vértices nuevos: las conexiones
 con la base no incluyen sus vértices originales en el desplazamiento ni la selección.
 
+Extrude «A toque» se activa con `tool.begin`, `tool: EXTRUDE` y
+`parameters: {variant: CURSOR, rotate_source: true}`. El rail anuncia la variante
+`CURSOR` con entrada `REPEAT_TAP`. Permanece `armed: true`, `active: false` y no
+crea geometría hasta recibir `tool.extrude_cursor` con `u`, `v` normalizados.
+Cada toque extruye hacia el punto de la vista a la profundidad del centro de la
+selección; sin selección crea un vértice a la profundidad del cursor 3D. Se usa la
+cámara remota, sin modificar `rv3d`, tanto en perspectiva como en ortográfica.
+`rotate_source` (bool, true) reparte el giro entre la selección de origen y el extremo
+nuevo; false conserva el origen y orienta solo el extremo. Se edita con
+`tool.parameter` y se describe en `controls`. No utiliza snap en esta variante.
+Cada toque válido confirma un tramo con un undo y devuelve el estado armado con
+`result: {changed, position?}`. Tocar el centro actual no duplica geometría ni crea
+undo. Un error restaura ese tramo; salir con `tool.cancel`, cambiar de herramienta
+o desconectar conserva los tramos ya confirmados. Undo cierra primero la herramienta.
+Android interpreta los toques consecutivos individualmente, ignora el arrastre de
+un dedo y reserva dos dedos para navegar. No muestra confirmación por tramo.
+
 Knife coloca puntos con `tool.knife_drag` (`phase` `BEGIN|UPDATE|END|CANCEL`, `u`,`v`).
 BEGIN y UPDATE solo mueven el candidato sin mutar la malla; END fija exactamente un
 punto. Dos puntos forman el primer segmento y los siguientes continúan el trazo.

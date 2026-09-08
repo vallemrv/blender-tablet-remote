@@ -48,6 +48,7 @@ fun InputSurface(
     onViewGesture: (Gesture, GesturePhase, Float, Float, Float) -> Unit,
     onTap: (Float, Float, Boolean) -> Unit,
     onDoubleTap: () -> Unit,
+    repeatTap: Boolean = false,
     cadDrawingEnabled: Boolean = false,
     onCadGesture: (GesturePhase, Float, Float) -> Unit = { _, _, _ -> },
     cadOverlay: List<com.blendertablet.remote.model.CadOverlay> = emptyList(),
@@ -78,6 +79,7 @@ fun InputSurface(
         update = { view ->
             view.updateCallbacks(onDebug, onToolGesture, onToolPointer, onViewGesture, onTap, onDoubleTap)
             view.onLongPress = onLongPress
+            view.repeatTap = repeatTap
             view.shapeTool = shapeTool
             view.fixedCircleRadius = fixedCircleRadius
             view.cadDrawingEnabled = cadDrawingEnabled
@@ -168,6 +170,7 @@ private class GestureView(
      * servidor qué hay debajo.
      */
     var onLongPress: (px: Float, py: Float, u: Float, v: Float) -> Unit = { _, _, _, _ -> }
+    var repeatTap: Boolean = false
     var longPressEnabled: Boolean = true
         set(value) {
             field = value
@@ -340,6 +343,7 @@ private class GestureView(
 
             MotionEvent.ACTION_POINTER_DOWN -> if (event.pointerCount >= 2) {
                 removeCallbacks(longPressRunnable)
+                if (repeatTap) suppressSingleAfterTweak = true
                 // Un segundo dedo significa navegar: se suelta la herramienta y la forma.
                 if (cadDrawing) {
                     onCadGesture(GesturePhase.CANCEL, nx(shapeCurrentX), ny(shapeCurrentY))
@@ -685,11 +689,11 @@ private class GestureView(
 
     private fun handleTap(e: MotionEvent) {
         val now = e.eventTime
-        if (now - lastTapAt < DOUBLE_TAP_MS) {
+        if (!repeatTap && now - lastTapAt < DOUBLE_TAP_MS) {
             onDoubleTap()
             lastTapAt = 0L
         } else {
-            lastTapAt = now
+            lastTapAt = if (repeatTap) 0L else now
             // Confirma localmente que el toque sí se registró. No representa el
             // resultado remoto: solo elimina la incertidumbre durante el viaje de
             // picking y el siguiente frame MJPEG.

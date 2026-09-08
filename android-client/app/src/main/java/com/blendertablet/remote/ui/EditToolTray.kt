@@ -133,7 +133,7 @@ fun EditToolTray(
     awaitingPick: Boolean = false,
     lengthUnit: com.blendertablet.remote.model.LengthUnit = com.blendertablet.remote.model.LengthUnit.CENTIMETERS,
 ) {
-    if (!session.active && !awaitingPick) return
+    if (!session.active && !awaitingPick && !session.armed) return
     // Knife y Bisect tienen su propia bandeja (puntos/pop/cerrar, o el aviso de
     // arrastre y clear inner/outer/fill).
     if (session.tool == EditTool.KNIFE || session.tool == EditTool.BISECT) return
@@ -144,8 +144,8 @@ fun EditToolTray(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     SchemaToolParameters(session.controls, session.parameters, lengthUnit, unitScaleLength,
                         onParameter, Modifier.weight(1f))
-                    RoundAction(Icons.Default.Close, "Descartar", Ink.Bad, onCancel)
-                    RoundAction(Icons.Default.Check, "Confirmar", if (session.canConfirm) Ink.Ok else Ink.Faint,
+                    RoundAction(Icons.Default.Close, if (session.active) "Descartar" else "Salir", Ink.Bad, onCancel)
+                    if (session.active) RoundAction(Icons.Default.Check, "Confirmar", if (session.canConfirm) Ink.Ok else Ink.Faint,
                         onClick = { if (session.canConfirm) onConfirm() })
                 }
             }

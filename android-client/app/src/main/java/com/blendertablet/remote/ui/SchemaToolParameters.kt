@@ -33,7 +33,10 @@ fun SchemaToolParameters(
     Row(modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically) {
         for (spec in specs) key(spec.id) {
-            if (spec.type == "enum") {
+            if (spec.type == "bool") {
+                val selected = (parameters[spec.id] ?: spec.default) as? Boolean ?: false
+                PillButton(spec.label, selected = selected) { onParameter(spec.id, !selected) }
+            } else if (spec.type == "enum") {
                 var expanded by remember { mutableStateOf(false) }
                 val current = (parameters[spec.id] ?: spec.default)?.toString().orEmpty()
                 Box {
