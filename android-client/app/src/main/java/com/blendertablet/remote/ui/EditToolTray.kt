@@ -361,6 +361,8 @@ private fun BevelParams(
             spec = spec,
             value = session.double(spec.key) ?: defaultValue(spec),
             unitScaleLength = unitScaleLength,
+            stepSize = if (spec.key == "offset" && session.distanceIncrement) session.snapStep else null,
+            lengthUnit = if (spec.key == "offset") lengthUnit else null,
             onCommit = { onParameter(spec.key, it) },
         )
     }

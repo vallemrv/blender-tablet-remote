@@ -213,6 +213,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   rápidas; Distancia numérica es exacta y no se vuelve a redondear por snap.
   Editar Distancia sustituye al destino geométrico
   sondeado. Knife usa el mismo desplegable de Snap.
+- En Bisel, Ancho se muestra en la unidad elegida; con Incremento/Rejilla sus
+  botones −/+ restan/suman el paso activo y conservan las pulsaciones rápidas.
 - Extruir Región desplaza y selecciona únicamente los vértices nuevos. Los vértices
   originales de las aristas/caras de conexión permanecen fijos, también al continuar
   otra extrusión desde el extremo seleccionado.
