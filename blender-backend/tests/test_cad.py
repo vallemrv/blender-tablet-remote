@@ -51,6 +51,10 @@ class CadTests(unittest.TestCase):
         sessions.cancel_all()
 
     def draw(self,typ,a,b):
+        with patch.object(cad,'_endpoint',return_value=None):
+            return self.draw_unsnapped(typ,a,b)
+
+    def draw_unsnapped(self,typ,a,b):
         with patch.object(runtime,'point',return_value=a):
             cad.entity_begin(dict(type=typ,u=.1,v=.1,**OWNER))
         with patch.object(runtime,'point',return_value=b):
@@ -376,7 +380,8 @@ def run():
     if not bpy.app.background:
         bpy.ops.wm.quit_blender()
 
-if bpy.app.background:
-    run()
-else:
-    bpy.app.timers.register(run,first_interval=1)
+if __name__ == '__main__':
+    if bpy.app.background:
+        run()
+    else:
+        bpy.app.timers.register(run,first_interval=1)

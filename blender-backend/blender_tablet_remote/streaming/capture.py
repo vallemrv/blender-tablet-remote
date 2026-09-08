@@ -187,7 +187,8 @@ class ViewportCapture:
         # región solo se hereda la proyección.
         camera.sync_from_region(rv3d)
 
-        with offscreen.bind():
+        from ..cad.runtime import runtime as cad_runtime
+        with offscreen.bind(), cad_runtime.preview_shading(space):
             fb = gpu.state.active_framebuffer_get()
             fb.clear(color=(0.0, 0.0, 0.0, 1.0), depth=1.0)
             offscreen.draw_view3d(

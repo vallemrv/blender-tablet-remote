@@ -79,4 +79,36 @@ class CadParserTest {
     @Test fun unsupportedStateNeverClaimsWorkspace() {
         assertFalse(CadParser.state(JSONObject("""{"version":2,"workspace":true}""")).workspace)
     }
+    @Test fun sketchEditingPreservesHandlesRulesAndCutPreview() {
+        val state = CadParser.state(JSONObject("""{
+          "version":1,"workspace":true,"step":0.002,"increment":false,
+          "active_sketch_id":"s", "selection":{"kind":"ENTITY","id":"b","items":[{"id":"a","part":"END"},{"id":"b","part":"START"}]},
+          "document":{"sketches":[{"id":"s","plane":"XY","entities":[{"id":"a","type":"ARC","radius":0.01,"sweep":90}],
+            "constraints":[{"id":"c","type":"COINCIDENT","refs":[{"id":"a"},{"id":"b"}]}]}],
+            "features":[{"id":"cut","type":"CUT","target_id":"base","depth":0.005,"enabled":true}]},
+          "session":{"id":"preview","active":true,"operation":"CUT","depth":0.005,"transparent":true,"can_confirm":true},
+          "overlay":[{"id":"a","points":[[0.1,0.2]],"handles":[{"part":"END","point":[0.2,0.3],"selected":true},{"part":"BAD","point":[null,0]}],"selected_parts":["END"]}]
+        }"""))
+        assertEquals(listOf("END", "START"), state.selection.map { it.part })
+        assertEquals("COINCIDENT", state.activeSketch!!.constraints.single().type)
+        assertEquals(90.0, state.activeSketch!!.entities.single().values["sweep"]!!, 0.0)
+        assertEquals("base", state.features.single().targetId)
+        assertEquals("CUT", state.features.single().type)
+        assertEquals("preview", state.sessionId)
+        assertTrue(state.transparent && state.canConfirm)
+        assertFalse(state.increment)
+        assertEquals(.002, state.step, 0.0)
+        assertTrue(state.overlay.single().handles.single().selected)
+    }
+    @Test fun extendedCapabilitiesFilterUnsupportedConstraints() {
+        val caps = CadParser.capabilities(JSONObject(capabilities).put("sketch_editing", true)
+            .put("entities", org.json.JSONArray(listOf("SQUARE", "ARC")))
+            .put("features", org.json.JSONArray(listOf("EXTRUDE", "CUT")))
+            .put("constraints", org.json.JSONArray(listOf("TANGENT", "COINCIDENT", "UNSUPPORTED"))))
+        assertTrue(caps.sketchEditing)
+        assertEquals(listOf("SQUARE", "ARC"), caps.entities)
+        assertEquals(listOf("EXTRUDE", "CUT"), caps.features)
+        assertEquals(listOf("TANGENT", "COINCIDENT"), caps.constraints)
+    }
+
 }

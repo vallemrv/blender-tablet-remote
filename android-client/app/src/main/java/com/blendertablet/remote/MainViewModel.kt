@@ -347,25 +347,50 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun cadTool(type: String?) {
         cancelCadStroke()
-        local.update { it.copy(cadTool = type?.takeIf { candidate -> candidate in client.state.value.features.cad.entities }) }
+        local.update { it.copy(cadTool = type?.takeIf { candidate -> candidate in client.state.value.features.cad.entities ||
+            (client.state.value.features.cad.sketchEditing && candidate in listOf("MOVE", "MULTI")) }) }
     }
+    private var cadGestureMode: String? = null
+    private var cadDepthStart = .02
+    private var cadPointerStartV = 0f
     private fun cancelCadStroke() {
-        if (cadStroke) { cadStroke = false; client.cadCommand("cad.session.cancel") }
+        if (cadStroke) {
+            cadStroke = false
+            if (cadGestureMode == "DEPTH") client.cadCommand("cad.extrude.update", mapOf("depth" to cadDepthStart))
+            else client.cadCommand("cad.session.cancel")
+            cadGestureMode = null
+        }
     }
     fun cadGesture(phase: GesturePhase, u: Float, v: Float) {
-        if (!client.state.value.cad.workspace) { cadStroke = false; return }
+        if (!client.state.value.cad.workspace) { cadStroke = false; cadGestureMode = null; return }
         when (phase) {
             GesturePhase.BEGIN -> {
+                val cad = client.state.value.cad
+                cadPointerStartV = v
+                if (cad.sessionActive && cad.operation in listOf("EXTRUDE", "CUT")) {
+                    cadStroke = true; cadGestureMode = "DEPTH"; cadDepthStart = cad.depth
+                    return
+                }
                 val type = local.value.cadTool ?: return
-                if (client.state.value.cad.activeSketchId == null) return
+                if (cad.activeSketchId == null || type == "MULTI") return
                 cadStroke = true
-                client.cadCommand("cad.entity.begin", mapOf("type" to type, "u" to u, "v" to v))
+                cadGestureMode = if (type == "MOVE") "DRAG" else "DRAW"
+                client.cadCommand(if (type == "MOVE") "cad.drag.begin" else "cad.entity.begin", mapOf("type" to type, "u" to u, "v" to v))
             }
-            GesturePhase.UPDATE -> if (cadStroke) client.cadCommand("cad.entity.update", mapOf("u" to u, "v" to v))
+            GesturePhase.UPDATE -> if (cadStroke) {
+                when (cadGestureMode) {
+                    "DEPTH" -> client.cadCommand("cad.extrude.update", mapOf("gesture" to (cadPointerStartV - v), "baseline_depth" to cadDepthStart))
+                    "DRAG" -> client.cadCommand("cad.drag.update", mapOf("u" to u, "v" to v))
+                    "DRAW" -> client.cadCommand("cad.entity.update", mapOf("u" to u, "v" to v))
+                }
+            }
             GesturePhase.END -> if (cadStroke) {
                 cadStroke = false
-                client.cadCommand("cad.session.confirm")
-                local.update { it.copy(cadTool = null) }
+                when (cadGestureMode) {
+                    "DRAG" -> client.cadCommand("cad.drag.end")
+                    "DRAW" -> client.cadCommand("cad.session.confirm")
+                }
+                cadGestureMode = null
             }
             GesturePhase.CANCEL -> cancelCadStroke()
         }
@@ -447,7 +472,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun pick(u: Float, v: Float, stylus: Boolean = false) {
         if (client.state.value.cad.workspace) {
-            client.cadCommand("cad.select", mapOf("u" to u, "v" to v)); return
+            client.cadCommand("cad.select", mapOf("u" to u, "v" to v, "additive" to (local.value.cadTool == "MULTI"))); return
         }
         val surfaceTool = client.toolSession.value
         if (surfaceTool.armed && surfaceTool.input == "REPEAT_TAP") {

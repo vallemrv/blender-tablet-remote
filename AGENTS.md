@@ -4,8 +4,7 @@
 
 La tablet Android es una interfaz táctil para Blender, no un escritorio remoto.
 Blender conserva el motor 3D; Android muestra una cámara remota y envía intención
-adaptada a dedo y stylus. El alcance actual es Object Mode, Edit Mode y el primer
-núcleo del workspace CAD paramétrico descrito en `docs/cad-workspace.md`.
+adaptada a dedo y stylus. El alcance actual es Object Mode, Edit Mode y el workspace CAD paramétrico descrito en `docs/cad-workspace.md`.
 
 ## Estructura
 
@@ -51,8 +50,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Alinear caras en Object: contacto entre caras, orientación de caras y copia de
   rotación del objeto destino, con preview reversible.
 - H.264 preferido con fallback MJPEG.
-- CAD v1: planos XY/XZ/YZ, líneas abiertas, rectángulos y círculos, parámetros de
-  ancho/alto/diámetro y extrusión asociativa con huecos simples. Documento JSON
+- CAD v1: planos XY/XZ/YZ y cara superior asociativa, líneas, rectángulos, cuadrados,
+  círculos, arcos, redondeo de sketch, selección de puntos/aristas y restricciones.
+  Extrusión de perfiles cerrados y vaciado por profundidad con incrementos. Documento JSON
   persistente en `.blend`, árbol, preview reversible y conversión explícita a malla.
 
 ## Invariantes técnicos
@@ -102,8 +102,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   y se dibuja en el rectángulo del vídeo en Android; no persiste píxeles como geometría.
 - La vista CAD aísla temporalmente sus resultados y restaura la visibilidad previa
   al salir. Los `.blend` y estados de undo conservan la visibilidad de la escena.
-- El kernel CAD v1 es nativo y limitado a perfiles rectangulares/circulares simples.
-  No anuncia BREP, STEP, solver general ni operaciones avanzadas. La evaluación de
+- El kernel CAD es nativo: extruye contornos simples y vacía con booleano de Blender.
+  El solver NumPy resuelve las restricciones anunciadas, hasta 300 parámetros.
+  No anuncia BREP, STEP, el solver completo de FreeCAD, Shell ni fillet de sólidos. La evaluación de
   OCP/CadQuery, build123d y FreeCAD vive en `docs/cad-kernel-evaluation.md`.
 
 ## Sistema de trabajo
@@ -259,6 +260,21 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   automáticamente; un toque directo también intenta fijarla en ese mismo punto.
 - Cada transformación inicia sin snap contra su propia selección; el botón `Propio`
   permite incluirla como destino durante esa sesión.
+- CAD tiene un rail de geometría y otro de restricciones solo durante el boceto;
+  sus iconos vectoriales distintos se resuelven mediante `AppIcons.cad`. Object/Edit
+  conservan sus raíles. La selección múltiple y el arrastre operan sobre IDs y roles
+  de puntos/aristas, nunca sobre índices de la malla evaluada.
+- Las restricciones CAD se persisten y resuelven al editar o mover. Un conflicto
+  no modifica el documento; el arrastre se proyecta a la libertad permitida. Un
+  toque sin cambios no crea undo. El redondeo recorta dos líneas conectadas y
+  añade un arco con coincidencias, tangencias y radio. Las uniones de línea usan
+  la política pegajosa común de `commands/snap.py`.
+- Extruir/Vaciar CAD recorren un paso por 4 % de altura con lápiz; Incremento
+  redondea el gesto, las cotas escritas son exactas. Vaciar consume su sólido
+  destino en el árbol y reconstruye desde los parámetros. La transparencia se
+  limita a GPUOffScreen mediante un contexto que restaura el sombreado siempre.
+- Un boceto sobre la cara superior sigue el plano/altura de su operación soporte.
+  Los soportes con dependientes no se borran ni convierten implícitamente.
 - La iconografía se resuelve por intención desde `ui/Iconography.kt`; las pantallas no
   eligen símbolos ni mantienen tablas de iconos propias.
 

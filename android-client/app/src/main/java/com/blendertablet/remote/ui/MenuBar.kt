@@ -57,12 +57,12 @@ fun MenuBar(
         MenuAnchor("Archivo", onOpen = actions.onFileMenuOpened) { close ->
             fileMenu(state, actions, close)
         }
-        MenuAnchor("Objeto") { close -> objectMenu(state, actions, close) }
+        if (!state.blender.cad.workspace) MenuAnchor("Objeto") { close -> objectMenu(state, actions, close) }
         if (state.blender.features.sceneScale) {
             MenuAnchor("Escena") { close -> sceneMenu(state, actions, close) }
         }
         MenuPlaceholder("Layouts")
-        if (state.blender.hiddenObjects.isNotEmpty() && state.blender.features.visibility) {
+        if (!state.blender.cad.workspace && state.blender.hiddenObjects.isNotEmpty() && state.blender.features.visibility) {
             MenuAnchor("Ocultos") { close -> hiddenMenu(state, actions, close) }
         }
         // Modificadores no es un menú: es un panel que se enseña o se esconde, así que

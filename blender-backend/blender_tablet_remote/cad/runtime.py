@@ -6,6 +6,7 @@ import bpy
 from mathutils import Vector
 from . import document as model
 from .kernel import kernel, world
+from . import sketch as sketch_geometry
 from ..errors import BadPayload, CommandError
 from ..bpy_utils import find_view3d, undo_push
 from ..camera import camera
@@ -25,6 +26,8 @@ class CadRuntime:
         self._hidden = []
         self._save_suspended = False
         self._empty = model.new_document()
+        self.step = .001
+        self.increment = True
 
     def reset(self):
         self.__init__()
@@ -108,18 +111,29 @@ class CadRuntime:
     def rebuild(self, doc):
         """Evaluate every feature first, then swap meshes; errors leave old data."""
         scale = max(float(bpy.context.scene.unit_settings.scale_length), 1e-12)
+        model.resolve_supports(doc)
         evaluated = []
+        solids = {}
+        consumed = set()
         for feature in doc['features']:
             if feature['enabled']:
                 sketch, entity = model.profile(doc, feature['profile_id'])
-                verts, faces = kernel.extrude(sketch, entity, model.number(feature['depth'], positive=True))
+                depth = model.number(feature['depth'], positive=True)
+                verts, faces = kernel.extrude(sketch, entity, -depth if feature['type']=='CUT' else depth)
+                if feature['type']=='CUT':
+                    target=feature.get('target_id')
+                    if target not in solids:
+                        raise CommandError('Activa el sólido destino antes del vaciado',code='cad_dependency')
+                    verts,faces=kernel.cut(solids[target],(verts,faces))
+                    consumed.add(target)
+                solids[feature['id']] = (verts,faces)
                 evaluated.append((feature, [tuple(c/scale for c in v) for v in verts], faces))
         objects = {o[FEATURE_KEY]:o for o in self.objects(doc)}
         keep = {f['id'] for f in doc['features']}
         for feature in doc['features']:
             if feature['id'] in objects:
-                objects[feature['id']].hide_viewport = not feature['enabled']
-                objects[feature['id']].hide_render = not feature['enabled']
+                objects[feature['id']].hide_viewport = not feature['enabled'] or feature['id'] in consumed
+                objects[feature['id']].hide_render = not feature['enabled'] or feature['id'] in consumed
         for feature, verts, faces in evaluated:
             identifier = feature['id']
             keep.add(identifier)
@@ -136,6 +150,8 @@ class CadRuntime:
                 obj.data = mesh
                 if old.users == 0:
                     bpy.data.meshes.remove(old)
+            obj.hide_viewport = identifier in consumed
+            obj.hide_render = identifier in consumed
         for identifier,obj in objects.items():
             if identifier not in keep:
                 old = obj.data
@@ -190,7 +206,7 @@ class CadRuntime:
         self.commit(doc,label)
         return self.status()
 
-    def point(self, payload, plane):
+    def point(self, payload, plane, offset=None):
         found = find_view3d()
         if found is None:
             raise CommandError('Se necesita un viewport para dibujar', code='no_viewport')
@@ -204,7 +220,10 @@ class CadRuntime:
         denom = direction.dot(normal)
         if abs(denom) < 1e-7:
             raise CommandError('El plano está de canto; vuelve a la vista del sketch', code='cad_plane_parallel')
-        distance = -origin.dot(normal)/denom
+        if offset is None:
+            active = next((s for s in self.doc()['sketches'] if s['id']==self.active_sketch_id),{})
+            offset = active.get('offset',0)
+        distance = (offset / max(bpy.context.scene.unit_settings.scale_length,1e-12) - origin.dot(normal))/denom
         if distance < 0:
             raise CommandError('El plano queda detrás de la cámara', code='cad_plane_parallel')
         p = (origin + direction*distance) * bpy.context.scene.unit_settings.scale_length
@@ -224,10 +243,10 @@ class CadRuntime:
         if bounds:
             lo = [min(p[i] for p in bounds) for i in (0,1)]
             hi = [max(p[i] for p in bounds) for i in (0,1)]
-            camera.location = Vector(world(sketch['plane'],(lo[0]+hi[0])/2,(lo[1]+hi[1])/2))/scale
+            camera.location = Vector(world(sketch['plane'],(lo[0]+hi[0])/2,(lo[1]+hi[1])/2,sketch.get('offset',0)))/scale
             camera.distance = max(.15, max(hi[i]-lo[i] for i in (0,1))*2)/scale
         else:
-            camera.location = Vector((0,0,0))
+            camera.location = Vector(world(sketch['plane'],0,0,sketch.get('offset',0)))/scale
             camera.distance = .2/scale
         camera.perspective = 'ORTHO'
         camera.axis_view = None
@@ -246,13 +265,39 @@ class CadRuntime:
         for sketch in doc['sketches']:
             if self.active_sketch_id and sketch['id'] != self.active_sketch_id:
                 continue
-            for e in sketch['entities']:
-                points = [camera.project(Vector(world(sketch['plane'],*p))/scale, found[3]) for p in model.outline(e)]
+            entries = sketch['entities'] if self.active_sketch_id else model.closed_entities(sketch)
+            for e in entries:
+                def project(p):
+                    return camera.project(Vector(world(sketch['plane'],*p,sketch.get('offset',0)))/scale,found[3])
+                points = [project(p) for p in model.outline(e)]
                 if any(p is None for p in points):
                     continue
-                selected = bool(self.selection and self.selection['id'] in (e['id'],'profile_'+e['id']))
-                result.append(dict(id=e['id'],points=points,closed=e['type']!='LINE',selected=selected))
+                refs = (self.selection or {}).get('items', [self.selection] if self.selection else [])
+                selected = any(ref['id'] in (e['id'],'profile_'+e['id']) for ref in refs)
+                handle_points = []
+                if self.active_sketch_id:
+                    for role,p in sketch_geometry.handles(e).items():
+                        projected=project(p)
+                        if projected is not None:
+                            handle_points.append(dict(part=role,point=projected,
+                                selected=any(ref['id']==e['id'] and ref.get('part')==role for ref in refs)))
+                selected_parts=[r.get('part','BODY') for r in refs if r['id']==e['id']]
+                result.append(dict(id=e['id'],points=points,closed=e['type'] not in ('LINE','ARC'),
+                                   selected=selected,handles=handle_points,selected_parts=selected_parts))
         return result
+
+    @contextmanager
+    def preview_shading(self, space):
+        shading=space.shading
+        if not (self.workspace and self.session and self.session['operation']=='CUT'):
+            yield
+            return
+        old=(shading.type,shading.show_xray,shading.xray_alpha)
+        try:
+            shading.type='SOLID'; shading.show_xray=True; shading.xray_alpha=.35
+            yield
+        finally:
+            shading.type,shading.show_xray,shading.xray_alpha=old
 
     def status(self):
         try:
@@ -264,10 +309,11 @@ class CadRuntime:
             if session and session.get('preview'):
                 doc = session['preview']
             return dict(version=1,workspace=self.workspace,isolated=bool(self.workspace),document=model.public(doc),
-                        active_sketch_id=self.active_sketch_id,selection=self.selection,
+                        active_sketch_id=self.active_sketch_id,selection=self.selection,step=self.step,increment=self.increment,
                         session=dict(active=bool(session),id=session['id'] if session else None,
                                      operation=session['operation'] if session else None,
                                      depth=session.get('depth') if session else None,
+                                     transparent=bool(session and session['operation']=='CUT'),
                                      can_confirm=bool(session and session.get('candidate'))),
                         overlay=self.overlay(doc),error=None)
         except CommandError as exc:

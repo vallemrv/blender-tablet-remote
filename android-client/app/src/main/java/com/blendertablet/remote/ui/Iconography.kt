@@ -54,6 +54,12 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Waves
 import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.unit.dp
 import com.blendertablet.remote.model.ActionId
 import com.blendertablet.remote.model.AddCategory
 import com.blendertablet.remote.model.EditTool
@@ -76,6 +82,53 @@ object AppIcons {
     val Rotate: ImageVector = Icons.AutoMirrored.Filled.RotateRight
     val Scale: ImageVector = Icons.Default.AspectRatio
     val Reset: ImageVector = Icons.Default.RestartAlt
+
+    // Original 24 × 24 stroke icons: each CAD intent has its own silhouette.
+    private val cadPaths = mapOf(
+        "LINE" to "M4,20 L20,4 M3,18 L6,21 M18,3 L21,6",
+        "RECTANGLE" to "M3,6 L21,6 L21,18 L3,18 Z M3,3 L3,4 M21,3 L21,4",
+        "SQUARE" to "M5,5 L19,5 L19,19 L5,19 Z M10,2 L14,2 M2,10 L2,14",
+        "CIRCLE" to "M21,12 A9,9 0,1 1,3,12 A9,9 0,1 1,21,12 M10,12 L14,12 M12,10 L12,14",
+        "ARC" to "M3,18 A15,15 0,0 1,18,3 M2,16 L4,20 M16,2 L20,4 M17,18 L21,18 M19,16 L19,20",
+        "FILLET" to "M3,3 L3,11 Q3,21 13,21 L21,21 M8,3 L8,9 M15,16 L21,16 M13,9 L8,14 M10,9 L13,9 L13,12",
+        "COINCIDENT" to "M3,6 L10,11 M21,18 L14,13 M15,12 A3,3 0,1 1,9,12 A3,3 0,1 1,15,12",
+        "HORIZONTAL" to "M3,12 L21,12 M3,8 L3,16 M21,8 L21,16",
+        "VERTICAL" to "M12,3 L12,21 M8,3 L16,3 M8,21 L16,21",
+        "PARALLEL" to "M4,19 L12,3 M12,21 L20,5",
+        "PERPENDICULAR" to "M3,20 L21,20 M8,20 L8,3 M8,15 L13,15 L13,20",
+        "TANGENT" to "M3,20 L21,20 M19,12 A7,7 0,1 1,5,12 A7,7 0,1 1,19,12 M12,19 L12,22",
+        "EQUAL" to "M4,8 L20,8 M4,16 L20,16",
+        "DISTANCE" to "M3,3 L3,21 M21,3 L21,21 M3,12 L21,12 M7,8 L3,12 L7,16 M17,8 L21,12 L17,16",
+        "RADIUS" to "M3,20 A17,17 0,0 1,20,3 M4,20 L16,8 M11,8 L16,8 L16,13",
+        "FIX" to "M5,10 L19,10 L19,21 L5,21 Z M8,10 L8,6 A4,4 0,0 1,16,6 L16,10 M12,14 L12,17",
+        "EXTRUDE" to "M3,11 L12,15 L21,11 L12,7 Z M3,11 L3,19 L12,23 L21,19 L21,11 M12,15 L12,23 M12,11 L12,1 M8,5 L12,1 L16,5",
+        "CUT" to "M3,9 L3,20 L21,20 L21,9 M3,9 L8,9 L8,16 L16,16 L16,9 L21,9 M12,2 L12,12 M9,9 L12,12 L15,9",
+        "SKETCH" to "M3,5 L14,5 M3,5 L3,21 L19,21 L19,12 M8,16 L9,12 L19,2 L22,5 L12,15 Z",
+        "PLANE_XY" to "M2,17 L9,8 L22,8 L15,17 Z M7,13 L17,13 M9,4 L9,7",
+        "PLANE_XZ" to "M3,20 L3,5 L20,5 L20,20 Z M3,20 L9,14 M9,14 L17,14 M9,14 L9,8",
+        "PLANE_YZ" to "M7,3 L19,8 L19,22 L7,17 Z M10,16 L16,18 M10,16 L10,8",
+        "MULTI" to "M3,3 L3,17 L7,13 L11,20 L14,18 L10,11 L16,11 Z M19,2 L19,8 M16,5 L22,5",
+        "SELECT" to "M5,3 L5,20 L10,15 L14,22 L17,20 L13,13 L21,13 Z",
+        "FINISH" to "M3,12 L9,18 L21,5",
+        "CANCEL" to "M5,5 L19,19 M19,5 L5,19",
+    )
+    private val cadVectors by lazy {
+        cadPaths.mapValues { (name, data) ->
+            ImageVector.Builder("CAD $name", 24.dp, 24.dp, 24f, 24f).addPath(
+                pathData = PathParser().parsePathString(data).toNodes(),
+                stroke = SolidColor(Color.White), strokeLineWidth = 1.7f,
+                strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round,
+            ).build()
+        }
+    }
+    fun cad(intent: String): ImageVector = when (intent) {
+        "MOVE" -> Move
+        "MODEL" -> Icons.Default.AccountTree
+        "DELETE" -> Icons.Default.Delete
+        "CONVERT" -> Icons.Default.ViewInAr
+        "VISIBLE" -> Icons.Default.Visibility
+        else -> cadVectors[intent] ?: Fallback
+    }
 
     fun action(id: ActionId): ImageVector = when (id) {
         ActionId.PLACE_OBJECT -> Icons.AutoMirrored.Filled.CompareArrows

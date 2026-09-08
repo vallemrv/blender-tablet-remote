@@ -549,3 +549,17 @@ def origin_to_geometry(payload: dict) -> dict:
 @command("snap.origin_to_center_of_mass", mutating=True)
 def origin_to_center_of_mass(payload: dict) -> dict:
     return _origin_set("ORIGIN_CENTER_OF_MASS")
+
+
+def query_sketch_endpoint(overlay, u, v, aspect, previous=None):
+    """CAD handles are visible sketch overlay geometry; use the shared acquisition policy."""
+    candidates=[]
+    for item in overlay:
+        for handle in item.get('handles',[]):
+            if handle['part']=='RIM':
+                continue  # A circle's radius handle is not a persistent topological endpoint.
+            x,y=handle['point']
+            distance=(((u-x)*aspect)**2+(v-y)**2)**.5
+            candidates.append(dict(id=item['id']+':'+handle['part'],entity_id=item['id'],
+                                   part=handle['part'],distance=distance))
+    return choose_sticky_candidate(candidates,previous,.018)

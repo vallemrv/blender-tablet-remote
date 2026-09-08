@@ -78,3 +78,14 @@ requieren OCP anterior a 8: no deben mezclarse simplemente los últimos releases
 Este ensayo prueba importación y una diferencia de cajas en el host indicado.
 No certifica fillets, calidad de mallado, rendimiento de documentos grandes,
 la pila completa de CadQuery/build123d o su distribución multiplataforma.
+
+
+## Extensión del 8 de septiembre de 2026
+
+El workspace incorpora ahora arcos y perfiles simples de líneas/arcos, restricciones
+numéricas acotadas con NumPy y vaciado por booleano exacto de Blender sobre mallas.
+El redondeo de sketch recorta dos líneas y añade un arco analítico restringido.
+Esta extensión conserva el kernel nativo y el documento como fuente. No integra
+FreeCAD/OCP ni anuncia BREP, STEP, fillet de sólidos o Shell. La comparación binaria
+anterior sigue siendo evidencia de aquella evaluación, no de una dependencia de
+la entrega actual. El alcance vigente está en [cad-workspace.md](cad-workspace.md).

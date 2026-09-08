@@ -405,7 +405,10 @@ for _mode, _actions in EDIT_CATALOG["groups"].items():
 
 FEATURES = {
     "cad": {"version": 1, "planes": ["XY", "XZ", "YZ"],
-            "entities": ["LINE", "RECTANGLE", "CIRCLE"], "features": ["EXTRUDE"],
+            "entities": ["LINE", "RECTANGLE", "SQUARE", "CIRCLE", "ARC"], "features": ["EXTRUDE", "CUT"],
+            "constraints": ["COINCIDENT", "HORIZONTAL", "VERTICAL", "PARALLEL", "PERPENDICULAR",
+                            "TANGENT", "EQUAL", "DISTANCE", "RADIUS", "FIX"],
+            "sketch_editing": True, "fillet": True,
             "length_unit": "METERS", "kernel": "BLENDER_NATIVE_MESH",
             "document_version": 1, "owned_sessions": True, "persistent": True},
     "history": {"version": 1, "repeat_last": True},

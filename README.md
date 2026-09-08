@@ -8,7 +8,7 @@ controles adaptados a dedo y stylus.
 
 - [`AGENTS.md`](AGENTS.md): arquitectura, invariantes y reglas de trabajo.
 - [`blender-backend/docs/protocol.md`](blender-backend/docs/protocol.md): contrato canónico entre ambos lados.
-- [`docs/cad-workspace.md`](docs/cad-workspace.md): dibujar, acotar, extruir y reeditar el primer núcleo CAD.
+- [`docs/cad-workspace.md`](docs/cad-workspace.md): dibujar, restringir, arrastrar, extruir y vaciar en CAD.
 - [`docs/cad-kernel-evaluation.md`](docs/cad-kernel-evaluation.md): evaluación reproducible y límites del kernel CAD.
 
 ## Arquitectura
@@ -24,10 +24,12 @@ una interfaz de viewport completo, reconexión automática, selección táctil/s
 navegación, transformaciones modales, modelado Edit Mode, menús de archivo/objetos y
 entrada de valores con unidades. El inventario preciso está en `AGENTS.md`.
 
-El workspace CAD añade sketches de líneas, rectángulos y círculos sobre XY/XZ/YZ,
-cotas de ancho/alto/diámetro y extrusiones asociativas de perfiles rectangulares o
-circulares con huecos simples. El documento paramétrico se guarda en el `.blend`;
-editar una cota reconstruye la pieza. Object y Edit conservan su flujo habitual.
+El workspace CAD tiene raíles propios de geometría y restricciones: líneas,
+rectángulos/cuadrados, círculos, arcos y redondeo de sketch. Permite seleccionar y
+arrastrar puntos/aristas, restringirlos y extruir perfiles cerrados; el vaciado por
+profundidad usa incrementos con lápiz y transparencia automática. El documento,
+sus cotas y dependencias se guardan en el `.blend`. El kernel sigue siendo de malla
+nativa, con un solver acotado; Object y Edit conservan su flujo habitual.
 
 ## Directorios
 

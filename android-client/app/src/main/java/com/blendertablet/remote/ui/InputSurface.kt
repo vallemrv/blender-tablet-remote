@@ -433,8 +433,7 @@ private class GestureView(
                     return true
                 }
                 if (cadDrawing) {
-                    // Flush the last MOVE sample; never raycast the pressure-release coordinates.
-                    onCadGesture(GesturePhase.UPDATE, nx(shapeCurrentX), ny(shapeCurrentY))
+                    // END consumes the last stable MOVE candidate without another raycast.
                     onCadGesture(GesturePhase.END, nx(shapeCurrentX), ny(shapeCurrentY))
                     cadDrawing = false
                     parent?.requestDisallowInterceptTouchEvent(false)
@@ -753,13 +752,28 @@ private class GestureView(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         cadOverlay.forEach { stroke ->
-            cadPaint.color = if (stroke.selected) 0xffffb347.toInt() else 0xff57dfe6.toInt()
+            cadPaint.color = if (stroke.selected && (stroke.selectedParts.isEmpty() || "BODY" in stroke.selectedParts)) 0xffffb347.toInt() else 0xff57dfe6.toInt()
             val path = android.graphics.Path()
             stroke.points.forEachIndexed { index, (u, v) ->
                 if (index == 0) path.moveTo(u * width, v * height) else path.lineTo(u * width, v * height)
             }
             if (stroke.closed) path.close()
             canvas.drawPath(path, cadPaint)
+            stroke.selectedParts.filter { it.startsWith("EDGE") }.forEach { part ->
+                val index = part.removePrefix("EDGE").toIntOrNull()
+                if (index != null && index in stroke.points.indices) {
+                    val a = stroke.points[index]; val b = stroke.points[(index + 1) % stroke.points.size]
+                    cadPaint.color = 0xffffb347.toInt()
+                    canvas.drawLine(a.first * width, a.second * height, b.first * width, b.second * height, cadPaint)
+                }
+            }
+            stroke.handles.forEach { handle ->
+                cadPaint.style = android.graphics.Paint.Style.FILL
+                cadPaint.color = if (handle.selected) 0xffffb347.toInt() else 0xffe0fafc.toInt()
+                canvas.drawCircle(handle.point.first * width, handle.point.second * height,
+                    (if (handle.selected) 5f else 3.5f) * resources.displayMetrics.density, cadPaint)
+            }
+            cadPaint.style = android.graphics.Paint.Style.STROKE
         }
         if (navigationOrbitEnabled) drawNavigationOrbit(canvas)
         if (shapeDrawing) {

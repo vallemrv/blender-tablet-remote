@@ -1320,10 +1320,13 @@ con Blender a 53 Hz.
 MJPEG permanece como fallback. H.264/libx264 es la ruta preferida por su menor ancho
 de banda y configuración de latencia interactiva.
 
-## CAD paramétrico — versión 1 (primer corte vertical)
+## CAD paramétrico — versión 1 extendida: sketch y vaciado
 
 `features.cad` anuncia `version:1`, `planes:[XY,XZ,YZ]`,
-`entities:[LINE,RECTANGLE,CIRCLE]`, `features:[EXTRUDE]`, `length_unit:METERS`.
+`entities:[LINE,RECTANGLE,SQUARE,CIRCLE,ARC]`, `features:[EXTRUDE,CUT]`,
+`sketch_editing:true`, `fillet:true`, `length_unit:METERS` y `constraints` con
+`COINCIDENT,HORIZONTAL,VERTICAL,PARALLEL,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,RADIUS,FIX`.
+Las extensiones se negocian por capabilities; se instala el APK junto con el ZIP.
 `mode.set {mode:CAD}` activa el espacio CAD (Blender permanece en Object).
 OBJECT/EDIT salen de CAD y cancelan cualquier preview. Los objetos evaluados CAD
 requieren `cad.convert` antes de Edit. El documento JSON versionado vive en la
@@ -1339,27 +1342,65 @@ un evento emitido al cambiar documento, sesión o proyección de la cámara:
 Las longitudes CAD son **metros**, independientes de `scene.scale_length`.
 Android convierte únicamente la representación mm/cm/m. LINE contiene
 `x,y,x2,y2`; RECTANGLE `x,y,width,height` (esquina mínima); CIRCLE `x,y,diameter`
-(centro). Las coordenadas están en el plano local del sketch. La normal positiva
+(centro); ARC `x,y,radius,start,sweep` (centro, radio y ángulos en grados).
+SQUARE es una intención de creación: persiste RECTANGLE con igualdad entre lados.
+El sketch guarda `offset` en metros y opcionalmente `support_id` de una feature;
+el soporte actualiza el plano/offset desde su cara superior. Las coordenadas están
+en el plano local del sketch. La normal positiva
 es +Z para XY, −Y para XZ y +X para YZ.
 
 | Comando | Payload | Efecto |
 | --- | --- | --- |
 | `cad.state` | `{}` | Consulta documento y preview |
-| `cad.sketch.create` | `{plane:"XY"}` | Crea y activa sketch |
+| `cad.sketch.create` | `{plane:"XY",offset?}` o `{support_id}` | Crea y activa sketch sobre plano/cara superior |
 | `cad.sketch.activate` | `{sketch_id}` | Edita sketch existente, encuadra su plano |
 | `cad.sketch.finish` | `{}` | Sale del dibujo conservando perfiles seleccionables |
-| `cad.select` | `{kind:"ENTITY\|PROFILE\|FEATURE",id}` o `{u,v}` | Selección estable |
-| `cad.entity.begin` | `{type:"LINE\|RECTANGLE\|CIRCLE",u,v}` | Inicia dibujo reversible |
+| `cad.select` | `{kind:"ENTITY\|PROFILE\|FEATURE",id,part?,additive?}` o `{u,v,additive?}` | Selección de puntos/aristas o perfiles; aditiva alterna pertenencia |
+| `cad.entity.begin` | `{type:"LINE\|RECTANGLE\|SQUARE\|CIRCLE\|ARC",u,v}` | Inicia dibujo reversible |
 | `cad.entity.update` | `{u,v}` | Actualiza extremo desde baseline |
-| `cad.entity.set` | `{entity_id,values:{width,height,diameter,x,y,x2,y2}}` | Edita dimensiones y reconstruye dependientes |
+| `cad.entity.set` | `{entity_id,values:{width?,height?,diameter?,radius?,start?,sweep?,x?,y?,x2?,y2?}}` | Edita dimensiones y reconstruye dependientes |
 | `cad.entity.delete` | `{entity_id}` | Borra entidad sin dependencias |
-| `cad.extrude.begin` | `{profile_id,depth:0.02}` | Preview de extrusión asociativa |
-| `cad.extrude.update` | `{depth}` | Actualiza profundidad desde baseline |
+| `cad.extrude.begin` | `{profile_id,depth,operation:"EXTRUDE\|CUT",target_id?}` | Preview aditiva o sustractiva; CUT exige destino |
+| `cad.extrude.update` | `{depth}` o `{gesture,baseline_depth}` | Cota exacta o delta vertical desde inicio del gesto, positivo hacia arriba |
 | `cad.session.confirm` | `{}` | Confirma candidato estable, un undo |
 | `cad.session.cancel` | `{}` | Restaura documento y geometría originales |
 | `cad.feature.set` | `{feature_id,depth?,enabled?}` | Edita o suprime feature |
 | `cad.feature.delete` | `{feature_id}` | Borra feature y resultado |
 | `cad.convert` | `{feature_id}` | Convierte resultado a malla independiente |
+
+| `cad.settings` | `{step?,increment?}` | Paso métrico positivo y snap, sin undo ni cambio geométrico |
+| `cad.drag.begin` | `{u,v}` | Adquiere un punto/arista; conserva el grupo si ya pertenece a él |
+| `cad.drag.update` | `{u,v}` | Reconstruye y resuelve restricciones desde baseline |
+| `cad.drag.end` | `{}` | Confirma último candidato con un undo; un toque no crea undo |
+| `cad.constraint.add` | `{type,value?}` | Restringe la selección; DISTANCE/RADIUS requieren metros |
+| `cad.constraint.set` | `{constraint_id,value}` | Cambia una cota persistente y resuelve dependientes |
+| `cad.constraint.delete` | `{constraint_id}` | Elimina una restricción del sketch activo |
+| `cad.fillet` | `{radius}` | Redondea dos líneas conectadas seleccionadas |
+| `cad.sketch.delete` | `{sketch_id}` | Elimina un boceto sin operaciones dependientes |
+
+`selection.items` contiene `{kind,id,part}`; `selection.kind/id/part` conserva el
+último elemento para el inspector. Roles: LINE START/END/BODY; RECTANGLE P0..P3 y
+EDGE0..EDGE3/BODY; CIRCLE CENTER/RIM/BODY; ARC CENTER/START/END/BODY. El sondeo da
+prioridad a puntos dentro de su radio, corrige el aspecto y luego prueba aristas.
+`overlay[].handles` contiene `{part,point:[u,v],selected}`; `selected_parts` enumera
+los roles seleccionados. Los perfiles de cadenas usan IDs derivados de sus miembros,
+nunca de índices evaluados. La línea adquiere extremos mediante la política común
+de `commands/snap.py` y guarda restricciones COINCIDENT al confirmar.
+
+Cada sketch contiene `constraints:[{id,type,refs:[{id,part}],value?,values?}]`.
+FIX guarda `values` de todos los parámetros de una entidad; no fija solo un punto.
+El solver admite 300 parámetros y resuelve el conjunto completo; una cota escrita
+es exacta y el arrastre proyecta el objetivo sobre la libertad permitida. Los
+conflictos devuelven `cad_constraint_conflict`, sin cambiar la escena persistente.
+No se anuncia un conteo de grados de libertad de un solver general.
+
+`step` e `increment` pertenecen al estado CAD, separados del documento. Un gesto
+recorre `gesture / 0.04 * step`; Incremento lo redondea a pasos enteros. La
+profundidad permanece positiva (mínimo 1e-7 m). CUT extruye en dirección negativa
+desde el plano del sketch y resta su volumen de `target_id`; al evaluar oculta el
+resultado previo consumido. No admite borrar/convertir soportes con dependientes.
+La preview CUT anuncia `session.transparent:true`; solo la captura GPU usa rayos X
+al 35 %, restaurando el sombreado inmediatamente incluso si falla el render.
 
 Los comandos de dimensión y feature son transacciones discretas con un undo. Una
 sesión conserva propietario; desconexión, undo/redo, cambio de archivo, cambio de
@@ -1371,9 +1412,11 @@ geometría válida. El kernel V1 genera malla nativa; no anuncia STEP, BREP ni s
 general. Rectángulos conservan lados horizontales/verticales y círculos diámetro.
 
 `document.revision` aumenta con cada transacción confirmada y vuelve al valor
-correspondiente al usar undo/redo. `session.depth` describe la preview de EXTRUDE y
-`session.can_confirm` exige un candidato no degenerado. LINE V1 es un segmento
-abierto; no se infieren perfiles de cadenas de líneas en este primer corte.
+correspondiente al usar undo/redo. `session.depth` describe la preview de EXTRUDE/CUT y
+`session.can_confirm` exige un candidato no degenerado. Una cadena cerrada de
+líneas/arcos no ramificada forma un perfil; las redes cruzadas no se subdividen
+en regiones implícitas. Los vaciados sin intersección o que eliminan todo el
+sólido se rechazan conservando el último resultado válido.
 
 CAD V1 aísla temporalmente la vista usando `hide_set`, como `view.local`, con su
 propio conjunto de objetos restaurables. `isolated:true` lo anuncia a Android.

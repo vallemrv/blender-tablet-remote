@@ -239,7 +239,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
         toolSessionArmed = toolSession.armed,
     )
     val trayInset by animateDpAsState(
-        targetValue = if (trayPresent) Metrics.TrayInset else 0.dp,
+        targetValue = if (state.blender.cad.workspace) 132.dp else if (trayPresent) Metrics.TrayInset else 0.dp,
         animationSpec = tween(160),
         label = "tray-inset",
     )
@@ -284,7 +284,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             h264Active = h264Active,
             h264Size = h264Size,
             input = viewportInput,
-            cadDrawingEnabled = state.connection == ConnectionStatus.CONNECTED && state.blender.cad.workspace && state.blender.cad.activeSketchId != null && state.cadTool != null,
+            cadDrawingEnabled = state.connection == ConnectionStatus.CONNECTED && state.blender.cad.workspace && ((state.blender.cad.activeSketchId != null && state.cadTool != null && state.cadTool != "MULTI") ||
+                (state.blender.features.cad.sketchEditing && state.blender.cad.sessionActive && state.blender.cad.operation in listOf("EXTRUDE", "CUT"))),
             cadOverlay = if (state.blender.cad.workspace) state.blender.cad.overlay else emptyList(),
             shapeTool = if (state.blender.cad.workspace) ShapeTool.NONE else state.shapeTool,
             fixedCircleRadius = state.circleRadius,
@@ -495,7 +496,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 }
                 if (state.blender.cad.workspace) CadWorkspace(state, vm)
 
-                ViewFooter(
+                if (!state.blender.cad.workspace || state.blender.cad.activeSketchId == null) ViewFooter(
                     projection = state.blender.view.perspective,
                     activeAxisView = state.blender.view.axisView,
                     inEdit = !state.blender.cad.workspace && state.blender.mode == BlenderMode.EDIT,
@@ -522,7 +523,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     DebugOverlay(vm, state.blender.mode, Modifier.align(Alignment.TopStart).padding(start = Metrics.EdgeMargin, top = 56.dp))
                 }
 
-                if (state.shapeTool == ShapeTool.CIRCLE) {
+                if (!state.blender.cad.workspace && state.shapeTool == ShapeTool.CIRCLE) {
                     CircleRadiusBar(
                         selected = state.circleRadius,
                         onRadius = vm::setCircleRadius,
