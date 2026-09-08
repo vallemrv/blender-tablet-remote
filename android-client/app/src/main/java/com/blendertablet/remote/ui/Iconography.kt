@@ -195,6 +195,15 @@ object AppIcons {
 
     fun toolbarFamily(id: String): ImageVector = editCatalog(id)
 
+    fun toolbarVariant(familyId: String, variantId: String?): ImageVector =
+        if (familyId == "EXTRUDE") when (variantId) {
+            "CURSOR" -> Icons.Default.TouchApp
+            "MANIFOLD" -> Icons.Default.JoinFull
+            "ALONG_NORMALS" -> Icons.Default.ZoomOutMap
+            "INDIVIDUAL" -> Icons.AutoMirrored.Filled.CallSplit
+            else -> editCatalog(familyId)
+        } else toolbarFamily(familyId)
+
     /** Un símbolo reconocible por destino; SnapControl solo decide estado y color. */
     fun snap(type: SnapType): ImageVector = when (type) {
         SnapType.NONE -> Icons.Default.DoNotDisturb

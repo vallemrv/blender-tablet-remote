@@ -928,7 +928,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun withGlobalSnap(tool: EditTool, parameters: Map<String, Any?>): Map<String, Any?> {
         if ("snap_type" !in parameters) return parameters
         val chosen = local.value.snapType
-        val compatible = if (tool == EditTool.EXTRUDE || !chosen.geometric) chosen else SnapType.NONE
+        val extrudeGeometric = tool == EditTool.EXTRUDE &&
+            (parameters["variant"] ?: "REGION") in setOf("REGION", "MANIFOLD")
+        val compatible = if (extrudeGeometric || !chosen.geometric) chosen else SnapType.NONE
         return parameters + mapOf(
             "snap_type" to compatible.name,
             "snap_step" to local.value.snapStep,
@@ -955,10 +957,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * parámetro, igual que ya hacía el catálogo contextual.
      */
     fun activateToolbarFamily(family: EditToolbarFamily, variantId: String? = null) {
+        val available = family.variants.filter { it.availableIn(client.state.value.selectionMode) }
+        if (variantId != null && available.none { it.id == variantId }) return
         val remembered = local.value.toolbarVariant[family.id]
-        val variant = family.variants.firstOrNull { it.id == (variantId ?: remembered) }
-            ?: family.variants.firstOrNull { it.id == family.defaultVariant }
-            ?: family.variants.firstOrNull { it.enabled }
+        val variant = available.firstOrNull { it.id == (variantId ?: remembered) }
+            ?: available.firstOrNull { it.id == family.defaultVariant }
+            ?: available.firstOrNull()
             ?: return
         local.update { it.copy(toolbarVariant = it.toolbarVariant + (family.id to variant.id)) }
         val toolWire = (variant.payload["tool"] as? String) ?: (family.payload["tool"] as? String) ?: family.id

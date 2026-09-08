@@ -220,6 +220,12 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Extruir Región desplaza y selecciona únicamente los vértices nuevos. Los vértices
   originales de las aristas/caras de conexión permanecen fijos, también al continuar
   otra extrusión desde el extremo seleccionado.
+- Extruir Región usa la selección efectiva: caras completas también en Vértices o
+  Aristas, y aristas completas también en Vértices. Confirmar y después Escalar
+  conserva la base y transforma solo el extremo nuevo.
+- Extruir identifica cada variante con su icono en rail/menú y su nombre en la
+  bandeja. Respeta los modos del catálogo; una variante incompatible no cierra la
+  preview anterior. Cambiar de sesión reinicia los borradores de Distancia y Paso.
 - Extruir ofrece Manifold en Caras con la operación nativa de Blender: disuelve
   bordes coplanares e intersecta los nuevos. Comparte distancia, paso, ejes y snap
   de Región; cada preview parte del baseline y confirmar crea un único undo.

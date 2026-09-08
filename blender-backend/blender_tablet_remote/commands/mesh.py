@@ -136,9 +136,14 @@ def extrude(payload: dict) -> dict:
     variant = str(payload.get("variant", "REGION")).upper()
     if variant not in {"REGION", "MANIFOLD", "ALONG_NORMALS", "INDIVIDUAL"}:
         raise BadPayload("'variant' must be REGION, MANIFOLD, ALONG_NORMALS or INDIVIDUAL")
-    vert_mode, edge_mode, face_mode = payload.get("_selection_mode", _select_mode())
+    vert_mode, edge_mode, face_mode = _select_mode()
     if variant != "REGION" and not face_mode:
         raise CommandError(f"{variant} requires face selection", code="incompatible_selection")
+    if variant == "REGION":
+        # E extruye la geometría efectiva: caras completas también en Aristas o
+        # Vértices, y aristas completas también en Vértices.
+        face_mode = any(face.select and not face.hide for face in bm.faces)
+        edge_mode = not face_mode and any(edge.select and not edge.hide for edge in bm.edges)
     if variant == "ALONG_NORMALS" and _custom_direction(payload) is not None:
         raise BadPayload("'direction' is incompatible with ALONG_NORMALS")
 

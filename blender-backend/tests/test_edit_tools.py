@@ -10,7 +10,7 @@ import bmesh
 from mathutils import Matrix, Quaternion, Vector
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from blender_tablet_remote.commands import knife, tools, snap, sessions, mesh
+from blender_tablet_remote.commands import knife, tools, snap, sessions, mesh, modal
 from blender_tablet_remote.camera import camera
 from blender_tablet_remote.errors import CommandError
 
@@ -205,6 +205,72 @@ class EditToolsTests(unittest.TestCase):
                         self.assertEqual((len(bm.edges),len(bm.faces)),(4,1))
                 tools.cancel({})
                 self.assertEqual(len(bmesh.from_edit_mesh(self.obj.data).verts),len(coords))
+
+    def test_extrude_effective_face_then_confirm_and_scale_in_every_selection_mode(self):
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        original = bpy.data.meshes.new('test_extrude_baseline')
+        bm.to_mesh(original)
+        try:
+            for mode in ((True,False,False), (False,True,False), (False,False,True)):
+                with self.subTest(mode=mode):
+                    sessions.cancel_all()
+                    bm = bmesh.from_edit_mesh(self.obj.data)
+                    bm.clear(); bm.from_mesh(original)
+                    bpy.context.scene.tool_settings.mesh_select_mode = mode
+                    bm.select_flush_mode()
+                    bmesh.update_edit_mesh(self.obj.data)
+                    self.begin('EXTRUDE', variant='REGION', offset=0)
+                    tools.confirm({})
+                    bm = bmesh.from_edit_mesh(self.obj.data)
+                    self.assertEqual((len(bm.verts),len(bm.edges),len(bm.faces)), (12,20,10))
+                    self.assertEqual(sum(f.select for f in bm.faces),1)
+                    fixed = {v.index:v.co.copy() for v in bm.verts if not v.select}
+                    with patch.object(modal,'require_rv3d',return_value=self.rv3d):
+                        modal.begin(dict(mode='SCALE', axes=['X','Y','Z'], snap_type='NONE'))
+                        modal.set_value(dict(values=[.5,.5,.5]))
+                    self.assertTrue(all((bm.verts[i].co-co).length < 1e-6 for i,co in fixed.items()))
+                    self.assertTrue(all(abs(abs(v.co.x)-.5)<1e-6 and abs(abs(v.co.y)-.5)<1e-6
+                                        and abs(v.co.z-1)<1e-6 for v in bm.verts if v.select))
+        finally:
+            sessions.cancel_all()
+            bpy.data.meshes.remove(original)
+
+    def test_extrude_connected_vertices_produces_a_face(self):
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        bm.clear()
+        a,b = [bm.verts.new(co) for co in ((0,0,0),(1,0,0))]
+        bm.edges.new((a,b))
+        a.select = b.select = True
+        bpy.context.scene.tool_settings.mesh_select_mode = (True,False,False)
+        bm.select_flush_mode()
+        bmesh.update_edit_mesh(self.obj.data)
+        self.begin('EXTRUDE', offset=1, constraint='Z')
+        self.assertEqual((len(bm.verts),len(bm.edges),len(bm.faces)),(4,4,1))
+
+    def test_invalid_extrude_variant_keeps_existing_preview(self):
+        bpy.context.scene.tool_settings.mesh_select_mode = (False,True,False)
+        self.begin('EXTRUDE', variant='REGION', offset=.5)
+        before = [tuple(v.co) for v in bmesh.from_edit_mesh(self.obj.data).verts]
+        session_id = tools.tool_session.session_id
+        with self.assertRaises(CommandError):
+            self.begin('EXTRUDE', variant='INDIVIDUAL')
+        self.assertTrue(tools.tool_session.active)
+        self.assertEqual(tools.tool_session.session_id,session_id)
+        self.assertEqual(before,[tuple(v.co) for v in bmesh.from_edit_mesh(self.obj.data).verts])
+
+    def test_switch_extrude_variants_rebuilds_from_same_baseline(self):
+        expected = {'REGION':(12,10), 'INDIVIDUAL':(12,10), 'ALONG_NORMALS':(12,10), 'MANIFOLD':(8,6)}
+        for variant in ('REGION','INDIVIDUAL','ALONG_NORMALS','MANIFOLD','CURSOR','REGION'):
+            self.begin('EXTRUDE', variant=variant, offset=.5)
+            bm = bmesh.from_edit_mesh(self.obj.data)
+            if variant == 'CURSOR':
+                self.assertEqual((len(bm.verts),len(bm.faces)),(8,6))
+                self.assertEqual(tools.tool_session.status()['input'],'REPEAT_TAP')
+            else:
+                self.assertEqual((len(bm.verts),len(bm.faces)),expected[variant])
+                self.assertAlmostEqual(max(v.co.z for v in bm.verts),1.5)
+        tools.cancel({})
+        self.assertEqual((len(bm.verts),len(bm.faces)),(8,6))
 
     def test_manifold_starts_at_zero_and_supports_inward_distance(self):
         self.begin('EXTRUDE', variant='MANIFOLD', offset=0)

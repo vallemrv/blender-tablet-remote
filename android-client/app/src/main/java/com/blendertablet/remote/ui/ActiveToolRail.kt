@@ -32,6 +32,7 @@ import com.blendertablet.remote.model.EditTool
 import com.blendertablet.remote.model.EditToolbarFamily
 import com.blendertablet.remote.model.EditToolbarVariant
 import com.blendertablet.remote.model.ToolSession
+import com.blendertablet.remote.model.SelectionMode
 
 /**
  * Barra izquierda de tools activas de Edit Mode (`edit_toolbar`, F1).
@@ -48,10 +49,11 @@ fun ToolbarFamilyButtons(
     families: List<EditToolbarFamily>,
     toolSession: ToolSession,
     rememberedVariants: Map<String, String>,
+    selectionMode: SelectionMode,
     vm: MainViewModel,
 ) {
     for (family in families) {
-        FamilyToolButton(family, toolSession, rememberedVariants[family.id], vm)
+        FamilyToolButton(family, toolSession, rememberedVariants[family.id], selectionMode, vm)
     }
 }
 
@@ -61,6 +63,7 @@ private fun FamilyToolButton(
     family: EditToolbarFamily,
     toolSession: ToolSession,
     rememberedVariant: String?,
+    selectionMode: SelectionMode,
     vm: MainViewModel,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -84,7 +87,7 @@ private fun FamilyToolButton(
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(AppIcons.toolbarFamily(family.id), description, tint = if (selected) Ink.Accent else Ink.OnPanel)
+            Icon(AppIcons.toolbarVariant(family.id, displayedVariant?.id), description, tint = if (selected) Ink.Accent else Ink.OnPanel)
             if (hasLongClickMenu(family)) {
                 VariantBadge(variantBadge(family.id, displayedVariant?.id), selected)
             }
@@ -94,8 +97,12 @@ private fun FamilyToolButton(
                 DropdownMenuItem(
                     text = { Text(variant.label) },
                     leadingIcon = {
+                        Icon(AppIcons.toolbarVariant(family.id, variant.id), null)
+                    },
+                    trailingIcon = {
                         if (variant.id == displayedVariant?.id) Icon(Icons.Default.Check, null, tint = Ink.Accent)
                     },
+                    enabled = variant.availableIn(selectionMode),
                     onClick = {
                         expanded = false
                         vm.activateToolbarFamily(family, variant.id)
@@ -134,7 +141,7 @@ internal fun displayedVariantOf(
  * todas `tool.begin` con el mismo `tool`), se desempata por el parámetro `variant`
  * que [MainViewModel.activateToolbarFamily] siempre manda.
  */
-private fun activeVariantOf(family: EditToolbarFamily, session: ToolSession): EditToolbarVariant? {
+internal fun activeVariantOf(family: EditToolbarFamily, session: ToolSession): EditToolbarVariant? {
     if (!session.armed && !session.active) return null
     val candidates = family.variants.filter { variant ->
         val wire = (variant.payload["tool"] as? String) ?: (family.payload["tool"] as? String) ?: family.id
@@ -145,15 +152,6 @@ private fun activeVariantOf(family: EditToolbarFamily, session: ToolSession): Ed
     return candidates.firstOrNull { it.id == variantParam } ?: candidates.first()
 }
 
-/**
- * Un icono por familia y **nunca compartido entre familias**.
- *
- * Antes la variante también cambiaba el icono, y el resultado era que Extrude a lo
- * largo de normales, Inset individual y Bridge se dibujaban los tres con la misma
- * flecha doble, e Inset compartía cuadro con Extrude individual: el rail decía la
- * variante a costa de no decir la herramienta. Ahora el icono identifica la familia y
- * la variante se lee en [VariantBadge].
- */
 /**
  * Etiqueta corta de la variante armada, para la esquina del botón.
  *

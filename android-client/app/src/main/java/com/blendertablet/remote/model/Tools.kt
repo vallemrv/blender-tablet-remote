@@ -83,6 +83,7 @@ data class DragLine(val start: List<Double>, val end: List<Double>)
 data class ToolSession(
     val active: Boolean = false,
     val armed: Boolean = false,
+    val sessionId: String? = null,
     val tool: EditTool = EditTool.EXTRUDE,
     val parameters: Map<String, Any?> = emptyMap(),
     /** Knife: puntos confirmados por el servidor, en coordenadas locales. */
@@ -200,4 +201,7 @@ data class EditToolbarVariant(
     val payload: Map<String, Any?> = emptyMap(),
     val requirements: Map<String, Any?> = emptyMap(),
     val parameters: List<EditCatalogParameter> = emptyList(),
-)
+) {
+    fun availableIn(mode: SelectionMode): Boolean = enabled &&
+        (requirements["selection_modes"] as? List<*>)?.let { mode.name in it } != false
+}

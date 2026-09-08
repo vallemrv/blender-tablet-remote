@@ -452,6 +452,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
 
                 EditToolTray(
                     session = toolSession,
+                    variantLabel = state.blender.features.editToolbar.families
+                        .firstNotNullOfOrNull { activeVariantOf(it, toolSession)?.label },
                     selectionMode = state.blender.selectionMode,
                     unitScaleLength = state.blender.unitScaleLength,
                     onParameter = vm::setToolParameter,
@@ -931,7 +933,7 @@ private fun RailContent(
     if (inEdit && state.blender.features.editToolbar.available) {
         RailDivider()
         RailLabel("EDITAR")
-        ToolbarFamilyButtons(state.blender.features.editToolbar.families, toolSession, state.toolbarVariant, vm)
+        ToolbarFamilyButtons(state.blender.features.editToolbar.families, toolSession, state.toolbarVariant, state.blender.selectionMode, vm)
     }
 
     // El catálogo contextual toma propiedad de las operaciones topológicas. En un

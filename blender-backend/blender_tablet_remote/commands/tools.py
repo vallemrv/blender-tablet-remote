@@ -112,6 +112,12 @@ class ToolSession:
         obj = active_object()
         if obj.mode != "EDIT" or obj.type != "MESH":
             raise CommandError("Parametric tools require mesh Edit Mode", code="wrong_mode")
+        if tool == "EXTRUDE":
+            variant = str(params.get("variant", "REGION")).upper()
+            if variant not in {"REGION", "CURSOR", "MANIFOLD", "ALONG_NORMALS", "INDIVIDUAL"}:
+                raise BadPayload("Unknown Extrude variant")
+            if variant not in {"REGION", "CURSOR"} and not bpy.context.scene.tool_settings.mesh_select_mode[2]:
+                raise CommandError(f"{variant} requires face selection", code="incompatible_selection")
         if self.active:
             self.restore()
             self.close()

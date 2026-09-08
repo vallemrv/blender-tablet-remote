@@ -411,8 +411,10 @@ tablet la arrastre después con un gesto `move`.
 `variant` es `REGION` por defecto. En caras, `ALONG_NORMALS` desplaza cada vértice
 nuevo según su normal y `INDIVIDUAL` crea una copia desconectada por cada cara; ambas
 requieren el submodo Cara (`incompatible_selection` fuera de él). `direction` no se
-combina con `ALONG_NORMALS`. Aristas y vértices sólo admiten `REGION`, que conserva la
-semántica existente: aristas → solo aristas y vértices → vértices individuales.
+combina con `ALONG_NORMALS`. Aristas y vértices sólo admiten `REGION`, que extruye
+la geometría efectiva seleccionada: caras completas primero, después aristas y,
+si no hay ninguna, vértices individuales. El extremo nuevo queda seleccionado para
+confirmar y continuar con Escalar, conservando fija la base.
 `MANIFOLD` también requiere Cara y ejecuta `mesh.extrude_manifold` nativo, con
 disolución de bordes coplanares e intersección de los nuevos. Comparte los ejes,
 orientación, distancia y snap de Región, dentro de la misma sesión reversible.
@@ -938,13 +940,17 @@ Cada familia tiene esta forma:
   "requirements": {"mode": "EDIT"},
   "variants": [
     {"id": "REGION", "label": "Región", "enabled": true,
-     "requirements": {"mode": "EDIT", "selection_modes": ["VERTEX"], "selection": {"verts": {"min": 1}}}}
+     "requirements": {"mode": "EDIT", "selection_modes": ["VERTEX", "EDGE", "FACE"], "selection": {"verts": {"min": 1}}}}
   ],
   "parameters": [{"id": "offset", "label": "Desplazamiento", "type": "float", "default": 0.0}]
 }
 ```
 
 - `default_variant` es la variante que arma un tap sin variante recordada.
+- Extrude distingue las variantes por icono y muestra su nombre en la bandeja.
+  Las variantes incompatibles con el submodo quedan deshabilitadas; el backend
+  rechaza ese cambio antes de cerrar la preview anterior. Los borradores de la
+  bandeja se reinician con el `session_id` de la sesión nueva.
 - `input` describe qué alimenta la sesión una vez armada: `PARAMETRIC` (los
   parámetros ya bastan, como Extrude/Inset), `VIEWPORT_TAP` (Loop Cut: el primer
   toque en el viewport la activa vía `tool.loop_pick`), `VIEWPORT_DRAG_SEGMENTS` (Knife:

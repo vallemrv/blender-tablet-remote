@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -23,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -134,6 +136,7 @@ fun EditToolTray(
     modifier: Modifier = Modifier,
     awaitingPick: Boolean = false,
     lengthUnit: com.blendertablet.remote.model.LengthUnit = com.blendertablet.remote.model.LengthUnit.CENTIMETERS,
+    variantLabel: String? = null,
 ) {
     if (!session.active && !awaitingPick && !session.armed) return
     // Knife y Bisect tienen su propia bandeja (puntos/pop/cerrar, o el aviso de
@@ -142,6 +145,8 @@ fun EditToolTray(
     FloatingPanel(modifier) {
         if (session.controls.isNotEmpty()) {
             Column {
+                if (session.tool == EditTool.EXTRUDE) Text("Extruir · ${variantLabel ?: "A toque"}",
+                    color = Ink.Accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 Text(session.instruction, color = Ink.Muted, fontSize = 12.sp)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     SchemaToolParameters(session.controls, session.parameters, lengthUnit, unitScaleLength,
@@ -171,10 +176,11 @@ fun EditToolTray(
             // Rótulo, no botón: la herramienta ya la eligió el rail y volver a
             // ofrecerla aquí sería la duplicidad que el plan prohíbe.
             Text(
-                session.tool.label.uppercase(),
+                if (session.tool == EditTool.EXTRUDE) "EXTRUIR\n${variantLabel ?: "Región"}" else session.tool.label.uppercase(),
                 color = Ink.Accent,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.widthIn(max = 160.dp),
             )
             Spacer(Modifier.width(10.dp))
             Row(
@@ -192,7 +198,9 @@ fun EditToolTray(
                 } else if (session.tool == EditTool.BRIDGE_EDGE_LOOPS) {
                     BridgeParams(session, unitScaleLength, onParameter)
                 } else if (session.tool == EditTool.EXTRUDE) {
-                    ExtrudeParams(session, unitScaleLength, lengthUnit, onParameter)
+                    key(session.sessionId, session.parameters["variant"]) {
+                        ExtrudeParams(session, unitScaleLength, lengthUnit, onParameter)
+                    }
                 } else if (session.tool == EditTool.INSET) {
                     InsetParams(session, unitScaleLength, lengthUnit, onParameter)
                 } else if (session.tool == EditTool.BEVEL) {

@@ -6,6 +6,15 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ExtrudeCursorStateTest {
+    @Test fun extrudeSessionIdentityChangesEvenWhenVariantAndValueMatch() {
+        fun session(id: String) = StateParser.toolSession(JSONObject("""{
+            "active":true,"armed":true,"tool":"EXTRUDE","session_id":"$id",
+            "parameters":{"variant":"REGION","offset":0}
+        }"""))
+        assertEquals("first",session("first").sessionId)
+        assertNotEquals(session("first"),session("second"))
+    }
+
     @Test fun armedCursorToolKeepsItsInputAndControlsWithoutParametricDragging() {
         val state = StateParser.toolSession(JSONObject("""{
             "active":false,"armed":true,"tool":"EXTRUDE","input":"REPEAT_TAP",
