@@ -162,7 +162,7 @@ interface RemoteBlenderClient {
 
     /** Loop y Ring parten de una arista ya seleccionada. */
     fun selectLoop(mode: SelectionOp = SelectionOp.SET)
-    fun selectRing()
+    fun selectRing(mode: SelectionOp = SelectionOp.SET)
 
     /** La `L` de Blender: extiende la selección a las islas conectadas. */
     fun selectLinked()

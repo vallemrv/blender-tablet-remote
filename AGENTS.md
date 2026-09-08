@@ -158,6 +158,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - La cabecera muestra preset y unidad activos cuando Blender está conectado, por ejemplo
   `Conectado · Mediana · cm`.
 - Los comandos discretos viven en menús contextuales.
+- Mayús + Ring añade el anillo a la selección existente (`ADD`) en Aristas y
+  Caras; sin modificador reemplaza y Alt resta.
 - Los atajos de Edit incluyen J para conectar vértices con la operación nativa
   `mesh.vert_connect_path`; requiere modo Vértices y al menos dos seleccionados,
   divide las caras atravesadas y registra un único undo.

@@ -709,7 +709,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val op = local.value.selectionOp
         client.selectLoop(op)
     }
-    fun selectRing() = client.selectRing()
+    fun selectRing() {
+        val op = local.value.selectionOp.let { if (it == SelectionOp.TOGGLE) SelectionOp.ADD else it }
+        client.selectRing(op)
+    }
 
     /** La `L` de Blender: de lo tocado a toda la pieza suelta que lo contiene. */
     fun selectLinked() = client.selectLinked()

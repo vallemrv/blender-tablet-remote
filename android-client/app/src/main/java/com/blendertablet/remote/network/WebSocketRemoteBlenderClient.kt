@@ -364,7 +364,8 @@ class WebSocketRemoteBlenderClient(
     )
     override fun selectLoop(mode: SelectionOp) =
         command("selection.loop", JSONObject().put("mode", mode.name))
-    override fun selectRing() = command("selection.ring")
+    override fun selectRing(mode: SelectionOp) =
+        command("selection.ring", JSONObject().put("mode", mode.name))
     override fun selectLinked() = command("selection.linked")
 
     override fun probeTouch(u: Double, v: Double, snapType: SnapType) = command(
