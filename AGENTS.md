@@ -226,6 +226,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Extruir identifica cada variante con su icono en rail/menú y su nombre en la
   bandeja. Respeta los modos del catálogo; una variante incompatible no cierra la
   preview anterior. Cambiar de sesión reinicia los borradores de Distancia y Paso.
+- Extruir muestra Distancia y Paso en mm con un máximo de dos decimales, sin
+  redondear los valores enviados. Reset 0 fija la distancia exacta a cero, limpia
+  el borrador y el destino geométrico, y conserva la sesión, variante y paso.
 - Extruir ofrece Manifold en Caras con la operación nativa de Blender: disuelve
   bordes coplanares e intersecta los nuevos. Comparte distancia, paso, ejes y snap
   de Región; cada preview parte del baseline y confirmar crea un único undo.

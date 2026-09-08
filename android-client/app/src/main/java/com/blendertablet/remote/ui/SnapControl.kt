@@ -108,6 +108,13 @@ fun SnapStepControl(
 val DistanceSnapSteps = listOf("1mm" to .001, "1cm" to .01, "10cm" to .1, "1m" to 1.0)
 val FactorSnapSteps = listOf("1%" to .01, "5%" to .05, "10%" to .1, "25%" to .25)
 
+/** Redondeo de presentación; los valores de edición y envío conservan su precisión. */
+internal fun formatToolDistance(value: Double, decimals: Int?): String {
+    val number = value.toBigDecimal()
+    return (decimals?.let { number.setScale(it, java.math.RoundingMode.HALF_UP) } ?: number)
+        .stripTrailingZeros().toPlainString()
+}
+
 /** Cantidad libre y unidad métrica; el consumidor recibe el paso en unidades Blender. */
 @Composable
 internal fun DistanceSnapStepInput(
@@ -115,6 +122,7 @@ internal fun DistanceSnapStepInput(
     unitScaleLength: Double,
     defaultUnit: LengthUnit,
     showSteppers: Boolean = false,
+    millimeterDecimals: Int? = null,
     onChange: (Double) -> Unit,
 ) {
     var unit by remember(defaultUnit) { mutableStateOf(defaultUnit.transformStepUnit()) }
@@ -149,7 +157,7 @@ internal fun DistanceSnapStepInput(
     Text("Paso", color = Ink.Faint, fontSize = 11.sp)
     if (showSteppers) PillButton("−") { adjustStep(-1.0) }
     CompactNumericField(
-        value = text ?: displayed.toBigDecimal().stripTrailingZeros().toPlainString(),
+        value = text ?: formatToolDistance(displayed, if (unit == TransformStepUnit.MM) millimeterDecimals else null),
         onValueChange = { text = it }, modifier = Modifier.width(84.dp),
         textAlign = TextAlign.End, placeholder = "Cantidad", onDone = { commit() },
     )

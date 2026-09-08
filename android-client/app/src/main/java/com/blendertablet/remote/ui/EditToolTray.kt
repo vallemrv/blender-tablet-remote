@@ -278,6 +278,7 @@ private fun SnapToggle(
             DistanceSnapStepInput(
                 session.snapStep, unitScaleLength, lengthUnit,
                 showSteppers = session.tool == EditTool.EXTRUDE,
+                millimeterDecimals = if (session.tool == EditTool.EXTRUDE) 2 else null,
             ) {
                 onParameter("snap_step", it)
             }
@@ -301,6 +302,8 @@ private fun ExtrudeParams(session: ToolSession, unitScaleLength: Double, lengthU
             unitScaleLength = unitScaleLength,
             stepSize = session.snapStep,
             lengthUnit = lengthUnit,
+            millimeterDecimals = 2,
+            showReset = true,
             onCommit = { onParameter(spec.key, it) },
         )
     }
@@ -588,6 +591,8 @@ private fun ParamStepper(
     showSteppers: Boolean = true,
     stepSize: Double? = null,
     lengthUnit: LengthUnit? = null,
+    millimeterDecimals: Int? = null,
+    showReset: Boolean = false,
     onCommit: (Double) -> Unit,
 ) {
     // null muestra el valor remoto; "" es un borrado intencional durante la edición.
@@ -599,7 +604,8 @@ private fun ParamStepper(
     val shownValue = pendingValue ?: value
     val formatted = if (lengthUnit != null) {
         val display = moveValueForDisplay(shownValue, lengthUnit.transformStepUnit(), unitScaleLength)
-        "${display.toBigDecimal().stripTrailingZeros().toPlainString()} ${lengthUnit.short}"
+        val decimals = if (lengthUnit == LengthUnit.MILLIMETERS) millimeterDecimals else null
+        "${formatToolDistance(display, decimals)} ${lengthUnit.short}"
     } else format(shownValue, spec.isInt)
 
     fun readDraft(): Double? {
@@ -640,6 +646,11 @@ private fun ParamStepper(
         )
         if (showSteppers) StepperButton("+") {
             adjust(1)
+        }
+        if (showReset) PillButton("Reset 0") {
+            text = null
+            pendingValue = if (value == 0.0) null else 0.0
+            onCommit(0.0)
         }
     }
 }
