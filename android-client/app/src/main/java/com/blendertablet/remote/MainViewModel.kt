@@ -1157,6 +1157,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun flattenScaleAxis(axis: String) {
+        if (client.transformSession.value.mode != TransformMode.SCALE || !client.transformSession.value.active) return
+        local.update { it.copy(referencePicking = false) }
+        client.transformFlatten(axis)
+    }
+
     fun setTransformCenterPreset(preset: String) {
         if (!client.transformSession.value.active) return
         lastReferencePointer = null

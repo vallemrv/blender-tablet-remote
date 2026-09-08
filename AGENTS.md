@@ -189,7 +189,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   su eje; con cadena conserva proporciones. El gesto métrico usa el eje restringido
   o la dimensión mayor de los ejes activos. Los valores escritos y Reset son exactos.
 - Escalar admite `0` exacto en % y mm/cm/m para aplanar, también con snap activo.
-  Restringir un eje conserva los demás; la cadena mantiene su comportamiento proporcional.
+  Escribir cero en un eje o pulsar X=0/Y=0/Z=0 aplana solo ese eje: una única petición
+  conserva los valores visibles de los demás y retira cualquier restricción incompatible.
+  La cadena sigue siendo proporcional para valores distintos de cero; Reset recupera el baseline.
 - El selector y los pasos de snap viven en `ui/SnapControl.kt`; las bandejas declaran
   opciones y reciben valores, pero no vuelven a implementar su interfaz.
 - Extruir, Inset y Bisel comparten incremento editable y selector mm/cm/m; comienzan
@@ -197,7 +199,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   Incremento/Rejilla recorre un paso por el 4 % de altura, conserva fracciones y
   publica el valor visual redondeado. Extruir muestra siempre Paso con −/+ que editan
   el paso en la unidad elegida, conservando la distancia y la preview actuales;
-  el siguiente gesto usa ese paso. Editar Distancia sustituye al destino geométrico
+  el siguiente gesto usa ese paso. Distancia tiene sus propios −/+ que suman/restan
+  el paso, incluso sin snap. Los botones conservan su valor local entre pulsaciones
+  rápidas; Distancia numérica es exacta y no se vuelve a redondear por snap.
+  Editar Distancia sustituye al destino geométrico
   sondeado. Knife usa el mismo desplegable de Snap.
 - Extruir Región desplaza y selecciona únicamente los vértices nuevos. Los vértices
   originales de las aristas/caras de conexión permanecen fijos, también al continuar
@@ -210,7 +215,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   crea y confirma un tramo, selecciona el extremo nuevo y registra un undo; salir
   conserva los tramos. Girar origen reparte el giro entre origen y extremo nuevo.
   Se anuncia como `REPEAT_TAP`: los toques consecutivos nunca encuadran por doble
-  toque y navegar con dos dedos no extruye. Sus controles usan la bandeja por esquema.
+  toque y navegar con dos dedos no extruye. Deslizar antes de soltar conserva el gesto
+  y confirma la última posición estable. Extruye la geometría efectiva seleccionada:
+  los extremos de una arista seleccionados en Vértices también producen una cara.
+  Sus controles usan la bandeja por esquema.
 - Revolución y Barrido/Marco viven en el catálogo contextual Edit y usan la bandeja
   por esquema. Revolución gira un perfil con ángulo en grados, segmentos, eje global
   y centro métrico (inicializado desde el cursor); cierra la vuelta de 360° y une los

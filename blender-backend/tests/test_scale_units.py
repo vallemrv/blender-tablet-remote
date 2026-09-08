@@ -154,6 +154,30 @@ class ScaleUnitsTests(unittest.TestCase):
             undo.assert_called_once_with('Remote scale')
         self.assertDimensions([20, 40, 0])
 
+    def test_flatten_axis_overrides_constraint_and_preserves_other_visible_scales(self):
+        for edit in (False, True):
+            for axis in 'XYZ':
+                for scene_scale in (1, .001):
+                    with self.subTest(edit=edit,axis=axis,scene_scale=scene_scale):
+                        start = self.begin(scene_scale,edit,axes=['X'])
+                        modal.set_value({'values':[2,3,4]})
+                        expected = [40,40,10]
+                        expected['XYZ'.index(axis)] = 0
+                        result = modal.set_value({'flatten_axis':axis})
+                        self.assertDimensions(expected)
+                        self.assertEqual(result['session_id'],start['session_id'])
+                        modal.set_value({'values':[1,1,1]})
+                        self.assertDimensions([20,40,10])
+
+    def test_flatten_several_axes_preserves_previous_zero(self):
+        self.begin(edit=True,axes=['Z'])
+        modal.set_value({'flatten_axis':'X'})
+        modal.set_value({'flatten_axis':'Y'})
+        self.assertDimensions([0,0,10])
+        with patch.object(modal,'undo_push') as undo, patch.object(modal.state,'snapshot',return_value={}):
+            modal.confirm({})
+            undo.assert_called_once_with('Remote scale')
+
     def test_invalid_step_unit_is_rejected(self):
         with self.assertRaises(BadPayload):
             modal.begin(dict(mode='SCALE', scale_step_unit='MM'))

@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -290,7 +291,7 @@ private fun ExtrudeParams(session: ToolSession, unitScaleLength: Double, lengthU
             spec = spec,
             value = session.double(spec.key) ?: defaultValue(spec),
             unitScaleLength = unitScaleLength,
-            showSteppers = false,
+            stepSize = session.snapStep,
             lengthUnit = lengthUnit,
             onCommit = { onParameter(spec.key, it) },
         )
@@ -575,30 +576,51 @@ private fun ParamStepper(
     value: Double,
     unitScaleLength: Double,
     showSteppers: Boolean = true,
+    stepSize: Double? = null,
     lengthUnit: LengthUnit? = null,
     onCommit: (Double) -> Unit,
 ) {
     // null muestra el valor remoto; "" es un borrado intencional durante la edición.
     var text by remember(spec.key) { mutableStateOf<String?>(null) }
+    var pendingValue by remember(spec.key) { mutableStateOf<Double?>(null) }
+    LaunchedEffect(value) {
+        if (pendingValue?.let { kotlin.math.abs(it - value) < 1e-9 } == true) pendingValue = null
+    }
+    val shownValue = pendingValue ?: value
     val formatted = if (lengthUnit != null) {
-        val display = moveValueForDisplay(value, lengthUnit.transformStepUnit(), unitScaleLength)
+        val display = moveValueForDisplay(shownValue, lengthUnit.transformStepUnit(), unitScaleLength)
         "${display.toBigDecimal().stripTrailingZeros().toPlainString()} ${lengthUnit.short}"
-    } else format(value, spec.isInt)
+    } else format(shownValue, spec.isInt)
 
-    fun commit() {
-        val input = text ?: return
+    fun readDraft(): Double? {
+        val input = text ?: return shownValue
         val withUnit = if (lengthUnit != null && input.trim().replace(',', '.').toDoubleOrNull() != null)
             "$input ${lengthUnit.short}" else input
-        val parsed = ValueParser.parse(withUnit, spec.mode) ?: return
+        val parsed = ValueParser.parse(withUnit, spec.mode) ?: return null
         val wire = if (spec.mode == TransformMode.MOVE) parsed / unitScaleLength else parsed
-        onCommit(clampParam(wire, spec.isInt, spec.min, spec.max))
+        return clampParam(wire, spec.isInt, spec.min, spec.max)
+    }
+    fun commit() {
+        if (text == null) return
+        val next = readDraft() ?: return
+        if (stepSize != null) pendingValue = next
+        onCommit(next)
         text = null
+    }
+    fun adjust(direction: Int) {
+        val current = if (stepSize != null) readDraft() ?: return else value
+        val next = stepParam(current, stepSize ?: spec.step, direction, spec.isInt, spec.min, spec.max)
+        if (stepSize != null) {
+            pendingValue = next
+            text = null
+        }
+        onCommit(next)
     }
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(spec.label, color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.padding(end = 4.dp))
         if (showSteppers) StepperButton("−") {
-            onCommit(stepParam(value, spec.step, -1, spec.isInt, spec.min, spec.max))
+            adjust(-1)
         }
         CompactNumericField(
             value = text ?: formatted,
@@ -607,7 +629,7 @@ private fun ParamStepper(
             modifier = Modifier.width(64.dp),
         )
         if (showSteppers) StepperButton("+") {
-            onCommit(stepParam(value, spec.step, 1, spec.isInt, spec.min, spec.max))
+            adjust(1)
         }
     }
 }

@@ -544,8 +544,11 @@ los ejes excluidos permanecen a 100 %. `transform.value` en SCALE respeta el val
 exacto, incluidos los botones y Reset, sin redondearlo otra vez; el siguiente gesto
 vuelve a aplicar el snap. Una dimensión base nula no admite incremento métrico.
 Los valores y dimensiones SCALE admiten cero exacto para aplanar, incluso con snap.
-Los ejes excluidos conservan su escala; en Android la cadena sigue replicando el
-factor, por lo que para aplanar un solo eje se restringe ese eje o se desactiva la cadena.
+`transform.value` también acepta `flatten_axis: X|Y|Z` exclusivamente en SCALE.
+En una única petición toma los factores visibles actuales, fija a cero el eje indicado,
+retira la restricción de ejes y aplica el valor exacto; mantiene la sesión y los otros
+factores. Android usa este comando tanto al escribir cero como desde X=0/Y=0/Z=0,
+independientemente de la cadena. Reset sigue enviando `[1,1,1]` sobre el baseline.
 
 Snap incremental y rejilla en la sesión modal:
 
@@ -699,6 +702,10 @@ destino de mundo al espacio local del objeto antes de extruir. Extruir muestra P
 con botones −/+ también sin snap; cada pulsación cambia `snap_step` en una unidad
 de la unidad métrica elegida (mínimo 0.001). Editar solo el paso conserva la distancia
 y la preview actuales; el siguiente gesto usa el nuevo paso.
+Distancia tiene sus propios −/+ que suman/restan el paso vigente. Una edición de
+`offset` se aplica exactamente, sin cuantizar otra vez por snap; el siguiente
+`tool.nudge` vuelve al incremento gestual. Cada pareja de botones mantiene el valor
+local pendiente para que las pulsaciones rápidas no dependan de la latencia.
 La edición de `offset` descarta el candidato geométrico anterior para aplicar el valor
 paramétrico. Su campo Distancia muestra unidades y acepta cantidades con o sin sufijo
 (en este último caso usa la unidad del preset).
@@ -719,8 +726,12 @@ Cada toque válido confirma un tramo con un undo y devuelve el estado armado con
 `result: {changed, position?}`. Tocar el centro actual no duplica geometría ni crea
 undo. Un error restaura ese tramo; salir con `tool.cancel`, cambiar de herramienta
 o desconectar conserva los tramos ya confirmados. Undo cierra primero la herramienta.
-Android interpreta los toques consecutivos individualmente, ignora el arrastre de
-un dedo y reserva dos dedos para navegar. No muestra confirmación por tramo.
+Android captura cada contacto completo: DOWN inicia, MOVE actualiza el destino y
+UP confirma la última posición estable, sin tomar las coordenadas de liberación.
+Deslizar no descarta el toque; un segundo dedo, cancelar o cambiar de herramienta
+descarta el contacto pendiente. Dos dedos navegan y no muestra confirmación por tramo.
+La extrusión usa la selección efectiva: seleccionar vértices que forman aristas o
+caras produce su extrusión conectada, sin cambiar el selector Vértices/Aristas/Caras.
 
 `REVOLVE` y `SWEEP` se anuncian en `edit_tools` v11 y en el catálogo contextual,
 sin añadir botones al rail. Ambas usan `tool.begin/parameter/confirm/cancel` y

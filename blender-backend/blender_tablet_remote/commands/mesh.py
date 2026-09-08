@@ -136,7 +136,7 @@ def extrude(payload: dict) -> dict:
     variant = str(payload.get("variant", "REGION")).upper()
     if variant not in {"REGION", "MANIFOLD", "ALONG_NORMALS", "INDIVIDUAL"}:
         raise BadPayload("'variant' must be REGION, MANIFOLD, ALONG_NORMALS or INDIVIDUAL")
-    vert_mode, edge_mode, face_mode = _select_mode()
+    vert_mode, edge_mode, face_mode = payload.get("_selection_mode", _select_mode())
     if variant != "REGION" and not face_mode:
         raise CommandError(f"{variant} requires face selection", code="incompatible_selection")
     if variant == "ALONG_NORMALS" and _custom_direction(payload) is not None:

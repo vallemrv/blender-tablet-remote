@@ -1205,6 +1205,18 @@ def nudge(payload: dict) -> dict:
 def set_value(payload: dict) -> dict:
     """Valor exacto: [x, y, z] para mover/escalar, o `angle` en grados para rotar."""
     session.require(payload.get("_client_id"))
+    if "flatten_axis" in payload:
+        axis = str(payload["flatten_axis"]).upper()
+        if session.mode != "SCALE" or axis not in AXIS_INDEX:
+            raise BadPayload("flatten_axis requires SCALE and X, Y or Z")
+        values = session._effective()
+        values[AXIS_INDEX[axis]] = 0.0
+        # Una única operación: conserva lo visible en los otros ejes y elimina
+        # cualquier restricción que pudiera ignorar el eje solicitado.
+        session.axes = []
+        session.set_values(values)
+        session.apply()
+        return session.status()
     if session.mode == "ROTATE":
         try:
             if "values" in payload:

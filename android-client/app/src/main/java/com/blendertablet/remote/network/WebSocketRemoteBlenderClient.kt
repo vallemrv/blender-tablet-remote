@@ -565,6 +565,10 @@ class WebSocketRemoteBlenderClient(
     }
 
     override fun transformConfirm() = command("transform.confirm")
+    override fun transformFlatten(axis: String) {
+        pendingTransformSnap = null
+        command("transform.value", JSONObject().put("flatten_axis", axis))
+    }
     override fun transformCancel() = command("transform.cancel")
 
     override fun toolBegin(tool: EditTool, parameters: Map<String, Any?>) =

@@ -17,6 +17,7 @@ import com.blendertablet.remote.model.ProportionalCircle
 import com.blendertablet.remote.model.ShapeTool
 import com.blendertablet.remote.model.SnapCandidate
 import com.blendertablet.remote.model.SnapType
+import com.blendertablet.remote.model.TapExtrusionGesture
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.hypot
@@ -170,7 +171,12 @@ private class GestureView(
      * servidor qué hay debajo.
      */
     var onLongPress: (px: Float, py: Float, u: Float, v: Float) -> Unit = { _, _, _, _ -> }
+    private val tapExtrusion = TapExtrusionGesture()
     var repeatTap: Boolean = false
+        set(value) {
+            if (!value) tapExtrusion.cancel()
+            field = value
+        }
     var longPressEnabled: Boolean = true
         set(value) {
             field = value
@@ -292,6 +298,10 @@ private class GestureView(
                     invalidate()
                     return true
                 }
+                if (repeatTap) {
+                    tapExtrusion.begin(nx(event.x), ny(event.y))
+                    return true
+                }
                 if (cadDrawingEnabled) {
                     cadDrawing = true
                     shapeCurrentX = event.x; shapeCurrentY = event.y
@@ -343,7 +353,10 @@ private class GestureView(
 
             MotionEvent.ACTION_POINTER_DOWN -> if (event.pointerCount >= 2) {
                 removeCallbacks(longPressRunnable)
-                if (repeatTap) suppressSingleAfterTweak = true
+                if (repeatTap) {
+                    tapExtrusion.cancel()
+                    suppressSingleAfterTweak = true
+                }
                 // Un segundo dedo significa navegar: se suelta la herramienta y la forma.
                 if (cadDrawing) {
                     onCadGesture(GesturePhase.CANCEL, nx(shapeCurrentX), ny(shapeCurrentY))
@@ -377,6 +390,9 @@ private class GestureView(
             // tres dedos para la captura de pantalla y nunca llega completo.
             MotionEvent.ACTION_MOVE ->
                 if (event.pointerCount >= 2) handlePair(event)
+                else if (tapExtrusion.active) {
+                    tapExtrusion.move(nx(event.x), ny(event.y))
+                }
                 else if (cadDrawing) {
                     shapeCurrentX = event.x; shapeCurrentY = event.y
                     if (event.eventTime - lastDispatchAt >= KNIFE_DISPATCH_MS) {
@@ -408,6 +424,11 @@ private class GestureView(
 
             MotionEvent.ACTION_UP -> {
                 removeCallbacks(longPressRunnable)
+                if (tapExtrusion.active) {
+                    tapExtrusion.end()?.let { (u, v) -> onTap(u, v, isStylus(downToolType)) }
+                    parent?.requestDisallowInterceptTouchEvent(false)
+                    return true
+                }
                 if (cadDrawing) {
                     // Flush the last MOVE sample; never raycast the pressure-release coordinates.
                     onCadGesture(GesturePhase.UPDATE, nx(shapeCurrentX), ny(shapeCurrentY))
@@ -449,6 +470,7 @@ private class GestureView(
 
             MotionEvent.ACTION_CANCEL -> {
                 removeCallbacks(longPressRunnable)
+                tapExtrusion.cancel()
                 if (cadDrawing) onCadGesture(GesturePhase.CANCEL, nx(shapeCurrentX), ny(shapeCurrentY))
                 cadDrawing = false
                 shapeDrawing = false
@@ -492,6 +514,7 @@ private class GestureView(
     }
 
     override fun onDetachedFromWindow() {
+        tapExtrusion.cancel()
         cancelTweak()
         super.onDetachedFromWindow()
     }

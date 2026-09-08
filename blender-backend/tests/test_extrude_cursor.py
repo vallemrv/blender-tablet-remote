@@ -124,6 +124,17 @@ class ExtrudeCursorTests(unittest.TestCase):
             undo.assert_not_called()
         self.assertEqual(len(bmesh.from_edit_mesh(self.obj.data).verts),8)
 
+    def test_vertex_selection_of_an_edge_creates_faces_when_tapping(self):
+        self.empty_or_edge(True)
+        bpy.context.scene.tool_settings.mesh_select_mode = (True,False,False)
+        self.arm()
+        with patch.object(tools,'undo_push'):
+            self.tap(.6,.3)
+            self.tap(.7,.2)
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        self.assertEqual((len(bm.verts),len(bm.faces)),(6,2))
+        self.assertEqual(tuple(bpy.context.scene.tool_settings.mesh_select_mode),(True,False,False))
+
 
 if __name__ == '__main__':
     unittest.main(argv=[__file__], defaultTest='ExtrudeCursorTests', verbosity=2)

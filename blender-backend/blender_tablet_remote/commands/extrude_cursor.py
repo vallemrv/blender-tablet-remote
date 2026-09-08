@@ -23,6 +23,11 @@ def apply(obj, payload, rotate_source=True):
     camera.sync_from_region(rv3d)
     bm = bmesh.from_edit_mesh(obj.data)
     selected = [vert for vert in bm.verts if vert.select and not vert.hide]
+    # Ctrl+RMB extruye la geometría efectiva, también si el usuario está en
+    # Vértices pero ha seleccionado los extremos de una arista o una cara.
+    faces_selected = any(f.select and not f.hide for f in bm.faces)
+    edges_selected = any(e.select and not e.hide for e in bm.edges)
+    selection_mode = (not faces_selected and not edges_selected, not faces_selected and edges_selected, faces_selected)
     world = obj.matrix_world
     try:
         inverse = world.inverted()
@@ -81,7 +86,7 @@ def apply(obj, payload, rotate_source=True):
         if selected:
             if rotate_source:
                 bmesh.ops.rotate(bm, verts=selected, cent=local_center, matrix=rotation.to_matrix())
-            mesh.extrude({"offset": 0, "variant": "REGION", "_no_undo": True})
+            mesh.extrude({"offset": 0, "variant": "REGION", "_no_undo": True, "_selection_mode": selection_mode})
             tip = [vert for vert in bm.verts if vert.select and not vert.hide]
             bmesh.ops.rotate(bm, verts=tip, cent=local_center, matrix=rotation.to_matrix())
             bmesh.ops.translate(bm, verts=tip, vec=delta)

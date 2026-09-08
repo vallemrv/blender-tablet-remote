@@ -432,6 +432,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     onMoveStep = vm::setMoveStep,
                     onScaleStep = vm::setScaleStep,
                     onValue = vm::transformValue,
+                    onFlatten = vm::flattenScaleAxis,
                     onProportionalRadius = vm::scaleProportionalRadius,
                     onProportionalRadiusValue = vm::setProportionalRadius,
                     onProportionalFalloff = vm::cycleProportionalFalloff,

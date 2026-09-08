@@ -11,6 +11,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -119,9 +120,13 @@ internal fun DistanceSnapStepInput(
     var unit by remember(defaultUnit) { mutableStateOf(defaultUnit.transformStepUnit()) }
     var expanded by remember { mutableStateOf(false) }
     var text by remember(unit, unitScaleLength) { mutableStateOf<String?>(null) }
-    val displayed = moveValueForDisplay(step, unit, unitScaleLength)
+    var pendingStep by remember(unitScaleLength) { mutableStateOf<Double?>(null) }
+    LaunchedEffect(step) {
+        if (pendingStep?.let { abs(it - step) < 1e-9 } == true) pendingStep = null
+    }
+    val displayed = moveValueForDisplay(pendingStep ?: step, unit, unitScaleLength)
     fun readStep(): Double? {
-        if (text == null) return step
+        if (text == null) return pendingStep ?: step
         val number = text?.trim()?.replace(',', '.')?.toDoubleOrNull()
             ?.takeIf { it.isFinite() && it > 0.0 } ?: return null
         return moveValueInBlenderUnits(number, unit, unitScaleLength)
@@ -129,14 +134,17 @@ internal fun DistanceSnapStepInput(
     fun commit() {
         if (text == null) return
         val wire = readStep() ?: return
+        if (showSteppers) pendingStep = wire
         onChange(wire)
         text = null
     }
     fun adjustStep(delta: Double) {
         val current = readStep() ?: return
         val next = (moveValueForDisplay(current, unit, unitScaleLength) + delta).coerceAtLeast(0.001)
-        onChange(moveValueInBlenderUnits(next, unit, unitScaleLength))
+        val wire = moveValueInBlenderUnits(next, unit, unitScaleLength)
+        pendingStep = wire
         text = null
+        onChange(wire)
     }
     Text("Paso", color = Ink.Faint, fontSize = 11.sp)
     if (showSteppers) PillButton("−") { adjustStep(-1.0) }

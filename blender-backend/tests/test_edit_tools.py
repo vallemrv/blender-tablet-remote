@@ -223,6 +223,16 @@ class EditToolsTests(unittest.TestCase):
         state = tools.nudge({'delta': .1})
         self.assertAlmostEqual(state['parameters']['offset'],.3)
 
+    def test_extrude_distance_buttons_use_new_step_without_requantizing_distance(self):
+        self.begin('EXTRUDE', offset=.2, snap_type='INCREMENT', snap_step=.1)
+        tools.parameter({'parameters':{'snap_step':.3}})
+        for distance in (.5,.8,.5,.2):
+            state = tools.parameter({'parameters':{'offset':distance}})
+            self.assertAlmostEqual(state['parameters']['offset'],distance)
+            self.assertAlmostEqual(state['snap_step'],.3)
+            bm = bmesh.from_edit_mesh(self.obj.data)
+            self.assertAlmostEqual(max(v.co.z for v in bm.verts),1+distance,places=6)
+
     def test_increment_accumulates_small_samples_and_reports_visual_value(self):
         for tool, primary in [('EXTRUDE','offset'),('INSET','thickness'),('BEVEL','offset')]:
             with self.subTest(tool=tool):

@@ -103,6 +103,7 @@ fun TransformBar(
     onCenterPreset: (String) -> Unit,
     onMoveStep: (Double, TransformStepUnit) -> Unit,
     onScaleStep: (Double, TransformStepUnit) -> Unit,
+    onFlatten: (String) -> Unit,
     onValue: (List<Double>?, Double?, List<Double>?) -> Unit,
     onProportionalRadius: (Double) -> Unit,
     onProportionalRadiusValue: (Double) -> Unit,
@@ -164,7 +165,7 @@ fun TransformBar(
                     ParametricAxisInputs(
                         session, unitScaleLength, moveStepValue, moveStepUnit,
                         scaleStepValue, stepIndex, constraint, snapType,
-                        scaleUnit, onConstraint, onValue,
+                        scaleUnit, onConstraint, onValue, onFlatten,
                     )
                     when (session.mode) {
                         TransformMode.SCALE -> {
@@ -321,6 +322,7 @@ private fun ParametricAxisInputs(
     scaleUnit: TransformStepUnit,
     onConstraint: (Constraint) -> Unit,
     onValue: (List<Double>?, Double?, List<Double>?) -> Unit,
+    onFlatten: ((String) -> Unit)? = null,
 ) {
     var scaleLinked by remember(session.sessionId) { mutableStateOf(true) }
     if (session.mode == TransformMode.SCALE) {
@@ -329,6 +331,9 @@ private fun ParametricAxisInputs(
             description = if (scaleLinked) "Dimensiones vinculadas" else "Dimensiones independientes",
             selected = scaleLinked,
         ) { scaleLinked = !scaleLinked }
+        Axis.entries.forEach { axis ->
+            PillButton("${axis.name}=0") { onFlatten?.invoke(axis.name) }
+        }
     }
     val referenceDistance = session.referenceDistance ?: 0.0
     val step = when (session.mode) {
@@ -365,6 +370,10 @@ private fun ParametricAxisInputs(
             if (!editing) text = format(displayed, 4)
         }
         fun send(value: Double) {
+            if (session.mode == TransformMode.SCALE && value == 0.0 && onFlatten != null) {
+                onFlatten(axis.name)
+                return
+            }
             val next = if (session.mode == TransformMode.SCALE) {
                 scaleValuesAfterAxisEdit(session.values, index, value, scaleLinked)
             } else session.values.toMutableList().also { it[index] = value }
