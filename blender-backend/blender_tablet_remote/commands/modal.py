@@ -169,6 +169,7 @@ class _Session:
         self.pivot = Vector((0.0, 0.0, 0.0))
         self.base_dimensions = Vector((0.0, 0.0, 0.0))
         self.session_id = None
+        self.step_continuation = False
         self.owner_id = None
         self.phase = "IDLE"
         self.orientation = "GLOBAL"
@@ -1269,11 +1270,72 @@ def set_value(payload: dict) -> dict:
     return session.status()
 
 
+@command("transform.select", mutating=True)
+def select_next(payload: dict) -> dict:
+    """Confirma el paso Edit y continúa la misma herramienta en otra selección."""
+    from . import selection
+
+    session.require(payload.get("_client_id"))
+    obj = session.edit_object
+    if obj is None or session.motion != "FREE":
+        raise CommandError("Changing transform selection requires Edit Mode", code="wrong_mode")
+    operation = selection._selection_op(payload)
+    picked = selection.pick(dict(payload, _probe=True))
+    if not picked.get("hit"):
+        return dict(session.status(), selection_changed=False)
+    bm = bmesh.from_edit_mesh(obj.data)
+    seq = {"vert": bm.verts, "edge": bm.edges, "face": bm.faces}[picked["element"]]
+    seq.ensure_lookup_table()
+    target = seq[picked["index"]]
+    current = {elem for elem in seq if elem.select and not elem.hide}
+    desired = ({target} if operation == "SET" else current | {target} if operation == "ADD"
+               else current - {target} if operation == "REMOVE" else current ^ {target})
+    # Un toque al vacío, a la misma selección o que la vacíe no cierra el paso.
+    if not desired or desired == current:
+        return dict(session.status(), selection_changed=False)
+    settings = dict(mode=session.mode, axes=list(session.axes), snap=session.snap,
+                    step=session.step, owner_id=session.owner_id, orientation=session.orientation,
+                    value_mode=session.value_mode, snap_type=session.snap_type,
+                    proportional=session.proportional, proportional_radius=session.proportional_radius,
+                    proportional_falloff=session.proportional_falloff, scale_step_unit=session.scale_step_unit)
+    changed = any((bm.verts[index].co - co).length_squared > 1e-20
+                  for index, co in session.edit_coords.items())
+    if changed:
+        confirm(payload)
+    else:
+        session.reset()
+    # No se repite el raycast tras confirmar: auto-merge puede cambiar índices.
+    desired = {elem for elem in desired if elem.is_valid}
+    if desired:
+        bm.select_history.clear()
+        for collection in (bm.verts, bm.edges, bm.faces):
+            for elem in collection:
+                elem.select = False
+        for elem in desired:
+            elem.select = True
+        if target.is_valid and target in desired:
+            bm.select_history.add(target)
+        bm.select_flush_mode()
+        bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
+    if any(v.select and not v.hide for v in bm.verts):
+        session.begin(**settings)
+        session.step_continuation = True
+        session.apply()
+    return dict(session.status(), selection_changed=True,
+                state=state.snapshot(include_view=False))
+
+
 @command("transform.confirm", mutating=True)
 def confirm(payload: dict) -> dict:
     """Cierra la transformación y la deja como un único paso de undo."""
     session.require(payload.get("_client_id"))
     session.apply()
+    if session.edit_object is not None and session.step_continuation:
+        bm = bmesh.from_edit_mesh(session.edit_object.data)
+        if not any((bm.verts[index].co - co).length_squared > 1e-20
+                   for index, co in session.edit_coords.items()):
+            session.reset()
+            return dict(state.snapshot(include_view=False), active=False)
     if session.edit_object is not None and session.mode == "MOVE" and bpy.context.scene.tool_settings.use_mesh_automerge:
         bm = bmesh.from_edit_mesh(session.edit_object.data)
         bm.verts.ensure_lookup_table()

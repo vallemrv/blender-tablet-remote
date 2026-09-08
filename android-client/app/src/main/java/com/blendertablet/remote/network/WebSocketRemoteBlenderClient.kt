@@ -103,7 +103,7 @@ class WebSocketRemoteBlenderClient(
          * refrescar la escena.
          */
         val MODAL_COMMANDS = setOf(
-            "transform.begin", "transform.axes", "transform.snap",
+            "transform.begin", "transform.select", "transform.axes", "transform.snap",
             "transform.value", "transform.nudge", "transform.status",
             "transform.snap_candidate",
             "transform.reference_candidate",
@@ -565,6 +565,11 @@ class WebSocketRemoteBlenderClient(
     }
 
     override fun transformConfirm() = command("transform.confirm")
+    override fun transformSelect(u: Double, v: Double, threshold: Double, mode: SelectionOp) {
+        pendingTransformSnap = null
+        command("transform.select", JSONObject().put("u", u).put("v", v)
+            .put("threshold", threshold).put("mode", mode.name))
+    }
     override fun transformFlatten(axis: String) {
         pendingTransformSnap = null
         command("transform.value", JSONObject().put("flatten_axis", axis))
@@ -888,8 +893,9 @@ class WebSocketRemoteBlenderClient(
                     }
                     command in MODAL_COMMANDS -> {
                         acceptTransformSession(
-                            StateParser.session(result), allowReplace = command == "transform.begin",
+                            StateParser.session(result), allowReplace = command == "transform.begin" || command == "transform.select",
                         )
+                        if (command == "transform.select") result?.optJSONObject("state")?.let(::updateState)
                         if (command == "transform.snap_candidate") {
                             transformSnapInFlight.set(false)
                             flushTransformSnap()

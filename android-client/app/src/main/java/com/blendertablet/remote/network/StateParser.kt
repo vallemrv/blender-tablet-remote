@@ -163,6 +163,7 @@ object StateParser {
             tweakSnapTypes(selection?.optJSONObject("tweak")),
             f.optJSONObject("scene_scale") != null,
             CadParser.capabilities(f.optJSONObject("cad")),
+            transformStepSelection = f.optJSONObject("transform_modal")?.optBoolean("edit_step_selection") == true,
         )
     }
 

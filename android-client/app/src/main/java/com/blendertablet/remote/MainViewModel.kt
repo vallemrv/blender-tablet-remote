@@ -442,8 +442,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Un toque en el viewport. Normalmente selecciona, pero con una transformación
      * abierta y un snap geométrico elegido significa "pega el movimiento a esto":
-     * seleccionar a mitad de un desplazamiento no tendría sentido, y tocar el destino
-     * es la forma corta de decir a dónde va.
+     * el toque fija el destino. En Edit también permite continuar en otra selección
+     * confirmando el paso anterior.
      */
     fun pick(u: Float, v: Float, stylus: Boolean = false) {
         if (client.state.value.cad.workspace) {
@@ -457,6 +457,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (surfaceTool.active && surfaceTool.input == "FACE_PAIR") {
             client.toolFacePick(u.toDouble(), v.toDouble(),
                 surfaceTool.parameters["pick_role"] as? String ?: "SOURCE", "TAP")
+            return
+        }
+        if (choosingTransformSelection()) {
+            client.transformSelect(u.toDouble(), v.toDouble(), if (stylus) 0.028 else 0.055, local.value.selectionOp)
             return
         }
         if (local.value.referencePicking && client.transformSession.value.active) {
@@ -501,7 +505,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             client.transformSnapCandidate(u.toDouble(), v.toDouble(), session.snapType)
             return
         }
-        if (session.active) return
+        if (session.active) {
+            if (client.state.value.mode == BlenderMode.EDIT && client.state.value.features.transformStepSelection &&
+                local.value.activeTool != ActiveTool.TWEAK) {
+                client.transformSelect(u.toDouble(), v.toDouble(), if (stylus) 0.028 else 0.055, local.value.selectionOp)
+            }
+            return
+        }
         // El pen apunta con precisión: un radio menor evita saltar al elemento vecino.
         // El dedo conserva una diana más grande y cómoda.
         val threshold = if (stylus) 0.028 else 0.055
@@ -763,7 +773,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Seguimiento absoluto del dedo para snap geométrico durante el arrastre. */
     fun toolPointer(u: Float, v: Float) {
-        if (client.state.value.cad.workspace) return
+        if (client.state.value.cad.workspace || choosingTransformSelection()) return
         val surfaceTool = client.toolSession.value
         if (surfaceTool.active && surfaceTool.input == "FACE_PAIR") {
             lastFacePointer = u to v
@@ -1145,6 +1155,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         client.transformValue(values, angleDegrees, dimensions)
 
     fun toggleTransformReference(role: String) {
+        local.update { it.copy(transformSelectionSessionId = null) }
         val session = client.transformSession.value
         if (!session.active) return
         val normalized = if (session.mode == TransformMode.MOVE) "SOURCE" else role
@@ -1155,6 +1166,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             lastReferencePointer = null
             local.update { it.copy(referencePicking = !it.referencePicking, referenceRole = normalized) }
         }
+    }
+
+    private fun choosingTransformSelection(): Boolean {
+        val session = client.transformSession.value
+        return session.active && session.sessionId == local.value.transformSelectionSessionId
+    }
+
+    fun chooseTransformSelection() {
+        val session = client.transformSession.value
+        if (!session.active || client.state.value.mode != BlenderMode.EDIT) return
+        local.update { it.copy(
+            transformSelectionSessionId = if (choosingTransformSelection()) null else session.sessionId,
+            referencePicking = false,
+        ) }
     }
 
     fun flattenScaleAxis(axis: String) {
@@ -1232,6 +1257,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * El servidor lo agrupa y cierra un único paso de undo al soltar.
      */
     fun toolGesture(phase: GesturePhase, dx: Float, dy: Float) {
+        if (choosingTransformSelection()) return
         if (client.toolSession.value.armed && client.toolSession.value.input == "REPEAT_TAP") return
         if (client.state.value.cad.workspace) {
             client.gesture(Gesture.ORBIT, phase, dx.toDouble(), dy.toDouble())

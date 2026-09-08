@@ -166,6 +166,14 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Los componentes compartidos poseen disposición, estado, unidades y ciclo de sesión;
   Blender conserva únicamente la lógica geométrica específica.
 - Mover usa un único `MovementControls` en Object y Edit sobre la misma sesión modal.
+- En Edit, Mover/Rotar/Escalar continúan por pasos al tocar otra selección. Un único
+  `transform.select` sondea la preview viva, confirma el cambio anterior con un undo
+  y abre otro baseline sin salir de la herramienta; conserva ejes, orientación y snap.
+  Los valores y referencias se reinician para la nueva selección. Reset/cancelar solo
+  afectan al paso actual. Un miss o una selección idéntica/vacía conserva la sesión;
+  cambiar sin transformar o terminar una continuación sin cambios no crea undo vacío.
+  Con snap geométrico, «Otra selección» distingue elegir elementos de fijar un destino.
+  Los toques consecutivos durante estas sesiones Edit no activan doble toque.
 - El selector `mm`/`cm`/`m` junto a X/Y/Z gobierna tanto los valores escritos y
   mostrados como el paso, los botones y el snap de Mover.
 - Android renueva `unitScaleLength` desde cada `scene_scale`; cargar otro `.blend` no

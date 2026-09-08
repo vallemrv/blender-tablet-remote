@@ -50,6 +50,7 @@ fun InputSurface(
     onTap: (Float, Float, Boolean) -> Unit,
     onDoubleTap: () -> Unit,
     repeatTap: Boolean = false,
+    independentTaps: Boolean = false,
     cadDrawingEnabled: Boolean = false,
     onCadGesture: (GesturePhase, Float, Float) -> Unit = { _, _, _ -> },
     cadOverlay: List<com.blendertablet.remote.model.CadOverlay> = emptyList(),
@@ -81,6 +82,7 @@ fun InputSurface(
             view.updateCallbacks(onDebug, onToolGesture, onToolPointer, onViewGesture, onTap, onDoubleTap)
             view.onLongPress = onLongPress
             view.repeatTap = repeatTap
+            view.independentTaps = independentTaps
             view.shapeTool = shapeTool
             view.fixedCircleRadius = fixedCircleRadius
             view.cadDrawingEnabled = cadDrawingEnabled
@@ -172,6 +174,7 @@ private class GestureView(
      */
     var onLongPress: (px: Float, py: Float, u: Float, v: Float) -> Unit = { _, _, _, _ -> }
     private val tapExtrusion = TapExtrusionGesture()
+    var independentTaps: Boolean = false
     var repeatTap: Boolean = false
         set(value) {
             if (!value) tapExtrusion.cancel()
@@ -712,11 +715,11 @@ private class GestureView(
 
     private fun handleTap(e: MotionEvent) {
         val now = e.eventTime
-        if (!repeatTap && now - lastTapAt < DOUBLE_TAP_MS) {
+        if (!repeatTap && !independentTaps && now - lastTapAt < DOUBLE_TAP_MS) {
             onDoubleTap()
             lastTapAt = 0L
         } else {
-            lastTapAt = if (repeatTap) 0L else now
+            lastTapAt = if (repeatTap || independentTaps) 0L else now
             // Confirma localmente que el toque sí se registró. No representa el
             // resultado remoto: solo elimina la incertidumbre durante el viaje de
             // picking y el siguiente frame MJPEG.

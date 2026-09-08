@@ -528,8 +528,25 @@ Solo atraviesa los objetos excluidos explícitamente por la sesión.
 | `transform.nudge` | `dx`, `dy` — normalmente llega por el canal de gestos |
 | `transform.value` | `values`: [x,y,z], `angle` en GRADOS legado, o `dimensions`: [x,y,z] finales en unidades Blender para SCALE |
 | `transform.session` | Publica `values` canónico y los roles `center`, `source`, `target`; `angle` y `reference_*` quedan como derivados v2 |
+| `transform.select` | Edit: `u`, `v`, `threshold`, `mode`: SET/ADD/REMOVE/TOGGLE; confirma el paso y continúa en la nueva selección |
 | `transform.confirm` | — cierra con un único paso de undo |
 | `transform.cancel` | — restaura las matrices originales |
+
+`transform_modal` v4 anuncia `edit_step_selection: true`. En Edit, `transform.select`
+sondea una sola vez la malla de la preview sin cambiar la selección. Si el toque elige
+otra selección no vacía, confirma la transformación anterior y comienza un nuevo
+baseline con la misma herramienta, ejes, orientación, snap, paso y ajustes proporcionales.
+Devuelve la nueva sesión (otro `session_id`), `selection_changed` y un snapshot explícito
+`state`; este snapshot es la única parte de la respuesta que actualiza la escena Android.
+Los valores vuelven a 0/0°/100 % y centro/fuente/destino se recalculan o se liberan.
+Un miss, una selección idéntica o vacía devuelve la misma sesión sin confirmar.
+Cada cambio geométrico confirmado crea un undo; elegir sin transformar y terminar
+una continuación sin cambios no generan pasos vacíos. Reset y cancelar restauran
+solo el baseline actual, conservando los pasos anteriores.
+Android permite elegir por toque sin snap geométrico. «Otra selección» arma la
+selección explícita incluso con snap o REL activos; se desarma al cambiar de sesión.
+Mientras se elige no envía nudges ni sondeos de snap. Los toques sucesivos en estas
+sesiones Edit se procesan individualmente, sin encuadrar por doble toque.
 
 En SCALE, `scale_step_unit` indica cómo interpretar `step`: `FACTOR` (predeterminado,
 porcentaje dividido entre 100) o `LENGTH` (mm/cm/m convertidos a unidades Blender,

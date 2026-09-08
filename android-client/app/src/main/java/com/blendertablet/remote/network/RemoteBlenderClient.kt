@@ -284,6 +284,7 @@ interface RemoteBlenderClient {
 
     /** Valor exacto: [values] para mover/escalar, [angleDegrees] para rotar. */
     fun transformValue(values: List<Double>?, angleDegrees: Double?, dimensions: List<Double>? = null)
+    fun transformSelect(u: Double, v: Double, threshold: Double, mode: SelectionOp)
     fun transformFlatten(axis: String)
     fun transformConfirm()
     fun transformCancel()

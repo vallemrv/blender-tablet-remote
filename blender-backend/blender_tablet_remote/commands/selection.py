@@ -172,7 +172,7 @@ def pick(payload: dict) -> dict:
     v = get_float(payload, "v", 0.5)
     origin, direction = camera.ray(u, v, rv3d)
 
-    mode = _selection_op(payload)
+    mode = "PROBE" if payload.get("_probe") else _selection_op(payload)
     active = bpy.context.view_layer.objects.active
     depsgraph = bpy.context.evaluated_depsgraph_get()
 
@@ -180,7 +180,7 @@ def pick(payload: dict) -> dict:
     # evaluada. Con Subdivision no corresponden al BMesh editable. Raycast sobre la
     # jaula original para que cara/vértice/arista tocados sean los que se seleccionan.
     if (active is not None and active.mode == "EDIT" and active.type == "MESH"
-            and any(modifier.show_viewport for modifier in active.modifiers)):
+            and (payload.get("_probe") or any(modifier.show_viewport for modifier in active.modifiers))):
         edit_hit = _edit_cage_raycast(active, origin, direction)
         if edit_hit is None:
             hit, location, face_index, obj = False, None, -1, active
@@ -578,6 +578,10 @@ def _pick_element(obj, world_location, face_index: int, mode: str, payload: dict
     if kind != "face" and distance > threshold:
         return {"hit": False, "reason": "outside_threshold", "distance": distance}
 
+    if mode == "PROBE":
+        return {"hit": True, "object": obj.name, "element": kind, "index": target.index,
+                "distance": distance}
+
     _apply_op(target, mode)
     if target.select:
         bm.select_history.add(target)
@@ -642,6 +646,10 @@ def _pick_through(obj, bm, rv3d, touch: Vector, threshold: float, mode: str, sel
                 elem.select = False
 
     distance, target = chosen
+
+    if mode == "PROBE":
+        return {"hit": True, "object": obj.name, "element": kind, "index": target.index,
+                "distance": distance}
 
     _apply_op(target, mode)
     if target.select:

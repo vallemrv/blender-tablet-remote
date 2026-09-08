@@ -81,6 +81,7 @@ data class ServerFeatures(
     /** `scene.scale`: presets de escala de trabajo. Sin ellos no se ofrece el menú. */
     val sceneScale: Boolean = false,
     val cad: CadCapabilities = CadCapabilities(),
+    val transformStepSelection: Boolean = false,
 )
 
 data class EditSettings(
@@ -537,6 +538,7 @@ data class AppUiState(
     val valueMode: ValueMode = ValueMode.RELATIVE,
     /** REL armado: el lápiz sondea una referencia sin mover la selección. */
     val referencePicking: Boolean = false,
+    val transformSelectionSessionId: String? = null,
     val referenceRole: String = "SOURCE",
     /** Paso de mover, en la unidad en que se escribe. Arranca en el más fino: 1 mm. */
     val moveStepValue: Double = 1.0,

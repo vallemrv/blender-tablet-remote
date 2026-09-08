@@ -60,6 +60,7 @@ IMMEDIATE_FRAME_COMMANDS = {
     "selection.reveal",
     "object.select",
     "transform.begin",
+    "transform.select",
     "transform.confirm",
     "transform.cancel",
     # Colocar el corte con el toque es una acción discreta: su preview no debe

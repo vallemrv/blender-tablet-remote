@@ -88,6 +88,9 @@ fun TransformBar(
     valueMode: ValueMode,
     referencePicking: Boolean,
     referencePickingRole: String,
+    canChangeSelection: Boolean,
+    selectionPicking: Boolean,
+    onChooseSelection: () -> Unit,
     moveStepValue: Double,
     moveStepUnit: TransformStepUnit,
     scaleStepValue: Double,
@@ -128,6 +131,10 @@ fun TransformBar(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (canChangeSelection) {
+                    PillButton(if (selectionPicking) "Toca la selección" else "Otra selección", selected = selectionPicking,
+                        onClick = onChooseSelection)
+                }
                 if (session.proportional) {
                     PillButton("Radio −") { onProportionalRadius(-1.0) }
                     ProportionalRadiusInput(
@@ -362,8 +369,8 @@ private fun ParametricAxisInputs(
                 }
             }
         }
-        var editing by remember(session.active, axis) { mutableStateOf(false) }
-        var text by remember(session.active, axis, if (session.mode == TransformMode.SCALE) scaleUnit else null) {
+        var editing by remember(session.sessionId, axis) { mutableStateOf(false) }
+        var text by remember(session.sessionId, axis, if (session.mode == TransformMode.SCALE) scaleUnit else null) {
             mutableStateOf(format(displayed, 4))
         }
         LaunchedEffect(displayed, editing) {

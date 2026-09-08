@@ -410,7 +410,7 @@ FEATURES = {
             "document_version": 1, "owned_sessions": True, "persistent": True},
     "history": {"version": 1, "repeat_last": True},
     "context": {"version": 1, "events": ["context.changed"], "selection_counts": True},
-    "transform_modal": {"version": 3, "modes": ["OBJECT", "EDIT"],
+    "transform_modal": {"version": 4, "edit_step_selection": True, "modes": ["OBJECT", "EDIT"],
                         "tools": ["MOVE", "ROTATE", "SCALE"],
                         "constraints": ENUMS["constraint"], "orientations": ENUMS["orientation"],
                         "owned_sessions": True, "manual_confirm": True,
