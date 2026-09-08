@@ -879,6 +879,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "snap_type" to "NONE",
         )
         EditTool.SUBDIVIDE -> mapOf("cuts" to 1.0)
+        EditTool.REVOLVE, EditTool.SWEEP -> emptyMap()
         EditTool.LOOP_CUT -> mapOf("cuts" to 1.0, "smoothness" to 0.0, "factor" to 0.0, "snap_type" to "NONE")
         EditTool.BRIDGE_EDGE_LOOPS -> mapOf("twist_offset" to 0.0, "merge_factor" to 0.0, "snap_type" to "NONE")
         EditTool.ALIGN -> emptyMap()

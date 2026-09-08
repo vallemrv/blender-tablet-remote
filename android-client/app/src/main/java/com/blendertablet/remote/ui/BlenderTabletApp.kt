@@ -940,6 +940,8 @@ private fun RailContent(
                 EditTool.BEVEL -> counts.countFor(state.blender.selectionMode) > 0
                 EditTool.INSET -> counts.selectionCounts.faces > 0
                 EditTool.SUBDIVIDE -> counts.selectionCounts.edges > 0
+                EditTool.REVOLVE -> counts.selectionCounts.verts > 0
+                EditTool.SWEEP -> counts.selectionCounts.edges > 0
                 EditTool.LOOP_CUT -> true // sin arista queda armada y el próximo tap la elige
                 EditTool.BRIDGE_EDGE_LOOPS -> counts.selectionCounts.edges >= 6
                 EditTool.KNIFE -> true // no exige selección previa

@@ -211,6 +211,12 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   conserva los tramos. Girar origen reparte el giro entre origen y extremo nuevo.
   Se anuncia como `REPEAT_TAP`: los toques consecutivos nunca encuadran por doble
   toque y navegar con dos dedos no extruye. Sus controles usan la bandeja por esquema.
+- Revolución y Barrido/Marco viven en el catálogo contextual Edit y usan la bandeja
+  por esquema. Revolución gira un perfil con ángulo en grados, segmentos, eje global
+  y centro métrico (inicializado desde el cursor); cierra la vuelta de 360° y une los
+  puntos sobre el eje. Barrido crea un perfil rectangular con ancho/fondo sobre una
+  cadena o loop plano de aristas sin caras, con ingletes compartidos y tapas opcionales.
+  Ambas reconstruyen la preview desde el baseline y confirman con un único undo.
 - Cada tipo de Snap obtiene su símbolo semántico desde `AppIcons.snap`; la marca de
   selección es un indicador aparte y no sustituye el icono del tipo.
 - El sondeo geométrico del backend permanece centralizado en `commands/snap.py`.

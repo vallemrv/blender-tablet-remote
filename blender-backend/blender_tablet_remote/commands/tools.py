@@ -14,8 +14,9 @@ from ..errors import BadPayload, CommandError
 from . import command
 from . import knife as knife_commands
 from . import mesh as mesh_commands
+from . import profile_tools
 
-SUPPORTED = {"EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE", "BISECT", "ALIGN"}
+SUPPORTED = {"EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE", "BISECT", "ALIGN", "REVOLVE", "SWEEP"}
 
 # Herramientas cuya sesión puede quedar ARMED (elegidas pero sin backup ni preview
 # todavía) porque su primer dato lo da un toque/arrastre en el viewport, no la
@@ -120,6 +121,17 @@ class ToolSession:
             # uniforme) o rotación sin aplicar sale torcido o desproporcionado.
             _flatten_transform(obj)
         bm = bmesh.from_edit_mesh(obj.data)
+        if tool == "REVOLVE":
+            params = dict(params)
+            for axis, coordinate in zip("xyz", bpy.context.scene.cursor.location):
+                params.setdefault(f"center_{axis}", coordinate)
+            for spec in profile_tools.REVOLVE_CONTROLS:
+                params.setdefault(spec["id"], spec["default"])
+        if tool == "SWEEP":
+            params = dict(params)
+            unit_scale = max(bpy.context.scene.unit_settings.scale_length, 1e-12)
+            for spec in profile_tools.SWEEP_CONTROLS:
+                params.setdefault(spec["id"], spec["default"] / unit_scale if spec.get("unit") == "length" else spec["default"])
         if tool == "EXTRUDE" and params.get("variant") == "CURSOR":
             self.arm(tool, owner, {"variant": "CURSOR", "rotate_source": params.get("rotate_source", True)})
             return
@@ -215,6 +227,14 @@ class ToolSession:
             self.alignment.preview(self.params)
             return
         self.restore_preview_base()
+        if self.tool in {"REVOLVE", "SWEEP"}:
+            try:
+                handler = profile_tools.revolve if self.tool == "REVOLVE" else profile_tools.sweep
+                self.result = handler(self.obj, self.params)
+            except Exception:
+                self.restore_preview_base()
+                raise
+            return
         if self.tool == "KNIFE":
             # Solo los trazos que el usuario finalizó con «Nuevo corte» se aplican a
             # la preview. Así el trazo activo sigue siendo overlay, pero el siguiente
@@ -298,6 +318,12 @@ class ToolSession:
             state["snap_type"] = str(self.params.get("snap_type", "NONE")).upper()
             state["snap_step"] = float(self.params.get("snap_step", 0.1))
             state["snap_candidate"] = self.snap_candidate
+            if self.tool == "REVOLVE":
+                state.update(input="PARAMETERS", controls=profile_tools.REVOLVE_CONTROLS,
+                             instruction="Gira el perfil alrededor del eje y centro indicados")
+            if self.tool == "SWEEP":
+                state.update(input="PARAMETERS", controls=profile_tools.SWEEP_CONTROLS,
+                             instruction="Marco rectangular sobre un contorno plano de aristas sin caras")
             primary = {"EXTRUDE": "offset", "BEVEL": "offset", "INSET": "thickness"}.get(self.tool)
             if primary and primary in self.result:
                 state["parameters"][primary] = self.result[primary]
@@ -444,6 +470,16 @@ def parameter(payload):
         # Editar la ayuda no desplaza la extrusión que ya se está mostrando.
         # El siguiente gesto parte de ella y usa el nuevo paso.
         tool_session.params["offset"] = tool_session.result["offset"]
+        return tool_session.status()
+    if tool_session.tool in {"REVOLVE", "SWEEP"}:
+        old = dict(tool_session.params)
+        tool_session.params.update(params)
+        try:
+            tool_session.preview()
+        except Exception:
+            tool_session.params = old
+            tool_session.preview()
+            raise
         return tool_session.status()
     tool_session.params.update(params)
     if tool_session.tool == "EXTRUDE" and "offset" in params:
@@ -855,6 +891,8 @@ def loop_pop(payload):
 @command("tool.nudge", mutating=True)
 def nudge(payload):
     tool_session.require(payload.get("_client_id"))
+    if tool_session.tool in {"REVOLVE", "SWEEP"}:
+        raise CommandError("Esta herramienta se edita con sus parámetros", code="wrong_tool")
     if tool_session.alignment is not None:
         raise CommandError("Alinear caras usa dos caras, no arrastre de valores", code="wrong_tool")
     if tool_session.tool == "KNIFE":

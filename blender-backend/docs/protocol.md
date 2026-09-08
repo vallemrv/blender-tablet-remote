@@ -722,6 +722,28 @@ o desconectar conserva los tramos ya confirmados. Undo cierra primero la herrami
 Android interpreta los toques consecutivos individualmente, ignora el arrastre de
 un dedo y reserva dos dedos para navegar. No muestra confirmación por tramo.
 
+`REVOLVE` y `SWEEP` se anuncian en `edit_tools` v11 y en el catálogo contextual,
+sin añadir botones al rail. Ambas usan `tool.begin/parameter/confirm/cancel` y
+publican `input: PARAMETERS`, `instruction` y `controls`; no admiten `tool.nudge`.
+El componente común representa controles `int`, `float`, `enum` y `bool`.
+
+- `REVOLVE` (Revolución): selección de vértices/aristas/caras; `angle` en grados
+  (−360..360, defecto 360), `steps` (1..256, defecto 32; mínimo 3 para una vuelta),
+  `axis` global (`X|Y|Z`, defecto Z), `center_x/y/z` en unidades Blender (inicialmente
+  cursor 3D), `merge` (true) une la costura de una vuelta completa. Los puntos sobre
+  el eje se sueldan. El cálculo conserva el radio físico con escalas no uniformes.
+- `SWEEP` (Barrido / Marco): una cadena o loop conectado, plano, sin ramificaciones
+  ni caras, seleccionado en Vértices o Aristas. Genera un perfil rectangular centrado
+  en el recorrido, con `width` y `depth` positivos en unidades Blender; sus valores
+  iniciales son 0.05 m y 0.1 m convertidos según `scale_length`. `caps` (true) tapa
+  los extremos de cadenas abiertas. Las esquinas comparten ingletes. Sustituye el
+  contorno seleccionado y conserva las aristas externas no seleccionadas. Esta
+  primera variante admite un perfil rectangular, no perfiles arbitrarios.
+
+Los controles de longitud usan la unidad del preset; cambiar cualquier parámetro
+reconstruye desde el baseline. Un error conserva la última preview válida; Cancelar
+restaura el perfil/recorrido inicial y Confirmar registra un único undo.
+
 Knife coloca puntos con `tool.knife_drag` (`phase` `BEGIN|UPDATE|END|CANCEL`, `u`,`v`).
 BEGIN y UPDATE solo mueven el candidato sin mutar la malla; END fija exactamente un
 punto. Dos puntos forman el primer segmento y los siguientes continúan el trazo.

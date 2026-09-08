@@ -5,7 +5,7 @@ PROTOCOL_VERSION = "2.0"
 ENUMS = {
     "mode": ["OBJECT", "EDIT", "CAD"],
     "selection_mode": ["VERTEX", "EDGE", "FACE"],
-    "tool": ["SELECT", "MOVE", "ROTATE", "SCALE", "EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE", "BISECT"],
+    "tool": ["SELECT", "MOVE", "ROTATE", "SCALE", "EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE", "BISECT", "REVOLVE", "SWEEP"],
     "modifier_type": ["SUBSURF", "ARRAY", "BEVEL", "SOLIDIFY", "BOOLEAN", "MIRROR"],
     "subdivision_type": ["CATMULL_CLARK", "SIMPLE"],
     "boolean_operation": ["DIFFERENCE", "UNION", "INTERSECT"],
@@ -396,6 +396,13 @@ EDIT_CATALOG = {
     },
 }
 
+for _mode, _actions in EDIT_CATALOG["groups"].items():
+    _actions.append(_edit_action("REVOLVE", "Revolución", command="tool.begin", execution="SESSION",
+                                 payload={"tool": "REVOLVE"}, selection=_selection(_mode, verts={"min": 1})))
+    if _mode in {"VERTEX", "EDGE"}:
+        _actions.append(_edit_action("SWEEP", "Barrido / Marco", command="tool.begin", execution="SESSION",
+                                     payload={"tool": "SWEEP"}, selection=_selection(_mode, edges={"min": 1})))
+
 FEATURES = {
     "cad": {"version": 1, "planes": ["XY", "XZ", "YZ"],
             "entities": ["LINE", "RECTANGLE", "CIRCLE"], "features": ["EXTRUDE"],
@@ -461,9 +468,9 @@ FEATURES = {
                       "attached": True, "source_target_snap": True,
                       "exclude_moving_objects": True},
     },
-    "edit_tools": {"version": 10,
+    "edit_tools": {"version": 11,
                    "tools": ["EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS",
-                             "KNIFE", "BISECT"],
+                             "KNIFE", "BISECT", "REVOLVE", "SWEEP"],
                    "bevel": {"profile": True, "miter_outer": ENUMS["bevel_miter"]},
                    "loop_cut": {"pick": True, "probe": True, "centered_pick": True, "distance": True,
                                 "falloff": ENUMS["loop_falloff"],

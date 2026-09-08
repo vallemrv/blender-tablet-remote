@@ -19,6 +19,7 @@ import com.blendertablet.remote.model.LengthUnit
 import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.ValueParser
 import java.util.Locale
+import kotlin.math.round
 
 /** Controles descritos por la herramienta: la bandeja comparte unidades y edición. */
 @Composable
@@ -48,7 +49,7 @@ fun SchemaToolParameters(
                         }
                     }
                 }
-            } else if (spec.type == "float") {
+            } else if (spec.type == "float" || spec.type == "int") {
                 val value = (parameters[spec.id] as? Number)?.toDouble() ?: 0.0
                 val length = spec.unit == "length"
                 val metresPerUnit = when (lengthUnit) {
@@ -60,7 +61,8 @@ fun SchemaToolParameters(
                 var draft by remember(value, conversion) { mutableStateOf<String?>(null) }
                 fun set(wire: Double) {
                     if (!wire.isFinite()) return
-                    onParameter(spec.id, wire.coerceIn(spec.min ?: -Double.MAX_VALUE, spec.max ?: Double.MAX_VALUE))
+                    val bounded = wire.coerceIn(spec.min ?: -Double.MAX_VALUE, spec.max ?: Double.MAX_VALUE)
+                    onParameter(spec.id, if (spec.type == "int") round(bounded).toInt() else bounded)
                     draft = null
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {

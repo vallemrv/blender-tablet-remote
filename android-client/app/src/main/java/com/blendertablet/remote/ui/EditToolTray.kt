@@ -87,6 +87,7 @@ private fun specsFor(tool: EditTool): List<ParamSpec> = when (tool) {
         ParamSpec("merge_factor", "Fusión", 0.01, false, TransformMode.SCALE),
     )
     EditTool.ALIGN -> emptyList()
+    EditTool.REVOLVE, EditTool.SWEEP -> emptyList()
     EditTool.KNIFE -> emptyList()
     EditTool.BISECT -> emptyList()
 }

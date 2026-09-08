@@ -112,6 +112,8 @@ object AppIcons {
         "BEVEL" -> Icons.Default.RoundedCorner
         "INSET" -> Icons.Default.CropFree
         "SUBDIVIDE" -> Icons.Default.Grid4x4
+        "REVOLVE" -> Icons.AutoMirrored.Filled.RotateRight
+        "SWEEP" -> Icons.Default.Timeline
         "LOOP_CUT" -> Icons.Default.ViewWeek
         "KNIFE", "BISECT" -> Icons.Default.ContentCut
         "SEPARATE" -> Icons.Default.AccountTree
@@ -129,6 +131,8 @@ object AppIcons {
         EditTool.BEVEL -> editCatalog("BEVEL")
         EditTool.INSET -> editCatalog("INSET")
         EditTool.SUBDIVIDE -> editCatalog("SUBDIVIDE")
+        EditTool.REVOLVE -> editCatalog("REVOLVE")
+        EditTool.SWEEP -> editCatalog("SWEEP")
         EditTool.LOOP_CUT -> editCatalog("LOOP_CUT")
         EditTool.BISECT -> editCatalog("BISECT")
         EditTool.BRIDGE_EDGE_LOOPS -> editCatalog("BRIDGE_EDGE_LOOPS")
