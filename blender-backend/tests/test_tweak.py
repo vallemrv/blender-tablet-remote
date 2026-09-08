@@ -65,6 +65,16 @@ class TweakTests(unittest.TestCase):
         for v,co in zip(self.bm.verts,self.coords):
             self.assertLess((v.co-co).length,1e-6)
 
+    def test_terminal_response_identifies_only_the_finished_tweak(self):
+        with patch.object(modal, 'undo_push'):
+            for phase in ('END', 'CANCEL'):
+                self.begin()
+                identity = modal.session.session_id
+                response = self.gesture(phase)
+                self.assertEqual(response['tweak_finished'], identity)
+                self.assertFalse(response['active'])
+                self.assertFalse(modal.session.active)
+
     def test_tap_selects_without_moving_or_undo(self):
         with patch.object(modal,'undo_push') as undo:
             result=self.begin()

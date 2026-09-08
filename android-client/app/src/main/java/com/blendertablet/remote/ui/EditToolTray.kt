@@ -39,6 +39,8 @@ import com.blendertablet.remote.model.LengthUnit
 import com.blendertablet.remote.model.SelectionMode
 import com.blendertablet.remote.model.ToolSession
 import com.blendertablet.remote.model.SnapType
+import com.blendertablet.remote.model.moveValueForDisplay
+import com.blendertablet.remote.model.transformStepUnit
 import com.blendertablet.remote.model.ValueParser
 import com.blendertablet.remote.model.TransformMode
 import kotlin.math.roundToInt
@@ -188,11 +190,11 @@ fun EditToolTray(
                 } else if (session.tool == EditTool.BRIDGE_EDGE_LOOPS) {
                     BridgeParams(session, unitScaleLength, onParameter)
                 } else if (session.tool == EditTool.EXTRUDE) {
-                    ExtrudeParams(session, unitScaleLength, onParameter)
+                    ExtrudeParams(session, unitScaleLength, lengthUnit, onParameter)
                 } else if (session.tool == EditTool.INSET) {
                     InsetParams(session, unitScaleLength, lengthUnit, onParameter)
                 } else if (session.tool == EditTool.BEVEL) {
-                    BevelParams(session, selectionMode, unitScaleLength, onParameter)
+                    BevelParams(session, selectionMode, unitScaleLength, lengthUnit, onParameter)
                 } else {
                     for (spec in specsFor(session.tool)) {
                         ParamStepper(
@@ -254,23 +256,26 @@ private fun LoopCutParams(
 private fun SnapToggle(
     session: ToolSession,
     onParameter: (String, Any?) -> Unit,
-    stepControl: (@Composable () -> Unit)? = null,
+    unitScaleLength: Double = 1.0,
+    lengthUnit: LengthUnit = LengthUnit.METERS,
 ) {
     val options = session.availableSnapTypes
     if (options.isEmpty()) return
     val selected = session.snapType
     SnapControl(options, selected, onSelect = { onParameter("snap_type", it.name) })
-    if (selected == SnapType.INCREMENT || selected == SnapType.GRID) {
-        if (stepControl != null) {
-            stepControl()
-            return
+    if (session.tool == EditTool.EXTRUDE || selected == SnapType.INCREMENT || selected == SnapType.GRID) {
+        if (session.tool in setOf(EditTool.EXTRUDE, EditTool.INSET, EditTool.BEVEL)) {
+            DistanceSnapStepInput(
+                session.snapStep, unitScaleLength, lengthUnit,
+                onNudge = if (session.tool == EditTool.EXTRUDE) { delta ->
+                    onParameter("offset", (session.double("offset") ?: 0.0) + delta)
+                } else null,
+            ) {
+                onParameter("snap_step", it)
+            }
+        } else {
+            SnapStepControl(session.snapStep, FactorSnapSteps) { onParameter("snap_step", it) }
         }
-        val distance = session.tool in setOf(EditTool.EXTRUDE, EditTool.BEVEL)
-        SnapStepControl(
-            selected = session.snapStep,
-            presets = if (distance) DistanceSnapSteps else FactorSnapSteps,
-            onSelect = { onParameter("snap_step", it) },
-        )
     }
 }
 
@@ -280,18 +285,20 @@ private fun SnapToggle(
  * eje: el backend lo rechaza y aquí se oculta.
  */
 @Composable
-private fun ExtrudeParams(session: ToolSession, unitScaleLength: Double, onParameter: (String, Any?) -> Unit) {
+private fun ExtrudeParams(session: ToolSession, unitScaleLength: Double, lengthUnit: LengthUnit, onParameter: (String, Any?) -> Unit) {
     for (spec in specsFor(EditTool.EXTRUDE)) {
         ParamStepper(
             spec = spec,
             value = session.double(spec.key) ?: defaultValue(spec),
             unitScaleLength = unitScaleLength,
+            showSteppers = false,
+            lengthUnit = lengthUnit,
             onCommit = { onParameter(spec.key, it) },
         )
     }
     val variant = (session.parameters["variant"] as? String) ?: "REGION"
     if (variant != "REGION") {
-        SnapToggle(session, onParameter)
+        SnapToggle(session, onParameter, unitScaleLength, lengthUnit)
         return
     }
     val constraint = (session.parameters["constraint"] as? String) ?: "FREE"
@@ -305,7 +312,7 @@ private fun ExtrudeParams(session: ToolSession, unitScaleLength: Double, onParam
             PillButton(label, selected = orientation == wire) { onParameter("orientation", wire) }
         }
     }
-    SnapToggle(session, onParameter)
+    SnapToggle(session, onParameter, unitScaleLength, lengthUnit)
 }
 
 /** Parámetros de Inset: grosor, profundidad y snap de incremento real (F2/F5). */
@@ -328,11 +335,7 @@ private fun InsetParams(
     PillButton("Costura fija", selected = !boundary) {
         onParameter("boundary", toggledInsetBoundary(boundary))
     }
-    SnapToggle(session, onParameter) {
-        DistanceSnapStepInput(session.snapStep, unitScaleLength, lengthUnit) {
-            onParameter("snap_step", it)
-        }
-    }
+    SnapToggle(session, onParameter, unitScaleLength, lengthUnit)
 }
 
 internal fun toggledInsetBoundary(boundary: Boolean): Boolean = !boundary
@@ -350,6 +353,7 @@ private fun BevelParams(
     session: ToolSession,
     selectionMode: SelectionMode,
     unitScaleLength: Double,
+    lengthUnit: LengthUnit,
     onParameter: (String, Any?) -> Unit,
 ) {
     for (spec in specsFor(EditTool.BEVEL)) {
@@ -366,7 +370,7 @@ private fun BevelParams(
         val miter = session.miterOuter()
         PillButton("Final: ${miter.label}") { onParameter("miter_outer", miter.next().wire) }
     }
-    SnapToggle(session, onParameter)
+    SnapToggle(session, onParameter, unitScaleLength, lengthUnit)
 }
 
 /** Parámetros de Bridge Edge Loops: desfase, fusión, su toggle de fundir y snap del factor. */
@@ -429,19 +433,14 @@ fun KnifeTray(
                 )
                 PillButton("Nuevo corte", enabled = session.points.size >= 2, onClick = onKnifeNewStroke)
                 PillButton("Cerrar", selected = session.closed, onClick = onKnifeClose)
-                PillButton("Snap", selected = session.flag("snap", true)) {
-                    onKnifeSnap(!session.flag("snap", true))
-                }
-                val snapModes = listOf("AUTO", "VERTEX", "EDGE_CENTER", "EDGE")
-                val snapMode = (session.parameters["snap_mode"] as? String ?: "AUTO").uppercase()
-                val snapLabel = when (snapMode) {
-                    "VERTEX" -> "Vértice"
-                    "EDGE_CENTER" -> "Medio"
-                    "EDGE" -> "Arista"
-                    else -> "Auto"
-                }
-                PillButton("Destino: $snapLabel", enabled = session.flag("snap", true)) {
-                    onKnifeSnapMode(snapModes[(snapModes.indexOf(snapMode).coerceAtLeast(0) + 1) % snapModes.size])
+                KnifeSnapControl(
+                    session.flag("snap", true),
+                    (session.parameters["snap_mode"] as? String ?: "AUTO").uppercase(),
+                ) { mode ->
+                    if (mode == "NONE") onKnifeSnap(false) else {
+                        onKnifeSnapMode(mode)
+                        if (!session.flag("snap", true)) onKnifeSnap(true)
+                    }
                 }
             }
             Spacer(Modifier.width(10.dp))
@@ -575,14 +574,22 @@ private fun ParamStepper(
     spec: ParamSpec,
     value: Double,
     unitScaleLength: Double,
+    showSteppers: Boolean = true,
+    lengthUnit: LengthUnit? = null,
     onCommit: (Double) -> Unit,
 ) {
     // null muestra el valor remoto; "" es un borrado intencional durante la edición.
     var text by remember(spec.key) { mutableStateOf<String?>(null) }
-    val formatted = format(value, spec.isInt)
+    val formatted = if (lengthUnit != null) {
+        val display = moveValueForDisplay(value, lengthUnit.transformStepUnit(), unitScaleLength)
+        "${display.toBigDecimal().stripTrailingZeros().toPlainString()} ${lengthUnit.short}"
+    } else format(value, spec.isInt)
 
     fun commit() {
-        val parsed = ValueParser.parse(text ?: return, spec.mode) ?: return
+        val input = text ?: return
+        val withUnit = if (lengthUnit != null && input.trim().replace(',', '.').toDoubleOrNull() != null)
+            "$input ${lengthUnit.short}" else input
+        val parsed = ValueParser.parse(withUnit, spec.mode) ?: return
         val wire = if (spec.mode == TransformMode.MOVE) parsed / unitScaleLength else parsed
         onCommit(clampParam(wire, spec.isInt, spec.min, spec.max))
         text = null
@@ -590,7 +597,7 @@ private fun ParamStepper(
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(spec.label, color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.padding(end = 4.dp))
-        StepperButton("−") {
+        if (showSteppers) StepperButton("−") {
             onCommit(stepParam(value, spec.step, -1, spec.isInt, spec.min, spec.max))
         }
         CompactNumericField(
@@ -599,7 +606,7 @@ private fun ParamStepper(
             onDone = { commit() },
             modifier = Modifier.width(64.dp),
         )
-        StepperButton("+") {
+        if (showSteppers) StepperButton("+") {
             onCommit(stepParam(value, spec.step, 1, spec.isInt, spec.min, spec.max))
         }
     }

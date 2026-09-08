@@ -616,7 +616,7 @@ class WebSocketRemoteBlenderClient(
         // invoque accidentalmente este método en el futuro.
         if (!_toolSession.value.acceptsViewportNudge) return
         val key = _toolSession.value.primaryKey
-        val limit = when (key) {
+        val limit = if (_toolSession.value.distanceIncrement) _toolSession.value.snapStep * 2.0 else when (key) {
             "cuts" -> 1.0
             // Loop Cut necesita conservar una porción útil del arrastre mientras
             // Blender reconstruye el preview. 0.02 descartaba casi todo el gesto
@@ -871,6 +871,13 @@ class WebSocketRemoteBlenderClient(
                     }
                     // Los modales devuelven el estado de la sesión; confirmar y
                     // cancelar la cierran y sí necesitan refrescar la escena.
+                    command == "selection.tweak" -> {
+                        val finished = result?.optString("tweak_finished")?.takeIf { it.isNotBlank() }
+                        if (finished != null && finished == _transformSession.value.sessionId) {
+                            _transformSession.value = TransformSession()
+                        }
+                        if (result?.has("mode") == true && result.has("objects")) updateState(result)
+                    }
                     command in MODAL_COMMANDS -> {
                         acceptTransformSession(
                             StateParser.session(result), allowReplace = command == "transform.begin",

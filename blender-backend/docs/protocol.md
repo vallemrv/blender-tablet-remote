@@ -314,7 +314,10 @@ toque sin desplazamiento conserva la selección pero no crea un undo de movimien
 Android distingue toque de arrastre mediante el umbral del dedo/stylus y confirma
 la última muestra estable, ignorando el salto de posición de ACTION_UP. Pulsar otra
 herramienta o repetir el botón Tweak permite salir; cancelar un gesto ya cerrado no
-cancela la nueva transformación. En FACE el movimiento siempre es FREE.
+cancela la nueva transformación. La respuesta terminal incluye `active: false` y
+`tweak_finished` con el ID de la sesión MOVE que acaba de cerrar; Android solo borra
+su copia si coincide ese ID, sin invalidar una transformación posterior. En FACE el
+movimiento siempre es FREE.
 
 El BEGIN configura el gesto entero y esos ajustes se conservan hasta END/CANCEL:
 
@@ -680,6 +683,17 @@ La feature `edit_tools.loop_cut` anuncia `pick`, `probe`, `falloff`, `even`, `fl
 `clamp`; un cliente debe usar el flujo de colocación por toque solo si `pick` está
 anunciado.
 
+Extruir, Inset y Bisel comparten el paso métrico editable de snap. Android convierte
+mm/cm/m según `scale_length` y, con Incremento/Rejilla, traduce el 4 % de arrastre
+vertical a un paso. El backend conserva el acumulador continuo pero publica en
+`parameters` el valor de la preview redondeada. `tool.snap_candidate` actualiza la
+preview de Extrude REGION también con `lock: false`; respeta su eje y convierte el
+destino de mundo al espacio local del objeto antes de extruir. Extruir muestra Paso
+con botones −/+ también sin snap; cada pulsación modifica `offset` en esa cantidad.
+La edición de `offset` descarta el candidato geométrico anterior para aplicar el valor
+paramétrico. Su campo Distancia muestra unidades y acepta cantidades con o sin sufijo
+(en este último caso usa la unidad del preset).
+
 Knife coloca puntos con `tool.knife_drag` (`phase` `BEGIN|UPDATE|END|CANCEL`, `u`,`v`).
 BEGIN y UPDATE solo mueven el candidato sin mutar la malla; END fija exactamente un
 punto. Dos puntos forman el primer segmento y los siguientes continúan el trazo.
@@ -691,13 +705,20 @@ anclas tentativas como cualquier mutación parcial del BMesh antes de responder 
 La cara visible es un destino exacto y el snap
 puede resolver `VERTEX`, `EDGE_CENTER` o `EDGE` (punto más cercano de la arista) dentro
 de umbrales táctiles deliberadamente pegajosos (0,080/0,070/0,042 del viewport,
-respectivamente). La prioridad es categórica `VERTEX > EDGE_CENTER > EDGE`: una arista
-no puede robar el snap a su vértice o centro por quedar matemáticamente a distancia cero.
+respectivamente, en fracciones del ancho y con corrección de aspecto). Los puntos
+discretos compiten por distancia con la política común de histéresis; una arista no
+puede robar el snap a un vértice o centro adquirible por tener distancia cero.
 En `AUTO`, las zonas prioritarias de vértice y centro se reducen a 0,035 y 0,028 para
 dejar accesible el cuerpo de la arista. Los radios grandes 0,080/0,070 se conservan al
 forzar `VERTEX` o `EDGE_CENTER`, donde la intención ya no es ambigua.
-La búsqueda se limita a la cara visible alcanzada por el raycast. El cliente confirma la
-última muestra estable anterior a ACTION_UP,
+La búsqueda usa el BMesh vivo, incluidos los vértices creados por trazos terminados,
+y filtra oclusión antes de competir; admite también la silueta sin impacto del rayo
+central. `tool.parameter` acepta `snap` y `snap_mode` (`AUTO|VERTEX|EDGE_CENTER|EDGE`).
+Cada segmento debe recorrer la superficie: para cambiar de plano hay que marcar el
+borde. Un segmento que cruza el volumen se rechaza sin modificar las caras ni los
+trazos anteriores. Las cadenas interiores dividen solo la cara recorrida en n-gons,
+también si es cóncava; no se integran puntos mediante abanicos de triángulos.
+El cliente confirma la última muestra estable anterior a ACTION_UP,
 evitando el salto que aparece al levantar el lápiz. `tool.status` publica
 `projected_points` y `snap_candidate`
 reproyectados con la cámara actual. La feature `edit_tools.knife` anuncia

@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Adjust
 import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.ContentCopy
@@ -69,6 +70,8 @@ object AppIcons {
     val Fallback: ImageVector = Icons.Default.Tune
     val Duplicate: ImageVector = Icons.Default.ContentCopy
     val DuplicateLinked: ImageVector = Icons.Default.AccountTree
+    val Tweak: ImageVector = Icons.Default.TouchApp
+    val SnapAuto: ImageVector = Icons.Default.AutoFixHigh
     val Move: ImageVector = Icons.Default.OpenWith
     val Rotate: ImageVector = Icons.AutoMirrored.Filled.RotateRight
     val Scale: ImageVector = Icons.Default.AspectRatio

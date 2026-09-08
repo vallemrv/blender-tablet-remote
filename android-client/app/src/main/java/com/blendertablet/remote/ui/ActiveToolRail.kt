@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -32,11 +31,7 @@ import com.blendertablet.remote.MainViewModel
 import com.blendertablet.remote.model.EditTool
 import com.blendertablet.remote.model.EditToolbarFamily
 import com.blendertablet.remote.model.EditToolbarVariant
-import com.blendertablet.remote.model.SnapType
 import com.blendertablet.remote.model.ToolSession
-import com.blendertablet.remote.model.TransformMode
-import com.blendertablet.remote.model.TweakMotion
-import com.blendertablet.remote.model.TweakSettings
 
 /**
  * Barra izquierda de tools activas de Edit Mode (`edit_toolbar`, F1).
@@ -114,137 +109,12 @@ private fun FamilyToolButton(
 internal fun hasLongClickMenu(family: EditToolbarFamily): Boolean =
     family.variants.count { it.enabled } > 1
 
-/**
- * Destinos de snap que se ofrecen en Tweak, en orden estable.
- *
- * Se cruzan los que anuncia el servidor con los que esta interfaz considera exactos
- * (misma decisión que la bandeja de transformación: nada de arista o cara arbitraria,
- * que dan un punto impreciso). Con SLIDE solo quedan los escalares: deslizar por una
- * arista ya decide el destino.
- */
-/**
- * Botón de Tweak: tap lo arma, pulsación larga elige cómo se mueve y a qué se pega.
- *
- * Los ajustes viven aquí y no en una bandeja inferior porque Tweak es un gesto de un
- * solo arrastre: cuando la bandeja aparecería el movimiento ya habría terminado. Por
- * eso tampoco muestra bandeja durante la sesión (ver `bottomTrayVisible`).
- */
-@OptIn(ExperimentalFoundationApi::class)
+/** Tweak es una única herramienta; sus ayudas viven en la bandeja inferior. */
 @Composable
-fun TweakToolButton(
-    settings: TweakSettings,
-    motions: List<TweakMotion>,
-    snapTypes: List<SnapType>,
-    selected: Boolean,
-    enabled: Boolean,
-    vm: MainViewModel,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val snapOptions = tweakSnapOptions(snapTypes, settings.motion)
-    val snap = settings.effectiveSnapType
-    val configurable = motions.size > 1 || snapOptions.size > 1
-    val description = "Tweak · ${settings.motion.label}" +
-        if (snap != SnapType.NONE) " · ${snap.label}" else ""
-
-    Box {
-        Box(
-            Modifier
-                .size(Metrics.Touch)
-                .clip(RoundedCornerShape(10.dp))
-                .background(if (selected) Ink.Accent.copy(alpha = .22f) else Color.Transparent)
-                .combinedClickable(
-                    enabled = enabled,
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = { if (selected) vm.selectTool() else vm.activateTweak() },
-                    onLongClick = { if (configurable) expanded = true },
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                Icons.Default.TouchApp, description,
-                tint = if (!enabled) Ink.Faint else if (selected) Ink.Accent else Ink.OnPanel,
-            )
-            // El badge dice el movimiento con su inicial y avisa del snap con el color:
-            // dos ajustes en una esquina de 14 dp no caben como texto.
-            if (configurable) {
-                VariantBadge(
-                    if (settings.motion == TweakMotion.SLIDE) "A" else "L",
-                    selected = snap != SnapType.NONE,
-                )
-            }
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            MenuHeader("Movimiento")
-            for (motion in motions) {
-                DropdownMenuItem(
-                    text = { Text(motion.label) },
-                    leadingIcon = {
-                        if (motion == settings.motion) Icon(Icons.Default.Check, null, tint = Ink.Accent)
-                    },
-                    onClick = {
-                        expanded = false
-                        vm.setTweakMotion(motion)
-                    },
-                )
-            }
-            if (settings.motion == TweakMotion.SLIDE) {
-                DropdownMenuItem(
-                    text = { Text("Sin salir de la arista") },
-                    leadingIcon = {
-                        if (settings.clamp) Icon(Icons.Default.Check, null, tint = Ink.Accent)
-                    },
-                    onClick = {
-                        expanded = false
-                        vm.toggleTweakClamp()
-                    },
-                )
-            }
-            if (snapOptions.size > 1) {
-                MenuHeader("Snap")
-                for (option in snapOptions) {
-                    DropdownMenuItem(
-                        text = { Text(option.label) },
-                        leadingIcon = {
-                            if (option == snap) Icon(Icons.Default.Check, null, tint = Ink.Accent)
-                        },
-                        onClick = {
-                            expanded = false
-                            vm.setTweakSnapType(option)
-                        },
-                    )
-                }
-                if (snap == SnapType.INCREMENT) {
-                    MenuHeader("Paso")
-                    for ((label, step) in tweakSnapSteps(settings.motion)) {
-                        DropdownMenuItem(
-                            text = { Text(label) },
-                            leadingIcon = {
-                                if (kotlin.math.abs(settings.snapStep - step) < 1e-9) {
-                                    Icon(Icons.Default.Check, null, tint = Ink.Accent)
-                                }
-                            },
-                            onClick = {
-                                expanded = false
-                                vm.setTweakSnapStep(step)
-                            },
-                        )
-                    }
-                }
-            }
-        }
+fun TweakToolButton(selected: Boolean, enabled: Boolean, vm: MainViewModel) {
+    IconAction(AppIcons.Tweak, "Tweak", selected = selected, enabled = enabled) {
+        if (selected) vm.selectTool() else vm.activateTweak()
     }
-}
-
-@Composable
-private fun MenuHeader(label: String) {
-    Text(
-        label.uppercase(),
-        color = Ink.Faint,
-        fontSize = 10.sp,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 2.dp),
-    )
 }
 
 internal fun displayedVariantOf(

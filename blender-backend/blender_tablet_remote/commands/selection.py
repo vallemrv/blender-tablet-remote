@@ -384,12 +384,14 @@ def tweak(payload: dict) -> dict:
         moved = modal.session.slide_rails is not None
     else:
         moved = modal.session.values.length > 1e-12
+    finished_session_id = _tweak_session_id
     if phase == "CANCEL" or not moved:
         result = modal.cancel(payload)
     else:
         result = modal.confirm(payload)
     _reset_tweak()
-    return dict(result, tweak=True, moved=moved and phase == "END")
+    return dict(result, tweak=True, tweak_finished=finished_session_id,
+                moved=moved and phase == "END")
 
 
 @command("selection.shortest_path", mutating=True)

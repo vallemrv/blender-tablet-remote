@@ -111,7 +111,7 @@ import com.blendertablet.remote.model.SnapAction
 import com.blendertablet.remote.model.ToolSession
 import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.TransformSession
-import com.blendertablet.remote.model.TweakMotion
+import com.blendertablet.remote.model.isTransformToolSelected
 import com.blendertablet.remote.model.bottomTrayVisible
 
 /**
@@ -387,6 +387,22 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 ToolRail(
                     modifier = Modifier.align(Alignment.CenterStart).padding(start = Metrics.EdgeMargin),
                 ) { RailContent(state, session, toolSession, vm) }
+
+                if (state.activeTool == ActiveTool.TWEAK && state.blender.mode == BlenderMode.EDIT) {
+                    TweakHelpersTray(
+                        settings = state.tweak,
+                        selectionMode = state.blender.selectionMode,
+                        motions = state.blender.features.tweakMotions,
+                        snapTypes = state.blender.features.tweakSnapTypes,
+                        unitScaleLength = state.blender.unitScaleLength,
+                        lengthUnit = state.blender.sceneScale.lengthUnit,
+                        onSlide = vm::setTweakMotion,
+                        onSnapType = vm::setTweakSnapType,
+                        onSnapStep = vm::setTweakSnapStep,
+                        onClamp = vm::toggleTweakClamp,
+                        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(Metrics.EdgeMargin),
+                    )
+                }
 
                 if (state.activeTool != ActiveTool.TWEAK) TransformBar(
                     session = session,
@@ -868,11 +884,6 @@ private fun RailContent(
     )
     if (inEdit && state.blender.features.selectionTweak) {
         TweakToolButton(
-            settings = if (state.blender.selectionMode == SelectionMode.FACE)
-                state.tweak.copy(motion = TweakMotion.FREE) else state.tweak,
-            motions = if (state.blender.selectionMode == SelectionMode.FACE)
-                listOf(TweakMotion.FREE) else state.blender.features.tweakMotions,
-            snapTypes = state.blender.features.tweakSnapTypes,
             selected = state.activeTool == ActiveTool.TWEAK,
             enabled = true,
             vm = vm,
@@ -880,19 +891,19 @@ private fun RailContent(
     }
     IconAction(
         Icons.Default.OpenWith, "Mover",
-        selected = session.active && session.mode == TransformMode.MOVE,
+        selected = isTransformToolSelected(state.activeTool, session, TransformMode.MOVE),
         enabled = editable,
         onClick = { vm.transformBegin(TransformMode.MOVE) },
     )
     IconAction(
         Icons.AutoMirrored.Filled.RotateRight, "Rotar",
-        selected = session.active && session.mode == TransformMode.ROTATE,
+        selected = isTransformToolSelected(state.activeTool, session, TransformMode.ROTATE),
         enabled = editable,
         onClick = { vm.transformBegin(TransformMode.ROTATE) },
     )
     IconAction(
         Icons.Default.AspectRatio, "Escalar",
-        selected = session.active && session.mode == TransformMode.SCALE,
+        selected = isTransformToolSelected(state.activeTool, session, TransformMode.SCALE),
         enabled = editable,
         onClick = { vm.transformBegin(TransformMode.SCALE) },
     )

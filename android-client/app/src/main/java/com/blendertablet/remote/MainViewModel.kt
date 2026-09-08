@@ -39,6 +39,7 @@ import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.TransformSession
 import com.blendertablet.remote.model.TransformStepUnit
 import com.blendertablet.remote.model.TweakMotion
+import com.blendertablet.remote.model.TweakSettings
 import com.blendertablet.remote.model.ValueMode
 import com.blendertablet.remote.model.scaleStepForWire
 import com.blendertablet.remote.model.scaleStepWireUnit
@@ -389,9 +390,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         client.setSelectionMode(mode)
     }
 
+    private fun closeTransformForToolChange() {
+        val wasTweak = local.value.activeTool == ActiveTool.TWEAK
+        val cancelled = cancelTweakGesture()
+        // END ya enviado puede seguir figurando como MOVE hasta recibir su respuesta.
+        // El cierre de Tweak es su propio END/CANCEL, identificado por sesión.
+        if (!wasTweak && !cancelled && client.transformSession.value.active) client.transformCancel()
+    }
+
     private fun closeSessions() {
-        val cancellingTweak = cancelTweakGesture()
-        if (!cancellingTweak && client.transformSession.value.active) client.transformCancel()
+        closeTransformForToolChange()
         if (client.toolSession.value.active) client.toolCancel()
         loopCutArmed = false
         local.update { it.copy(loopCutAwaitingTap = false) }
@@ -713,7 +721,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Herramientas paramétricas de Edit Mode. */
     fun beginEditTool(tool: EditTool) {
-        if (client.transformSession.value.active) client.transformCancel()
+        closeTransformForToolChange()
         local.update { it.copy(activeTool = ActiveTool.valueOf(tool.name), loopCutAwaitingTap = false) }
         if (tool == EditTool.LOOP_CUT && client.state.value.context.selectionCounts.edges == 0) {
             if (client.state.value.features.loopCutPick) {
@@ -803,7 +811,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // Las sesiones existentes usan exactamente tool.begin {tool, parameters}.
         val tool = EditTool.fromWire(action.id)
         if (action.execution == "SESSION" && action.command == "tool.begin" && tool != null) {
-            if (client.transformSession.value.active) client.transformCancel()
+            closeTransformForToolChange()
             local.update { it.copy(activeTool = ActiveTool.valueOf(tool.name), loopCutAwaitingTap = false) }
             val params = action.parameters.associate { it.id to it.default }.toMutableMap()
             if (variant != null) params["variant"] = variant
@@ -913,12 +921,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         when (tool) {
             EditTool.LOOP_CUT, EditTool.KNIFE -> beginEditTool(tool)
             EditTool.BISECT -> {
-                if (client.transformSession.value.active) client.transformCancel()
+                closeTransformForToolChange()
                 local.update { it.copy(activeTool = ActiveTool.BISECT, loopCutAwaitingTap = false) }
                 client.toolBegin(tool, toolDefaultParameters(tool))
             }
             else -> {
-                if (client.transformSession.value.active) client.transformCancel()
+                closeTransformForToolChange()
                 local.update { it.copy(activeTool = ActiveTool.valueOf(tool.name), loopCutAwaitingTap = false) }
                 val params = (family.parameters + variant.parameters)
                     .associate { it.id to it.default }.toMutableMap<String, Any?>()
@@ -999,8 +1007,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun activateTweak() {
-        val cancellingTweak = cancelTweakGesture()
-        if (!cancellingTweak && client.transformSession.value.active) client.transformCancel()
+        closeTransformForToolChange()
         if (client.toolSession.value.active || client.toolSession.value.armed) client.toolCancel()
         loopCutArmed = false
         local.update { it.copy(activeTool = ActiveTool.TWEAK, loopCutAwaitingTap = false,
@@ -1035,24 +1042,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Modo de movimiento del Tweak; elegirlo también deja el Tweak como herramienta. */
-    fun setTweakMotion(motion: TweakMotion) {
-        activateTweak()
-        local.update { it.copy(tweak = it.tweak.copy(motion = motion)) }
+    /** Las ayudas cambian el siguiente gesto; nunca activan ni reabren la herramienta. */
+    private fun updateTweakSettings(change: (TweakSettings) -> TweakSettings) {
+        if (local.value.activeTool != ActiveTool.TWEAK) return
+        cancelTweakGesture()
+        local.update { it.copy(tweak = change(it.tweak)) }
     }
 
-    fun setTweakSnapType(snapType: SnapType) {
-        activateTweak()
-        local.update { it.copy(tweak = it.tweak.copy(snapType = snapType)) }
-    }
+    fun setTweakMotion(motion: TweakMotion) = updateTweakSettings { it.copy(motion = motion) }
+
+    fun setTweakSnapType(snapType: SnapType) = updateTweakSettings { it.copy(snapType = snapType) }
 
     fun setTweakSnapStep(step: Double) {
-        local.update { it.copy(tweak = it.tweak.copy(snapStep = step)) }
+        if (!step.isFinite() || step <= 0.0) return
+        updateTweakSettings { it.copy(snapStep = step) }
     }
 
-    fun toggleTweakClamp() {
-        local.update { it.copy(tweak = it.tweak.copy(clamp = !it.tweak.clamp)) }
-    }
+    fun toggleTweakClamp() = updateTweakSettings { it.copy(clamp = !it.clamp) }
 
     /**
      * El snap elegido, recortado a lo que admite el modo anunciado.
@@ -1238,8 +1244,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (tool.acceptsViewportNudge && !tool.snapType.geometric &&
                 (phase == GesturePhase.UPDATE || phase == GesturePhase.END)
             ) {
-                val sensitivity = if (tool.tool == EditTool.LOOP_CUT) 2.0 else 1.0
-                client.toolNudge(-dy.toDouble() * sensitivity)
+                client.toolNudge(tool.viewportNudge(dy.toDouble()))
             }
             // Knife se maneja por taps (tool.knife_point), no por arrastre. El
             // arrastre de un dedo queda deliberadamente inerte durante la sesión;

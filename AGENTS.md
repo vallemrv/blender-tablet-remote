@@ -74,7 +74,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - El explorador identifica cada fila por nombre y ruta: varios enlaces simbólicos
   pueden compartir un destino canónico sin ser la misma entrada de la lista.
 - Knife acumula puntos interiores y divide una cara una sola vez en dos n-gons. No se
-  sustituye por triangulación punto a punto.
+  sustituye por triangulación punto a punto. Sondea el BMesh vivo y admite n-gons
+  cóncavos de cortes previos; cada segmento recorre la superficie y nunca el volumen.
+- El cierre de Tweak identifica `tweak_finished`; Android retira únicamente esa
+  sesión MOVE interna y conserva cualquier transformación posterior.
 - El snap táctil filtra primero por geometría visible y después clasifica el candidato.
 - Mover sin snap sigue al dedo continuamente; con Incremento avanza en saltos táctiles
   perceptibles y no reutiliza la misma sensibilidad del movimiento libre.
@@ -119,6 +122,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   catálogo completo.
 - El rail de tools permanece siempre abierto, sin botón de cierre ni estado plegado.
   Mover/Rotar/Escalar viven ahí; en Edit añade Tweak.
+- Tweak marca únicamente su botón, aunque use una sesión MOVE interna. Mientras está
+  encendido muestra ayudas en la bandeja inferior: GG y Snap activables, con paso
+  editable para Incremento. GG solo admite vértices/aristas; en caras sigue libre.
+  Las ayudas modifican el gesto sin activar otra herramienta ni reabrir Tweak;
+  no hay un menú alternativo de ajustes por pulsación larga en su botón.
 - Duplicar vive en el radial. En Object conserva normal/enlazado y en Edit duplica la
   selección efectiva.
 - En Object, el radial agrupa Alinear caras y las acciones de origen bajo Colocar,
@@ -174,8 +182,12 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   o la dimensión mayor de los ejes activos. Los valores escritos y Reset son exactos.
 - El selector y los pasos de snap viven en `ui/SnapControl.kt`; las bandejas declaran
   opciones y reciben valores, pero no vuelven a implementar su interfaz.
-- En Inset, el incremento ofrece una cantidad editable y un selector mm/cm/m;
-  comienza en la unidad del preset y convierte el paso según `scale_length`.
+- Extruir, Inset y Bisel comparten incremento editable y selector mm/cm/m; comienzan
+  en la unidad del preset y convierten el paso según `scale_length`. Su arrastre con
+  Incremento/Rejilla recorre un paso por el 4 % de altura, conserva fracciones y
+  publica el valor visual redondeado. Extruir muestra siempre Paso con −/+ que restan
+  o suman esa distancia a su valor editable; una edición numérica sustituye al destino
+  geométrico sondeado. Knife usa el mismo desplegable de Snap.
 - Cada tipo de Snap obtiene su símbolo semántico desde `AppIcons.snap`; la marca de
   selección es un indicador aparte y no sustituye el icono del tipo.
 - El sondeo geométrico del backend permanece centralizado en `commands/snap.py`.

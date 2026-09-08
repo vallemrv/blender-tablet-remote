@@ -8,7 +8,7 @@ import bmesh
 import bpy
 from mathutils import Vector
 
-from ..bpy_utils import active_object, find_view3d, undo_push
+from ..bpy_utils import active_object, find_view3d, undo_push, view3d_override
 from ..camera import camera
 from ..errors import BadPayload, CommandError
 from . import command
@@ -23,20 +23,32 @@ SUPPORTED = {"EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_
 VIEWPORT_ARMED = {"LOOP_CUT", "BISECT"}
 
 SNAP_THRESHOLD = 0.045
-KNIFE_VERTEX_THRESHOLD = 0.080
-KNIFE_EDGE_CENTER_THRESHOLD = 0.070
-KNIFE_EDGE_THRESHOLD = 0.042
-# AUTO necesita zonas de prioridad menores: los radios grandes se conservan cuando
-# el usuario fuerza Vértice o Medio, pero no deben cubrir una arista completa.
-KNIFE_AUTO_VERTEX_THRESHOLD = 0.035
-KNIFE_AUTO_EDGE_CENTER_THRESHOLD = 0.028
 
 
-def _knife_snap_thresholds(snap_mode):
-    """Radios (vértice, centro) equilibrados en AUTO y pegajosos al forzar."""
-    if str(snap_mode).upper() == "AUTO":
-        return KNIFE_AUTO_VERTEX_THRESHOLD, KNIFE_AUTO_EDGE_CENTER_THRESHOLD
-    return KNIFE_VERTEX_THRESHOLD, KNIFE_EDGE_CENTER_THRESHOLD
+def _has_transform_to_bake(obj) -> bool:
+    eps = 1e-6
+    return (
+        any(abs(v) > eps for v in obj.location)
+        or any(abs(v) > eps for v in obj.rotation_euler)
+        or any(abs(v - 1.0) > eps for v in obj.scale)
+        or any(abs(v) > eps for v in obj.delta_location)
+        or any(abs(v) > eps for v in obj.delta_rotation_euler)
+        or any(abs(v - 1.0) > eps for v in obj.delta_scale)
+    )
+
+
+def _flatten_transform(obj) -> None:
+    """Hornea loc/rot/escala, igual que Ctrl+A. Requiere salir de Edit Mode."""
+    if not _has_transform_to_bake(obj):
+        return
+    from .transform import _bake_transform
+
+    with view3d_override():
+        bpy.ops.object.mode_set(mode="OBJECT")
+    _bake_transform(obj, True, True, True)
+    undo_push("Remote apply transform")
+    with view3d_override():
+        bpy.ops.object.mode_set(mode="EDIT")
 
 
 class ToolSession:
@@ -103,6 +115,10 @@ class ToolSession:
             self.close()
         self.disarm()
         self.obj = obj
+        if tool == "INSET":
+            # El grosor de Inset vive en espacio local: con escala (sobre todo no
+            # uniforme) o rotación sin aplicar sale torcido o desproporcionado.
+            _flatten_transform(obj)
         bm = bmesh.from_edit_mesh(obj.data)
         if tool == "LOOP_CUT" and "edge" not in params:
             seed = next((edge for edge in bm.edges if edge.select and not edge.hide), None)
@@ -204,6 +220,11 @@ class ToolSession:
             try:
                 results = [knife_commands.cut_polyline(bm, points, closed)
                            for points, closed in zip(self.knife_strokes, self.knife_stroke_closed)]
+                validation = bm.copy()
+                try:
+                    knife_commands.cut_polyline(validation, self.points, self.closed)
+                finally:
+                    validation.free()
                 bmesh.update_edit_mesh(self.obj.data, loop_triangles=True, destructive=True)
                 self.result = {"strokes": results, "active_deferred": True}
             except CommandError:
@@ -229,10 +250,15 @@ class ToolSession:
             source_local /= len(selected)
             source_world = self.obj.matrix_world @ source_local
             target_world = Vector(self.snap_candidate["position"])
-            delta_world = target_world - source_world
-            payload["direction"] = list((self.obj.matrix_world.inverted().to_3x3() @ delta_world).normalized()) if delta_world.length else [0, 0, 1]
-            payload["offset"] = delta_world.length
-            payload["snap_type"] = "NONE"  # el destino ya quedó resuelto exactamente
+            delta_local = self.obj.matrix_world.inverted().to_3x3() @ (target_world - source_world)
+            axis = mesh_commands._resolve_extrude_direction(payload, self.obj)
+            if axis is None:
+                payload["direction"] = list(delta_local.normalized()) if delta_local.length else [0, 0, 1]
+                payload["offset"] = delta_local.length
+            else:
+                payload.pop("direction", None)
+                payload["offset"] = delta_local.dot(axis)
+            payload["snap_type"] = "NONE"
         payload["_no_undo"] = True
         handlers = {"EXTRUDE": mesh_commands.extrude, "BEVEL": mesh_commands.bevel,
                     "INSET": mesh_commands.inset, "SUBDIVIDE": mesh_commands.subdivide,
@@ -264,11 +290,14 @@ class ToolSession:
                 self.close()
                 return {"active": False, "armed": False, "phase": "INVALIDATED"}
             state = {"active": True, "armed": True, "phase": "ACTIVE", "session_id": self.session_id,
-                     "owner": self.owner_id, "tool": self.tool, "parameters": self.params,
+                     "owner": self.owner_id, "tool": self.tool, "parameters": dict(self.params),
                      "preview": self.result}
             state["snap_type"] = str(self.params.get("snap_type", "NONE")).upper()
             state["snap_step"] = float(self.params.get("snap_step", 0.1))
             state["snap_candidate"] = self.snap_candidate
+            primary = {"EXTRUDE": "offset", "BEVEL": "offset", "INSET": "thickness"}.get(self.tool)
+            if primary and primary in self.result:
+                state["parameters"][primary] = self.result[primary]
             if self.alignment is not None:
                 state.update(self.alignment.status(self.params))
             if self.tool == "KNIFE":
@@ -362,9 +391,13 @@ def parameter(payload):
         if not isinstance(params, dict):
             raise BadPayload("'parameters' must be an object")
         for key, value in params.items():
-            if key != "snap":
+            if key == "snap":
+                tool_session.params[key] = bool(value)
+            elif key == "snap_mode" and str(value).upper() in {"AUTO", "VERTEX", "EDGE_CENTER", "EDGE"}:
+                tool_session.params[key] = str(value).upper()
+            else:
                 raise BadPayload(f"Knife parameter '{key}' not supported")
-            tool_session.params["snap"] = bool(value)
+        tool_session.snap_candidate = None
         return tool_session.status()
     params = payload.get("parameters", payload.get("parameter"))
     if not isinstance(params, dict):
@@ -382,6 +415,8 @@ def parameter(payload):
             raise
         return tool_session.status()
     tool_session.params.update(params)
+    if tool_session.tool == "EXTRUDE" and "offset" in params:
+        tool_session.snap_candidate = None  # El valor paramétrico sustituye al destino sondeado.
     if str(tool_session.params.get("snap_type", "NONE")).upper() not in {"VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER", "CURSOR"}:
         tool_session.snap_candidate = None
     tool_session.preview()
@@ -425,8 +460,7 @@ def snap_candidate(payload):
         tool_session.preview()
         return tool_session.status()
     tool_session.params["snap_type"] = snap_type
-    if bool(payload.get("lock", True)):
-        tool_session.snap_candidate = candidate
+    tool_session.snap_candidate = candidate
     tool_session.preview()
     return tool_session.status()
 
@@ -493,34 +527,8 @@ def knife_point(payload):
     tool_session.require(payload.get("_client_id"))
     if tool_session.tool != "KNIFE":
         raise CommandError("knife_point requires a KNIFE session", code="wrong_tool")
-    found = find_view3d()
-    if found is None:
-        raise CommandError("No 3D viewport available", code="no_viewport")
-    rv3d = found[3]
-    camera.sync_from_region(rv3d)
-
-    u = float(payload.get("u", 0.5))
-    v = float(payload.get("v", 0.5))
-    origin, direction = camera.ray(u, v, rv3d)
-    depsgraph = bpy.context.evaluated_depsgraph_get()
-    hit, location, _normal, _face_index, hit_obj, _matrix = bpy.context.scene.ray_cast(
-        depsgraph, origin, direction
-    )
-    if not hit or hit_obj != tool_session.obj:
-        return dict(tool_session.status(), hit=False)
-
-    # El ancla es el punto local; el raycast se hace sobre el backup (restaurado), así
-    # que las coordenadas y la cara son estables para todas las reproducciones.
-    world = Vector(location)
-    local = tool_session.obj.matrix_world.inverted() @ world
-    snap_class = "NONE"
-    if tool_session.params.get("snap", True):
-        snap_class, snap_local = _geometry_snap(tool_session.obj, rv3d, u, v)
-        if snap_local is not None:
-            local = snap_local
-    tool_session.points.append(list(local))
-    tool_session.preview()
-    return dict(tool_session.status(), hit=True, snap=snap_class, point=list(local))
+    knife_drag(dict(payload, phase="BEGIN"))
+    return knife_drag(dict(payload, phase="END"))
 
 
 @command("tool.knife_drag", mutating=True)
@@ -551,13 +559,15 @@ def knife_drag(payload):
     elif phase == "END" and candidate.get("hit"):
         endpoint = list(candidate["local_position"])
         if tool_session.points and (Vector(endpoint) - Vector(tool_session.points[-1])).length_squared > 1e-12:
+            old_closed = tool_session.closed
             tool_session.points.append(endpoint)
             tool_session.closed = False
             try:
                 tool_session.preview()
             except Exception:
                 tool_session.points.pop()
-                tool_session.restore_preview_base()
+                tool_session.closed = old_closed
+                tool_session.preview()
                 raise
         elif not tool_session.points:
             tool_session.points.append(endpoint)
@@ -566,94 +576,8 @@ def knife_drag(payload):
 
 
 def _knife_candidate(obj, u, v, snap_enabled, snap_mode="AUTO", previous=None):
-    """Punto visible de cara con snap deliberado solo a sus vértices/aristas."""
-    found = find_view3d()
-    if found is None:
-        raise CommandError("No 3D viewport available", code="no_viewport")
-    rv3d = found[3]
-    camera.sync_from_region(rv3d)
-    origin, direction = camera.ray(u, v, rv3d)
-    hit, location, _normal, _face_index, hit_obj, _matrix = bpy.context.scene.ray_cast(
-        bpy.context.evaluated_depsgraph_get(), origin, direction)
-    if not hit or hit_obj != obj:
-        return {"hit": False, "snap_type": "NONE", "screen": [u, v]}
-    world = Vector(location)
-    local = obj.matrix_world.inverted() @ world
-    bm = bmesh.from_edit_mesh(obj.data)
-    face = min((f for f in bm.faces if not f.hide),
-               key=lambda f: knife_commands._point_face_distance(f, local), default=None)
-    snap_type, snapped = "FACE", local
-    touch = Vector((u, v))
-    if snap_enabled and face is not None:
-        vertices, centers, edges = [], [], []
-        vertex_threshold, center_threshold = _knife_snap_thresholds(snap_mode)
-        # Solo la cara alcanzada por el raycast es elegible. Incluir vecinas por
-        # conectividad llega enseguida a caras traseras (p.ej. todo un cubo).
-        for vert in face.verts:
-            screen = camera.project(obj.matrix_world @ vert.co, rv3d)
-            if screen is not None:
-                distance = (Vector(screen) - touch).length
-                vertices.append((distance, "VERTEX", vert.co.copy(), screen, vert.index))
-        for edge in face.edges:
-            pa = camera.project(obj.matrix_world @ edge.verts[0].co, rv3d)
-            pb = camera.project(obj.matrix_world @ edge.verts[1].co, rv3d)
-            if pa is None or pb is None:
-                continue
-            a2, b2 = Vector(pa), Vector(pb)
-            span = b2 - a2
-            center_screen = (a2 + b2) * 0.5
-            center_distance = (center_screen - touch).length
-            centers.append((center_distance, "EDGE_CENTER",
-                            (edge.verts[0].co + edge.verts[1].co) * 0.5,
-                            center_screen, edge.index))
-            t = max(0.0, min(1.0, (touch - a2).dot(span) / span.length_squared)) if span.length_squared > 1e-12 else 0.5
-            screen = a2 + span * t
-            distance = (screen - touch).length
-            edges.append((distance, "EDGE", edge.verts[0].co.lerp(edge.verts[1].co, t), screen, edge.index))
-        # Prioridad categórica, no por distancia global: una arista tiene siempre
-        # distancia ~0 bajo el lápiz y antes robaba el snap a sus propios vértices y
-        # centro. Dentro de su radio, VERTEX > EDGE_CENTER > EDGE.
-        groups = {"VERTEX": vertices, "EDGE_CENTER": centers, "EDGE": edges}
-        if snap_mode not in {"AUTO", *groups}:
-            snap_mode = "AUTO"
-        previous_type = previous.get("snap_type") if isinstance(previous, dict) else None
-        order = ([previous_type] if previous_type in groups else [])
-        order += [kind for kind in ("VERTEX", "EDGE_CENTER", "EDGE") if kind not in order]
-        if snap_mode != "AUTO":
-            order = [snap_mode]
-        thresholds = {
-            "VERTEX": vertex_threshold,
-            "EDGE_CENTER": center_threshold,
-            "EDGE": KNIFE_EDGE_THRESHOLD,
-        }
-        chosen = None
-        from .snap import choose_sticky_candidate
-        for kind in order:
-            ranked = [
-                {"hit": True, "snap_type": candidate_type,
-                 "id": f"{obj.name}:{candidate_type}:{candidate_element}",
-                 "object": obj.name, "element": candidate_element,
-                 "position": list(obj.matrix_world @ candidate_local),
-                 "local_position": list(candidate_local), "screen": list(candidate_screen),
-                 "distance": candidate_distance}
-                for candidate_distance, candidate_type, candidate_local, candidate_screen,
-                    candidate_element in groups[kind]
-            ]
-            chosen = choose_sticky_candidate(ranked, previous, thresholds[kind])
-            if chosen is not None:
-                break
-        if chosen is not None:
-            return chosen
-        else:
-            element = face.index if face is not None else -1
-    else:
-        element = face.index if face is not None else -1
-    snapped_world = obj.matrix_world @ snapped
-    screen = camera.project(snapped_world, rv3d) or (u, v)
-    return {"hit": True, "snap_type": snap_type, "id": f"{obj.name}:{snap_type}:{element}",
-            "object": obj.name, "element": element, "position": list(snapped_world),
-            "local_position": list(snapped), "screen": list(screen),
-            "distance": float((Vector(screen) - touch).length)}
+    from .snap import query_edit_surface_candidate
+    return query_edit_surface_candidate(obj, u, v, snap_enabled, snap_mode, previous)
 
 
 def _geometry_snap(obj, rv3d, u, v):
@@ -791,6 +715,7 @@ def knife_new_stroke(payload):
     except Exception:
         tool_session.points = tool_session.knife_strokes.pop()
         tool_session.closed = tool_session.knife_stroke_closed.pop()
+        tool_session.preview()
         raise
     return tool_session.status()
 
@@ -800,8 +725,14 @@ def knife_close(payload):
     tool_session.require(payload.get("_client_id"))
     if tool_session.tool != "KNIFE":
         raise CommandError("knife_close requires a KNIFE session", code="wrong_tool")
-    tool_session.closed = not tool_session.closed
-    tool_session.preview()
+    old_closed = tool_session.closed
+    tool_session.closed = not old_closed
+    try:
+        tool_session.preview()
+    except Exception:
+        tool_session.closed = old_closed
+        tool_session.preview()
+        raise
     return tool_session.status()
 
 

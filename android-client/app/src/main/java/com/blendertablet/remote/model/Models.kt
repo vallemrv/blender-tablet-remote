@@ -570,8 +570,8 @@ data class AppUiState(
  * ¿Hay una bandeja horizontal inferior ocupando el borde de abajo?
  *
  * Es la señal que eleva el teclado de vistas: transformación modal activa, herramienta
- * paramétrica activa o Loop Cut esperando el toque que coloca el corte. Extraído a una
- * función pura para poder probar el layout sin montar la interfaz.
+ * paramétrica activa, Tweak encendido o Loop Cut esperando el toque que coloca el corte.
+ * Extraído a una función pura para poder probar el layout sin montar la interfaz.
  */
 fun bottomTrayVisible(
     sessionActive: Boolean,
@@ -580,6 +580,6 @@ fun bottomTrayVisible(
     loopCutAwaitingTap: Boolean,
     /** Bisect armado (edit_toolbar) esperando el arrastre de línea que activa la sesión. */
     toolSessionArmed: Boolean = false,
-): Boolean = (sessionActive && activeTool != ActiveTool.TWEAK) || toolSessionActive ||
+): Boolean = activeTool == ActiveTool.TWEAK || sessionActive || toolSessionActive ||
     (activeTool == ActiveTool.LOOP_CUT && !toolSessionActive && loopCutAwaitingTap) ||
     (activeTool == ActiveTool.BISECT && !toolSessionActive && toolSessionArmed)

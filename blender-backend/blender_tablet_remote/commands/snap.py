@@ -10,6 +10,7 @@ from __future__ import annotations
 import bmesh
 import bpy
 from mathutils import Vector
+from mathutils.bvhtree import BVHTree
 
 from .. import state
 from ..bpy_utils import (
@@ -58,6 +59,77 @@ def choose_sticky_candidate(candidates: list[dict], previous: dict | None,
 
 def query_reference_candidate(payload: dict, previous: dict | None = None) -> dict:
     return _query_geometric(payload, REFERENCE_THRESHOLDS, previous)
+
+
+def query_edit_surface_candidate(obj, u, v, enabled=True, mode="AUTO", previous=None):
+    """Ancla sobre la superficie editable viva, incluidas las caras de cortes previos."""
+    found = find_view3d()
+    if found is None:
+        raise CommandError("No 3D viewport available", code="no_viewport")
+    region, rv3d = found[2], found[3]
+    viewport = found[1].spaces.active if found[1] is not None else None
+    camera.sync_from_region(rv3d)
+    aspect = max(1, region.width) / max(1, region.height)
+    bm = bmesh.from_edit_mesh(obj.data)
+    for seq in (bm.verts, bm.edges, bm.faces):
+        seq.index_update()
+        seq.ensure_lookup_table()
+    # Scene.ray_cast usa la malla evaluada, que puede ir por detrás del BMesh.
+    faces = [face for face in bm.faces if not face.hide]
+    tree = BVHTree.FromPolygons([v.co for v in bm.verts],
+                               [[v.index for v in face.verts] for face in faces])
+    inverse = obj.matrix_world.inverted()
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+
+    def surface(screen):
+        origin, direction = camera.ray(*screen, rv3d)
+        point, _, index, _ = tree.ray_cast(inverse @ origin,
+                                         (inverse.to_3x3() @ direction).normalized())
+        return point, index
+
+    def visible(position, screen):
+        if not _visible(position, screen, depsgraph, rv3d, {obj.name}, viewport):
+            return False
+        point, _ = surface(screen)
+        if point is None:
+            return True  # silueta o arista sin cara
+        origin, direction = camera.ray(*screen, rv3d)
+        target_distance = (position - origin).dot(direction)
+        hit_distance = (obj.matrix_world @ point - origin).dot(direction)
+        return target_distance <= hit_distance + max(1e-6, abs(target_distance) * 1e-5)
+
+    thresholds = ({"VERTEX": .035, "EDGE_CENTER": .028, "EDGE": .042} if mode == "AUTO"
+                  else {mode: {"VERTEX": .080, "EDGE_CENTER": .070, "EDGE": .042}[mode]})
+    ranked = []
+    if enabled:
+        for kind, acquire in thresholds.items():
+            for distance, element, position in _screen_candidates(obj, kind, rv3d, Vector((u, v)), aspect, set()):
+                identity = f"{obj.name}:{kind}:{element}"
+                limit = (acquire * STICKY_RELEASE_FACTOR + STICKY_RELEASE_PADDING
+                         if previous and previous.get("id") == identity else acquire)
+                if distance > limit:
+                    continue
+                screen = camera.project(position, rv3d)
+                if screen is None or not visible(position, screen):
+                    continue
+                ranked.append(dict(hit=True, snap_type=kind, id=identity, object=obj.name,
+                                   element=element, position=list(position), screen=list(screen),
+                                   local_position=list(inverse @ position), distance=distance,
+                                   acquire_threshold=acquire))
+        # AUTO deja adquirir puntos discretos cerca de una arista; una arista a
+        # distancia cero no puede tapar sus extremos ni su centro.
+        points = [c for c in ranked if c["snap_type"] != "EDGE"]
+        chosen = choose_sticky_candidate(points, previous, max(thresholds.values()))
+        if chosen is None:
+            chosen = choose_sticky_candidate(ranked, previous, max(thresholds.values()))
+        if chosen is not None:
+            return {k: value for k, value in chosen.items() if k != "acquire_threshold"}
+    local, index = surface((u, v))
+    if local is None or not visible(obj.matrix_world @ local, (u, v)):
+        return dict(hit=False, snap_type="NONE", screen=[u, v])
+    return dict(hit=True, snap_type="FACE", id=f"{obj.name}:FACE:{faces[index].index}",
+                object=obj.name, element=faces[index].index, position=list(obj.matrix_world @ local),
+                local_position=list(local), screen=[u, v], distance=0.0)
 
 
 def query_face_frame(payload: dict) -> dict | None:

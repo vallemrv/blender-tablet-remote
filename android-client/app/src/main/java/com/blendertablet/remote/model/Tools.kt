@@ -113,6 +113,17 @@ data class ToolSession(
     val acceptsViewportNudge: Boolean
         get() = active && input == "PARAMETRIC" && tool != EditTool.KNIFE && tool != EditTool.BISECT
 
+    val distanceIncrement: Boolean
+        get() = tool in setOf(EditTool.EXTRUDE, EditTool.INSET, EditTool.BEVEL) &&
+            snapType in setOf(SnapType.INCREMENT, SnapType.GRID)
+
+    /** Un paso por cada 4 % de altura; conserva fracciones hasta cruzar el paso. */
+    fun viewportNudge(dy: Double): Double = -dy * when {
+        distanceIncrement -> snapStep / 0.04
+        tool == EditTool.LOOP_CUT -> 2.0
+        else -> 1.0
+    }
+
     val primaryKey: String
         get() = when (tool) {
             EditTool.EXTRUDE, EditTool.BEVEL -> "offset"

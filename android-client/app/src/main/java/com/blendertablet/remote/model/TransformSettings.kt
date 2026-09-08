@@ -91,7 +91,7 @@ enum class TweakMotion(val label: String) {
 
 /**
  * Ajustes del gesto de Tweak. Viven fuera de la sesión porque el gesto es tan corto
- * que no da tiempo a configurarlo mientras dura: se eligen antes, en el rail, y el
+ * que no da tiempo a configurarlo mientras dura: se eligen en la bandeja inferior y el
  * BEGIN los manda enteros.
  */
 data class TweakSettings(
@@ -131,3 +131,7 @@ enum class ValueMode(val label: String) {
     RELATIVE("Relativo"),
     ABSOLUTE("Absoluto"),
 }
+
+/** Una sesión MOVE interna de Tweak no selecciona otra herramienta en el rail. */
+fun isTransformToolSelected(activeTool: ActiveTool, session: TransformSession, mode: TransformMode): Boolean =
+    activeTool != ActiveTool.TWEAK && session.active && session.mode == mode
