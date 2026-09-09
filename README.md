@@ -35,6 +35,8 @@ nativa, con un solver acotado; Object y Edit conservan su flujo habitual.
 
 Sculpt incorpora nueve pinceles nativos, suavizado e inversión, presión del lápiz
 para fuerza y radio, simetría X/Y/Z, máscaras, Dyntopo y niveles Multires.
+Multiresolución se añade también desde **Modificadores → +**, con niveles de Vista,
+Escultura y Render y un botón para crear subdivisiones reales.
 El panel Referencias permite importar varias imágenes, ampliarlas y colocarlas
 junto al modelo. En CAD, **Bocetos → Editar** reabre un boceto existente; al
 seleccionar un perfil o sólido aparece **Editar boceto**.

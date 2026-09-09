@@ -33,6 +33,18 @@ los niveles superiores al bajar y subir. Desde la tablet se limita a seis nivele
 el coste real depende de las caras del objeto. La malla debe ser propia: una
 copia enlazada necesita convertirse primero en copia normal.
 
+En Object se encuentra en **Modificadores → + → Multiresolución**. La tarjeta
+ofrece Vista, Escultura y Render, muestra los niveles creados y tiene
+**Subdividir (+1 nivel)**. El botón crea resolución real; los selectores recorren
+los niveles ya creados. También sigue disponible desde Malla dentro de Sculpt.
+
+En la comparación controlada de vídeo con Subdivision 2, GPU GTX 1080,
+1280 × 710 y la misma calidad, dos rondas pasaron de 19,25–19,75 a 22,25–22,75 fps.
+El retraso mediano de captura a recepción HTTP local pasó de 92–95 a 48–57 ms;
+el percentil 95, de 162–174 a unos 88 ms. Es una medida del PC y del transporte
+local, no de la red Wi-Fi ni de la respuesta física del lápiz. Se eliminaron
+recorridos por byte en el parser H.264 y esperas innecesarias entre capturas.
+
 Máscara protege zonas frente a los pinceles. La bandeja permite invertirla o
 limpiarla. Suavizar temporalmente usa Smooth y mantiene el pincel elegido para el
 siguiente trazo.

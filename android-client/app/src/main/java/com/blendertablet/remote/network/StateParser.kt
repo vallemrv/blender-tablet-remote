@@ -133,7 +133,8 @@ object StateParser {
                     p.optDouble("step").takeUnless { p.isNull("step") || !p.has("step") },
                     strings(p.optJSONArray("values")), p.optJSONObject("object_filter")?.let {
                         ObjectChoiceFilter(it.optString("type").takeIf(String::isNotBlank), it.optBoolean("exclude_self"))
-                    })
+                    }, label = p.optString("label", name), readOnly = p.optBoolean("read_only"),
+                    maxParameter = p.optString("max_parameter").takeIf { it.isNotBlank() })
             }.toList())
         }.toList()
     }

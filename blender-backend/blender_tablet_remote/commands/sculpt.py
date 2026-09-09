@@ -495,34 +495,12 @@ def dyntopo(payload):
 def multires(payload):
     cancel()
     obj = _mesh()
-    if obj.use_dynamic_topology_sculpting:
-        raise CommandError('Desactiva Dyntopo antes de usar Multires', code='incompatible_modifier')
     action = str(payload.get('action', 'add')).lower()
-    if action not in {'add', 'subdivide', 'level'}:
-        raise BadPayload('Acción Multires desconocida')
-    modifier = next((m for m in obj.modifiers if m.type == 'MULTIRES'), None)
-    if action == 'level' and modifier is None:
-        raise CommandError('Añade Multires primero', code='not_found')
-    if action == 'level':
-        level = int(_number(payload.get('level'), 'level', 0, modifier.total_levels))
-    if modifier and action == 'add':
-        return _result()
-    with view3d_override():
-        bpy.ops.object.mode_set(mode='OBJECT')
-        try:
-            if modifier is None:
-                modifier = obj.modifiers.new('Multires', 'MULTIRES')
-            if action in {'add', 'subdivide'}:
-                if modifier.total_levels >= 6:
-                    raise CommandError('Máximo de 6 niveles Multires desde la tablet', code='resolution_limit')
-                bpy.ops.object.multires_subdivide(modifier=modifier.name, mode='CATMULL_CLARK')
-                level = modifier.total_levels
-            modifier.sculpt_levels = level
-            modifier.levels = level
-        finally:
-            bpy.ops.object.mode_set(mode='SCULPT')
-    undo_push('Multires tablet')
-    history_changed()
+    from .modifiers import multires_change
+    _modifier, changed = multires_change(obj, action, level=payload.get('level'))
+    if changed:
+        undo_push('Multires tablet')
+        history_changed()
     return _result()
 
 

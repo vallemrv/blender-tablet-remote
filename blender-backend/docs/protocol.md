@@ -1027,7 +1027,7 @@ Pila no destructiva del objeto activo. No confundir `modifier.add type=BEVEL` co
 | Comando | Payload |
 |---|---|
 | `modifier.add_options` | `object?` — catálogo con descriptores tipados |
-| `modifier.add` | `object?`, `type`: `SUBSURF`\|`ARRAY`\|`BEVEL`\|`SOLIDIFY`\|`BOOLEAN`\|`MIRROR`, `name?`, `parameters?` |
+| `modifier.add` | `object?`, `type`: `SUBSURF`\|`MULTIRES`\|`ARRAY`\|`BEVEL`\|`SOLIDIFY`\|`BOOLEAN`\|`MIRROR`, `name?`, `parameters?` |
 | `modifier.remove` | `object?`, `name` |
 | `modifier.move` | `object?`, `name`, `index` |
 | `modifier.set` | `object?`, `name`, `parameters{}` |
@@ -1039,6 +1039,7 @@ Tipos y parámetros:
 | Tipo | Parámetros | Defaults |
 |---|---|---|
 | `SUBSURF` | `levels`, `render_levels`, `subdivision_type` (`CATMULL_CLARK`\|`SIMPLE`) | 1, 2, `CATMULL_CLARK` |
+| `MULTIRES` | `levels`, `sculpt_levels`, `render_levels`; `total_levels` de solo lectura; acción `subdivide:true` | Se crea con un nivel nativo; no duplica uno existente |
 | `ARRAY` | `count`, `relative_offset` `[x,y,z]`, `use_merge`, `merge_threshold` | 2, `[1,0,0]`, false, 0.01 |
 | `BEVEL` | `width`, `segments`, `affect` (`EDGES`\|`VERTICES`), `limit_method` (`NONE`\|`ANGLE`), `angle_limit` (grados), `profile` | 0.1, 1, `EDGES`, `ANGLE`, 30, 0.5 |
 | `SOLIDIFY` | `thickness`, `offset`, `use_even_offset`, `use_rim` | 0.1, −1, true, true |
@@ -1066,6 +1067,15 @@ además `modifier`, el nombre real asignado por Blender. La identidad estable es
 el par `(object, name)`, nunca un índice ni un nombre global. `modifier.add_options`
 describe cada parámetro con `type`, `default` y, según corresponda, `min/max/step`,
 `values` o `object_filter`. `unsupported_type` se usa para tipos no compatibles.
+
+La feature `modifiers` versión 3 incorpora `label`, `read_only`, `max_parameter`
+y `type:"action"`. Android excluye acciones y campos de solo lectura de los
+defaults enviados al crear. `max_parameter:"total_levels"` limita los selectores
+Multires a los niveles nativos existentes. La acción Subdividir envía
+`modifier.set {name,parameters:{subdivide:true}}`, crea un nivel y actualiza Vista
+y Escultura. Se admiten hasta seis niveles; sus cambios usan un undo por operación.
+El panel Object y `sculpt.multires` comparten la operación nativa. Dyntopo y
+Multires siguen siendo excluyentes y los demás modificadores se conservan.
 
 El estado completo contiene `hidden_objects:[{name,type}]`, enumerado desde el view
 layer, y `active.modifiers[]`. `visibility.changed` lleva exactamente
@@ -1307,6 +1317,13 @@ propósito: un fotograma perdido no debe retrasar un comando, ni al revés.
 | `/` | página de prueba: abre esto en el navegador del PC para verificar el vídeo sin la tablet |
 
 Si hay token, va en la query: `http://10.0.0.8:8766/stream.mjpg?token=SECRETO`.
+
+El parser H.264 localiza AUD/NAL mediante búsquedas nativas de bytes, evitando
+recorrer cada byte comprimido en Python. Conserva las unidades de acceso, sus
+flags y los prefijos parciales entre lecturas. La espera del pump se acota por
+el próximo vencimiento de captura, descontando el tiempo de dibujo ya consumido.
+Sin espectadores se conserva la cadencia de control. Estas optimizaciones no
+cambian resolución, calidad, códec ni el framing de red.
 
 ### Framing H.264 `btr-h264-v1`
 

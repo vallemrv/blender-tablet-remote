@@ -302,7 +302,7 @@ def _modifiers_sig(obj) -> tuple:
     bits = []
     for mod in obj.modifiers:
         entry = [mod.name, mod.type, bool(mod.show_viewport), bool(mod.show_render)]
-        for attr in ("levels", "render_levels", "count", "width", "segments", "thickness",
+        for attr in ("levels", "sculpt_levels", "total_levels", "render_levels", "count", "width", "segments", "thickness",
                      "offset", "operation", "solver", "affect", "limit_method", "profile"):
             if hasattr(mod, attr):
                 value = getattr(mod, attr)

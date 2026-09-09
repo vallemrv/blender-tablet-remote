@@ -113,6 +113,15 @@ class ViewportCapture:
         """
         self._force_capture = True
 
+    def next_delay(self, maximum: float) -> float:
+        """Wake at the next video deadline instead of sleeping past it after render."""
+        if not self.enabled or self._errors >= MAX_CONSECUTIVE_ERRORS or not self.has_viewers():
+            return maximum
+        if self._force_capture:
+            return min(maximum, .001)
+        remaining = self._last_capture + 1.0 / self.fps - time.monotonic()
+        return min(maximum, max(.001, remaining))
+
     def tick(self) -> None:
         """Captura un frame si toca. Nunca lanza: el pump no puede morir."""
         if not self.enabled or self._errors >= MAX_CONSECUTIVE_ERRORS:

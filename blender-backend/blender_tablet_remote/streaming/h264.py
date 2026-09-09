@@ -19,18 +19,13 @@ CONTENT_TYPE = "application/x-btr-h264"
 def nal_types(annex_b: bytes) -> set[int]:
     """Devuelve tipos NAL de un access unit Annex B (start codes 3/4 bytes)."""
     result: set[int] = set()
-    i = 0
-    while i + 4 <= len(annex_b):
-        if annex_b[i:i + 3] == b"\x00\x00\x01":
-            pos = i + 3
-        elif annex_b[i:i + 4] == b"\x00\x00\x00\x01":
-            pos = i + 4
-        else:
-            i += 1
-            continue
-        if pos < len(annex_b):
-            result.add(annex_b[pos] & 0x1F)
-        i = pos + 1
+    start = annex_b.find(b"\x00\x00\x01")
+    while start >= 0:
+        pos = start + 3
+        if pos >= len(annex_b):
+            break
+        result.add(annex_b[pos] & 0x1F)
+        start = annex_b.find(b"\x00\x00\x01", pos + 1)
     return result
 
 
@@ -52,14 +47,13 @@ def split_access_units(buffer: bytes, final: bool = False) -> tuple[list[bytes],
     Conserva el último AU incompleto salvo al cerrar el proceso.
     """
     starts: list[int] = []
-    i = 0
-    while i + 4 <= len(buffer):
-        if buffer[i:i + 5] == b"\x00\x00\x00\x01\x09":
-            starts.append(i); i += 5
-        elif buffer[i:i + 4] == b"\x00\x00\x01\x09":
-            starts.append(i); i += 4
-        else:
-            i += 1
+    # bytes.find scans in native code. A Python iteration per compressed byte
+    # held the GIL for tens of milliseconds on detailed/subdivided viewports.
+    marker = b"\x00\x00\x01\x09"
+    pos = buffer.find(marker)
+    while pos >= 0:
+        starts.append(pos - 1 if pos and buffer[pos - 1] == 0 else pos)
+        pos = buffer.find(marker, pos + len(marker))
     if not starts:
         return [], buffer
     units = [buffer[starts[n]:starts[n + 1]] for n in range(len(starts) - 1)]

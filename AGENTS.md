@@ -34,6 +34,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   undo. Otra herramienta o repetir su botón desactiva Tweak; sus eventos pendientes
   nunca modifican una transformación posterior. En caras usa movimiento libre.
 - H.264 se decodifica sobre una `Surface`; MJPEG se decodifica a Bitmap.
+- AUD/NAL H.264 se localizan con búsquedas nativas de bytes, sin recorridos Python
+  por byte. El pump respeta el próximo vencimiento de captura descontando el tiempo
+  de dibujo; sin vídeo conserva la cadencia de control. No se descartan AUs por ello.
 - El contrato canónico está en `blender-backend/docs/protocol.md`.
 
 ## Capacidades principales
@@ -166,6 +169,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   Cada trazo confirmado aporta un undo nativo. Android limita una petición en vuelo,
   conserva el orden de muestras y cierra el trazo antes de navegar/cambiar intención.
   Dyntopo y Multires son alternativas explícitas, nunca se elimina uno al activar otro.
+- Multires también se añade desde el panel general de modificadores. Vista,
+  Escultura y Render solo eligen niveles creados; Subdividir añade uno (máximo seis).
+  Object y Sculpt comparten la implementación nativa y conservan el resto de la pila.
+  El esquema de modificadores describe etiquetas, campos de solo lectura, acciones
+  y límites referenciados al estado; la UI no simula niveles inexistentes.
 - Multires/Dyntopo respaldan la malla nativa durante el trazo para restaurar
   desplazamientos y topología; sus archivos privados se retiran al cerrar.
   Guardar desde el PC restaura el baseline en `save_pre` y difiere el cierre del

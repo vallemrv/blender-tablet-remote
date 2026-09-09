@@ -149,7 +149,11 @@ class SculptTests(unittest.TestCase):
         return positions, faces
 
     def test_multires_native_sculpt_undo(self):
-        result = sculpt.multires(dict(action='add'))
+        from blender_tablet_remote.commands import modifiers
+        mode._set_mode('OBJECT')
+        modifiers.add({'type':'MULTIRES'})
+        mode._set_mode('SCULPT')
+        result = {'sculpt':sculpt.status()}
         self.assertEqual(result['sculpt']['multires']['total_levels'], 1)
         base, _ = self.flush_evaluated()
         # Mode transitions above change the native grid cache; establish its

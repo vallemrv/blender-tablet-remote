@@ -368,7 +368,7 @@ def _pump() -> float | None:
     # En background no hay ventana que se bloquee, así que no hay por qué tocar la
     # pantalla de nadie: evita alterar la interfaz local del PC.
     screen.keep_awake(bool(busy) and not bpy.app.background)
-    return TICK_ACTIVE if busy else TICK_IDLE
+    return _capture.next_delay(TICK_ACTIVE) if busy else TICK_IDLE
 
 
 def _broadcast_events() -> None:

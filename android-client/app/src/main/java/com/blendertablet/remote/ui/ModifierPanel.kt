@@ -150,7 +150,8 @@ private fun Header(state: BlenderState, actions: ModifierActions) {
                             addOpen = false
                             actions.add(
                                 descriptor.type,
-                                descriptor.parameters.associate { it.name to it.default.wireValue() },
+                                descriptor.parameters.filter { !it.readOnly && it.type != "action" }
+                                    .associate { it.name to it.default.wireValue() },
                             )
                         },
                     )
@@ -271,12 +272,25 @@ private fun ModifierHeaderButton(
 @Composable
 private fun ModifierParameter(
     item: ModifierState,
-    spec: ModifierParameterDescriptor,
+    declaredSpec: ModifierParameterDescriptor,
     state: BlenderState,
     set: (String, String, Any?) -> Unit,
 ) {
+    val actualMaximum = declaredSpec.maxParameter?.let { (item.parameters[it] as? Number)?.toDouble() }
+    val spec = if (declaredSpec.type != "action" && actualMaximum != null)
+        declaredSpec.copy(max = actualMaximum) else declaredSpec
     val value = item.parameters[spec.name]
+    if (spec.readOnly) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(spec.label, color = Ink.Faint, fontSize = 11.sp)
+            Text(value?.toString() ?: "—", color = Ink.OnPanel, fontSize = 12.sp)
+        }
+        return
+    }
     when (spec.type) {
+        "action" -> PillButton(spec.label, enabled = spec.max == null || actualMaximum == null || actualMaximum < spec.max) {
+            set(item.name, spec.name, true)
+        }
         "bool" -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(spec.name, color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.weight(1f))
             IconAction(
@@ -327,7 +341,7 @@ private fun ModifierParameter(
                 set(item.name, spec.name, stepModifierScalar(current, isInt, delta, spec))
             }
             StepperRow(
-                label = spec.name,
+                label = spec.label,
                 value = formatModifierValue(current, isInt, spec.step),
                 minusEnabled = spec.min == null || current > spec.min,
                 plusEnabled = spec.max == null || current < spec.max,
@@ -378,6 +392,7 @@ private fun ChoiceRow(
  * en vez de dejar el hueco vacío: la app puede ser más vieja que el servidor.
  */
 private fun iconOf(type: String): ImageVector = when (type) {
+    "MULTIRES" -> AppIcons.Multires
     "SUBSURF" -> Icons.Default.Deblur
     "ARRAY" -> Icons.Default.AutoAwesomeMotion
     "BEVEL" -> Icons.Default.RoundedCorner
@@ -388,6 +403,7 @@ private fun iconOf(type: String): ImageVector = when (type) {
 }
 
 private fun labelOf(type: String): String = when (type) {
+    "MULTIRES" -> "Multiresolución"
     "SUBSURF" -> "Subdivisión"
     "ARRAY" -> "Matriz"
     "BEVEL" -> "Bisel"

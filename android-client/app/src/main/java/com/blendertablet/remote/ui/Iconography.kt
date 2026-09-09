@@ -85,6 +85,7 @@ object AppIcons {
     val Scale: ImageVector = Icons.Default.AspectRatio
     val Reset: ImageVector = Icons.Default.RestartAlt
     val Frame: ImageVector = Icons.Default.CenterFocusStrong
+    val Multires: ImageVector = Icons.Default.Layers
 
     val Reference: ImageVector = Icons.Default.Image
     fun sculpt(intent: String): ImageVector = when (intent.uppercase()) {

@@ -1,7 +1,7 @@
 """modifier.* — pila no destructiva del objeto activo.
 
 API de datablock (`obj.modifiers.new`), no operadores. El catálogo es deliberadamente
-corto: Subsurf, Array, Bevel, Solidify, Boolean y Mirror. Bevel aquí no es `mesh.bevel`.
+corto: Subsurf, Multires, Array, Bevel, Solidify, Boolean y Mirror. Bevel aquí no es `mesh.bevel`.
 """
 
 from __future__ import annotations
@@ -16,6 +16,10 @@ from ..errors import BadPayload, CommandError
 from . import command
 
 SCHEMA = {
+    "MULTIRES": {
+        key: {"type": "int", "default": 1, "min": 0, "max": 6, "step": 1}
+        for key in ("levels", "sculpt_levels", "render_levels")
+    },
     "SUBSURF": {
         "levels": {"type": "int", "default": 1, "min": 0, "max": 6, "step": 1},
         "render_levels": {"type": "int", "default": 2, "min": 0, "max": 6, "step": 1},
@@ -65,6 +69,7 @@ SCHEMA = {
 
 CATALOG = {
     "SUBSURF": {"blender": "SUBSURF", "default_name": "Subdivision"},
+    "MULTIRES": {"blender": "MULTIRES", "default_name": "Multires"},
     "ARRAY": {"blender": "ARRAY", "default_name": "Array"},
     "BEVEL": {"blender": "BEVEL", "default_name": "Bevel"},
     "SOLIDIFY": {"blender": "SOLIDIFY", "default_name": "Solidify"},
@@ -129,7 +134,16 @@ def _write(mod, kind: str, params: dict, obj, preserve_current: bool = False) ->
     data = _defaults(kind)
     data.update(current)
     data.update({key: params[key] for key in _keys(kind) if key in params})
-    if kind == "SUBSURF":
+    if kind == "MULTIRES":
+        values = {key: _bounded_int(data[key], key, 0, mod.total_levels) for key in _keys(kind)}
+        with view3d_override(), bpy.context.temp_override(object=obj, active_object=obj):
+            previous_mode = obj.mode
+            if previous_mode == 'SCULPT': bpy.ops.object.mode_set(mode='OBJECT')
+            try:
+                for key, value in values.items(): setattr(mod, key, value)
+            finally:
+                if previous_mode == 'SCULPT': bpy.ops.object.mode_set(mode='SCULPT')
+    elif kind == "SUBSURF":
         mod.levels = _bounded_int(data["levels"], "levels", 0, 6)
         mod.render_levels = _bounded_int(data["render_levels"], "render_levels", 0, 6)
         subdiv = str(data["subdivision_type"]).upper()
@@ -210,7 +224,10 @@ def _bounded_int(value, key, minimum, maximum):
 def _read(mod) -> dict:
     kind = next((key for key, spec in CATALOG.items() if spec["blender"] == mod.type), None)
     params: dict = {}
-    if kind == "SUBSURF":
+    if kind == "MULTIRES":
+        params = {key: int(getattr(mod, key)) for key in _keys(kind)}
+        params['total_levels'] = int(mod.total_levels)
+    elif kind == "SUBSURF":
         params = {
             "levels": int(mod.levels),
             "render_levels": int(mod.render_levels),
@@ -276,6 +293,12 @@ def describe(obj) -> list[dict]:
 @command("modifier.add_options")
 def add_options(payload: dict) -> dict:
     return {"types": {
+        "MULTIRES": {"parameters": {
+            **{key: dict(_number('int', 1, 0, 6, 1), label=label, max_parameter='total_levels')
+               for key, label in [('levels','Vista'), ('sculpt_levels','Escultura'), ('render_levels','Render')]},
+            'total_levels': dict(_number('int', 0, 0, 6, 1), label='Niveles creados', read_only=True),
+            'subdivide': {'type':'action', 'label':'Subdividir (+1 nivel)', 'max':6, 'max_parameter':'total_levels'},
+        }},
         "SUBSURF": {"parameters": {"levels": _number("int", 1, 0, 6, 1), "render_levels": _number("int", 2, 0, 6, 1), "subdivision_type": _enum("CATMULL_CLARK", ["CATMULL_CLARK", "SIMPLE"])}},
         "ARRAY": {"parameters": {"count": _number("int", 2, 1, 1000, 1), "relative_offset": _number("float3", [1.0, 0.0, 0.0], -1000.0, 1000.0, 0.1), "use_merge": {"type": "bool", "default": False}, "merge_threshold": _number("float", 0.01, 0.0, 1000.0, 0.001)}},
         "BEVEL": {"parameters": {"width": _number("float", 0.1, 0.0, 1000.0, 0.01), "segments": _number("int", 1, 1, 1000, 1), "affect": _enum("EDGES", ["EDGES", "VERTICES"]), "limit_method": _enum("ANGLE", ["NONE", "ANGLE"]), "angle_limit": _number("float", 30.0, 0.0, 180.0, 1.0), "profile": _number("float", 0.5, 0.0, 1.0, 0.05)}},
@@ -300,6 +323,42 @@ def _enum(default, values):
     return {"type": "enum", "default": default, "values": values}
 
 
+def multires_change(obj, action, *, level=None, name=None):
+    """One native implementation shared by Object's modifier panel and Sculpt."""
+    if obj.mode not in {'OBJECT', 'SCULPT'}:
+        raise CommandError('Multires requiere Object o Sculpt', code='wrong_mode')
+    if obj.use_dynamic_topology_sculpting:
+        raise CommandError('Desactiva Dyntopo antes de usar Multires', code='incompatible_modifier')
+    mod = _require(obj, name) if name else next((m for m in obj.modifiers if m.type == 'MULTIRES'), None)
+    if mod and mod.type != 'MULTIRES': raise BadPayload('El modificador no es Multires')
+    if action not in {'add', 'subdivide', 'level'}: raise BadPayload('Acción Multires desconocida')
+    if action == 'add' and mod: return mod, False
+    if mod is None and action != 'add': raise CommandError('Añade Multires primero', code='not_found')
+    if action == 'level':
+        level = _bounded_int(level, 'level', 0, mod.total_levels)
+    elif mod and mod.total_levels >= 6:
+        raise CommandError('Máximo de 6 niveles Multires desde la tablet', code='resolution_limit')
+    created = mod is None
+    previous_mode = obj.mode
+    with view3d_override(), bpy.context.temp_override(object=obj, active_object=obj):
+        if previous_mode == 'SCULPT': bpy.ops.object.mode_set(mode='OBJECT')
+        try:
+            if created: mod = obj.modifiers.new('Multires', 'MULTIRES')
+            if action != 'level':
+                result = bpy.ops.object.multires_subdivide(modifier=mod.name, mode='CATMULL_CLARK')
+                if 'FINISHED' not in result: raise CommandError('No se pudo subdividir Multires', code='subdivide_failed')
+                level = mod.total_levels
+                mod.render_levels = max(mod.render_levels, level)
+            mod.levels = level
+            mod.sculpt_levels = level
+        except Exception:
+            if created and mod: obj.modifiers.remove(mod)
+            raise
+        finally:
+            if previous_mode == 'SCULPT': bpy.ops.object.mode_set(mode='SCULPT')
+    return mod, True
+
+
 @command("modifier.add", mutating=True)
 def add(payload: dict) -> dict:
     obj = _target(payload)
@@ -313,7 +372,15 @@ def add(payload: dict) -> dict:
     if not isinstance(params, dict):
         raise BadPayload("'parameters' must be an object")
     name = str(payload["name"]) if payload.get("name") else spec["default_name"]
-    mod = obj.modifiers.new(name, spec["blender"])
+    if kind == 'MULTIRES':
+        from .sessions import cancel_all
+        cancel_all()
+        obj = _target(payload)
+        mod, changed = multires_change(obj, 'add')
+        if not changed: return dict(stack(obj), modifier=mod.name)
+        mod.name = name
+    else:
+        mod = obj.modifiers.new(name, spec["blender"])
     try:
         _write(mod, kind, params, obj)
     except Exception:
@@ -363,6 +430,15 @@ def set_params(payload: dict) -> dict:
     params = payload.get("parameters", payload)
     if not isinstance(params, dict):
         raise BadPayload("'parameters' must be an object")
+    if kind == 'MULTIRES':
+        from .sessions import cancel_all
+        cancel_all()
+        obj = _target(payload)
+        mod = _require(obj, payload.get('name'))
+        if params.get('subdivide') is True:
+            for key in _keys(kind):
+                if key in params: _bounded_int(params[key], key, 0, min(mod.total_levels + 1, 6))
+            multires_change(obj, 'subdivide', name=mod.name)
     filtered = {key: params[key] for key in _keys(kind) if key in params}
     _write(mod, kind, filtered, obj, preserve_current=True)
     undo_push("Remote set modifier")
