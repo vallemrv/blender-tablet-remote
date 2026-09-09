@@ -57,6 +57,7 @@ fun InputSurface(
     sculptStylusOnly: Boolean = true,
     sculptRadius: Float = .04f,
     sculptPressureSize: Boolean = false,
+    sculptCursorStyle: SculptCursorStyle = SculptCursorStyle(),
     onSculptStroke: (GesturePhase, List<SculptPoint>, Boolean, Boolean) -> Unit = { _, _, _, _ -> },
     cadDrawingEnabled: Boolean = false,
     onCadGesture: (GesturePhase, Float, Float) -> Unit = { _, _, _ -> },
@@ -97,6 +98,7 @@ fun InputSurface(
             view.sculptStylusOnly = sculptStylusOnly
             view.sculptRadius = sculptRadius
             view.sculptPressureSize = sculptPressureSize
+            view.sculptCursorStyle = sculptCursorStyle
             view.cadDrawingEnabled = cadDrawingEnabled
             view.onCadGesture = onCadGesture
             view.cadOverlay = cadOverlay
@@ -242,6 +244,9 @@ private class GestureView(
     var sculptStylusOnly = true
     var sculptRadius = .04f
     var sculptPressureSize = false
+    var sculptCursorStyle = SculptCursorStyle()
+    private var sculptHoverSmooth = false
+    private var sculptHoverInvert = false
     private var sculptPointerId = -1
     private var sculptPointerStylus = false
     private var sculptSmooth = false
@@ -612,6 +617,7 @@ private class GestureView(
                     onSculptStroke(GesturePhase.END, emptyList(), sculptSmooth, sculptInvert)
                     sculptPointerId = -1
                     sculptCursorPressure = 1f
+                    updateSculptHoverModifiers(event, actionIndex)
                     sculptSuppressPalm = event.pointerCount > 1
                 } else if (sculptPointerId < 0) {
                     if (action == MotionEvent.ACTION_UP && !moved && !sculptSuppressPalm) {
@@ -637,6 +643,8 @@ private class GestureView(
         sculptSamples.clear()
         sculptPointerId = event.getPointerId(index)
         sculptPointerStylus = isStylus(event.getToolType(index))
+        sculptHoverSmooth = false
+        sculptHoverInvert = false
         sculptSmooth = event.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY != 0
         sculptInvert = event.getToolType(index) == MotionEvent.TOOL_TYPE_ERASER ||
             event.buttonState and MotionEvent.BUTTON_STYLUS_SECONDARY != 0
@@ -678,10 +686,18 @@ private class GestureView(
         if (sculptEnabled && event.pointerCount > 0 && isStylus(event.getToolType(0))) {
             sculptCursorVisible = event.actionMasked != MotionEvent.ACTION_HOVER_EXIT
             sculptCursorX = event.x; sculptCursorY = event.y; sculptCursorPressure = 1f
+            updateSculptHoverModifiers(event, 0)
             invalidate()
             return true
         }
         return super.onHoverEvent(event)
+    }
+
+    private fun updateSculptHoverModifiers(event: MotionEvent, index: Int) {
+        val hovering = isStylus(event.getToolType(index)) && event.actionMasked != MotionEvent.ACTION_HOVER_EXIT
+        sculptHoverSmooth = hovering && event.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY != 0
+        sculptHoverInvert = hovering && (event.getToolType(index) == MotionEvent.TOOL_TYPE_ERASER ||
+            event.buttonState and MotionEvent.BUTTON_STYLUS_SECONDARY != 0)
     }
 
     private fun handleTweak(e: MotionEvent) {
@@ -952,6 +968,10 @@ private class GestureView(
         if (sculptEnabled && sculptCursorVisible) {
             val pressure = if (sculptPressureSize && sculptPointerId >= 0) sculptCursorPressure else 1f
             val radius = (sculptRadius * height * pressure).coerceAtLeast(2f)
+            sculptCursorPaint.color = sculptCursorStyle.color(
+                penSmooth = if (sculptPointerId >= 0) sculptSmooth else sculptHoverSmooth,
+                penInvert = if (sculptPointerId >= 0) sculptInvert else sculptHoverInvert,
+            )
             canvas.drawCircle(sculptCursorX, sculptCursorY, radius, sculptOutlinePaint)
             canvas.drawCircle(sculptCursorX, sculptCursorY, radius, sculptCursorPaint)
         }
@@ -1084,7 +1104,11 @@ private class GestureView(
 
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
         val stylus = event.pointerCount > 0 && isStylus(event.getToolType(0))
-        if (sculptEnabled && stylus) return true
+        if (sculptEnabled && stylus) {
+            updateSculptHoverModifiers(event, 0)
+            invalidate()
+            return true
+        }
         if (stylus && event.actionMasked == MotionEvent.ACTION_BUTTON_PRESS &&
             event.actionButton == MotionEvent.BUTTON_STYLUS_PRIMARY
         ) {

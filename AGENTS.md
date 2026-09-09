@@ -178,9 +178,13 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   espaciado nativo, con corrección de aspecto y presión interpolada. El extremo
   provisional se sustituye entre UPDATE y no se acumula como otra aplicación
   por paquete. Grab conserva su recorrido. END confirma lo ya dibujado.
-- El círculo Sculpt tiene su propio contorno opaco blanco/negro; nunca comparte
+- El círculo Sculpt tiene su propio contorno opaco con borde negro; nunca comparte
   el Paint que se desvanece tras un toque de selección. Conserva el radio relativo
   al vídeo y la presión de tamaño tanto al pintar como al aproximar el lápiz.
+  Su color representa la intención: Suavizar azul, Invertir naranja, Máscara violeta
+  y normal blanco, con prioridad en ese orden. Incluye el pincel Suavizar y los
+  modificadores de la bandeja/lápiz, también durante hover; durante el trazo conserva
+  los modificadores del lápiz fijados al comenzar.
 - Los trazos Sculpt llevan propietario e ID; son excluyentes con transform/tool/CAD.
   La preview difiere el commit nativo de undo hasta restaurar la matriz del objeto
   y registra exactamente un paso propio, incluso si el pincel devuelve FINISHED
