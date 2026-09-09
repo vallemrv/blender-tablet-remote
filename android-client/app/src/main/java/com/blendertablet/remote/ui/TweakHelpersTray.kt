@@ -12,6 +12,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.blendertablet.remote.model.LengthUnit
+import com.blendertablet.remote.model.EditSettings
 import com.blendertablet.remote.model.SelectionMode
 import com.blendertablet.remote.model.SnapType
 import com.blendertablet.remote.model.TransformStepUnit
@@ -27,6 +28,11 @@ fun TweakHelpersTray(
     snapTypes: List<SnapType>,
     unitScaleLength: Double,
     lengthUnit: LengthUnit,
+    editSettings: EditSettings,
+    proportionalRadiusStep: Double,
+    onProportional: () -> Unit,
+    onProportionalRadius: (Double) -> Unit,
+    onProportionalFalloff: () -> Unit,
     onSlide: (TweakMotion) -> Unit,
     onSnapType: (SnapType) -> Unit,
     onSnapStep: (Double) -> Unit,
@@ -45,6 +51,14 @@ fun TweakHelpersTray(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("TWEAK", color = Ink.Accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            PillButton(if (slide) "Proporcional (sin GG)" else "Proporcional",
+                selected = !slide && editSettings.proportional, enabled = !slide,
+                onClick = onProportional)
+            if (!slide && editSettings.proportional) {
+                ProportionalRadiusInput(editSettings.radius, unitScaleLength, lengthUnit,
+                    proportionalRadiusStep, onProportionalRadius)
+                PillButton("Perfil: ${falloffLabel(editSettings.falloff)}", onClick = onProportionalFalloff)
+            }
             PillButton("GG", selected = slide, enabled = canSlide) {
                 onSlide(if (slide) TweakMotion.FREE else TweakMotion.SLIDE)
             }

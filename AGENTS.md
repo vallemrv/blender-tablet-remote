@@ -143,6 +143,12 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   editable para Incremento. GG solo admite vértices/aristas; en caras sigue libre.
   Las ayudas modifican el gesto sin activar otra herramienta ni reabrir Tweak;
   no hay un menú alternativo de ajustes por pulsación larga en su botón.
+- Tweak libre hereda la edición proporcional, su radio y perfil desde los ajustes
+  de Edit. Su bandeja ofrece Proporcional/Radio/Perfil mediante el mismo campo
+  métrico de radio de las transformaciones. Cambiar la influencia conserva el
+  arrastre y cancelar restaura también los vecinos; confirmar crea un solo undo.
+  GG conserva el deslizamiento de la selección por aristas y no aplica proporcional;
+  la bandeja muestra «Proporcional (sin GG)» deshabilitado mientras GG está activo.
 - Duplicar vive en el radial. En Object conserva normal/enlazado y en Edit duplica la
   selección efectiva.
 - En Object, el radial agrupa Alinear caras y las acciones de origen bajo Colocar,

@@ -109,6 +109,48 @@ class TweakTests(unittest.TestCase):
         for v,co in zip(self.bm.verts,self.coords):
             self.assertLess((v.co-co-offset).length,1e-6)
 
+    def test_free_tweak_inherits_proportional_weights_and_commits_once(self):
+        settings = bpy.context.scene.tool_settings
+        settings.use_proportional_edit = True
+        settings.proportional_size = 3
+        settings.proportional_edit_falloff = 'LINEAR'
+        picked = self.begin()['index']
+        self.assertTrue(modal.session.proportional)
+        with patch.object(modal, 'undo_push') as undo:
+            self.gesture('UPDATE', dx=.03, dy=.02)
+            delta = self.bm.verts[picked].co - self.coords[picked]
+            self.assertGreater(delta.length, .01)
+            affected = 0
+            for vert, original in zip(self.bm.verts, self.coords):
+                distance = (original - self.coords[picked]).length
+                weight = max(0, 1 - distance / 3)
+                self.assertLess((vert.co - original - delta * weight).length, 1e-6)
+                if vert.index != picked and weight > 0: affected += 1
+            self.assertGreater(affected, 0)
+            self.gesture('END')
+            undo.assert_called_once()
+
+    def test_proportional_radius_can_change_during_tweak_and_cancel_restores_all(self):
+        settings = bpy.context.scene.tool_settings
+        settings.use_proportional_edit = True
+        settings.proportional_size = 3
+        settings.proportional_edit_falloff = 'LINEAR'
+        picked = self.begin()['index']
+        identity = modal.session.session_id
+        self.gesture('UPDATE', dx=.03, dy=.02)
+        selected = self.bm.verts[picked].co.copy()
+        with patch.object(modal, 'undo_push') as undo:
+            modal.set_edit_settings(dict(radius=1, _client_id='tablet'))
+            for vert, original in zip(self.bm.verts, self.coords):
+                if vert.index != picked: self.assertEqual(vert.co, original)
+            modal.set_edit_settings(dict(radius=4, falloff='CONSTANT', _client_id='tablet'))
+            self.assertEqual(modal.session.session_id, identity)
+            self.assertEqual(self.bm.verts[picked].co, selected)
+            self.assertTrue(all((vert.co-original).length > .01 for vert, original in zip(self.bm.verts, self.coords)))
+            self.gesture('CANCEL')
+            undo.assert_not_called()
+        self.assertUnmoved()
+
     def test_next_gesture_can_change_selection(self):
         first=self.begin()['index']
         self.gesture('END')

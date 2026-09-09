@@ -452,7 +452,7 @@ private fun ParametricAxisInputs(
 }
 
 @Composable
-private fun ProportionalRadiusInput(
+internal fun ProportionalRadiusInput(
     radius: Double,
     unitScaleLength: Double,
     unit: LengthUnit,
@@ -494,7 +494,7 @@ private fun ProportionalRadiusInput(
     PillButton("+", repeatOnHold = true) { adjust(1) }
 }
 
-private fun falloffLabel(value: String) = when (value) {
+internal fun falloffLabel(value: String) = when (value) {
     "SPHERE" -> "Esfera"
     "ROOT" -> "Raíz"
     "SHARP" -> "Agudo"

@@ -407,6 +407,11 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 if (state.activeTool == ActiveTool.TWEAK && state.blender.mode == BlenderMode.EDIT) {
                     TweakHelpersTray(
                         settings = state.tweak,
+                        editSettings = state.blender.editSettings,
+                        proportionalRadiusStep = state.blender.sceneScale.proportionalRadiusStep,
+                        onProportional = vm::toggleProportional,
+                        onProportionalRadius = vm::setProportionalRadius,
+                        onProportionalFalloff = vm::cycleProportionalFalloff,
                         selectionMode = state.blender.selectionMode,
                         motions = state.blender.features.tweakMotions,
                         snapTypes = state.blender.features.tweakSnapTypes,
