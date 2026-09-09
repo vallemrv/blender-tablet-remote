@@ -114,10 +114,10 @@ private fun SculptTopologyDialog(sculpt: SculptState, vm: MainViewModel, onDismi
                 } else {
                     Text("Nivel ${sculpt.multiresLevel} de ${sculpt.multiresTotalLevels}", color = Ink.Accent)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        PillButton("−", enabled = sculpt.multiresLevel > 0) {
+                        PillButton("−", repeatOnHold = true, enabled = sculpt.multiresLevel > 0) {
                             vm.sculptCommand("sculpt.multires", mapOf("action" to "level", "level" to sculpt.multiresLevel - 1))
                         }
-                        PillButton("+", enabled = sculpt.multiresLevel < sculpt.multiresTotalLevels) {
+                        PillButton("+", repeatOnHold = true, enabled = sculpt.multiresLevel < sculpt.multiresTotalLevels) {
                             vm.sculptCommand("sculpt.multires", mapOf("action" to "level", "level" to sculpt.multiresLevel + 1))
                         }
                         PillButton("Subdividir", enabled = !sculpt.dyntopoEnabled) {

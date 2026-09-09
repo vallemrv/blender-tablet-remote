@@ -120,6 +120,7 @@ fun PillButton(
     modifier: Modifier = Modifier,
     selected: Boolean = false,
     enabled: Boolean = true,
+    repeatOnHold: Boolean = false,
     onClick: () -> Unit,
 ) {
     val background = if (selected) Ink.Accent.copy(alpha = .22f) else Color.White.copy(alpha = .05f)
@@ -134,7 +135,8 @@ fun PillButton(
             .clip(RoundedCornerShape(9.dp))
             .background(background)
             .then(if (selected) Modifier.border(1.dp, Ink.Accent.copy(alpha = .5f), RoundedCornerShape(9.dp)) else Modifier)
-            .then(if (enabled) Modifier.clickableNoRipple(onClick) else Modifier)
+            .then(if (repeatOnHold) Modifier.repeatingClick(enabled, onClick)
+                else if (enabled) Modifier.clickableNoRipple(onClick) else Modifier)
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -189,7 +191,7 @@ fun StepperButton(label: String, enabled: Boolean = true, onClick: () -> Unit) {
             .height(34.dp)
             .clip(RoundedCornerShape(9.dp))
             .background(Color.White.copy(alpha = .05f))
-            .then(if (enabled) Modifier.clickableNoRipple(onClick) else Modifier),
+            .repeatingClick(enabled, onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(label, color = if (enabled) Ink.Muted else Ink.Faint, fontSize = 15.sp)

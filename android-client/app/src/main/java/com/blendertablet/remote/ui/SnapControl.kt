@@ -163,7 +163,7 @@ internal fun DistanceSnapStepInput(
         onChange(wire)
     }
     Text("Paso", color = Ink.Faint, fontSize = 11.sp)
-    if (showSteppers) PillButton("−") { adjustStep(-1.0) }
+    if (showSteppers) PillButton("−", repeatOnHold = true) { adjustStep(-1.0) }
     CompactNumericField(
         value = text ?: formatToolDistance(displayed,
             detailDecimalPlaces(displayed, if (unit == TransformStepUnit.MM) millimeterDecimals else null)),
@@ -184,7 +184,7 @@ internal fun DistanceSnapStepInput(
             }
         }
     }
-    if (showSteppers) PillButton("+") { adjustStep(1.0) }
+    if (showSteppers) PillButton("+", repeatOnHold = true) { adjustStep(1.0) }
 }
 
 /** Opciones de Tweak derivadas por el mismo módulo que representa el snap. */
@@ -206,12 +206,12 @@ internal fun ScaleStepInput(value: Double, unit: TransformStepUnit, onChange: (D
             }
     }
     Text("Paso", color = Ink.Faint, fontSize = 11.sp)
-    PillButton("−") { onChange((value - 1.0).coerceAtLeast(0.001)) }
+    PillButton("−", repeatOnHold = true) { onChange((value - 1.0).coerceAtLeast(0.001)) }
     CompactNumericField(
         value = text, onValueChange = { text = it }, modifier = Modifier.width(84.dp),
         textAlign = TextAlign.End, placeholder = "Paso", onDone = { commit() },
     )
-    PillButton("+") { onChange(value + 1.0) }
+    PillButton("+", repeatOnHold = true) { onChange(value + 1.0) }
 }
 
 @Composable

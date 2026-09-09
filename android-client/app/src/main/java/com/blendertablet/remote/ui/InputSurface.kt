@@ -150,6 +150,17 @@ private class GestureView(
         style = Paint.Style.STROKE
         strokeWidth = 2f * resources.displayMetrics.density
     }
+    // Selection feedback fades tapPaint; the brush outline must stay opaque.
+    private val sculptOutlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.BLACK
+        style = Paint.Style.STROKE
+        strokeWidth = 3f * resources.displayMetrics.density
+    }
+    private val sculptCursorPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.WHITE
+        style = Paint.Style.STROKE
+        strokeWidth = 1.5f * resources.displayMetrics.density
+    }
     private val shapePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = android.graphics.Color.parseColor("#4C8DFF")
         style = Paint.Style.STROKE
@@ -940,7 +951,9 @@ private class GestureView(
         super.onDraw(canvas)
         if (sculptEnabled && sculptCursorVisible) {
             val pressure = if (sculptPressureSize && sculptPointerId >= 0) sculptCursorPressure else 1f
-            canvas.drawCircle(sculptCursorX, sculptCursorY, (sculptRadius * height * pressure).coerceAtLeast(2f), tapPaint)
+            val radius = (sculptRadius * height * pressure).coerceAtLeast(2f)
+            canvas.drawCircle(sculptCursorX, sculptCursorY, radius, sculptOutlinePaint)
+            canvas.drawCircle(sculptCursorX, sculptCursorY, radius, sculptCursorPaint)
         }
         cadOverlay.forEach { stroke ->
             cadPaint.color = if (stroke.selected && (stroke.selectedParts.isEmpty() || "BODY" in stroke.selectedParts)) 0xffffb347.toInt() else 0xff57dfe6.toInt()

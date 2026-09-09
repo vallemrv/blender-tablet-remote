@@ -173,6 +173,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   espaciado nativo, con corrección de aspecto y presión interpolada. El extremo
   provisional se sustituye entre UPDATE y no se acumula como otra aplicación
   por paquete. Grab conserva su recorrido. END confirma lo ya dibujado.
+- El círculo Sculpt tiene su propio contorno opaco blanco/negro; nunca comparte
+  el Paint que se desvanece tras un toque de selección. Conserva el radio relativo
+  al vídeo y la presión de tamaño tanto al pintar como al aproximar el lápiz.
 - Los trazos Sculpt llevan propietario e ID; son excluyentes con transform/tool/CAD.
   La preview difiere el commit nativo de undo hasta restaurar la matriz del objeto
   y registra exactamente un paso propio, incluso si el pincel devuelve FINISHED
@@ -274,6 +277,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   La cadena sigue siendo proporcional para valores distintos de cero; Reset recupera el baseline.
 - El selector y los pasos de snap viven en `ui/SnapControl.kt`; las bandejas declaran
   opciones y reciben valores, pero no vuelven a implementar su interfaz.
+- Los botones −/+ comparten pulsación mantenida: esperan 400 ms y aceleran de
+  180 a 80 ms entre incrementos, sin multiplicar el paso. Soltar no añade otro
+  incremento; cancelar, desplazar el panel, deshabilitar o retirar el control
+  detiene la repetición. Un toque corto sigue dando exactamente un paso.
 - El radio proporcional muestra y acepta la unidad del preset (mm/cm/m); sus −/+
   acumulan el paso físico anunciado convertido por `scale_length` (1 mm en Pequeña).
   Cambiar radio, perfil o activación actualiza la influencia desde el baseline sin

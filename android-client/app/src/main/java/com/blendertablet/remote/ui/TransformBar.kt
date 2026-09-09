@@ -296,7 +296,7 @@ private fun MoveStepInput(
     fun commit(raw: String = text) {
         raw.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0.0 }?.let { onChange(it, unit) }
     }
-    PillButton("−") { onChange((value - 1.0).coerceAtLeast(0.001), unit) }
+    PillButton("−", repeatOnHold = true) { onChange((value - 1.0).coerceAtLeast(0.001), unit) }
     CompactNumericField(
         value = text, onValueChange = { text = it }, modifier = Modifier.width(58.dp),
         textAlign = TextAlign.End, placeholder = "Paso", onDone = { commit() },
@@ -313,7 +313,7 @@ private fun MoveStepInput(
             }
         }
     }
-    PillButton("+") { onChange(value + 1.0, unit) }
+    PillButton("+", repeatOnHold = true) { onChange(value + 1.0, unit) }
 }
 
 @Composable
@@ -415,7 +415,7 @@ private fun ParametricAxisInputs(
                     fontWeight = FontWeight.Bold)
             }
             if (snapType == SnapType.INCREMENT) {
-                PillButton("−") {
+                PillButton("−", repeatOnHold = true) {
                     val next = current - axisStep
                     send(if (session.mode == TransformMode.SCALE && next < 0.0) current else next)
                 }
@@ -445,7 +445,7 @@ private fun ParametricAxisInputs(
                 },
             )
             if (snapType == SnapType.INCREMENT) {
-                PillButton("+") { send(current + axisStep) }
+                PillButton("+", repeatOnHold = true) { send(current + axisStep) }
             }
         }
     }
@@ -481,7 +481,7 @@ private fun ProportionalRadiusInput(
         send(ProportionalRadius.step(current, direction, stepMeters, unitScaleLength))
     }
     Text("Radio", color = Ink.Muted, fontSize = 11.sp)
-    PillButton("−") { adjust(-1) }
+    PillButton("−", repeatOnHold = true) { adjust(-1) }
     CompactNumericField(
         value = text ?: formatToolDistance(displayed, 3),
         onValueChange = { text = it },
@@ -491,7 +491,7 @@ private fun ProportionalRadiusInput(
         modifier = Modifier.width(64.dp),
     )
     Text(unit.short, color = Ink.Muted, fontSize = 11.sp)
-    PillButton("+") { adjust(1) }
+    PillButton("+", repeatOnHold = true) { adjust(1) }
 }
 
 private fun falloffLabel(value: String) = when (value) {
