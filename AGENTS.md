@@ -34,8 +34,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   undo. Otra herramienta o repetir su botón desactiva Tweak; sus eventos pendientes
   nunca modifican una transformación posterior. En caras usa movimiento libre.
 - H.264 se decodifica sobre una `Surface`; MJPEG se decodifica a Bitmap.
-- AUD/NAL H.264 se localizan con búsquedas nativas de bytes, sin recorridos Python
-  por byte. El pump respeta el próximo vencimiento de captura descontando el tiempo
+- H.264 usa longitudes de paquetes FLV solo en la tubería privada de ffmpeg para
+  publicar cada AU completo sin esperar al siguiente fotograma; Android sigue
+  recibiendo Annex B con SPS/PPS en cada keyframe. Configuración/metadatos no
+  consumen marcas de captura. Los NAL se localizan con búsquedas nativas de bytes,
+  sin recorridos Python por byte. El pump respeta el próximo vencimiento de captura descontando el tiempo
   de dibujo; sin vídeo conserva la cadencia de control. No se descartan AUs por ello.
 - El contrato canónico está en `blender-backend/docs/protocol.md`.
 

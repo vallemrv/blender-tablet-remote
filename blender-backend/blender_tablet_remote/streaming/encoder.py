@@ -19,7 +19,6 @@ que necesita el cliente, y deja la puerta abierta a H.264/NVENC (§88) sin rehac
 from __future__ import annotations
 
 import queue
-import os
 import shutil
 import subprocess
 import threading
@@ -27,7 +26,7 @@ import time
 
 from .. import log
 from .frames import FrameBuffer
-from .h264 import split_access_units
+from .h264 import flv_access_units
 
 FFMPEG = "ffmpeg"
 BOUNDARY_PREFIX = b"--"
@@ -302,7 +301,10 @@ class H264Encoder(JpegEncoder):
             "-pix_fmt", "yuv420p", "-bf", "0", "-g", str(gop),
             "-keyint_min", str(gop), "-sc_threshold", "0", "-crf", str(crf),
             "-x264-params", "aud=1:repeat-headers=1:bframes=0:rc-lookahead=0:sync-lookahead=0",
-            "-fflags", "nobuffer", "-flush_packets", "1", "-f", "h264", "pipe:1",
+            # Packet lengths let the reader publish this frame immediately.
+            # Raw Annex B needs the next AUD to delimit the previous frame.
+            "-fflags", "nobuffer", "-flush_packets", "1",
+            "-flvflags", "no_duration_filesize+no_sequence_end", "-f", "flv", "pipe:1",
         ]
         try:
             proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -321,19 +323,10 @@ class H264Encoder(JpegEncoder):
     def _read_loop(self, proc: subprocess.Popen) -> None:
         stdout = proc.stdout
         assert stdout is not None
-        pending = b""
         try:
-            while proc.poll() is None:
-                chunk = os.read(stdout.fileno(), 65536)
-                if not chunk:
-                    break
-                units, pending = split_access_units(pending + chunk)
-                for unit in units:
-                    self._publish_au(unit)
-            units, _ = split_access_units(pending, final=True)
-            for unit in units:
+            for unit in flv_access_units(stdout):
                 self._publish_au(unit)
-        except (OSError, ValueError):
+        except (OSError, ValueError, EOFError):
             pass
 
     def _publish_au(self, data: bytes) -> None:

@@ -45,6 +45,15 @@ el percentil 95, de 162–174 a unos 88 ms. Es una medida del PC y del transport
 local, no de la red Wi-Fi ni de la respuesta física del lápiz. Se eliminaron
 recorridos por byte en el parser H.264 y esperas innecesarias entre capturas.
 
+La salida H.264 también publica ahora cada fotograma al completar su paquete, sin
+retenerlo hasta recibir el siguiente. En una prueba del codificador con 48 cuadros
+RGBA de 640 × 480 a 24 fps, la mediana pasó de 46,69 a 2,09 ms (P95: 47,03 a
+5,42 ms). El último cuadro se recibió sin enviar otro ni cerrar ffmpeg. Es una
+medida aislada del codificador: los costes del trazo, Dyntopo, la captura, la red
+y la tablet se suman. Dyntopo continúa reconstruyendo topología y restaurando su
+baseline nativo durante la preview, por lo que su coste crece con el detalle y el
+recorrido.
+
 Máscara protege zonas frente a los pinceles. Con ese pincel activo, una pulsación
 larga sobre su botón del rail abre «Invertir máscara» y «Borrar toda la máscara».
 Ambas acciones admiten Deshacer. Suavizar temporalmente usa Smooth y mantiene el pincel elegido para el

@@ -1318,9 +1318,12 @@ propósito: un fotograma perdido no debe retrasar un comando, ni al revés.
 
 Si hay token, va en la query: `http://10.0.0.8:8766/stream.mjpg?token=SECRETO`.
 
-El parser H.264 localiza AUD/NAL mediante búsquedas nativas de bytes, evitando
-recorrer cada byte comprimido en Python. Conserva las unidades de acceso, sus
-flags y los prefijos parciales entre lecturas. La espera del pump se acota por
+La tubería privada de ffmpeg utiliza paquetes FLV con longitud explícita para
+publicar cada fotograma H.264 completo sin esperar al AUD del siguiente. El lector
+convierte los NAL a Annex B y conserva SPS/PPS en cada keyframe; metadatos y
+configuración no consumen timestamps de captura. FLV no se transmite a Android.
+Los NAL se localizan con búsquedas nativas de bytes, sin recorridos Python por byte.
+La espera del pump se acota por
 el próximo vencimiento de captura, descontando el tiempo de dibujo ya consumido.
 Sin espectadores se conserva la cadencia de control. Estas optimizaciones no
 cambian resolución, calidad, códec ni el framing de red.
@@ -1328,7 +1331,7 @@ cambian resolución, calidad, códec ni el framing de red.
 ### Framing H.264 `btr-h264-v1`
 
 La respuesta es `application/x-btr-h264`, sin muxer. Cada registro contiene una
-access unit completa (AUD hasta antes del AUD siguiente), lista para encolarla en
+access unit completa de un fotograma, lista para encolarla en
 Android `MediaCodec`. Todos los enteros son big-endian:
 
 | Offset | Tamaño | Campo |
