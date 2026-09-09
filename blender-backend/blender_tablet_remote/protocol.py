@@ -3,7 +3,7 @@
 PROTOCOL_VERSION = "2.0"
 
 ENUMS = {
-    "mode": ["OBJECT", "EDIT", "CAD"],
+    "mode": ["OBJECT", "EDIT", "CAD", "SCULPT"],
     "selection_mode": ["VERTEX", "EDGE", "FACE"],
     "tool": ["SELECT", "MOVE", "ROTATE", "SCALE", "EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE", "BISECT", "REVOLVE", "SWEEP"],
     "modifier_type": ["SUBSURF", "ARRAY", "BEVEL", "SOLIDIFY", "BOOLEAN", "MIRROR"],

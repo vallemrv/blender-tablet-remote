@@ -78,7 +78,7 @@ fun TopToolbar(
                             vm.toggleAutoMerge()
                         }
                     }
-                    if (!blender.cad.workspace) {
+                    if (!blender.cad.workspace && blender.mode != BlenderMode.SCULPT) {
                     PillButton("Mayús", selected = state.selectionOp == SelectionOp.TOGGLE && !state.shortestPathActive) { vm.toggleSelectionOp(SelectionOp.TOGGLE) }
                     if (inEdit && blender.features.selectionShortestPath) {
                         PillButton("Ctrl", selected = state.shortestPathActive) { vm.toggleShortestPath() }
@@ -87,7 +87,7 @@ fun TopToolbar(
                     }
                     IconAction(Icons.AutoMirrored.Filled.Undo, "Deshacer") { vm.undo() }
                     IconAction(Icons.AutoMirrored.Filled.Redo, "Rehacer") { vm.redo() }
-                    if (!blender.cad.workspace && blender.features.repeatLast) {
+                    if (!blender.cad.workspace && blender.mode != BlenderMode.SCULPT && blender.features.repeatLast) {
                         PillButton("⇧R") { vm.repeatLast() }
                     }
                 }
@@ -133,7 +133,7 @@ fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 IconAction(
                     Icons.Default.ViewInAr, "Object Mode",
-                    selected = !inEdit && !blender.cad.workspace,
+                    selected = blender.mode == BlenderMode.OBJECT && !blender.cad.workspace,
                 ) { vm.setMode(BlenderMode.OBJECT) }
                 IconAction(
                     Icons.Default.Straighten, "Edit Mode",
@@ -142,8 +142,10 @@ fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier
                 ) { vm.setMode(BlenderMode.EDIT) }
                 if (blender.features.cad.available) PillButton("CAD", selected = blender.cad.workspace) { vm.enterCad() }
                 IconAction(
-                    Icons.Default.Brush, "Sculpt Mode · próximamente",
-                    onClick = {},
+                    AppIcons.sculpt("DRAW"), "Escultura",
+                    selected = blender.mode == BlenderMode.SCULPT,
+                    enabled = blender.sculpt.available && editable && blender.activeObjectType == "MESH",
+                    onClick = { vm.setMode(BlenderMode.SCULPT) },
                 )
             }
         }

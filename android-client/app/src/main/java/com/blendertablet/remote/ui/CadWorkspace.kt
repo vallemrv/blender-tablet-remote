@@ -34,9 +34,15 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
     LaunchedEffect(cad.selectedFeature?.id) { cad.selectedFeature?.let { cutTarget = it.id } }
     val target = targets.firstOrNull { it.id == cutTarget } ?: targets.singleOrNull()
     val editing = cad.activeSketchId != null
+    val selectedSketch = cad.selectedSketch
     val depthPreview = cad.sessionActive && cad.operation in listOf("EXTRUDE", "CUT")
     val availableHeight = (LocalConfiguration.current.screenHeightDp - 320).coerceAtLeast(100).dp
     fun command(name: String, vararg values: Pair<String, Any?>) { if (connected) vm.cadCommand(name, mapOf(*values)) }
+    fun editSketch(sketchId: String) {
+        vm.cadTool(null)
+        modelVisible = false
+        command("cad.sketch.activate", "sketch_id" to sketchId)
+    }
     fun beginFeature(operation: String) {
         vm.cadTool(null)
         command("cad.extrude.begin", "profile_id" to cad.selectionId, "depth" to cad.step * 10,
@@ -44,14 +50,17 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
     }
     FloatingPanel(Modifier.align(Alignment.TopStart).padding(start = Metrics.EdgeMargin, top = 76.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            CadAction("MODEL", "Árbol del modelo", selected = modelVisible) { modelVisible = !modelVisible }
-            Text(if (editing) "Boceto · ${cad.activeSketch?.plane}" else "Sólidos CAD", color = Ink.OnPanel, fontSize = 13.sp,
+            PillButton("Bocetos · ${cad.sketches.size}", selected = modelVisible) { modelVisible = !modelVisible }
+            Text(if (editing) "${cad.activeSketch?.name} · ${cad.activeSketch?.plane}" else "Sólidos CAD", color = Ink.OnPanel, fontSize = 13.sp,
                 modifier = Modifier.padding(horizontal = 8.dp))
             if (editing) CadAction("PLANE_${cad.activeSketch?.plane}", "Volver al plano del boceto", enabled = !cad.sessionActive) {
                 command("cad.sketch.activate", "sketch_id" to cad.activeSketchId)
             }
-            if (editing) CadAction("FINISH", "Finalizar boceto", enabled = !cad.sessionActive) {
+            if (editing) PillButton("Finalizar boceto", enabled = connected && !cad.sessionActive) {
                 vm.cadTool(null); command("cad.sketch.finish")
+            }
+            else if (selectedSketch != null) PillButton("Editar boceto", enabled = connected && !cad.sessionActive) {
+                editSketch(selectedSketch.id)
             }
         }
     }
@@ -98,8 +107,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
             Text("Modelo CAD", color = Ink.OnPanel, fontSize = 14.sp)
             cad.sketches.forEach { sketch ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                PillButton("${sketch.name} · ${sketch.plane}", selected = cad.activeSketchId == sketch.id, enabled = !cad.sessionActive) {
-                    vm.cadTool(null); command("cad.sketch.activate", "sketch_id" to sketch.id)
+                PillButton("${if (cad.activeSketchId == sketch.id) "Editando" else "Editar"} ${sketch.name} · ${sketch.plane}", selected = cad.activeSketchId == sketch.id, enabled = connected && !cad.sessionActive) {
+                    editSketch(sketch.id)
                 }
                     CadAction("DELETE", "Eliminar ${sketch.name}", enabled = !cad.sessionActive && cad.features.none { it.sketchId == sketch.id }) { command("cad.sketch.delete", "sketch_id" to sketch.id) }
                 }
@@ -144,10 +153,15 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                 state.cadTool == "MULTI" -> "Toca puntos o aristas para añadir/quitar · elige una restricción en el rail derecho"
                 state.cadTool == "ARC" -> "Arrastra centro → inicio del arco · ajusta el radio y el ángulo en la bandeja"
                 state.cadTool != null -> "${cadLabel(state.cadTool!!)} · arrastra para dibujar · dos dedos navegan"
-                editing -> "${cad.selection.size} seleccionados · ${cad.activeSketch?.constraints?.size ?: 0} restricciones · mantén un icono para ver su función"
-                else -> "Crea un boceto o selecciona un perfil cerrado para extruir o vaciar"
+                editing -> "Seleccionar · toca puntos o aristas para editar sus cotas · Mover permite arrastrarlos · Finalizar boceto vuelve a los sólidos"
+                selectedSketch != null -> "${selectedSketch.name} seleccionado · Editar boceto abre su geometría y actualiza las operaciones dependientes"
+                else -> "Abre Bocetos para editar uno existente · o crea uno en XY/XZ/YZ y selecciona un perfil para extruir"
             }, color = Ink.Muted, fontSize = 12.sp)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (editing && !cad.sessionActive) {
+                    PillButton("Seleccionar", selected = state.cadTool == null, enabled = connected) { vm.cadTool(null) }
+                    if (capabilities.sketchEditing) PillButton("Mover", selected = state.cadTool == "MOVE", enabled = connected) { vm.cadTool("MOVE") }
+                }
                 CadUnitSelector(unit) { unit = it }
                 if (capabilities.sketchEditing && (state.cadTool == "MOVE" || depthPreview)) {
                     SnapControl(listOf(SnapType.NONE, SnapType.INCREMENT), if (cad.increment) SnapType.INCREMENT else SnapType.NONE,
@@ -206,7 +220,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                 } else cad.selectedFeature?.let { feature ->
                     CadDimension("Profundidad", feature.depth, unit, feature.id) { command("cad.feature.set", "feature_id" to feature.id, "depth" to it) }
                     CadAction("VISIBLE", if (feature.enabled) "Ocultar" else "Mostrar", selected = feature.enabled) { command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled) }
-                    CadAction("SKETCH", "Editar boceto") { command("cad.sketch.activate", "sketch_id" to feature.sketchId) }
                     CadAction("CONVERT", "Convertir a malla", enabled = feature.enabled && connected) { command("cad.convert", "feature_id" to feature.id) }
                     CadAction("DELETE", "Borrar operación") { command("cad.feature.delete", "feature_id" to feature.id) }
                 }

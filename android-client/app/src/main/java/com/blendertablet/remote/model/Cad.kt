@@ -47,4 +47,13 @@ data class CadState(
     val activeSketch get() = sketches.firstOrNull { it.id == activeSketchId }
     val selectedEntity get() = sketches.flatMap { it.entities }.firstOrNull { selectionKind == "ENTITY" && it.id == selectionId }
     val selectedFeature get() = features.firstOrNull { selectionKind == "FEATURE" && it.id == selectionId }
+    /** Resolve the source document sketch, including profiles made from several entities. */
+    val selectedSketch get() = sketches.firstOrNull { sketch ->
+        when (selectionKind) {
+            "PROFILE" -> sketch.profiles.any { it.id == selectionId }
+            "ENTITY" -> sketch.entities.any { it.id == selectionId }
+            "FEATURE" -> sketch.id == selectedFeature?.sketchId
+            else -> false
+        }
+    }
 }

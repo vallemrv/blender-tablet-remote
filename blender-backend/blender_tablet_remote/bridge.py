@@ -95,6 +95,8 @@ def start(
     commands.load_all()
     from .cad.lifecycle import register_handlers
     register_handlers()
+    from .commands import sculpt
+    sculpt.register_handlers()
     log.set_level(2 if verbose else 1)
 
     _token = token or ""
@@ -156,6 +158,8 @@ def stop() -> None:
     from .cad.lifecycle import unregister_handlers
     runtime.leave()
     unregister_handlers()
+    from .commands import sculpt
+    sculpt.unregister_handlers()
     _gestures.reset()
     while not _inbox.empty():
         try:
@@ -175,6 +179,7 @@ def reset_session() -> None:
     contra un estado de otro archivo.
     """
     global _last_modal_status
+    _capture._sculpt_depth = None
     from .commands.modal import session
 
     # La sesión modal guarda matrices de objetos del archivo anterior: restaurarlas
@@ -437,6 +442,8 @@ def _handle(client: WSClient, msg: dict) -> None:
 
     if kind == "_client_gone":
         _gestures.drop_client(msg["client_id"])
+        from .commands.sculpt import owner_disconnected
+        owner_disconnected(msg["client_id"])
         from .commands.modal import session
         session.owner_disconnected(msg["client_id"])
         from .commands.tools import tool_session
@@ -463,6 +470,8 @@ def _handle(client: WSClient, msg: dict) -> None:
 
     if kind == "gesture":
         try:
+            from .commands.sculpt import cancel as cancel_sculpt
+            cancel_sculpt()
             _gestures.handle(client.id, msg)
             _stats["gestures"] += 1
         except CommandError as exc:
@@ -506,6 +515,8 @@ def _authorized(client: WSClient, msg: dict) -> bool:
 
 
 def _handle_command(client: WSClient, msg: dict) -> None:
+    from .commands.sculpt import finish_saved_preview
+    finish_saved_preview()
     name = msg.get("command")
     if not name:
         _respond(client, msg, False, error="Missing 'command'", code="bad_payload")
@@ -528,6 +539,11 @@ def _handle_command(client: WSClient, msg: dict) -> None:
 
     log.info("command %s", name)
     try:
+        # Native sculpt previews own the latest undo step. Close them before
+        # any unrelated intention can write geometry or change active context.
+        if not name.startswith("sculpt.") and not name.startswith(("stream.", "scene.")) and name not in {"view.get", "server.ping", "server.capabilities", "file.info", "file.list", "file.locations"}:
+            from .commands.sculpt import cancel as cancel_sculpt
+            cancel_sculpt()
         if name.startswith("mesh.") and name not in {"mesh.info", "mesh.loop_probe"}:
             from .cad.runtime import FEATURE_KEY
             obj = bpy.context.view_layer.objects.active

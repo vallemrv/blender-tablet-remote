@@ -5,7 +5,7 @@ package com.blendertablet.remote.model
  * y lo está reintentando sola, sin que el usuario tenga que tocar nada.
  */
 enum class ConnectionStatus { DISCONNECTED, CONNECTING, RECONNECTING, CONNECTED }
-enum class BlenderMode { OBJECT, EDIT }
+enum class BlenderMode { OBJECT, EDIT, SCULPT }
 enum class SelectionMode { VERTEX, EDGE, FACE }
 /** Atajos de la página Edit; su adaptador wire vive en MainViewModel. */
 enum class EditFooterAction { MAKE_EDGE_FACE, CONNECT_VERTICES, KNIFE, SEPARATE, SPLIT, NORMALS, NORMALS_OUTSIDE, NORMALS_INSIDE, NORMALS_FLIP }
@@ -444,6 +444,7 @@ data class Transform(
 data class BlenderState(
     val mode: BlenderMode = BlenderMode.OBJECT,
     val cad: CadState = CadState(),
+    val sculpt: SculptState = SculptState(),
     val activeObject: String? = null,
     val selectedObjects: List<String> = emptyList(),
     val selectionMode: SelectionMode = SelectionMode.VERTEX,
@@ -521,6 +522,9 @@ data class AppUiState(
     val blender: BlenderState = BlenderState(),
     val activeTool: ActiveTool = ActiveTool.SELECT,
     val cadTool: String? = null,
+    val sculptSmooth: Boolean = false,
+    val sculptInvert: Boolean = false,
+    val sculptStylusOnly: Boolean = true,
     val controlsVisible: Boolean = true,
     val debugVisible: Boolean = false,
     val error: String? = null,

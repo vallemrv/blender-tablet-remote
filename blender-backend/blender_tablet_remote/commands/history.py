@@ -55,12 +55,21 @@ def _run(op, label: str) -> dict:
 
 @command("history.undo")
 def undo(payload: dict) -> dict:
-    return _run(bpy.ops.ed.undo, "undo")
+    result = _run(bpy.ops.ed.undo, "undo")
+    from .sculpt import history_traversed
+    history_traversed(True)
+    return result
 
 
 @command("history.redo")
 def redo(payload: dict) -> dict:
-    return _run(bpy.ops.ed.redo, "redo")
+    from .sculpt import redo_allowed
+    if not redo_allowed():
+        raise CommandError("El trazo cancelado no se puede rehacer", code="nothing_to_redo")
+    result = _run(bpy.ops.ed.redo, "redo")
+    from .sculpt import history_traversed
+    history_traversed(False)
+    return result
 
 
 @command("history.push")

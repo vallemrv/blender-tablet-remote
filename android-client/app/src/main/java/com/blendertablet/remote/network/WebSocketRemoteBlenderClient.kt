@@ -179,6 +179,7 @@ class WebSocketRemoteBlenderClient(
         retryJob = null
         socket?.close(1000, "Client disconnect")
         socket = null
+        clearSculptTransport()
         pending.clear()
         sentAtNs.clear()
         stateRequestInFlight.set(false)
@@ -222,6 +223,7 @@ class WebSocketRemoteBlenderClient(
         // enable commands against an older backend during the next handshake.
         _state.value = _state.value.copy(
             cad = com.blendertablet.remote.model.CadState(),
+            sculpt = com.blendertablet.remote.model.SculptState(),
             features = _state.value.features.copy(cad = com.blendertablet.remote.model.CadCapabilities()),
         )
         val generation = this.generation.incrementAndGet()
@@ -230,6 +232,7 @@ class WebSocketRemoteBlenderClient(
         // cancel() y no close(): el socket viejo puede estar medio muerto y esperar
         // su handshake de cierre retrasaría el intento nuevo hasta el timeout.
         socket?.cancel()
+        clearSculptTransport()
         pending.clear()
         sentAtNs.clear()
         stateRequestInFlight.set(false)
@@ -254,6 +257,68 @@ class WebSocketRemoteBlenderClient(
         }
     }
 
+    private val sculptTransportLock = Any()
+    private val sculptQueue = SculptCommandQueue()
+    private var sculptInFlight = false
+    private var sculptInFlightId: String? = null
+    private var sculptInFlightPhase: String? = null
+    private var sculptStoppedId: String? = null
+
+    private fun clearSculptTransport() = synchronized(sculptTransportLock) {
+        sculptQueue.clear()
+        sculptInFlight = false
+        sculptInFlightId = null
+        sculptInFlightPhase = null
+        sculptStoppedId = null
+    }
+
+    private fun flushSculptTransport() {
+        while (!sculptInFlight) {
+            val next = sculptQueue.poll() ?: break
+            if (next.raw != null) {
+                if (socket?.send(next.raw) != true) reportOffline()
+            } else {
+                val stroke = next.name == "sculpt.stroke"
+                if (stroke) {
+                    sculptInFlight = true
+                    sculptInFlightId = next.payload.optString("stroke_id")
+                    sculptInFlightPhase = next.payload.optString("phase")
+                }
+                if (!sendCommandNow(next.name, next.payload) && stroke) {
+                    sculptInFlight = false
+                    sculptQueue.clear()
+                }
+            }
+        }
+    }
+
+    private fun acknowledgeSculpt(ok: Boolean, result: JSONObject?) = synchronized(sculptTransportLock) {
+        if (!ok) sculptInFlightId?.let { id ->
+            sculptStoppedId = id
+            if (sculptInFlightPhase != "cancel") sculptQueue.recoverStroke(id)
+            else sculptQueue.removeStroke(id)
+        } else if (result?.optBoolean("limit_reached", false) == true) {
+            // The backend already committed the last stable preview. Discard the
+            // rest of this pointer's samples without rolling that work back.
+            sculptInFlightId?.let { id ->
+                sculptStoppedId = id
+                sculptQueue.removeStroke(id)
+            }
+            _notices.value = result.optString("message").ifBlank {
+                "Trazo confirmado: levanta el lápiz para continuar"
+            }
+        }
+        sculptInFlight = false
+        sculptInFlightId = null
+        sculptInFlightPhase = null
+        flushSculptTransport()
+    }
+
+    override fun sculptCommand(name: String, payload: Map<String, Any?>) {
+        require(name.startsWith("sculpt."))
+        command(name, JSONObject(payload))
+    }
+
     override fun cadCommand(name: String, payload: Map<String, Any?>) {
         if (!_state.value.features.cad.available) return
         require(name.startsWith("cad.") || (name == "mode.set" && payload["mode"] == "CAD"))
@@ -268,7 +333,21 @@ class WebSocketRemoteBlenderClient(
         command(command, JSONObject(payload))
     }
 
-    private fun sendCommand(name: String, payload: JSONObject = JSONObject()): Boolean {
+    private fun sendCommand(name: String, payload: JSONObject = JSONObject()): Boolean = synchronized(sculptTransportLock) {
+        if (name == "sculpt.stroke") {
+            val phase = payload.optString("phase")
+            if (phase == "begin") sculptStoppedId = null
+            else if (payload.optString("stroke_id") == sculptStoppedId) return@synchronized true
+        }
+        if (name == "sculpt.stroke" || sculptInFlight || !sculptQueue.isEmpty) {
+            if (_connection.value != ConnectionStatus.CONNECTED) { reportOffline(); return@synchronized false }
+            sculptQueue.add(SculptQueuedMessage(name, payload))
+            flushSculptTransport()
+            true
+        } else sendCommandNow(name, payload)
+    }
+
+    private fun sendCommandNow(name: String, payload: JSONObject = JSONObject()): Boolean {
         val id = "c${commandId.incrementAndGet()}"
         val message = JSONObject()
             .put("type", "command")
@@ -329,7 +408,10 @@ class WebSocketRemoteBlenderClient(
             append(tokenJson)
             append('}')
         }
-        if (socket?.send(message) != true) reportOffline()
+        synchronized(sculptTransportLock) {
+            if (sculptInFlight || !sculptQueue.isEmpty) sculptQueue.add(SculptQueuedMessage("gesture", JSONObject(), message))
+            else if (socket?.send(message) != true) reportOffline()
+        }
     }
 
     override fun requestState() {
@@ -376,7 +458,10 @@ class WebSocketRemoteBlenderClient(
     override fun clearProbe() {
         _touchProbe.value = null
     }
-    override fun setMode(mode: BlenderMode) = command(if (mode == BlenderMode.OBJECT) "mode.object" else "mode.edit")
+    override fun setMode(mode: BlenderMode) {
+        if (mode == BlenderMode.SCULPT) command("mode.set", JSONObject().put("mode", "SCULPT"))
+        else command(if (mode == BlenderMode.OBJECT) "mode.object" else "mode.edit")
+    }
     override fun setSelectionMode(mode: SelectionMode) = command("selection.${mode.name.lowercase()}")
     override fun invertSelection() = command("selection.invert")
     override fun hideSelection() = command("selection.hide")
@@ -784,6 +869,7 @@ class WebSocketRemoteBlenderClient(
                 if (command == "scene.get_state") stateRequestInFlight.set(false)
                 // El servidor devuelve el estado en "result" (ver docs/protocol.md).
                 val result = message.optJSONObject("result")
+                if (command == "sculpt.stroke") acknowledgeSculpt(message.optBoolean("ok", false), result)
                 // El hueco queda libre incluso si el nudge falló: si no, un error
                 // dejaría la herramienta sorda al arrastre para siempre.
                 if (command == "tool.nudge") nudgeInFlight = false
@@ -818,10 +904,28 @@ class WebSocketRemoteBlenderClient(
                         else if (command == "tool.drag_line") Unit
                         else _errors.value = message.optString("error", "Error remoto")
                     }
+                    command != null && command.startsWith("sculpt.") -> result?.optJSONObject("sculpt")?.let {
+                        _state.value = _state.value.copy(sculpt = SculptParser.state(it))
+                    }
                     command != null && command.startsWith("cad.") -> result?.let {
                         _state.value = _state.value.copy(cad = CadParser.state(it))
                     }
-                    command == "mode.set" && _state.value.features.cad.available -> cadCommand("cad.state")
+                    command == "mode.set" || (_state.value.mode == BlenderMode.SCULPT &&
+                        command in setOf("mode.object", "mode.edit")) -> {
+                        val mode = result?.optString("mode")
+                        if (mode == "SCULPT") {
+                            _state.value = _state.value.copy(mode = BlenderMode.SCULPT,
+                                sculpt = result?.optJSONObject("sculpt")?.let(SculptParser::state)
+                                    ?: _state.value.sculpt.copy(active = true),
+                                cad = _state.value.cad.copy(workspace = false))
+                        } else if (_state.value.mode == BlenderMode.SCULPT && mode in setOf("OBJECT", "EDIT", "EDIT_MESH", "CAD")) {
+                            _state.value = _state.value.copy(mode = if (mode!!.startsWith("EDIT")) BlenderMode.EDIT else BlenderMode.OBJECT,
+                                sculpt = _state.value.sculpt.copy(active = false))
+                        }
+                        result?.optJSONObject("cad")?.let { _state.value = _state.value.copy(cad = CadParser.state(it)) }
+                        requestState()
+                        if (_state.value.features.cad.available) cadCommand("cad.state")
+                    }
                     command == "scene.get_state" -> result?.let(::updateState)
                     command == "server.capabilities" -> result?.let { caps ->
                         _state.value = _state.value.copy(
@@ -1057,6 +1161,7 @@ class WebSocketRemoteBlenderClient(
         _state.value = parsed.copy(
             features = old.features,
             cad = if (json.has("cad")) parsed.cad else old.cad,
+            sculpt = if (json.has("sculpt")) parsed.sculpt else old.sculpt,
             modifierOptions = old.modifierOptions,
             view = if (json.has("view") || json.has("shading")) parsed.view else old.view,
             unitScaleLength = json.optJSONObject("scene_scale")?.let { scale ->

@@ -12,12 +12,15 @@ VALID_MODES = {
     "OBJECT",
     "EDIT",
     "CAD",
+    "SCULPT",
 }
 
 
 def _set_mode(target: str, owner=None) -> dict:
     from ..cad.runtime import runtime, FEATURE_KEY
     from .sessions import cancel_all, cancel_cad
+    from .sculpt import cancel as cancel_sculpt
+    cancel_sculpt()
     cancel_cad()
     if target == "CAD":
         doc = runtime.doc()
@@ -36,7 +39,7 @@ def _set_mode(target: str, owner=None) -> dict:
             runtime.focus(sketch)
         return {"mode": "CAD", "cad": runtime.status()}
     obj = bpy.context.view_layer.objects.active
-    if target == "EDIT" and obj and obj.get(FEATURE_KEY):
+    if target in {"EDIT", "SCULPT"} and obj and obj.get(FEATURE_KEY):
         raise CommandError("Esta pieza es paramétrica: edita su sketch o conviértela a malla", code="cad_mesh_protected")
     runtime.leave()
     if target == "OBJECT" and obj is None:
@@ -46,11 +49,21 @@ def _set_mode(target: str, owner=None) -> dict:
         return {"mode": target}
     if target == "EDIT" and obj.type not in {"MESH", "CURVE", "SURFACE", "META", "FONT", "ARMATURE", "LATTICE"}:
         raise CommandError(f"Object type '{obj.type}' has no Edit Mode", code="wrong_mode")
+    if target == "SCULPT":
+        if obj.type != "MESH":
+            raise CommandError("Escultura requiere una malla", code="wrong_mode")
+        if bpy.app.background or bpy.app.version < (4, 4, 0):
+            raise CommandError("Escultura requiere Blender 4.4+ con ventana", code="no_viewport")
+        cancel_all()
     try:
         with view3d_override():
             bpy.ops.object.mode_set(mode=target)
     except RuntimeError as exc:
         raise CommandError(f"Cannot switch to {target}: {exc}", code="wrong_mode")
+    if target == "SCULPT":
+        from .sculpt import enter, status
+        enter()
+        return {"mode": obj.mode, "sculpt": status()}
     return {"mode": obj.mode}
 
 

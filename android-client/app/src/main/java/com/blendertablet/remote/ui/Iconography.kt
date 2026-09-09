@@ -6,6 +6,8 @@ import androidx.compose.material.icons.automirrored.filled.CallSplit
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.automirrored.filled.ShowChart
+import androidx.compose.material.icons.filled.Brush
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Adjust
@@ -82,6 +84,21 @@ object AppIcons {
     val Rotate: ImageVector = Icons.AutoMirrored.Filled.RotateRight
     val Scale: ImageVector = Icons.Default.AspectRatio
     val Reset: ImageVector = Icons.Default.RestartAlt
+
+    val Reference: ImageVector = Icons.Default.Image
+    fun sculpt(intent: String): ImageVector = when (intent.uppercase()) {
+        "DRAW" -> Icons.Default.Brush
+        "CLAY" -> Icons.Default.Layers
+        "INFLATE" -> Icons.Default.Lens
+        "CREASE" -> Icons.Default.Timeline
+        "FLATTEN" -> Icons.Default.LinearScale
+        "GRAB" -> Icons.Default.TouchApp
+        "SMOOTH" -> Icons.Default.Waves
+        "MASK" -> Icons.Default.Flip
+        "PINCH" -> Icons.Default.CenterFocusStrong
+        "TOPOLOGY" -> Icons.Default.Grid4x4
+        else -> Fallback
+    }
 
     // Original 24 × 24 stroke icons: each CAD intent has its own silhouette.
     private val cadPaths = mapOf(

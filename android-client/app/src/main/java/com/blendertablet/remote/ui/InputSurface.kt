@@ -9,6 +9,8 @@ import android.graphics.Paint
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import com.blendertablet.remote.model.SculptPoint
+import com.blendertablet.remote.model.SculptSamples
 import com.blendertablet.remote.model.Gesture
 import com.blendertablet.remote.model.GesturePhase
 import com.blendertablet.remote.model.InputDebug
@@ -51,6 +53,11 @@ fun InputSurface(
     onDoubleTap: () -> Unit,
     repeatTap: Boolean = false,
     independentTaps: Boolean = false,
+    sculptEnabled: Boolean = false,
+    sculptStylusOnly: Boolean = true,
+    sculptRadius: Float = .04f,
+    sculptPressureSize: Boolean = false,
+    onSculptStroke: (GesturePhase, List<SculptPoint>, Boolean, Boolean) -> Unit = { _, _, _, _ -> },
     cadDrawingEnabled: Boolean = false,
     onCadGesture: (GesturePhase, Float, Float) -> Unit = { _, _, _ -> },
     cadOverlay: List<com.blendertablet.remote.model.CadOverlay> = emptyList(),
@@ -85,6 +92,11 @@ fun InputSurface(
             view.independentTaps = independentTaps
             view.shapeTool = shapeTool
             view.fixedCircleRadius = fixedCircleRadius
+            view.onSculptStroke = onSculptStroke
+            view.sculptEnabled = sculptEnabled
+            view.sculptStylusOnly = sculptStylusOnly
+            view.sculptRadius = sculptRadius
+            view.sculptPressureSize = sculptPressureSize
             view.cadDrawingEnabled = cadDrawingEnabled
             view.onCadGesture = onCadGesture
             view.cadOverlay = cadOverlay
@@ -205,6 +217,32 @@ private class GestureView(
     private var suppressSingleAfterTweak = false
     var navigationOrbitEnabled: Boolean = false
     var onShape: (ShapeTool, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> }
+    var onSculptStroke: (GesturePhase, List<SculptPoint>, Boolean, Boolean) -> Unit = { _, _, _, _ -> }
+    var sculptEnabled = false
+        set(value) {
+            if (field && !value) {
+                cancelSculpt()
+                endNavigationOrbit()
+                endViewGesture()
+                sculptCursorVisible = false
+            }
+            field = value
+        }
+    var sculptStylusOnly = true
+    var sculptRadius = .04f
+    var sculptPressureSize = false
+    private var sculptPointerId = -1
+    private var sculptPointerStylus = false
+    private var sculptSmooth = false
+    private var sculptInvert = false
+    private var sculptSuppressPalm = false
+    private var sculptCursorVisible = false
+    private var sculptCursorX = 0f
+    private var sculptCursorY = 0f
+    private var sculptCursorPressure = 1f
+    private var sculptStartedAt = 0L
+    private val sculptSamples = SculptSamples()
+
     /** Puntos del Knife (normalizados) para el overlay. */
     var cadDrawingEnabled = false
         set(value) {
@@ -283,6 +321,8 @@ private class GestureView(
             x = event.getX(index),
             y = event.getY(index),
         ))
+
+        if (sculptEnabled) return handleSculptEvent(event)
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
@@ -487,6 +527,152 @@ private class GestureView(
         return true
     }
 
+    /** Sculpt owns only its mode: the existing Object/Edit gesture paths remain independent. */
+    private fun handleSculptEvent(event: MotionEvent): Boolean {
+        val action = event.actionMasked
+        val actionIndex = event.actionIndex
+        if (action == MotionEvent.ACTION_CANCEL) {
+            cancelSculpt()
+            cancelGestures()
+            sculptSuppressPalm = true
+            sculptCursorVisible = false
+            parent?.requestDisallowInterceptTouchEvent(false)
+            invalidate()
+            return true
+        }
+        val lifting = action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP
+        if (lifting && event.flags and MotionEvent.FLAG_CANCELED != 0) {
+            if (sculptPointerId == event.getPointerId(actionIndex)) cancelSculpt()
+            if (sculptPointerId < 0) {
+                endNavigationOrbit(); endViewGesture(); sculptSuppressPalm = true
+                sculptCursorVisible = false
+            }
+            if (action == MotionEvent.ACTION_UP) parent?.requestDisallowInterceptTouchEvent(false)
+            invalidate()
+            return true
+        }
+        when (action) {
+            MotionEvent.ACTION_DOWN -> {
+                parent?.requestDisallowInterceptTouchEvent(true)
+                sculptSuppressPalm = false
+                moved = false
+                lastX = event.x; lastY = event.y
+                startX = event.x; startY = event.y
+                downToolType = event.getToolType(0)
+                resetPending()
+                if (navigationOrbitEnabled && NavigationOrbitLayout.contains(width, height, event.x, event.y)) {
+                    navigationOrbitActive = true; navigationOrbitBegan = false
+                } else if (isStylus(downToolType) || !sculptStylusOnly) {
+                    beginSculpt(event, 0)
+                } else {
+                    // A single finger orbits while the pen paints.
+                    navigationOrbitActive = true; navigationOrbitBegan = false
+                }
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                val incomingStylus = isStylus(event.getToolType(actionIndex))
+                if (sculptPointerId >= 0 && sculptPointerStylus) return true // Palm cannot navigate or cancel the pen.
+                if (incomingStylus) {
+                    cancelSculpt(); endNavigationOrbit(); endViewGesture()
+                    sculptSuppressPalm = false
+                    beginSculpt(event, actionIndex)
+                } else if (!sculptSuppressPalm) {
+                    cancelSculpt()
+                    endNavigationOrbit()
+                    rememberPointers(event)
+                }
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (sculptPointerId >= 0) {
+                    val index = event.findPointerIndex(sculptPointerId)
+                    if (index < 0) cancelSculpt() else {
+                        appendSculptSamples(event, index)
+                        if (event.eventTime - lastDispatchAt >= DISPATCH_MS) flushSculpt(event.eventTime)
+                    }
+                } else if (!sculptSuppressPalm) {
+                    if (event.pointerCount >= 2) handlePair(event)
+                    else if (navigationOrbitActive) handleNavigationOrbit(event)
+                }
+            }
+            MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_UP -> {
+                if (sculptPointerId >= 0 && event.getPointerId(actionIndex) == sculptPointerId) {
+                    // Release pressure/position is jitter, not another dab.
+                    flushSculpt(event.eventTime)
+                    onSculptStroke(GesturePhase.END, emptyList(), sculptSmooth, sculptInvert)
+                    sculptPointerId = -1
+                    sculptCursorPressure = 1f
+                    sculptSuppressPalm = event.pointerCount > 1
+                } else if (sculptPointerId < 0) {
+                    if (action == MotionEvent.ACTION_UP && !moved && !sculptSuppressPalm) {
+                        if (event.eventTime - lastTapAt in 1..DOUBLE_TAP_MS) {
+                            lastTapAt = 0L; onDoubleTap()
+                        } else lastTapAt = event.eventTime
+                    }
+                    endNavigationOrbit()
+                    if (event.pointerCount - 1 < 2) {
+                        endViewGesture()
+                        if (action == MotionEvent.ACTION_POINTER_UP) sculptSuppressPalm = true
+                    }
+                    rememberPointers(event, skip = actionIndex)
+                }
+                if (action == MotionEvent.ACTION_UP) parent?.requestDisallowInterceptTouchEvent(false)
+            }
+        }
+        invalidate()
+        return true
+    }
+
+    private fun beginSculpt(event: MotionEvent, index: Int) {
+        sculptSamples.clear()
+        sculptPointerId = event.getPointerId(index)
+        sculptPointerStylus = isStylus(event.getToolType(index))
+        sculptSmooth = event.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY != 0
+        sculptInvert = event.getToolType(index) == MotionEvent.TOOL_TYPE_ERASER ||
+            event.buttonState and MotionEvent.BUTTON_STYLUS_SECONDARY != 0
+        sculptStartedAt = event.eventTime
+        lastDispatchAt = event.eventTime
+        appendSculptSamples(event, index, includeHistory = false)
+        onSculptStroke(GesturePhase.BEGIN, sculptSamples.drain(), sculptSmooth, sculptInvert)
+    }
+
+    private fun appendSculptSamples(event: MotionEvent, index: Int, includeHistory: Boolean = true) {
+        fun sample(x: Float, y: Float, pressure: Float, time: Long) {
+            if (sculptSamples.full) flushSculpt(time)
+            sculptSamples.add(nx(x), ny(y), if (sculptPointerStylus) pressure else 1f,
+                (time - sculptStartedAt).toDouble() / 1000.0)
+        }
+        if (includeHistory) for (history in 0 until event.historySize) {
+            sample(event.getHistoricalX(index, history), event.getHistoricalY(index, history),
+                event.getHistoricalPressure(index, history), event.getHistoricalEventTime(history))
+        }
+        sample(event.getX(index), event.getY(index), event.getPressure(index), event.eventTime)
+        sculptCursorX = event.getX(index); sculptCursorY = event.getY(index)
+        sculptCursorPressure = if (sculptPointerStylus) event.getPressure(index).coerceIn(0f, 1f) else 1f
+        sculptCursorVisible = true
+    }
+
+    private fun flushSculpt(time: Long) {
+        val points = sculptSamples.drain()
+        if (points.isNotEmpty() && sculptPointerId >= 0) onSculptStroke(GesturePhase.UPDATE, points, sculptSmooth, sculptInvert)
+        lastDispatchAt = time
+    }
+
+    private fun cancelSculpt() {
+        sculptSamples.clear()
+        if (sculptPointerId >= 0) onSculptStroke(GesturePhase.CANCEL, emptyList(), sculptSmooth, sculptInvert)
+        sculptPointerId = -1
+    }
+
+    override fun onHoverEvent(event: MotionEvent): Boolean {
+        if (sculptEnabled && event.pointerCount > 0 && isStylus(event.getToolType(0))) {
+            sculptCursorVisible = event.actionMasked != MotionEvent.ACTION_HOVER_EXIT
+            sculptCursorX = event.x; sculptCursorY = event.y; sculptCursorPressure = 1f
+            invalidate()
+            return true
+        }
+        return super.onHoverEvent(event)
+    }
+
     private fun handleTweak(e: MotionEvent) {
         pendingDx += e.x - lastX
         pendingDy += e.y - lastY
@@ -516,6 +702,7 @@ private class GestureView(
     }
 
     override fun onDetachedFromWindow() {
+        cancelSculpt()
         tapExtrusion.cancel()
         cancelTweak()
         super.onDetachedFromWindow()
@@ -751,6 +938,10 @@ private class GestureView(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        if (sculptEnabled && sculptCursorVisible) {
+            val pressure = if (sculptPressureSize && sculptPointerId >= 0) sculptCursorPressure else 1f
+            canvas.drawCircle(sculptCursorX, sculptCursorY, (sculptRadius * height * pressure).coerceAtLeast(2f), tapPaint)
+        }
         cadOverlay.forEach { stroke ->
             cadPaint.color = if (stroke.selected && (stroke.selectedParts.isEmpty() || "BODY" in stroke.selectedParts)) 0xffffb347.toInt() else 0xff57dfe6.toInt()
             val path = android.graphics.Path()
@@ -880,6 +1071,7 @@ private class GestureView(
 
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
         val stylus = event.pointerCount > 0 && isStylus(event.getToolType(0))
+        if (sculptEnabled && stylus) return true
         if (stylus && event.actionMasked == MotionEvent.ACTION_BUTTON_PRESS &&
             event.actionButton == MotionEvent.BUTTON_STYLUS_PRIMARY
         ) {

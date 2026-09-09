@@ -17,6 +17,35 @@ from test_cad import CadTests, OWNER, volume
 
 
 class SketchTests(CadTests):
+    def test_reopen_selected_profile_or_feature_edits_source_without_duplicate_or_navigation_undo(self):
+        entity = self.rect()
+        sketch_id = runtime.active_sketch_id
+        feature = self.extrude(entity)
+        baseline = copy.deepcopy(runtime.doc())
+        for kind, identifier in [('PROFILE', 'profile_' + entity), ('FEATURE', feature)]:
+            cad.select(dict(kind=kind, id=identifier, **OWNER))
+            with patch.object(runtime, 'focus') as focus, patch.object(cad, 'undo_push') as command_undo, \
+                    patch('blender_tablet_remote.cad.runtime.undo_push') as runtime_undo:
+                status = cad.sketch_activate(dict(sketch_id=sketch_id, **OWNER))
+                self.assertEqual(status['active_sketch_id'], sketch_id)
+                self.assertIsNone(status['selection'])
+                focus.assert_called_once()
+                self.assertEqual(focus.call_args.args[0]['id'], sketch_id)
+                cad.sketch_finish(OWNER)
+                command_undo.assert_not_called()
+                runtime_undo.assert_not_called()
+            self.assertEqual(runtime.doc(), baseline)
+        cad.sketch_activate(dict(sketch_id=sketch_id, **OWNER))
+        cad.select(dict(kind='ENTITY', id=entity, **OWNER))
+        with patch('blender_tablet_remote.cad.runtime.undo_push') as undo:
+            cad.entity_set(dict(entity_id=entity, values={'width': .1}, **OWNER))
+            undo.assert_called_once()
+        cad.sketch_finish(OWNER)
+        self.assertEqual(len(runtime.doc()['sketches']), 1)
+        self.assertEqual(len(runtime.doc()['features']), 1)
+        self.assertEqual(self.obj()[FEATURE_KEY], feature)
+        self.assertAlmostEqual(volume(self.obj()), .1 * .045 * .02, places=10)
+
     def select_refs(self,*refs):
         cad._set_selection([dict(kind='ENTITY',id=identifier,part=part) for identifier,part in refs])
 

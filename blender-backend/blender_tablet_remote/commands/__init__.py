@@ -37,6 +37,7 @@ def load_all() -> None:
         modifiers,
         objects,
         scene,
+        sculpt,
         selection,
         snap,
         stream,

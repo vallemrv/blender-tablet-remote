@@ -11,7 +11,18 @@ El rail izquierdo contiene selección, selección múltiple, arrastre, línea,
 rectángulo, cuadrado, círculo, arco y redondeo. El rail derecho contiene las
 restricciones y solo aparece al editar un boceto. Los raíles y bandejas de
 Object/Edit no aparecen en CAD. Cada intención tiene un icono vectorial propio;
-mantenerlo pulsado muestra su función. El árbol se abre con su icono superior.
+mantenerlo pulsado muestra su función. El árbol se abre con **Bocetos** arriba a
+la izquierda; cada boceto muestra **Editar** junto a su nombre y plano.
+
+Para continuar un boceto existente, toca **Bocetos → Editar [nombre]**. También
+puedes seleccionar un perfil en la vista o una operación en el árbol y pulsar
+**Editar boceto** en la cabecera: abre el boceto de origen, encuadra su plano y
+activa selección, sin duplicarlo. Toca sus puntos/aristas para cambiar las cotas
+en la bandeja o activa **Mover** para arrastrarlos. Elegir una figura en el rail
+activa dibujo; volver a **Seleccionar** permite editar lo que ya existe.
+**Finalizar boceto**, siempre visible en la cabecera durante la edición, vuelve
+a los sólidos. Entrar/salir del boceto no crea undo; cambiar su geometría sí
+actualiza las operaciones dependientes y registra un paso de undo.
 
 - Dibujar una línea: arrastrar entre extremos. Acercarse a un extremo existente
   lo adquiere con la política táctil común y guarda una coincidencia persistente.
@@ -111,7 +122,7 @@ una instancia gráfica independiente. Android verifica el parser y las capabilit
 La tablet emulada sirve para revisar disposición, iconos y entrada, pero no
 sustituye comprobar la sensación del lápiz y el rechazo de palma en la tablet física.
 
-Comprobación de esta entrega: 38 pruebas CAD pasan en Blender gráfico, 35 pruebas
-unitarias Android pasan y la tablet emulada completa dibujo, arrastre, extrusión
-por gesto y vaciado con transparencia. La comprobación de snap pasa sus pruebas
-sin viewport (13 pasan; 2 requieren su propio entorno gráfico).
+La reapertura de bocetos se verifica con 39 pruebas CAD en Blender gráfico y las
+pruebas de `CadParserTest` en Android. Incluye reapertura desde perfil/operación,
+identidad estable, regeneración del sólido tras editar y ausencia de undo al
+entrar/salir. La suite gráfica comprueba además cámara, persistencia y undo real.

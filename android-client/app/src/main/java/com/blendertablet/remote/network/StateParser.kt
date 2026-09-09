@@ -77,7 +77,12 @@ object StateParser {
         val selected = json.optJSONArray("selected_objects") ?: JSONArray()
         return BlenderState(
             cad = CadParser.state(json.optJSONObject("cad")),
-            mode = if (json.optString("mode").startsWith("EDIT")) BlenderMode.EDIT else BlenderMode.OBJECT,
+            sculpt = SculptParser.state(json.optJSONObject("sculpt")),
+            mode = when {
+                json.optString("mode").startsWith("EDIT") -> BlenderMode.EDIT
+                json.optString("mode") == "SCULPT" -> BlenderMode.SCULPT
+                else -> BlenderMode.OBJECT
+            },
             activeObject = json.optString("active_object").takeIf { it.isNotBlank() && it != "null" },
             selectedObjects = List(selected.length()) { selected.optString(it) },
             selectionMode = enum(json.optString("selection_mode"), SelectionMode.VERTEX),

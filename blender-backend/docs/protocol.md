@@ -281,7 +281,7 @@ seleccionada la copia, equivalente a `Shift+D` antes de moverla.
 
 ### Modos
 
-`mode.object`, `mode.edit`, `mode.toggle`, `mode.set` (`mode`: `OBJECT` o `EDIT`).
+`mode.object`, `mode.edit`, `mode.toggle`, `mode.set` (`mode`: `OBJECT`, `EDIT`, `CAD` o `SCULPT`).
 
 ### Selección
 
@@ -1451,3 +1451,74 @@ de CAD y deja seleccionado el objeto convertido.
 Al entrar en CAD con un documento existente se encuadra su sketch activo válido
 o el primero, sin activar la edición. Repetir CAD mientras ya está abierto conserva
 la vista. Solo cambia la cámara remota; `rv3d` permanece intacto.
+
+## Escultura y presión del lápiz
+
+`mode.set {mode:"SCULPT"}` activa Sculpt nativo sobre la malla activa. Los resultados
+CAD requieren conversión explícita a malla. El estado completo incluye `sculpt`;
+el cliente habilita la entrada al modo solo cuando `sculpt.available` es verdadero.
+Requiere una ventana 3D y Blender 4.4 o posterior; la validación de esta entrega
+se realiza en Blender 5.2.1. No hay escultura simulada en background.
+
+```json
+{"sculpt":{"available":true,"active":true,"brush":"DRAW","radius":0.04,"strength":0.5,"pressure_strength":true,"pressure_size":false,"symmetry":{"x":true,"y":false,"z":false},"dyntopo":{"enabled":false,"detail":12},"multires":{"name":"","level":0,"total_levels":0},"brushes":[{"id":"DRAW","label":"Dibujar","icon":"DRAW"}]}}
+```
+
+El catálogo incluye DRAW, CLAY, INFLATE, CREASE, FLATTEN, GRAB, SMOOTH, MASK y PINCH.
+Android usa sus IDs, etiquetas e intención de icono. `radius` es una fracción de
+la **altura del vídeo**, no píxeles de la tablet ni unidades de la escena.
+
+| Comando | Payload | Resultado |
+|---|---|---|
+| `sculpt.settings` | `{brush?,radius?,strength?,pressure_strength?,pressure_size?,symmetry?:{x?,y?,z?}}` | Ajustes parciales; radio 0.002–0.3, fuerza 0–1 |
+| `sculpt.stroke` | `{phase,stroke_id,points?,smooth?,invert?}` | Preview nativa o cierre del trazo identificado |
+| `sculpt.dyntopo` | `{enabled?,detail?}` | Dyntopo nativo, detalle relativo entre 1 y 40 px |
+| `sculpt.multires` | `{action:"add\|subdivide\|level",level?}` | Crear con un nivel, subdividir o elegir nivel existente |
+| `sculpt.mask` | `{action:"clear\|invert"}` | Limpiar o invertir máscara nativa |
+
+Todos devuelven `result.sculpt`. `mode.set` también lo devuelve al entrar y Android
+lo aplica inmediatamente, sin depender de un refresco de escena posterior.
+Multires y Dyntopo son excluyentes: se rechaza la operación incompatible sin
+eliminar el otro sistema. Multires permite hasta seis niveles desde la tablet.
+
+Cada `points` contiene como máximo 128 muestras `{u,v,pressure,time}`. `u/v` se
+normalizan al rectángulo del vídeo, con origen arriba a la izquierda; `pressure`
+está entre 0 y 1 y `time` son segundos desde el inicio. Android conserva las
+muestras históricas de MotionEvent, incluida su presión; un cero no se sustituye
+por fuerza máxima. Para dedo, cuyo valor no representa fuerza física del lápiz,
+se utiliza presión 1. El backend limita cada trazo a 4096 muestras de superficie.
+Si otro lote supera ese límite, confirma la última preview aceptada y devuelve
+`limit_reached:true` con `message`. Android muestra el aviso, descarta las muestras
+pendientes de ese ID y espera a que se levante el lápiz para iniciar otro trazo.
+
+Las fases son `begin/update/end/cancel`. `stroke_id` identifica el trazo y el
+servidor asocia su propietario a la conexión, sin confiar en IDs de cliente del
+payload. Las fases atrasadas de otro trazo o propietario no lo modifican.
+`smooth` e `invert` se fijan al comenzar. `end` confirma lo ya aplicado: ignora
+coordenadas de liberación y no repite el sondeo. `cancel` restaura la preview;
+desconexión, cambio de intención y guardar también la cierran. Transform, tool,
+CAD y escultura comparten exclusión de sesiones.
+
+El backend reconstruye el trazo acumulado mediante el pincel nativo y su undo,
+conservando un paso por trazo confirmado. Entrar en Sculpt crea el baseline
+nativo de modo que Blender necesita para inicializar su historial. Android
+mantiene una única petición de trazo en vuelo, agrupa muestras pendientes y
+ordena el cierre antes de navegación u otras operaciones. Un fallo descarta las
+muestras pendientes de ese trazo y envía cancelación antes de continuar.
+
+Multires y Dyntopo conservan sus desplazamientos/topología en un respaldo nativo privado
+durante el trazo y lo retira al cerrar; el cierre confirmado se consolida en undo
+global. Esto evita depender de la compresión asíncrona del undo de grids nativo.
+Los materiales existentes se reutilizan. Para esculpir Multires, la malla debe
+tener un solo usuario; un duplicado normal crea una copia independiente.
+
+`Solo lápiz` es el valor inicial de Android: un dedo orbita y dos desplazan/zoom.
+Puede habilitarse `Lápiz + dedo`. El botón principal del lápiz suaviza durante el
+trazo; borrador/botón secundario invierten. Los eventos de cancelación y rechazo
+de palma cancelan el trazo; no lo confirman. El círculo local comunica radio y
+posición del lápiz; la geometría y la máscara se ven en GPUOffScreen.
+
+Las imágenes de **Referencias** son copias privadas de la tablet y no amplían el
+protocolo ni se insertan en el documento CAD o `.blend`. Véanse las guías
+[de escultura](../../docs/sculpt-workspace.md) y
+[de referencias](../../docs/reference-images.md).

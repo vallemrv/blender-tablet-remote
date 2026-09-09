@@ -9,6 +9,8 @@ controles adaptados a dedo y stylus.
 - [`AGENTS.md`](AGENTS.md): arquitectura, invariantes y reglas de trabajo.
 - [`blender-backend/docs/protocol.md`](blender-backend/docs/protocol.md): contrato canónico entre ambos lados.
 - [`docs/cad-workspace.md`](docs/cad-workspace.md): dibujar, restringir, arrastrar, extruir y vaciar en CAD.
+- [`docs/sculpt-workspace.md`](docs/sculpt-workspace.md): pinceles, presión, simetría, Dyntopo y Multires.
+- [`docs/reference-images.md`](docs/reference-images.md): tablero de imágenes de referencia en la tablet.
 - [`docs/cad-kernel-evaluation.md`](docs/cad-kernel-evaluation.md): evaluación reproducible y límites del kernel CAD.
 
 ## Arquitectura
@@ -30,6 +32,12 @@ arrastrar puntos/aristas, restringirlos y extruir perfiles cerrados; el vaciado 
 profundidad usa incrementos con lápiz y transparencia automática. El documento,
 sus cotas y dependencias se guardan en el `.blend`. El kernel sigue siendo de malla
 nativa, con un solver acotado; Object y Edit conservan su flujo habitual.
+
+Sculpt incorpora nueve pinceles nativos, suavizado e inversión, presión del lápiz
+para fuerza y radio, simetría X/Y/Z, máscaras, Dyntopo y niveles Multires.
+El panel Referencias permite importar varias imágenes, ampliarlas y colocarlas
+junto al modelo. En CAD, **Bocetos → Editar** reabre un boceto existente; al
+seleccionar un perfil o sólido aparece **Editar boceto**.
 
 ## Directorios
 

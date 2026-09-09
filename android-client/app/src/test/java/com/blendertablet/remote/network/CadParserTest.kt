@@ -62,6 +62,24 @@ class CadParserTest {
         val state = CadParser.state(JSONObject("""{"version":1,"workspace":true,"selection":{"kind":"ENTITY","id":"deleted"},"document":{"sketches":[]}}"""))
         assertNull(state.selectedEntity)
         assertNull(state.selectedFeature)
+        assertNull(state.selectedSketch)
+    }
+    @Test fun selectedProfileOrOperationResolvesItsExistingSketchForEditing() {
+        val state = CadParser.state(JSONObject("""{
+          "version":1,"workspace":true,
+          "document":{"sketches":[
+            {"id":"other","entities":[],"profiles":[]},
+            {"id":"source","entities":[{"id":"line1","type":"LINE"},{"id":"line2","type":"LINE"}],
+             "profiles":[{"id":"profile_chain","entity_id":"chain","label":"Contorno"}]}],
+            "features":[{"id":"cut","type":"CUT","sketch_id":"source","target_id":"base","profile_id":"profile_chain"}]},
+          "selection":{"kind":"PROFILE","id":"profile_chain"}}
+        """))
+        assertNull(state.activeSketch)
+        assertEquals("source", state.selectedSketch?.id)
+        assertEquals("source", state.copy(selectionKind = "FEATURE", selectionId = "cut").selectedSketch?.id)
+        assertEquals("source", state.copy(selectionKind = "ENTITY", selectionId = "line2").selectedSketch?.id)
+        assertNull(state.copy(selectionId = "deleted_profile").selectedSketch)
+        assertNull(state.copy(selectionKind = "FEATURE", selectionId = "deleted_feature").selectedSketch)
     }
     @Test fun previewRetainsDepthAndConfirmationAuthority() {
         val state = CadParser.state(JSONObject("""{"version":1,"workspace":true,"session":{"active":true,"operation":"EXTRUDE","depth":0.03,"can_confirm":false}}"""))

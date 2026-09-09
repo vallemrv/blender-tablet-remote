@@ -138,5 +138,7 @@ def undo_push(message: str) -> None:
     """Marca un punto de undo. Sin UI puede fallar; no es motivo para romper el comando."""
     try:
         bpy.ops.ed.undo_push(message=message)
+        from .commands.sculpt import history_changed
+        history_changed()
     except RuntimeError:
         pass

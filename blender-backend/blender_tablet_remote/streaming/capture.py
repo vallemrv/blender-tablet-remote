@@ -16,6 +16,7 @@ import time
 
 import bpy
 import gpu
+from mathutils import Vector
 
 from .. import log
 from ..camera import camera
@@ -56,6 +57,7 @@ class ViewportCapture:
         self.fps = 24.0
         self.max_width = 1280
         self.quality = 70
+        self._sculpt_depth = None
         self._offscreen = None
         self._offscreen_size = (0, 0)
 
@@ -200,6 +202,14 @@ class ViewportCapture:
                 camera.projection_matrix(rv3d),
                 do_color_management=True,
             )
+            obj = bpy.context.view_layer.objects.active
+            if obj and obj.mode == "SCULPT":
+                matrix = camera.perspective_matrix(rv3d).copy()
+                self._sculpt_depth = (fb.read_depth(0, 0, width, height), matrix,
+                                      matrix.inverted_safe(), obj.name, obj.matrix_world.copy(),
+                                      width, height)
+            else:
+                self._sculpt_depth = None
             draw_transform_markers(rv3d, width, height)
             buffer = fb.read_color(0, 0, width, height, 4, 0, "UBYTE")
 
@@ -207,6 +217,29 @@ class ViewportCapture:
         # trabajo ocurra fuera del hilo principal.
         self.encoder.submit(bytes(buffer))
         return True
+
+    def sculpt_surface(self, u, v, obj, rv3d):
+        """Visible native PBVH surface of the last video frame, never desktop depth.
+
+        The boolean distinguishes a valid background sample from unavailable or
+        stale depth. Native multires/Dyntopo cannot be raycast through Mesh RNA.
+        """
+        cached = self._sculpt_depth
+        if cached is None:
+            return False, None
+        depth, matrix, inverse, name, object_matrix, width, height = cached
+        if (name != obj.name or object_matrix != obj.matrix_world or
+                matrix != camera.perspective_matrix(rv3d) or
+                (width, height) != self._offscreen_size):
+            return False, None
+        x = min(width - 1, max(0, int(u * width)))
+        y = min(height - 1, max(0, int((1 - v) * height)))
+        z = float(depth[y][x])
+        if z >= 1 or z < 0:
+            return True, None
+        world = inverse @ Vector(((x + .5) / width * 2 - 1,
+                                    (y + .5) / height * 2 - 1, z * 2 - 1, 1))
+        return True, Vector(world[:3]) / world.w if abs(world.w) > 1e-9 else None
 
     def _ensure_offscreen(self, width: int, height: int):
         if self._offscreen is not None and self._offscreen_size == (width, height):
@@ -223,6 +256,7 @@ class ViewportCapture:
     def shutdown(self) -> None:
         """Libera recursos GPU. Debe llamarse desde el hilo principal."""
         self.enabled = False
+        self._sculpt_depth = None
         self.encoder.stop()
         if self._offscreen is not None:
             try:

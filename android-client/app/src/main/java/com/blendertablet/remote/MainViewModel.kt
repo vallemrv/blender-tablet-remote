@@ -290,9 +290,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Detiene MediaCodec antes de que Android invalide los buffers de la Surface. */
-    fun onBackground() = h264Stream.pause()
+    fun onBackground() { cancelSculptStroke(); h264Stream.pause() }
 
     fun disconnect() {
+        cancelSculptStroke()
         h264Stream.stopTransport()
         stream.stop()
         client.disconnect()
@@ -334,6 +335,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * cambiar, que es la salida no destructiva.
      */
     fun enterCad() {
+        cancelSculptStroke()
         if (!client.state.value.features.cad.available) return
         closeSessions()
         local.update { it.copy(activeTool = ActiveTool.SELECT, shapeTool = ShapeTool.NONE,
@@ -396,13 +398,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private var sculptStrokeId: String? = null
+    fun sculptSettings(values: Map<String, Any?>) {
+        cancelSculptStroke()
+        client.sculptCommand("sculpt.settings", values)
+    }
+    fun sculptCommand(name: String, values: Map<String, Any?> = emptyMap()) {
+        cancelSculptStroke()
+        client.sculptCommand(name, values)
+    }
+    fun toggleSculptSmooth() { cancelSculptStroke(); local.update { it.copy(sculptSmooth = !it.sculptSmooth) } }
+    fun toggleSculptInvert() { cancelSculptStroke(); local.update { it.copy(sculptInvert = !it.sculptInvert) } }
+    fun toggleSculptStylusOnly() { cancelSculptStroke(); local.update { it.copy(sculptStylusOnly = !it.sculptStylusOnly) } }
+    private fun cancelSculptStroke() {
+        val id = sculptStrokeId ?: return
+        sculptStrokeId = null
+        client.sculptCommand("sculpt.stroke", mapOf("phase" to "cancel", "stroke_id" to id, "points" to emptyList<Any>()))
+    }
+    fun sculptStroke(phase: GesturePhase, points: List<com.blendertablet.remote.model.SculptPoint>, smooth: Boolean, invert: Boolean) {
+        if (client.connection.value != ConnectionStatus.CONNECTED || client.state.value.mode != BlenderMode.SCULPT) return
+        if (phase == GesturePhase.BEGIN) {
+            cancelSculptStroke()
+            sculptStrokeId = java.util.UUID.randomUUID().toString()
+        }
+        val id = sculptStrokeId ?: return
+        client.sculptCommand("sculpt.stroke", mapOf("phase" to phase.name.lowercase(), "stroke_id" to id,
+            "points" to points.map { it.wire() }, "smooth" to (smooth || local.value.sculptSmooth),
+            "invert" to (invert || local.value.sculptInvert)))
+        if (phase == GesturePhase.END || phase == GesturePhase.CANCEL) sculptStrokeId = null
+    }
+
     fun setMode(mode: BlenderMode) {
+        cancelSculptStroke()
         cancelCadStroke()
         local.update { it.copy(cadTool = null) }
         closeSessions()
         local.update { it.copy(
             shapeTool = ShapeTool.NONE,
-            activeTool = if (mode != BlenderMode.EDIT && it.activeTool == ActiveTool.TWEAK)
+            activeTool = if (mode == BlenderMode.SCULPT || client.state.value.mode == BlenderMode.SCULPT ||
+                (mode != BlenderMode.EDIT && it.activeTool == ActiveTool.TWEAK))
                 ActiveTool.SELECT else it.activeTool,
             shortestPathActive = if (mode == BlenderMode.EDIT) it.shortestPathActive else false,
         ) }
@@ -454,8 +488,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updateInput(input: InputDebug) {
         _inputDebug.value = input
     }
-    fun undo() { cancelCadStroke(); client.undo() }
-    fun redo() { cancelCadStroke(); client.redo() }
+    fun undo() { cancelSculptStroke(); cancelCadStroke(); client.undo() }
+    fun redo() { cancelSculptStroke(); cancelCadStroke(); client.redo() }
     fun repeatLast() = client.repeatLast()
     fun delete() = client.delete()
     fun duplicate() = client.duplicate()
@@ -1248,11 +1282,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun transformConfirm() = client.transformConfirm()
     fun transformCancel() = client.transformCancel()
 
-    fun fileNew() = client.fileNew()
-    fun fileOpen(path: String) = client.fileOpen(path)
-    fun fileSave() = client.fileSave()
-    fun fileSaveAs(path: String) = client.fileSaveAs(path)
-    fun fileSaveAs(folder: String, name: String) = client.fileSaveAs(folder, name)
+    fun fileNew() { cancelSculptStroke(); client.fileNew() }
+    fun fileOpen(path: String) { cancelSculptStroke(); client.fileOpen(path) }
+    fun fileSave() { cancelSculptStroke(); client.fileSave() }
+    fun fileSaveAs(path: String) { cancelSculptStroke(); client.fileSaveAs(path) }
+    fun fileSaveAs(folder: String, name: String) { cancelSculptStroke(); client.fileSaveAs(folder, name) }
 
     fun setLocation(x: Float, y: Float, z: Float) =
         client.setLocation(x.toDouble(), y.toDouble(), z.toDouble())

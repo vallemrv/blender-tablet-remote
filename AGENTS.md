@@ -4,7 +4,8 @@
 
 La tablet Android es una interfaz táctil para Blender, no un escritorio remoto.
 Blender conserva el motor 3D; Android muestra una cámara remota y envía intención
-adaptada a dedo y stylus. El alcance actual es Object Mode, Edit Mode y el workspace CAD paramétrico descrito en `docs/cad-workspace.md`.
+adaptada a dedo y stylus. El alcance actual es Object Mode, Edit Mode, Sculpt
+(`docs/sculpt-workspace.md`) y el workspace CAD paramétrico (`docs/cad-workspace.md`).
 
 ## Estructura
 
@@ -40,6 +41,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Conexión, reconexión, estado de escena, objetos, archivos, undo y redo.
 - Explorador remoto de archivos con ubicaciones y tokens opacos.
 - Object/Edit y selección Vertex/Edge/Face.
+- Sculpt nativo: nueve pinceles esenciales, suavizado/inversión, presión, simetría,
+  máscaras, Dyntopo y Multires. Referencias de imágenes persistentes en la tablet.
 - Picking, Box, Circle, Loop, Ring, shortest path y Tweak.
 - Navegación orbital, vistas, cámara remota, wireframe y xray.
 - Move/Rotate/Scale con sesiones reversibles, restricciones, orientación, valores,
@@ -149,8 +152,28 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   común. Las caras fuente/destino y el candidato se dibujan en GPUOffScreen. Navegar
   con dos dedos cancela el sondeo temporal, sin fijar otra cara.
 - Debajo del ojo hay un selector horizontal Object/Edit/CAD/Sculpt; CAD solo aparece
-  si el backend lo anuncia. Sculpt y el menú superior
-  Layouts son por ahora únicamente presencia visual y no envían comandos.
+  si el backend lo anuncia. Sculpt se habilita según `sculpt.available` sobre mallas;
+  Layouts sigue siendo únicamente presencia visual y no envía comandos.
+- Sculpt usa pinceles nativos y la cámara remota; nunca escribe en `rv3d`.
+  Radio se expresa como fracción de altura del vídeo. La presión real e histórica
+  del lápiz gobierna fuerza/radio por separado; cero conserva cero. Solo lápiz es
+  el valor inicial, un dedo orbita y dos dedos navegan. Cancelación/palma restaura
+  el trazo; UP confirma la última muestra estable sin volver a sondear.
+- Los trazos Sculpt llevan propietario e ID; son excluyentes con transform/tool/CAD.
+  Cada trazo confirmado aporta un undo nativo. Android limita una petición en vuelo,
+  conserva el orden de muestras y cierra el trazo antes de navegar/cambiar intención.
+  Dyntopo y Multires son alternativas explícitas, nunca se elimina uno al activar otro.
+- Multires/Dyntopo respaldan la malla nativa durante el trazo para restaurar
+  desplazamientos y topología; sus archivos privados se retiran al cerrar.
+  Guardar desde el PC restaura el baseline en `save_pre` y difiere el cierre del
+  historial: nunca ejecuta undo dentro de los handlers de guardado/carga.
+  La tablet impide rehacer previews canceladas; el redo directo del PC es nativo.
+- Referencias es un tablero local con varias imágenes, zoom, desplazamiento y
+  opacidad. Importa copias privadas acotadas y conserva los originales; sus gestos
+  quedan en el panel. No son planos 3D ni contenido del `.blend`.
+- CAD ofrece «Bocetos → Editar», «Editar boceto» desde un perfil/operación y
+  «Finalizar boceto» con texto. Reabrir enfoca el plano y selecciona el original;
+  no duplica el boceto ni crea un undo de navegación.
 - En Edit, Vértices/Aristas/Caras se sitúa a la izquierda del selector de modo, en
   la misma fila bajo el ojo; no aparece en la barra superior.
 - El panel de modificadores queda limitado entre ese selector de modos y el selector

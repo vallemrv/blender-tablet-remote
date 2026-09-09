@@ -57,7 +57,7 @@ fun MenuBar(
         MenuAnchor("Archivo", onOpen = actions.onFileMenuOpened) { close ->
             fileMenu(state, actions, close)
         }
-        if (!state.blender.cad.workspace) MenuAnchor("Objeto") { close -> objectMenu(state, actions, close) }
+        if (!state.blender.cad.workspace && state.blender.mode != BlenderMode.SCULPT) MenuAnchor("Objeto") { close -> objectMenu(state, actions, close) }
         if (state.blender.features.sceneScale) {
             MenuAnchor("Escena") { close -> sceneMenu(state, actions, close) }
         }

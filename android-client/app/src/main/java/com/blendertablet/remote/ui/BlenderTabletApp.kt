@@ -234,12 +234,13 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     // Hay una bandeja horizontal inferior ocupando el borde de abajo: la de
     // transformación, la de herramienta paramétrica o el aviso de Loop Cut esperando
     // toque. Mientras exista, el teclado de vistas se eleva para no solaparse.
-    val trayPresent = state.blender.cad.workspace || bottomTrayVisible(
+    val sculptActive = state.blender.mode == BlenderMode.SCULPT
+    val trayPresent = sculptActive || state.blender.cad.workspace || bottomTrayVisible(
         session.active, toolSession.active, state.activeTool, state.loopCutAwaitingTap,
         toolSessionArmed = toolSession.armed,
     )
     val trayInset by animateDpAsState(
-        targetValue = if (state.blender.cad.workspace) 132.dp else if (trayPresent) Metrics.TrayInset else 0.dp,
+        targetValue = if (sculptActive) 132.dp else if (state.blender.cad.workspace) 132.dp else if (trayPresent) Metrics.TrayInset else 0.dp,
         animationSpec = tween(160),
         label = "tray-inset",
     )
@@ -265,6 +266,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             onKnifeDrag = vm::knifeDrag,
             onTweakDrag = vm::tweakGesture,
             onCadGesture = vm::cadGesture,
+            onSculptStroke = vm::sculptStroke,
             onViewGestureLive = { g, phase, dx, dy, factor ->
                 vm.viewGesture(g, phase, dx, dy, factor)
                 if (phase != GesturePhase.BEGIN && phase != GesturePhase.UPDATE) vm.requestState()
@@ -284,6 +286,10 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             h264Active = h264Active,
             h264Size = h264Size,
             input = viewportInput,
+            sculptEnabled = sculptActive && state.connection == ConnectionStatus.CONNECTED,
+            sculptStylusOnly = state.sculptStylusOnly,
+            sculptRadius = state.blender.sculpt.radius,
+            sculptPressureSize = state.blender.sculpt.pressureSize,
             cadDrawingEnabled = state.connection == ConnectionStatus.CONNECTED && state.blender.cad.workspace && ((state.blender.cad.activeSketchId != null && state.cadTool != null && state.cadTool != "MULTI") ||
                 (state.blender.features.cad.sketchEditing && state.blender.cad.sessionActive && state.blender.cad.operation in listOf("EXTRUDE", "CUT"))),
             cadOverlay = if (state.blender.cad.workspace) state.blender.cad.overlay else emptyList(),
@@ -294,7 +300,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 state.blender.features.knifeDrag,
             tweakActive = !state.blender.cad.workspace && state.activeTool == ActiveTool.TWEAK &&
                 state.blender.mode == BlenderMode.EDIT,
-            longPressEnabled = !state.blender.cad.workspace && toolSession.input != "REPEAT_TAP" && viewportLongPressEnabled(session.active, toolSession.active),
+            longPressEnabled = !sculptActive && !state.blender.cad.workspace && toolSession.input != "REPEAT_TAP" && viewportLongPressEnabled(session.active, toolSession.active),
             repeatTap = toolSession.armed && toolSession.input == "REPEAT_TAP",
             independentTaps = session.active && state.blender.mode == BlenderMode.EDIT &&
                 state.activeTool != ActiveTool.TWEAK && state.blender.features.transformStepSelection,
@@ -302,11 +308,11 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             snapCandidate = if (state.blender.cad.workspace) null else toolSession.snapCandidate,
             cancelPickOnNavigation = toolSession.input == "FACE_PAIR",
             proportionalCircle = if (state.blender.cad.workspace) null else session.proportionalCircle,
-            navigationOrbitEnabled = navigationOrbitVisible(
+            navigationOrbitEnabled = (sculptActive || navigationOrbitVisible(
                 session.active,
                 toolSession.active,
                 state.activeTool,
-            ) && quickMenuAt == null && !modifiersOpen,
+            )) && quickMenuAt == null && !modifiersOpen,
             onShape = vm::shapeSelect,
             onLongPress = { x, y, u, v ->
                 // El menú se abre ya, en el sitio donde está el dedo, y en paralelo
@@ -358,7 +364,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     modifier = Modifier.align(Alignment.TopStart).padding(Metrics.EdgeMargin),
                 )
 
-                if (!state.blender.cad.workspace) {
+                if (!state.blender.cad.workspace && !sculptActive) {
                 val modifiersAvailable = state.blender.features.modifiers &&
                     state.blender.mode == BlenderMode.OBJECT && state.blender.activeObjectType == "MESH"
 
@@ -497,6 +503,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
 
                 }
                 if (state.blender.cad.workspace) CadWorkspace(state, vm)
+                if (sculptActive) SculptWorkspace(state, vm)
+                ReferencePanel(Modifier.align(Alignment.TopCenter).padding(top = 76.dp))
 
                 if (!state.blender.cad.workspace || state.blender.cad.activeSketchId == null) ViewFooter(
                     projection = state.blender.view.perspective,
@@ -697,6 +705,7 @@ class ViewportInput(
     val onKnifeDrag: (GesturePhase, Float, Float) -> Unit,
     val onTweakDrag: (GesturePhase, Float, Float, Float, Float) -> Unit,
     val onCadGesture: (GesturePhase, Float, Float) -> Unit,
+    val onSculptStroke: (GesturePhase, List<com.blendertablet.remote.model.SculptPoint>, Boolean, Boolean) -> Unit,
     /** Con vídeo activo: al soltar el gesto se refresca el estado. */
     val onViewGestureLive: (Gesture, GesturePhase, Float, Float, Float) -> Unit,
     /** Sin vídeo: solo navega, no hay nada que refrescar aún. */
@@ -722,6 +731,10 @@ private fun ViewportLayer(
     h264Active: Boolean,
     h264Size: Pair<Int, Int>?,
     input: ViewportInput,
+    sculptEnabled: Boolean,
+    sculptStylusOnly: Boolean,
+    sculptRadius: Float,
+    sculptPressureSize: Boolean,
     shapeTool: ShapeTool,
     fixedCircleRadius: Float?,
     cadDrawingEnabled: Boolean,
@@ -761,6 +774,11 @@ private fun ViewportLayer(
                     onDoubleTap = input.onDoubleTap,
                     repeatTap = repeatTap,
                     independentTaps = independentTaps,
+                    sculptEnabled = sculptEnabled,
+                    sculptStylusOnly = sculptStylusOnly,
+                    sculptRadius = sculptRadius,
+                    sculptPressureSize = sculptPressureSize,
+                    onSculptStroke = input.onSculptStroke,
                     cadDrawingEnabled = cadDrawingEnabled,
                     onCadGesture = input.onCadGesture,
                     cadOverlay = cadOverlay,
@@ -794,6 +812,11 @@ private fun ViewportLayer(
                 onDoubleTap = input.onDoubleTap,
                 repeatTap = repeatTap,
                 independentTaps = independentTaps,
+                sculptEnabled = sculptEnabled,
+                sculptStylusOnly = sculptStylusOnly,
+                sculptRadius = sculptRadius,
+                sculptPressureSize = sculptPressureSize,
+                onSculptStroke = input.onSculptStroke,
                 cadDrawingEnabled = cadDrawingEnabled,
                 onCadGesture = input.onCadGesture,
                 cadOverlay = cadOverlay,
@@ -805,6 +828,7 @@ private fun ViewportLayer(
                 onLongPress = onLongPress,
                 shapeTool = shapeTool,
                 fixedCircleRadius = fixedCircleRadius,
+                navigationOrbitEnabled = sculptEnabled && navigationOrbitEnabled,
                 knifePoints = knifePoints,
                 snapCandidate = snapCandidate,
                 cancelPickOnNavigation = cancelPickOnNavigation,
@@ -841,6 +865,11 @@ private fun ViewportLayer(
                 onDoubleTap = input.onDoubleTap,
                 repeatTap = repeatTap,
                 independentTaps = independentTaps,
+                sculptEnabled = sculptEnabled,
+                sculptStylusOnly = sculptStylusOnly,
+                sculptRadius = sculptRadius,
+                sculptPressureSize = sculptPressureSize,
+                onSculptStroke = input.onSculptStroke,
                 cadDrawingEnabled = cadDrawingEnabled,
                 onCadGesture = input.onCadGesture,
                 cadOverlay = cadOverlay,
@@ -852,6 +881,7 @@ private fun ViewportLayer(
                 onLongPress = onLongPress,
                 shapeTool = shapeTool,
                 fixedCircleRadius = fixedCircleRadius,
+                navigationOrbitEnabled = sculptEnabled && navigationOrbitEnabled,
                 knifePoints = knifePoints,
                 snapCandidate = snapCandidate,
                 cancelPickOnNavigation = cancelPickOnNavigation,

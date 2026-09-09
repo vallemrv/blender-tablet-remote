@@ -59,6 +59,8 @@ def snapshot(include_view: bool = True) -> dict:
     state.update(context_snapshot())
     from .cad.runtime import runtime
     state["cad"] = runtime.status()
+    from .commands.sculpt import status as sculpt_status
+    state["sculpt"] = sculpt_status()
 
     if active is not None:
         state["active"] = object_info(active)
