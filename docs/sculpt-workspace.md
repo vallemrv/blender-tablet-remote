@@ -86,9 +86,14 @@ cancelar/deshacer, sin cambiar de modo ni activar Wireframe. Con una esfera de u
 6.000 caras y Mirror, un recorrido de 400 muestras con Suavizar pasó de unos 69 ms
 a 20 ms en la última actualización. Es tiempo del backend, no latencia total del lápiz.
 
-Este ajuste visual está validado en malla ordinaria. El refresco sólido de Multires
-en GPUOffScreen sigue pendiente de una corrección propia: no se considera resuelto
-por actualizar su malla base, porque eso puede perder el estado vivo de las rejillas.
+Multires muestra en GPUOffScreen la superficie correspondiente a **Escultura**, aunque
+**Vista** tenga otro nivel. Workbench no utiliza los buffers de escultura PBVH al
+dibujar una imagen offscreen: las rejillas nativas se materializan temporalmente
+como malla evaluada mediante `use_sculpt_base_mesh`, y se restauran antes de volver
+a aceptar entrada. Se conserva el estado original del flag. No se actualiza la
+malla base con `Mesh.update()`, no se cambia de modo y no se aplica el modificador.
+El relieve aparece durante el trazo y al confirmar, cancelar, deshacer o rehacer.
+Esta evaluación tiene un coste dependiente del nivel y del tamaño de la malla.
 
 Multires y Dyntopo conservan además un baseline nativo en un archivo `.blend`
 temporal privado, retirado al confirmar, cancelar, desconectar o cargar otra
@@ -116,7 +121,11 @@ blender -t 2 --factory-startup --python blender-backend/tests/test_sculpt.py
 Comprueban presión, Agarrar con cámaras distintas, simetría/activos nativos,
 preview y undo, propiedad de trazo, Dyntopo, Multires con dos confirmaciones y sus
 undo/redo, conservación de material y nivel, profundidad/oclusión, guardado,
-carga, desconexión y limpieza ante fallos de snapshot.
+carga, desconexión y limpieza ante fallos de snapshot. La regresión de Multires
+compara píxeles y profundidad en Sólido con niveles de Vista/Escultura distintos,
+durante el trazo y tras cancelación/confirmación/undo/redo; también comprueba que
+un error de dibujo restaure el flag de evaluación. Las 17 pruebas gráficas de
+Sculpt pasan con esta corrección.
 
 Validación del refinamiento: 14 pruebas gráficas de escultura (incluida una pieza
 de 1 mm con PC en perspectiva y ortográfica), 39 de CAD, 56 de Android,

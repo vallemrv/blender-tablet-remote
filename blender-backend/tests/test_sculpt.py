@@ -16,6 +16,84 @@ from blender_tablet_remote.errors import CommandError
 
 
 class SculptTests(unittest.TestCase):
+    def test_multires_solid_surface_levels_strokes_and_history(self):
+        import numpy as np
+        from unittest.mock import patch
+        from blender_tablet_remote import bridge
+        from blender_tablet_remote.commands import history, modifiers
+        from blender_tablet_remote.streaming.capture import ViewportCapture, _multires_surface
+        from blender_tablet_remote.streaming.frames import FrameBuffer
+        mode._set_mode('OBJECT')
+        with view3d_override():
+            bpy.ops.object.select_all(action='SELECT'); bpy.ops.object.delete(use_global=False)
+            bpy.ops.mesh.primitive_cube_add()
+        modifiers.add({'type': 'MULTIRES'})
+        for _ in range(2):
+            modifiers.set_params({'name': 'Multires', 'parameters': {'subdivide': True}})
+        cap = ViewportCapture(FrameBuffer()); cap.max_width = 640
+        frames = []; cap.encoder.ensure = lambda *a: True; cap.encoder.submit = frames.append
+        space = find_view3d()[1].spaces.active
+        old_shading, old_overlays = space.shading.type, space.overlay.show_overlays
+        sculpt.register_handlers()
+
+        def capture():
+            cap._grab_offscreen()
+            return np.frombuffer(frames[-1], dtype=np.uint8).copy()
+
+        def surface():
+            usable, point = cap.sculpt_surface(.5, .5, bpy.context.object, self.rv)
+            self.assertTrue(usable); self.assertIsNotNone(point)
+            return point.z
+
+        def assert_context():
+            obj = bpy.context.view_layer.objects.active
+            self.assertEqual(obj.mode, 'SCULPT')
+            self.assertTrue(obj.select_get())
+            self.assertEqual(obj.matrix_world, self.matrix)
+            mod = obj.modifiers['Multires']
+            self.assertFalse(mod.use_sculpt_base_mesh)
+            self.assertEqual((mod.levels, mod.sculpt_levels, mod.render_levels), (0, 3, 1))
+            self.assertEqual(self.rv.view_matrix, self.pc)
+
+        try:
+            space.shading.type = 'SOLID'; space.overlay.show_overlays = False
+            expected = capture()
+            mode._set_mode('SCULPT')
+            modifiers.set_params({'name': 'Multires', 'parameters': {'levels': 0, 'render_levels': 1}})
+            sculpt.settings(dict(brush='DRAW', radius=.12, strength=.7))
+            baseline = capture(); baseline_z = surface()
+            self.assertLess(np.count_nonzero(expected != baseline), 50)
+            self.assertLess(baseline_z, .95)  # The rounded Multires cube, not its flat cage.
+            assert_context()
+            with patch.object(bridge, '_capture', cap):
+                self.send('begin', [self.point()])
+                changed = capture()
+                self.assertGreater(np.count_nonzero(changed != baseline), 1000)
+                self.assertGreater(surface(), baseline_z + .02)
+                self.send('update', [self.point(.1)])
+                capture(); assert_context()
+                self.send('cancel')
+                restored = capture()
+                self.assertLess(np.count_nonzero(restored != baseline), 50)
+                self.send('begin', [self.point()]); capture()
+                self.send('update', [self.point(.1)])
+                preview = capture()
+                self.send('end')
+                self.assertLess(np.count_nonzero(capture() != preview), 50)
+                history.undo({})
+                self.assertLess(np.count_nonzero(capture() != baseline), 50)
+                history.redo({})
+                self.assertLess(np.count_nonzero(capture() != preview), 50)
+                assert_context()
+            # A capture exception must not leave base-mesh sculpt enabled.
+            with self.assertRaisesRegex(RuntimeError, 'draw failed'):
+                with _multires_surface():
+                    raise RuntimeError('draw failed')
+            assert_context()
+        finally:
+            sculpt.unregister_handlers(); cap.shutdown()
+            space.shading.type, space.overlay.show_overlays = old_shading, old_overlays
+
     def test_solid_surface_updates_during_stroke_and_after_cancel(self):
         import numpy as np
         from blender_tablet_remote.streaming.capture import ViewportCapture

@@ -169,6 +169,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   cancelar o deshacer el trazo: cambiar coordenadas no basta para refrescar el
   buffer sólido del offscreen. No se llama a `Mesh.update()` sobre la malla base
   de Dyntopo/Multires, cuyo estado vivo pertenece a BMesh/rejillas nativas.
+- GPUOffScreen dibuja Multires a su nivel de Escultura, incluidos los desplazamientos
+  vivos. Durante la captura se materializan las rejillas nativas como malla evaluada
+  mediante `use_sculpt_base_mesh`; el flag original y las rejillas de Sculpt se
+  restauran siempre al terminar, también ante errores. No cambia de modo, no aplica
+  el modificador y no modifica los niveles de Vista/Escultura/Render ni `rv3d`.
 - El historial de lápiz de los pinceles por aplicaciones se remuestrea según su
   espaciado nativo, con corrección de aspecto y presión interpolada. El extremo
   provisional se sustituye entre UPDATE y no se acumula como otra aplicación

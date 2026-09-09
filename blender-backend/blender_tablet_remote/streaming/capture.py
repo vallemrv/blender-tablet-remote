@@ -13,6 +13,7 @@ No captura el framebuffer de la ventana del PC ni su interfaz nativa.
 from __future__ import annotations
 
 import time
+from contextlib import contextmanager
 
 import bpy
 import gpu
@@ -42,6 +43,34 @@ def _find_view3d_space():
                 continue
             return area, region, space, space.region_3d
     return None
+
+
+@contextmanager
+def _multires_surface():
+    """Materialize native Multires grids for GPUOffScreen's image-render path.
+
+    Workbench excludes sculpt PBVH batches during offscreen image rendering.
+    In Sculpt, the evaluated Mesh otherwise contains only the coarse cage, with
+    the actual surface stored in native CCG grids. This evaluation flag exposes
+    that same displaced surface as a Mesh, at sculpt_levels, for this draw only.
+    """
+    obj = bpy.context.view_layer.objects.active
+    modifiers = [m for m in obj.modifiers
+                 if m.type == 'MULTIRES' and m.show_viewport and m.sculpt_levels > 0
+                 and not m.use_sculpt_base_mesh] if obj and obj.mode == 'SCULPT' else []
+    try:
+        for modifier in modifiers:
+            modifier.use_sculpt_base_mesh = True
+        if modifiers:
+            bpy.context.evaluated_depsgraph_get()
+        yield
+    finally:
+        for modifier in modifiers:
+            modifier.use_sculpt_base_mesh = False
+        if modifiers:
+            # Native brushes must receive their live grids again, including when
+            # drawing failed. No Mesh.update(), mode switch, or undo is involved.
+            bpy.context.view_layer.update()
 
 
 class ViewportCapture:
@@ -199,7 +228,7 @@ class ViewportCapture:
         camera.sync_from_region(rv3d)
 
         from ..cad.runtime import runtime as cad_runtime
-        with offscreen.bind(), cad_runtime.preview_shading(space):
+        with _multires_surface(), offscreen.bind(), cad_runtime.preview_shading(space):
             fb = gpu.state.active_framebuffer_get()
             fb.clear(color=(0.0, 0.0, 0.0, 1.0), depth=1.0)
             offscreen.draw_view3d(
@@ -228,7 +257,7 @@ class ViewportCapture:
         return True
 
     def sculpt_surface(self, u, v, obj, rv3d):
-        """Visible native PBVH surface of the last video frame, never desktop depth.
+        """Visible sculpt surface of the last video frame, never desktop depth.
 
         The boolean distinguishes a valid background sample from unavailable or
         stale depth. Native multires/Dyntopo cannot be raycast through Mesh RNA.
