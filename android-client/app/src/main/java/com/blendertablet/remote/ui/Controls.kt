@@ -93,6 +93,8 @@ fun IconAction(
     selected: Boolean = false,
     enabled: Boolean = true,
     tint: Color? = null,
+    onLongClick: (() -> Unit)? = null,
+    onLongClickLabel: String? = null,
     onClick: () -> Unit,
 ) {
     val background = if (selected) Ink.Accent.copy(alpha = .22f) else Color.Transparent
@@ -106,7 +108,7 @@ fun IconAction(
             .size(Metrics.Touch)
             .clip(RoundedCornerShape(10.dp))
             .background(background)
-            .then(if (enabled) Modifier.clickableNoRipple(onClick) else Modifier),
+            .then(if (enabled) Modifier.clickableNoRipple(onClick, onLongClick, onLongClickLabel) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, description, Modifier.size(Metrics.IconSize), tint = content)

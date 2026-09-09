@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -27,12 +29,30 @@ import kotlin.math.roundToInt
 fun BoxScope.SculptWorkspace(state: AppUiState, vm: MainViewModel) {
     val sculpt = state.blender.sculpt
     var topologyOpen by rememberSaveable { mutableStateOf(false) }
+    var maskActionsOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(sculpt.active, sculpt.brush) { maskActionsOpen = false }
     val railHeight = (LocalConfiguration.current.screenHeightDp - 220).coerceAtLeast(88).dp
     ToolRail(Modifier.align(Alignment.CenterStart).padding(start = Metrics.EdgeMargin).heightIn(max = railHeight)) {
         RailLabel("PINCEL")
         sculpt.brushes.forEach { brush ->
-            IconAction(AppIcons.sculpt(brush.icon), brush.label, selected = sculpt.brush == brush.id,
-                enabled = sculpt.active) { vm.sculptSettings(mapOf("brush" to brush.id)) }
+            val activeMask = sculpt.active && brush.id == "MASK" && sculpt.brush == "MASK"
+            Box {
+                IconAction(AppIcons.sculpt(brush.icon), brush.label, selected = sculpt.brush == brush.id,
+                    enabled = sculpt.active,
+                    onLongClick = if (activeMask) ({ maskActionsOpen = true }) else null,
+                    onLongClickLabel = "Acciones de máscara",
+                ) { vm.sculptSettings(mapOf("brush" to brush.id)) }
+                if (activeMask) DropdownMenu(expanded = maskActionsOpen, onDismissRequest = { maskActionsOpen = false }) {
+                    DropdownMenuItem(text = { Text("Invertir máscara") }, onClick = {
+                        maskActionsOpen = false
+                        vm.sculptCommand("sculpt.mask", mapOf("action" to "invert"))
+                    })
+                    DropdownMenuItem(text = { Text("Borrar toda la máscara") }, onClick = {
+                        maskActionsOpen = false
+                        vm.sculptCommand("sculpt.mask", mapOf("action" to "clear"))
+                    })
+                }
+            }
         }
     }
     FloatingPanel(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(Metrics.EdgeMargin)) {
@@ -127,11 +147,6 @@ private fun SculptTopologyDialog(sculpt: SculptState, vm: MainViewModel, onDismi
                 }
                 if (sculpt.dyntopoEnabled || sculpt.multiresName != null)
                     Text("Dyntopo y Multires se usan por separado. Para quitar Multires, vuelve a Object → Modificadores.", color = Ink.Muted, fontSize = 11.sp)
-                Text("Máscara · protege las zonas pintadas", fontSize = 13.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    PillButton("Limpiar") { vm.sculptCommand("sculpt.mask", mapOf("action" to "clear")) }
-                    PillButton("Invertir") { vm.sculptCommand("sculpt.mask", mapOf("action" to "invert")) }
-                }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Listo") } },

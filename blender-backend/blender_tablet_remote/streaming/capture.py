@@ -46,6 +46,23 @@ def _find_view3d_space():
 
 
 @contextmanager
+def _sculpt_grid(space):
+    """Hide only the grid in tablet Sculpt frames; preserve the viewport settings."""
+    obj = bpy.context.view_layer.objects.active
+    overlay = space.overlay
+    previous = {key: getattr(overlay, key) for key in
+                ('show_floor', 'show_ortho_grid', 'show_axis_x', 'show_axis_y', 'show_axis_z')
+                } if obj and obj.mode == 'SCULPT' else {}
+    try:
+        for key in previous:
+            setattr(overlay, key, False)
+        yield
+    finally:
+        for key, value in previous.items():
+            setattr(overlay, key, value)
+
+
+@contextmanager
 def _multires_surface():
     """Materialize native Multires grids for GPUOffScreen's image-render path.
 
@@ -228,7 +245,7 @@ class ViewportCapture:
         camera.sync_from_region(rv3d)
 
         from ..cad.runtime import runtime as cad_runtime
-        with _multires_surface(), offscreen.bind(), cad_runtime.preview_shading(space):
+        with _multires_surface(), _sculpt_grid(space), offscreen.bind(), cad_runtime.preview_shading(space):
             fb = gpu.state.active_framebuffer_get()
             fb.clear(color=(0.0, 0.0, 0.0, 1.0), depth=1.0)
             offscreen.draw_view3d(

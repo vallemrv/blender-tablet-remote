@@ -165,6 +165,12 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   El tamaño nativo se calcula en pantalla, evitando el mínimo RNA de 0,001 unidades
   de tamaño en mundo. La adaptación de la vista mantiene los trazos fuera del
   near plane del PC y restaura siempre la matriz original del objeto.
+- La rejilla y sus ejes se ocultan solo durante la captura Sculpt, conservando
+  los demás overlays. Fuera de Sculpt se recuperan sus flags originales, también
+  si antes estaban desactivados; guardar y el viewport del PC conservan el estado.
+- Con Máscara activa, mantener su botón del rail abre «Invertir máscara» y
+  «Borrar toda la máscara». Ambas acciones usan el undo nativo; viven en ese menú,
+  no en los ajustes de topología de Malla.
 - En Sculpt sobre malla ordinaria, la superficie sólida se invalida tras aplicar,
   cancelar o deshacer el trazo: cambiar coordenadas no basta para refrescar el
   buffer sólido del offscreen. No se llama a `Mesh.update()` sobre la malla base

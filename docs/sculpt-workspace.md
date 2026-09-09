@@ -45,9 +45,13 @@ el percentil 95, de 162–174 a unos 88 ms. Es una medida del PC y del transport
 local, no de la red Wi-Fi ni de la respuesta física del lápiz. Se eliminaron
 recorridos por byte en el parser H.264 y esperas innecesarias entre capturas.
 
-Máscara protege zonas frente a los pinceles. La bandeja permite invertirla o
-limpiarla. Suavizar temporalmente usa Smooth y mantiene el pincel elegido para el
+Máscara protege zonas frente a los pinceles. Con ese pincel activo, una pulsación
+larga sobre su botón del rail abre «Invertir máscara» y «Borrar toda la máscara».
+Ambas acciones admiten Deshacer. Suavizar temporalmente usa Smooth y mantiene el pincel elegido para el
 siguiente trazo.
+
+La rejilla y los ejes se ocultan en el vídeo mientras Sculpt está activo. Al salir
+vuelven a su estado anterior; las máscaras y las demás ayudas siguen disponibles.
 
 Las imágenes de referencia viven en el panel Referencias de Android: se importan
 desde Archivo → Imágenes de referencia, se conservan localmente y permiten

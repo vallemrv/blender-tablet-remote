@@ -16,6 +16,35 @@ from blender_tablet_remote.errors import CommandError
 
 
 class SculptTests(unittest.TestCase):
+    def test_sculpt_grid_is_temporary_and_preserves_other_overlays(self):
+        from blender_tablet_remote.streaming.capture import _sculpt_grid
+        overlay = find_view3d()[1].spaces.active.overlay
+        keys = ('show_floor', 'show_ortho_grid', 'show_axis_x', 'show_axis_y', 'show_axis_z')
+        original = {key: getattr(overlay, key) for key in keys}
+        original_overlays = overlay.show_overlays
+        expected = dict(zip(keys, (True, True, True, False, False)))
+        try:
+            overlay.show_overlays = True
+            for key, value in expected.items(): setattr(overlay, key, value)
+            with self.assertRaisesRegex(RuntimeError, 'draw failed'):
+                with _sculpt_grid(find_view3d()[1].spaces.active):
+                    self.assertTrue(overlay.show_overlays)
+                    self.assertFalse(any(getattr(overlay, key) for key in keys))
+                    raise RuntimeError('draw failed')
+            self.assertEqual({key: getattr(overlay, key) for key in keys}, expected)
+            mode._set_mode('OBJECT')
+            with _sculpt_grid(find_view3d()[1].spaces.active):
+                self.assertEqual({key: getattr(overlay, key) for key in keys}, expected)
+            # An already hidden grid must stay hidden after leaving Sculpt.
+            for key in keys: setattr(overlay, key, False)
+            mode._set_mode('SCULPT')
+            with _sculpt_grid(find_view3d()[1].spaces.active): pass
+            mode._set_mode('OBJECT')
+            self.assertFalse(any(getattr(overlay, key) for key in keys))
+        finally:
+            for key, value in original.items(): setattr(overlay, key, value)
+            overlay.show_overlays = original_overlays
+
     def test_multires_solid_surface_levels_strokes_and_history(self):
         import numpy as np
         from unittest.mock import patch
