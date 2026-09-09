@@ -54,13 +54,18 @@ y la tablet se suman. Dyntopo continúa reconstruyendo topología y restaurando 
 baseline nativo durante la preview, por lo que su coste crece con el detalle y el
 recorrido.
 
-Máscara protege zonas frente a los pinceles. Con ese pincel activo, una pulsación
-larga sobre su botón del rail abre «Invertir máscara» y «Borrar toda la máscara».
+Máscara protege zonas frente a los pinceles. El menú **Malla** ofrece **Invertir
+máscara** y **Borrar máscara**, sin mantener pulsado el pincel.
 Ambas acciones admiten Deshacer. Suavizar temporalmente usa Smooth y mantiene el pincel elegido para el
 siguiente trazo.
 
 La rejilla y los ejes se ocultan en el vídeo mientras Sculpt está activo. Al salir
 vuelven a su estado anterior; las máscaras y las demás ayudas siguen disponibles.
+
+La bandeja inferior muestra **Dyntopo · detalle** cuando está activado. Con
+Multires muestra su nivel de Escultura, un selector entre los niveles creados y
+**Subdividir** para añadir uno (máximo seis). Estos controles están también en
+Malla y no requieren cambiar a Object. El cambio del selector se envía al soltarlo.
 
 Las imágenes de referencia viven en el panel Referencias de Android: se importan
 desde Archivo → Imágenes de referencia, se conservan localmente y permiten
@@ -147,3 +152,27 @@ aprobadas. APK compilado,
 ZIP validado con Blender y comprobación de interfaz conectada en tablet emulada.
 La sensación y respuesta de un lápiz físico quedan pendientes de validación en
 el dispositivo del usuario.
+
+## Fallos conocidos
+
+### Crash de Blender en Sculpt tras una ráfaga de `sculptmode_toggle` (2026-09-09)
+
+Reportado por el usuario probando en el dispositivo real; sin reproducir de forma
+controlada ni investigado a fondo todavía.
+
+- **Síntoma**: Blender termina (SEGV). El log del pump muestra una ráfaga de
+  `sculpt.stroke` seguida de varios `Attempt to free nullptr pointer` y un volcado
+  de crash en `/tmp/blender.crash.txt`.
+- **Backtrace de Python del crash**: `streaming/capture.py:251` (`_grab_offscreen`,
+  la llamada a `offscreen.draw_view3d(...)`) ← `capture.py:190` (`tick`) ←
+  `bridge.py:352` (`_pump`).
+- **Contexto en el propio log del pump**: inmediatamente antes del crash se ve una
+  larga serie de `bpy.ops.sculpt.sculptmode_toggle()` en el backtrace de Python.
+- **Backtrace nativo**: el fallo ocurre dentro del driver
+  (`libnvidia-glcore.so.580.178.04`), no en código del addon.
+- **Hipótesis sin confirmar**: la captura offscreen del pump (`_grab_offscreen`,
+  que hace `bind()` + `draw_view3d`) coincide en el tiempo con el cambio repetido
+  de modo Sculpt; el driver libera un puntero nulo al reconstruir el contexto GL
+  justo durante uno de esos toggles.
+- **Estado**: Blender se reinició sin cambios de código. No hay fix ni mitigación
+  aplicada.

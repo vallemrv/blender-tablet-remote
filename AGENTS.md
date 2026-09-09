@@ -177,9 +177,12 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - La rejilla y sus ejes se ocultan solo durante la captura Sculpt, conservando
   los demás overlays. Fuera de Sculpt se recuperan sus flags originales, también
   si antes estaban desactivados; guardar y el viewport del PC conservan el estado.
-- Con Máscara activa, mantener su botón del rail abre «Invertir máscara» y
-  «Borrar toda la máscara». Ambas acciones usan el undo nativo; viven en ese menú,
-  no en los ajustes de topología de Malla.
+- Invertir y borrar la máscara viven en el menú Malla de Sculpt, sin pulsación
+  larga del pincel. Ambas acciones usan el undo nativo.
+- La bandeja de propiedades Sculpt muestra el detalle de Dyntopo cuando está
+  activo, o el selector discreto de niveles Multires y Subdividir cuando existe.
+  Comparte esos controles con Malla. Elegir nivel solo recorre los creados;
+  Subdividir añade uno y se deshabilita al llegar a seis, sin salir de Sculpt.
 - En Sculpt sobre malla ordinaria, la superficie sólida se invalida tras aplicar,
   cancelar o deshacer el trazo: cambiar coordenadas no basta para refrescar el
   buffer sólido del offscreen. No se llama a `Mesh.update()` sobre la malla base

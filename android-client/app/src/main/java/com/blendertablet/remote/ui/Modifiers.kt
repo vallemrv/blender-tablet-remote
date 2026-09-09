@@ -3,7 +3,6 @@ package com.blendertablet.remote.ui
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
@@ -19,15 +18,9 @@ import androidx.compose.ui.composed
  * un viewport a pantalla completa distrae. El estado seleccionado ya se comunica con
  * color y fondo.
  */
-fun Modifier.clickableNoRipple(onClick: () -> Unit): Modifier =
-    clickableNoRipple(onClick, null, null)
-
-fun Modifier.clickableNoRipple(onClick: () -> Unit, onLongClick: (() -> Unit)?,
-    onLongClickLabel: String?): Modifier = composed {
+fun Modifier.clickableNoRipple(onClick: () -> Unit): Modifier = composed {
     val interaction = remember { MutableInteractionSource() }
-    if (onLongClick == null) clickable(interactionSource = interaction, indication = null, onClick = onClick)
-    else combinedClickable(interactionSource = interaction, indication = null, onClick = onClick,
-        onLongClick = onLongClick, onLongClickLabel = onLongClickLabel)
+    clickable(interactionSource = interaction, indication = null, onClick = onClick)
 }
 
 /** Uses the normal button gesture policy, including scroll and pointer cancellation. */
