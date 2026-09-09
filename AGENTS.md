@@ -165,7 +165,19 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   El tamaño nativo se calcula en pantalla, evitando el mínimo RNA de 0,001 unidades
   de tamaño en mundo. La adaptación de la vista mantiene los trazos fuera del
   near plane del PC y restaura siempre la matriz original del objeto.
+- En Sculpt sobre malla ordinaria, la superficie sólida se invalida tras aplicar,
+  cancelar o deshacer el trazo: cambiar coordenadas no basta para refrescar el
+  buffer sólido del offscreen. No se llama a `Mesh.update()` sobre la malla base
+  de Dyntopo/Multires, cuyo estado vivo pertenece a BMesh/rejillas nativas.
+- El historial de lápiz de los pinceles por aplicaciones se remuestrea según su
+  espaciado nativo, con corrección de aspecto y presión interpolada. El extremo
+  provisional se sustituye entre UPDATE y no se acumula como otra aplicación
+  por paquete. Grab conserva su recorrido. END confirma lo ya dibujado.
 - Los trazos Sculpt llevan propietario e ID; son excluyentes con transform/tool/CAD.
+  La preview difiere el commit nativo de undo hasta restaurar la matriz del objeto
+  y registra exactamente un paso propio, incluso si el pincel devuelve FINISHED
+  sin iniciar trazo sobre la superficie evaluada. Repetir/cancelar nunca deshace
+  la entrada en Sculpt ni una selección anterior.
   Cada trazo confirmado aporta un undo nativo. Android limita una petición en vuelo,
   conserva el orden de muestras y cierra el trazo antes de navegar/cambiar intención.
   Dyntopo y Multires son alternativas explícitas, nunca se elimina uno al activar otro.

@@ -16,6 +16,44 @@ from blender_tablet_remote.errors import CommandError
 
 
 class SculptTests(unittest.TestCase):
+    def test_solid_surface_updates_during_stroke_and_after_cancel(self):
+        import numpy as np
+        from blender_tablet_remote.streaming.capture import ViewportCapture
+        from blender_tablet_remote.streaming.frames import FrameBuffer
+        cap=ViewportCapture(FrameBuffer());cap.max_width=640
+        cap.encoder.ensure=lambda *a: True
+        frames=[];cap.encoder.submit=frames.append
+        space=find_view3d()[1].spaces.active
+        previous=space.shading.type,space.overlay.show_overlays
+        sculpt.register_handlers()
+        try:
+            for face in bpy.context.object.data.polygons: face.use_smooth=True
+            bpy.context.object.data.update()
+            space.shading.type='SOLID';space.overlay.show_overlays=False
+            cap._grab_offscreen();cap._grab_offscreen()
+            before=np.frombuffer(frames[-1],dtype=np.uint8).copy()
+            p=self.point()
+            _,surface=cap.sculpt_surface(p['u'],p['v'],bpy.context.object,self.rv)
+            self.send('begin',[p])
+            cap._grab_offscreen()
+            _,after=cap.sculpt_surface(p['u'],p['v'],bpy.context.object,self.rv)
+            self.assertGreater(after.z-surface.z,1e-4)
+            self.assertGreater(np.count_nonzero(np.frombuffer(frames[-1],dtype=np.uint8)!=before),1000)
+            self.assertEqual(bpy.context.object.mode,'SCULPT')
+            self.assertEqual(space.shading.type,'SOLID')
+            self.send('cancel');cap._grab_offscreen()
+            _,restored=cap.sculpt_surface(p['u'],p['v'],bpy.context.object,self.rv)
+            self.assertAlmostEqual(restored.z,surface.z,places=4)
+            self.send('begin',[p]);self.send('end')
+            from blender_tablet_remote.commands import history
+            history.undo({});cap._grab_offscreen()
+            _,undone=cap.sculpt_surface(p['u'],p['v'],bpy.context.object,self.rv)
+            self.assertAlmostEqual(undone.z,surface.z,places=4)
+        finally:
+            sculpt.unregister_handlers()
+            cap.shutdown()
+            space.shading.type,space.overlay.show_overlays=previous
+
     def test_one_mm_brush_deforms_only_local_patch_and_cancels(self):
         mode._set_mode('OBJECT')
         obj=bpy.context.object
@@ -116,6 +154,42 @@ class SculptTests(unittest.TestCase):
         with view3d_override():
             bpy.ops.ed.redo()
         self.assertGreater(self.changed(), 1e-4)
+
+    def test_native_miss_keeps_mode_selection_and_previous_stroke(self):
+        from unittest.mock import patch
+        from blender_tablet_remote.commands import history
+        from mathutils import Vector
+        sculpt.register_handlers()
+        try:
+            self.send('begin', [self.point()]); self.send('end')
+            committed = [v.co.copy() for v in bpy.context.object.data.vertices]
+            # A remote hit can be rejected by native sculpt (e.g. an evaluated
+            # Mirror face). Keep the real brush operator and force only its
+            # screen coordinates to miss; Blender still returns FINISHED.
+            for brush in ('SMOOTH', 'DRAW', 'CLAY', 'GRAB', 'MASK'):
+                sculpt.settings(dict(brush=brush))
+                with patch.object(sculpt, 'location_3d_to_region_2d', return_value=Vector((-10000, -10000))):
+                    self.send('begin', [self.point()])
+                    self.send('update', [self.point(.1)])
+                    self.send('update', [self.point(.2)])
+                    self.send('cancel')
+                obj = bpy.context.view_layer.objects.active
+                self.assertEqual(obj.name, self.name)
+                self.assertTrue(obj.select_get())
+                self.assertEqual(obj.mode, 'SCULPT')
+                self.assertEqual(obj.matrix_world, self.matrix)
+                self.assertLess(max((v.co-co).length for v, co in zip(obj.data.vertices, committed)), 1e-6)
+            history.undo({})
+            self.assertLess(self.changed(), 1e-6)
+            history.redo({})
+            self.assertGreater(self.changed(), 1e-4)
+            sculpt.settings(dict(brush='DRAW'))
+            self.send('begin', [self.point(.2)])
+            self.send('update', [self.point(.3)]); self.send('end')
+            history.undo({})
+            self.assertLess(max((v.co-co).length for v, co in zip(bpy.context.object.data.vertices, committed)), 1e-6)
+        finally:
+            sculpt.unregister_handlers()
 
     def test_stale_owner_and_zero_pressure(self):
         self.send('begin', [self.point(pressure=0)])

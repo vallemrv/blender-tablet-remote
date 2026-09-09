@@ -1539,6 +1539,12 @@ está entre 0 y 1 y `time` son segundos desde el inicio. Android conserva las
 muestras históricas de MotionEvent, incluida su presión; un cero no se sustituye
 por fuerza máxima. Para dedo, cuyo valor no representa fuerza física del lápiz,
 se utiliza presión 1. El backend limita cada trazo a 4096 muestras de superficie.
+En los pinceles por aplicaciones, estas muestras se convierten a aplicaciones
+separadas por el espaciado nativo del pincel. Se integra el recorrido entre paquetes,
+se corrige el aspecto de pantalla y se interpola la presión. El extremo provisional
+solo pertenece a la preview actual; no se añade otra aplicación permanente por cada
+UPDATE. Grab conserva su recorrido completo. Una primera muestra de presión cero
+no inicia una aplicación: la primera positiva fija el inicio real.
 Si otro lote supera ese límite, confirma la última preview aceptada y devuelve
 `limit_reached:true` con `message`. Android muestra el aviso, descarta las muestras
 pendientes de ese ID y espera a que se levante el lápiz para iniciar otro trazo.

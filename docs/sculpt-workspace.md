@@ -70,12 +70,25 @@ unidades del campo de tamaño en mundo. La adaptación coloca temporalmente el
 trazo a la profundidad de trabajo del PC, evitando que su near plane excluya
 una pieza milimétrica. Al terminar la llamada se restaura la matriz original.
 
-Cada actualización deshace la preview nativa anterior y reproduce las muestras
-acumuladas. Hay una sola solicitud de trazo en vuelo en Android. Se admiten 128
+Cada actualización deshace la preview nativa anterior y reproduce las aplicaciones
+acumuladas. El historial del lápiz se remuestrea con el espaciado nativo del pincel,
+conservando el recorrido y la presión interpolada. El extremo visible es provisional:
+se sustituye en la siguiente actualización, sin acumular una aplicación por paquete.
+Grab conserva su recorrido completo. Hay una sola solicitud de trazo en vuelo en
+Android. Se admiten 128
 muestras por mensaje y 4096 por trazo; al superar ese límite se conserva la última
 preview confirmándola y se pide levantar el lápiz para continuar con otro trazo.
 La reproducción completa cuesta más cuanto más largo es el trazo o más
 densa es la malla; no se presupone una latencia fija en escenas grandes.
+
+En malla ordinaria se actualiza además su superficie sólida durante el trazo y al
+cancelar/deshacer, sin cambiar de modo ni activar Wireframe. Con una esfera de unas
+6.000 caras y Mirror, un recorrido de 400 muestras con Suavizar pasó de unos 69 ms
+a 20 ms en la última actualización. Es tiempo del backend, no latencia total del lápiz.
+
+Este ajuste visual está validado en malla ordinaria. El refresco sólido de Multires
+en GPUOffScreen sigue pendiente de una corrección propia: no se considera resuelto
+por actualizar su malla base, porque eso puede perder el estado vivo de las rejillas.
 
 Multires y Dyntopo conservan además un baseline nativo en un archivo `.blend`
 temporal privado, retirado al confirmar, cancelar, desconectar o cargar otra
