@@ -957,7 +957,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return parameters + mapOf(
             "snap_type" to compatible.name,
             "snap_step" to local.value.snapStep,
-        )
+        ) + if (tool in setOf(EditTool.EXTRUDE, EditTool.BEVEL, EditTool.INSET))
+            mapOf("auto_size" to true) else emptyMap()
     }
 
     private fun rememberSnapType(type: SnapType) {

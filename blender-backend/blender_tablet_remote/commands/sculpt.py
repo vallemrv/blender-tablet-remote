@@ -9,7 +9,7 @@ import math
 import bpy
 from bpy.app.handlers import persistent
 from bpy_extras.view3d_utils import location_3d_to_region_2d
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 from ..bpy_utils import active_object, find_view3d, view3d_override, undo_push
 from ..camera import camera
@@ -60,7 +60,14 @@ def status():
     mesh = obj if obj and obj.type == 'MESH' else None
     sd = bpy.context.scene.tool_settings.sculpt
     modifier = next((m for m in mesh.modifiers if m.type == 'MULTIRES'), None) if mesh else None
+    radius_meters = None
+    found = find_view3d()
+    if found:
+        camera.sync_from_region(found[3])
+        span = camera.screen_span(camera.projection_matrix(found[3]))[1]
+        radius_meters = span * _settings['radius'] * bpy.context.scene.unit_settings.scale_length
     result = dict(_settings, available=not bpy.app.background and bpy.app.version >= (4, 4, 0),
+                  radius_meters=radius_meters,
                   active=bool(mesh and mesh.mode == 'SCULPT'),
                   symmetry={axis: bool(getattr(mesh, 'use_mesh_mirror_' + axis, axis == 'x'))
                             for axis in 'xyz'},
@@ -92,7 +99,9 @@ def _activate(brush_id):
     brush.strength = _settings['strength']
     brush.use_pressure_strength = _settings['pressure_strength']
     brush.use_pressure_size = _settings['pressure_size']
-    brush.use_locked_size = 'SCENE'
+    # VIEW lets native sculpt calculate submillimeter radii internally; assigning
+    # unprojected_size through RNA clamps every diameter to >= .001 Blender units.
+    brush.use_locked_size = 'VIEW'
     brush.falloff_shape = 'SPHERE'
     sd = bpy.context.scene.tool_settings.sculpt
     unified = getattr(sd, 'unified_paint_settings', None)
@@ -329,16 +338,23 @@ def _preview():
     window, area, region, rv3d = find_view3d()
     brush = _activate(_stroke['brush'])
     original = obj.matrix_world.copy()
-    adapter = rv3d.view_matrix.inverted_safe() @ camera.view_matrix()
     first_world = original @ Vector(points[0]['location'])
-    depth = abs((camera.view_matrix() @ first_world).z)
+    depth = max(abs((camera.view_matrix() @ first_world).z), 1e-12)
     projection = camera.projection_matrix(rv3d)
     span = 2 * (depth if camera.perspective == 'PERSP' else 1) / max(abs(projection[1][1]), 1e-9)
-    # Blender 5 reports diameter; older supported versions report radius.
-    world_factor = 2 if 'Diameter' in brush.bl_rna.properties['unprojected_size'].description else 1
+    # Match the remote radius at the first surface sample to native screen pixels.
     pixel_factor = 2 if 'Diameter' in brush.bl_rna.properties['size'].description else 1
-    brush.unprojected_size = world_factor * span * _settings['radius'] / max(max(abs(v) for v in obj.scale), 1e-9)
-    brush.size = max(1, min(5000, int(pixel_factor * _settings['radius'] * region.height)))
+    native_perspective = abs(rv3d.window_matrix[3][2]) > 1e-9
+    # Present the stroke at the desktop's working depth only while its native
+    # brush runs. Perspective pixels are unchanged by this uniform view scaling;
+    # an orthographic desktop receives the equivalent span of the remote view.
+    # This avoids the PC near plane swallowing millimeter-sized targets.
+    view_scale = max(rv3d.view_distance, 1e-9) / depth if native_perspective else (
+        2 / max(abs(rv3d.window_matrix[1][1]), 1e-9) / span)
+    adapter = rv3d.view_matrix.inverted_safe() @ Matrix.Diagonal((view_scale, view_scale, view_scale, 1.0)) @ camera.view_matrix()
+    native_depth = depth * view_scale if native_perspective else 1.0
+    native_span = 2 * native_depth / max(abs(rv3d.window_matrix[1][1]), 1e-9)
+    brush.size = max(1, min(5000, round(pixel_factor * _settings['radius'] * span * view_scale / native_span * region.height)))
     records = []
     try:
         if adapter @ original != original:

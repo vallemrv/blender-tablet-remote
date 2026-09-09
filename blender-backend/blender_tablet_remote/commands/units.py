@@ -9,6 +9,7 @@ malla se veía rota en cuanto la pieza se salía del rango para el que estaba pe
 from __future__ import annotations
 
 import bpy
+import math
 
 from ..camera import camera
 from ..errors import BadPayload, CommandError
@@ -65,8 +66,9 @@ def apply_scale(name: str) -> dict:
     # `scale_length` no se toca: multiplica el tamaño del mundo y cambiaría el
     # significado de la geometría existente, que es justo lo que un preset no debe hacer.
 
-    camera.set_clipping(scale["clip_start"], scale["clip_end"])
-    _apply_grid(scale["grid_scale"])
+    conversion = max(unit_settings.scale_length, 1e-12)
+    camera.set_clipping(scale["clip_start"] / conversion, scale["clip_end"] / conversion)
+    _apply_grid(scale["grid_scale"] / conversion)
     bpy.context.scene.tool_settings.proportional_size = (
         scale["proportional_radius"] / max(unit_settings.scale_length, 1e-12))
     return current_scale()
@@ -91,7 +93,36 @@ def reset() -> None:
     global _current
     _current = _preset_for_scene()
     scale = SCENE_SCALES[_current]
-    camera.set_clipping(scale["clip_start"], scale["clip_end"])
+    conversion = max(bpy.context.scene.unit_settings.scale_length, 1e-12)
+    camera.set_clipping(scale["clip_start"] / conversion, scale["clip_end"] / conversion)
+
+
+def detail_step(obj) -> float:
+    """Initial Edit-tool step: 1% of the smallest useful selected dimension.
+
+    Rounded down to 1/2/5, measured in meters, then returned in Blender units.
+    This does not change the existing Move, Scale or proportional controls.
+    """
+    conversion = max(bpy.context.scene.unit_settings.scale_length, 1e-12)
+    if obj.mode == 'EDIT':
+        import bmesh
+        bm = bmesh.from_edit_mesh(obj.data)
+        vertices = [v for v in bm.verts if v.select and not v.hide]
+        if len(vertices) < 2:
+            vertices = [v for v in bm.verts if not v.hide]
+        points = [v.co for v in vertices]
+    else:
+        points = list(obj.bound_box)
+    spans = [(max(p[a] for p in points) - min(p[a] for p in points)) *
+             obj.matrix_world.to_3x3().col[a].length * conversion
+             for a in range(3)] if points else []
+    useful = [s for s in spans if s > max(spans, default=0) * 1e-6 and s > 0]
+    preset_step = SCENE_SCALES[_current or _preset_for_scene()]['snap_step']
+    target = min(min(useful) * .01, preset_step) if useful else preset_step
+    target = max(target, 1e-15)
+    magnitude = 10 ** math.floor(math.log10(target))
+    step = max(v for v in (1, 2, 5, 10) if v <= target / magnitude + 1e-5) * magnitude
+    return step / conversion
 
 
 @command("scene.scale")

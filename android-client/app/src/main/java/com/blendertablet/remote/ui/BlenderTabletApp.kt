@@ -174,6 +174,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     // Acción pendiente de confirmar porque descarta cambios sin guardar.
     var pendingDiscard by remember { mutableStateOf<PendingDiscard?>(null) }
     var modifiersOpen by remember { mutableStateOf(false) }
+    var referencesOpen by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(state.blender.activeObject, state.blender.mode, state.blender.features.modifiers, state.blender.cad.workspace) {
         if (state.blender.cad.workspace || !state.blender.features.modifiers || state.blender.mode != BlenderMode.OBJECT || state.blender.activeObjectType != "MESH") modifiersOpen = false
     }
@@ -224,6 +225,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             if (modifiersOpen) vm.openModifiers()
         },
         onSceneScale = vm::setSceneScale,
+        onReferences = { referencesOpen = true },
     )
 
     val session by vm.transformSession.collectAsStateWithLifecycle()
@@ -302,8 +304,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 state.blender.mode == BlenderMode.EDIT,
             longPressEnabled = !sculptActive && !state.blender.cad.workspace && toolSession.input != "REPEAT_TAP" && viewportLongPressEnabled(session.active, toolSession.active),
             repeatTap = toolSession.armed && toolSession.input == "REPEAT_TAP",
-            independentTaps = session.active && state.blender.mode == BlenderMode.EDIT &&
-                state.activeTool != ActiveTool.TWEAK && state.blender.features.transformStepSelection,
+            independentTaps = state.blender.mode == BlenderMode.EDIT || state.blender.cad.workspace,
             // Los marcadores de transformación ya forman parte del fotograma.
             snapCandidate = if (state.blender.cad.workspace) null else toolSession.snapCandidate,
             cancelPickOnNavigation = toolSession.input == "FACE_PAIR",
@@ -504,9 +505,11 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 }
                 if (state.blender.cad.workspace) CadWorkspace(state, vm)
                 if (sculptActive) SculptWorkspace(state, vm)
-                ReferencePanel(Modifier.align(Alignment.TopCenter).padding(top = 76.dp))
+                if (referencesOpen) ReferencePanel(Modifier.align(Alignment.TopCenter).padding(top = 76.dp),
+                    onDismiss = { referencesOpen = false })
 
                 if (!state.blender.cad.workspace || state.blender.cad.activeSketchId == null) ViewFooter(
+                    onFrameSelected = vm::frameSelected,
                     projection = state.blender.view.perspective,
                     activeAxisView = state.blender.view.axisView,
                     inEdit = !state.blender.cad.workspace && state.blender.mode == BlenderMode.EDIT,
@@ -585,7 +588,12 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 // Ya en el anillo (Loop/Ring/Ocultar) o en la barra izquierda
                 // (Extrude/Inset/Loop Cut/Cut) no se repiten aquí (F1 "cero duplicidades").
                 val excluded = RADIAL_TOP_LEVEL_CATALOG_IDS +
-                    if (state.blender.features.editToolbar.available) TOOLBAR_OWNED_CATALOG_IDS else emptySet()
+                    if (state.blender.features.editToolbar.available)
+                        state.blender.features.editToolbar.families.flatMap { family ->
+                            family.variants.map { variant ->
+                                (variant.payload["tool"] ?: family.payload["tool"] ?: family.id).toString()
+                            }
+                        }.toSet() else emptySet()
                 val catalogActions = state.blender.features.editCatalog.actionsFor(state.blender.selectionMode)
                     .filter { it.id !in excluded }
                 editCatalogActions(catalogActions, vm)
@@ -651,12 +659,9 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     }
 }
 
-/** IDs de `edit_catalog` que la barra de tools activas ya cubre cuando existe. */
-private val TOOLBAR_OWNED_CATALOG_IDS = setOf("EXTRUDE", "INSET", "LOOP_CUT", "KNIFE")
-
 /** IDs de `edit_catalog` que ya viven directamente en el anillo de nivel 1. */
 private val RADIAL_TOP_LEVEL_CATALOG_IDS =
-    setOf("SELECT_LOOP", "SELECT_RING", "SELECT_LINKED", "DELETE")
+    setOf("SELECT_LOOP", "SELECT_RING", "SELECT_LINKED", "DELETE", "HIDE")
 
 /** Convierte el contrato opaco en filas, sin repartir nombres wire por la UI. */
 private fun editCatalogActions(actions: List<EditCatalogAction>, vm: MainViewModel): List<QuickAction> =
@@ -1028,8 +1033,9 @@ private fun quickActions(
     vm: MainViewModel,
     /** Catálogo de vértice/arista/cara ya filtrado y sin duplicar el anillo (F1/F4). */
     meshToolsChildren: List<QuickAction>,
+    selectionOnly: Boolean = false,
     onRename: () -> Unit,
-): List<QuickAction> = RadialMenu.actionsFor(context)
+): List<QuickAction> = (if (selectionOnly) RadialMenu.selectionActions(context) else RadialMenu.actionsFor(context))
     // Sin catálogo del servidor (edit_catalog no disponible) no hay nada que abrir.
     .filter { it != ActionId.EDIT_MESH_TOOLS || meshToolsChildren.isNotEmpty() }
     .map { id ->
@@ -1061,6 +1067,8 @@ private fun quickActions(
         // servidor, ya sin lo que vive en el anillo (Loop/Ring/Ocultar) ni en la
         // barra izquierda (Extrude/Inset/Loop Cut/Cut).
         ActionId.EDIT_MESH_TOOLS -> QuickAction(label, AppIcons.action(id), children = meshToolsChildren)
+        ActionId.EDIT_SELECTION_TOOLS -> QuickAction(label, AppIcons.action(id),
+            children = quickActions(context, vm, emptyList(), selectionOnly = true, onRename = onRename))
         ActionId.SELECT_ALL -> QuickAction(label, Icons.Default.SelectAll) { vm.selectAll() }
         ActionId.DESELECT_ALL -> QuickAction(label, Icons.Default.Deselect) { vm.deselectAll() }
         // Caja y Círculo arman el arrastre por forma y cierran el menú: el siguiente

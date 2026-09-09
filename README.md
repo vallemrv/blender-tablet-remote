@@ -39,6 +39,13 @@ El panel Referencias permite importar varias imágenes, ampliarlas y colocarlas
 junto al modelo. En CAD, **Bocetos → Editar** reabre un boceto existente; al
 seleccionar un perfil o sólido aparece **Editar boceto**.
 
+Para piezas pequeñas, Extruir/Bisel/Inset ajustan sus pasos iniciales a la selección:
+una pieza de 1 mm comienza con 0,01 mm de paso y 0,02 mm de Bisel. Sus unidades,
+botones y arrastre comparten esa medida. Los presets cambian la unidad de trabajo
+y conservan el tamaño real. **Encuadrar objeto** está en el panel de vistas;
+los toques consecutivos en Edit ya no alejan la vista. Las referencias se abren
+desde **Archivo → Imágenes de referencia…**.
+
 ## Directorios
 
 ```text

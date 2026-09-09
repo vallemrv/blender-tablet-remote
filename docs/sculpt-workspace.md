@@ -8,6 +8,8 @@ El rail ofrece Dibujar, Arcilla, Inflar, Pliegue, Aplanar, Agarrar, Suavizar,
 Máscara y Pellizcar. Son los pinceles nativos de los recursos esenciales de Blender.
 La bandeja reúne tamaño, fuerza, presión sobre fuerza o tamaño, inversión y
 suavizado temporal. La simetría X/Y/Z actúa en los ejes locales del objeto.
+Radio muestra la medida aproximada en mm/cm/m sobre el plano del pivote (`≈`);
+el círculo conserva su tamaño en pantalla y esa medida cambia al acercar la vista.
 El lápiz transmite presión real, incluidos sus puntos históricos; el dedo usa
 fuerza uniforme. En «Solo lápiz», un dedo orbita y dos desplazan/zoom. Los dedos
 que se apoyan mientras el lápiz está dibujando se ignoran como posibles contactos
@@ -36,7 +38,7 @@ limpiarla. Suavizar temporalmente usa Smooth y mantiene el pincel elegido para e
 siguiente trazo.
 
 Las imágenes de referencia viven en el panel Referencias de Android: se importan
-del selector de documentos de la tablet, se conservan localmente y permiten
+desde Archivo → Imágenes de referencia, se conservan localmente y permiten
 comparar proporciones mientras se esculpe. Su funcionamiento completo está en
 [referencias](reference-images.md).
 
@@ -51,6 +53,10 @@ capturada se usa el raycast de la malla evaluada, que representa la base en Scul
 El motor nativo depende de su vista para Agarrar y otros cálculos. Durante su
 llamada se adapta temporalmente la matriz del objeto a la cámara remota y se
 restaura en `finally`; no se escribe en `rv3d` ni se cambia la vista del PC.
+El tamaño nativo usa píxeles de pantalla para evitar el mínimo RNA de 0,001
+unidades del campo de tamaño en mundo. La adaptación coloca temporalmente el
+trazo a la profundidad de trabajo del PC, evitando que su near plane excluya
+una pieza milimétrica. Al terminar la llamada se restaura la matriz original.
 
 Cada actualización deshace la preview nativa anterior y reproduce las muestras
 acumuladas. Hay una sola solicitud de trazo en vuelo en Android. Se admiten 128
@@ -87,8 +93,10 @@ preview y undo, propiedad de trazo, Dyntopo, Multires con dos confirmaciones y s
 undo/redo, conservación de material y nivel, profundidad/oclusión, guardado,
 carga, desconexión y limpieza ante fallos de snapshot.
 
-Validación de la entrega: 13 pruebas gráficas de escultura, 39 de CAD, 54 de
-Android y 7 regresiones de cámara/edición proporcional aprobadas. APK compilado,
+Validación del refinamiento: 14 pruebas gráficas de escultura (incluida una pieza
+de 1 mm con PC en perspectiva y ortográfica), 39 de CAD, 56 de Android,
+8 de cámara/edición proporcional, 4 de dimensiones, 5 de primitivas y 26 de Edit
+aprobadas. APK compilado,
 ZIP validado con Blender y comprobación de interfaz conectada en tablet emulada.
 La sensación y respuesta de un lápiz físico quedan pendientes de validación en
 el dispositivo del usuario.

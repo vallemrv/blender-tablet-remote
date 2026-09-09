@@ -128,6 +128,23 @@ class ToolSession:
             # uniforme) o rotación sin aplicar sale torcido o desproporcionado.
             _flatten_transform(obj)
         bm = bmesh.from_edit_mesh(obj.data)
+        if tool in {'EXTRUDE', 'BEVEL', 'INSET'}:
+            from .units import detail_step
+            params = dict(params)
+            automatic = params.pop('auto_size', False)
+            step = detail_step(obj)
+            if automatic:
+                params['snap_step'] = step
+                if tool == 'BEVEL':
+                    params['offset'] = step * 2
+                elif tool == 'INSET':
+                    params['thickness'] = step * 2
+            else:
+                params.setdefault('snap_step', step)
+                if tool == 'BEVEL':
+                    params.setdefault('offset', step * 2)
+                elif tool == 'INSET':
+                    params.setdefault('thickness', step * 2)
         if tool == "REVOLVE":
             params = dict(params)
             for axis, coordinate in zip("xyz", bpy.context.scene.cursor.location):

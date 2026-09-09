@@ -24,7 +24,7 @@ import math
 
 from mathutils import Matrix, Quaternion, Vector
 
-MIN_DISTANCE = 0.001
+MIN_DISTANCE = 1e-9
 MAX_DISTANCE = 100000.0
 
 # Rango de profundidad del vídeo de la tablet.
@@ -68,6 +68,7 @@ class RemoteCamera:
         self.location = rv3d.view_location.copy()
         self.rotation = rv3d.view_rotation.copy()
         self.distance = float(rv3d.view_distance)
+        self.perspective = 'ORTHO' if getattr(rv3d, 'view_perspective', self.perspective) == 'ORTHO' else 'PERSP'
         self._ortho_depth = self.distance * 4.0
         self._synced = True
         self._frame_cache = None
@@ -105,7 +106,7 @@ class RemoteCamera:
         height = 2.0 * self.distance / max(abs(persp[1][1]), 1e-9)
         # El zoom ortográfico cambia la ampliación, no atraviesa la pieza. El rango
         # de profundidad se centra en el pivote y conserva el volumen encuadrado.
-        depth = max(self.clip_end, self._ortho_depth, self.distance * 4.0)
+        depth = max(min(self.clip_end, self.distance * 100.0), self._ortho_depth, self.distance * 4.0)
         near, far = self.distance - depth, self.distance + depth
         return Matrix(((2.0 / width, 0.0, 0.0, 0.0),
                        (0.0, 2.0 / height, 0.0, 0.0),
@@ -127,18 +128,23 @@ class RemoteCamera:
 
     def _reclipped(self, window: Matrix) -> Matrix:
         """La matriz de la ventana con `clip_start`/`clip_end` en vez de los suyos."""
-        # El preset define el mínimo útil, no una pared rígida. Al alejar la cámara
-        # `distance` puede superar `clip_end` y antes el objeto desaparecía cortado.
-        # Abrimos el fondo automáticamente y subimos el near solo lo necesario para
-        # conservar un cociente ~10 000, sin pedir al usuario que gestione clipping.
-        far = max(self.clip_end, self.distance * 4.0)
-        near = max(self.clip_start, far / 10_000.0)
+        # Acercarse a una pieza pequeña reduce también el rango de profundidad;
+        # alejarse lo amplía. El preset nunca obliga a separar la cámara de la pieza.
+        near, far = self._depth_range(self.distance)
         if far <= near:
             return window.copy()
         matrix = window.copy()
         matrix[2][2] = -(far + near) / (far - near)
         matrix[2][3] = -2.0 * far * near / (far - near)
         return matrix
+
+    def _depth_range(self, distance):
+        # Clipping follows the working distance, including submillimeter pieces.
+        # A preset is an upper range, never a minimum distance from the model.
+        distance = max(distance, MIN_DISTANCE)
+        far = max(distance * 4.0, min(self.clip_end, distance * 100.0))
+        near = max(min(self.clip_start, distance * .01), far / 10_000.0)
+        return near, far
 
     def set_clipping(self, start: float, end: float) -> None:
         self.clip_start = float(start)
@@ -245,7 +251,7 @@ class RemoteCamera:
         distance = max((max(abs(p.x) * x_scale, abs(p.y) * y_scale) +
                         (p.z if self.perspective == 'PERSP' else 0.0) for p in offsets), default=MIN_DISTANCE)
         if self.perspective == 'PERSP':
-            near = max(self.clip_start, self.clip_end / 10_000.0, distance * 4.0 / 10_000.0)
+            near, _ = self._depth_range(distance)
             distance = max(distance, max((p.z for p in offsets), default=0.0) + near * 2.0)
         self.distance = max(MIN_DISTANCE, min(MAX_DISTANCE, distance))
         self._ortho_depth = max((p.length * 2.0 for p in offsets), default=self.distance * 4.0)
@@ -273,7 +279,7 @@ class RemoteCamera:
     def project(self, point, rv3d) -> list[float] | None:
         """Punto del mundo -> (u, v) 0..1 con origen arriba-izquierda, o None si queda detrás."""
         clip = self.perspective_matrix(rv3d) @ Vector((point[0], point[1], point[2], 1.0))
-        if clip.w <= 1e-6:
+        if clip.w <= 0.0:
             return None
         return [(clip.x / clip.w + 1.0) * 0.5, (1.0 - clip.y / clip.w) * 0.5]
 

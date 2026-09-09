@@ -115,6 +115,11 @@ internal fun formatToolDistance(value: Double, decimals: Int?): String {
         .stripTrailingZeros().toPlainString()
 }
 
+/** Fine distances must remain visible instead of rounding a real movement to zero. */
+internal fun detailDecimalPlaces(value: Double, normal: Int?): Int? =
+    if (normal == null || value == 0.0 || abs(value) >= Math.pow(10.0, -normal.toDouble())) normal
+    else maxOf(normal, 1 - kotlin.math.floor(kotlin.math.log10(abs(value))).toInt())
+
 /** Cantidad libre y unidad métrica; el consumidor recibe el paso en unidades Blender. */
 @Composable
 internal fun DistanceSnapStepInput(
@@ -123,6 +128,7 @@ internal fun DistanceSnapStepInput(
     defaultUnit: LengthUnit,
     showSteppers: Boolean = false,
     millimeterDecimals: Int? = null,
+    onUnitChange: ((LengthUnit) -> Unit)? = null,
     onChange: (Double) -> Unit,
 ) {
     var unit by remember(defaultUnit) { mutableStateOf(defaultUnit.transformStepUnit()) }
@@ -148,7 +154,9 @@ internal fun DistanceSnapStepInput(
     }
     fun adjustStep(delta: Double) {
         val current = readStep() ?: return
-        val next = (moveValueForDisplay(current, unit, unitScaleLength) + delta).coerceAtLeast(0.001)
+        val shown = moveValueForDisplay(current, unit, unitScaleLength)
+        val quantum = Math.pow(10.0, kotlin.math.floor(kotlin.math.log10(shown)))
+        val next = (shown + delta * quantum).coerceAtLeast(quantum / 10.0)
         val wire = moveValueInBlenderUnits(next, unit, unitScaleLength)
         pendingStep = wire
         text = null
@@ -157,7 +165,8 @@ internal fun DistanceSnapStepInput(
     Text("Paso", color = Ink.Faint, fontSize = 11.sp)
     if (showSteppers) PillButton("−") { adjustStep(-1.0) }
     CompactNumericField(
-        value = text ?: formatToolDistance(displayed, if (unit == TransformStepUnit.MM) millimeterDecimals else null),
+        value = text ?: formatToolDistance(displayed,
+            detailDecimalPlaces(displayed, if (unit == TransformStepUnit.MM) millimeterDecimals else null)),
         onValueChange = { text = it }, modifier = Modifier.width(84.dp),
         textAlign = TextAlign.End, placeholder = "Cantidad", onDone = { commit() },
     )
@@ -167,7 +176,10 @@ internal fun DistanceSnapStepInput(
             listOf(TransformStepUnit.MM, TransformStepUnit.CM, TransformStepUnit.M).forEach { option ->
                 DropdownMenuItem(
                     text = { Text(option.label) },
-                    onClick = { commit(); unit = option; expanded = false },
+                    onClick = {
+                        commit(); unit = option; expanded = false
+                        onUnitChange?.invoke(LengthUnit.entries.first { it.transformStepUnit() == option })
+                    },
                 )
             }
         }

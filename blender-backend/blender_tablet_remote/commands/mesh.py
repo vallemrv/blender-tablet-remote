@@ -296,18 +296,30 @@ def bevel(payload: dict) -> dict:
     if not geom:
         raise CommandError(f"No {affect.lower()} selected", code="empty_selection")
 
-    ret = bmesh.ops.bevel(
-        bm,
-        geom=geom,
-        offset=offset,
-        offset_type="OFFSET",
-        segments=segments,
-        profile=profile,
-        affect=affect,
-        clamp_overlap=bool(payload.get("clamp", True)),
-        miter_outer=miter_outer,
-        spread=spread,
-    )
+    # Width is a world distance, including unapplied/nonuniform object scale.
+    # Work without translation to retain precision for small objects far away.
+    linear = obj.matrix_world.to_3x3()
+    metric_transform = any(abs(linear.col[a].dot(linear.col[b]) - (1.0 if a == b else 0.0)) > 1e-7
+                           for a in range(3) for b in range(3))
+    try:
+        inverse = linear.inverted()
+    except ValueError:
+        raise CommandError("Bisel requiere una escala de objeto distinta de cero", code="invalid_scale")
+    if metric_transform:
+        for vert in bm.verts:
+            vert.co = linear @ vert.co
+        bm.normal_update()
+    try:
+        ret = bmesh.ops.bevel(
+            bm, geom=geom, offset=offset, offset_type="OFFSET", segments=segments,
+            profile=profile, affect=affect, clamp_overlap=bool(payload.get("clamp", True)),
+            miter_outer=miter_outer, spread=spread,
+        )
+    finally:
+        if metric_transform:
+            for vert in bm.verts:
+                vert.co = inverse @ vert.co
+            bm.normal_update()
 
     _deselect_all(bm)
     _select_geom(bm, ret.get("faces", []))

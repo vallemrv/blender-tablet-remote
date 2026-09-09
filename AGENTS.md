@@ -98,7 +98,7 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - La cámara remota no escribe en `rv3d`.
 - El zoom ortográfico conserva la profundidad alrededor del pivote: acercarse no
   recorta la cara delantera al atravesar la posición nominal de la cámara. El doble
-  toque encuadra los límites del objeto al 85 % de la vista según orientación y
+  toque en Object y el botón Encuadrar encuadran los límites del objeto al 85 % de la vista según orientación y
   proyección reales, también si el PC está en ortográfica.
 - CAD es un workspace; Blender permanece en Object. Sus longitudes son metros y
   se convierten a unidades Blender al materializar. IDs y revisión pertenecen al
@@ -153,12 +153,15 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   con dos dedos cancela el sondeo temporal, sin fijar otra cara.
 - Debajo del ojo hay un selector horizontal Object/Edit/CAD/Sculpt; CAD solo aparece
   si el backend lo anuncia. Sculpt se habilita según `sculpt.available` sobre mallas;
-  Layouts sigue siendo únicamente presencia visual y no envía comandos.
+  Layouts se ha retirado.
 - Sculpt usa pinceles nativos y la cámara remota; nunca escribe en `rv3d`.
   Radio se expresa como fracción de altura del vídeo. La presión real e histórica
   del lápiz gobierna fuerza/radio por separado; cero conserva cero. Solo lápiz es
   el valor inicial, un dedo orbita y dos dedos navegan. Cancelación/palma restaura
   el trazo; UP confirma la última muestra estable sin volver a sondear.
+  El tamaño nativo se calcula en pantalla, evitando el mínimo RNA de 0,001 unidades
+  de tamaño en mundo. La adaptación de la vista mantiene los trazos fuera del
+  near plane del PC y restaura siempre la matriz original del objeto.
 - Los trazos Sculpt llevan propietario e ID; son excluyentes con transform/tool/CAD.
   Cada trazo confirmado aporta un undo nativo. Android limita una petición en vuelo,
   conserva el orden de muestras y cierra el trazo antes de navegar/cambiar intención.
@@ -171,6 +174,25 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Referencias es un tablero local con varias imágenes, zoom, desplazamiento y
   opacidad. Importa copias privadas acotadas y conserva los originales; sus gestos
   quedan en el panel. No son planos 3D ni contenido del `.blend`.
+  Se abre desde Archivo → Imágenes de referencia; cerrado no ocupa la vista.
+- El encuadre y el clipping siguen el tamaño visto, también en piezas de 1 mm y
+  menores; los rangos de preset se convierten por `scale_length`. Edit/CAD no
+  interpretan toques consecutivos como encuadre. El panel de vistas ofrece
+  «Encuadrar objeto» explícito; cámaras/luces ajenas no ensanchan su fallback.
+- Extruir/Bisel/Inset inicializan el paso al 1 % de la menor dimensión útil,
+  redondeado a 1/2/5 y acotado por el preset. Una pieza de 1 mm usa 0,01 mm;
+  Bisel e Inset comienzan en dos pasos. Los valores editados siguen siendo exactos.
+  Bisel interpreta su ancho en mundo con escala sin aplicar, sin cambiar la matriz
+  del objeto. Estos valores iniciales no cambian Mover ni Escalar.
+- Los botones del Paso de herramientas Edit siguen su orden de magnitud y nunca
+  muestran cero por falta de decimales. Sculpt muestra el radio métrico aproximado
+  del plano del pivote; su parámetro de gesto continúa siendo relativo a la pantalla.
+- El radial Edit separa Selección y Malla, con Duplicar y Borrar accesibles al nivel
+  principal. Bisel permanece en el rail; Bridge vive en Malla para dejar visible
+  Cortar. Las exclusiones se derivan del catálogo del rail, sin listas duplicadas.
+- En Extruir/Bisel/Inset, los botones de distancia y el arrastre libre usan el paso
+  físico de la sesión; sin snap conservan sus fracciones. La unidad elegida en Paso
+  gobierna también sus distancias. Paso permanece accesible con snap desactivado.
 - CAD ofrece «Bocetos → Editar», «Editar boceto» desde un perfil/operación y
   «Finalizar boceto» con texto. Reabrir enfoca el plano y selecciona el original;
   no duplica el boceto ni crea un undo de navegación.
@@ -258,7 +280,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Extruir identifica cada variante con su icono en rail/menú y su nombre en la
   bandeja. Respeta los modos del catálogo; una variante incompatible no cierra la
   preview anterior. Cambiar de sesión reinicia los borradores de Distancia y Paso.
-- Extruir muestra Distancia y Paso en mm con un máximo de dos decimales, sin
+- Extruir muestra Distancia y Paso en mm normalmente con dos decimales, ampliándolos
+  para no mostrar cero en cotas subcentésimas, sin
   redondear los valores enviados. Reset 0 fija la distancia exacta a cero, limpia
   el borrador y el destino geométrico, y conserva la sesión, variante y paso.
 - Extruir ofrece Manifold en Caras con la operación nativa de Blender: disuelve

@@ -61,7 +61,6 @@ fun MenuBar(
         if (state.blender.features.sceneScale) {
             MenuAnchor("Escena") { close -> sceneMenu(state, actions, close) }
         }
-        MenuPlaceholder("Layouts")
         if (!state.blender.cad.workspace && state.blender.hiddenObjects.isNotEmpty() && state.blender.features.visibility) {
             MenuAnchor("Ocultos") { close -> hiddenMenu(state, actions, close) }
         }
@@ -76,18 +75,6 @@ fun MenuBar(
             fontSize = 11.sp,
             modifier = Modifier.padding(start = 4.dp, end = 6.dp),
         )
-    }
-}
-
-/** Entrada visual reservada para un menú todavía sin comportamiento. */
-@Composable
-private fun MenuPlaceholder(title: String) {
-    Row(
-        Modifier.heightIn(min = 34.dp).padding(start = 10.dp, end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(title, color = Ink.Muted, fontSize = 13.sp)
-        Icon(Icons.Default.ArrowDropDown, null, Modifier.size(18.dp), tint = Ink.Faint)
     }
 }
 
@@ -107,6 +94,7 @@ data class MenuActions(
     val onApplyTransform: (Boolean, Boolean, Boolean) -> Unit,
     val onModifiers: () -> Unit,
     val onSceneScale: (String) -> Unit,
+    val onReferences: () -> Unit,
 )
 
 // ------------------------------------------------------------- árbol de menú
@@ -139,6 +127,7 @@ object MenuSeparator : MenuNode
 private fun fileMenu(state: AppUiState, actions: MenuActions, close: () -> Unit): List<MenuNode> = listOf(
     MenuLeaf("Nuevo") { close(); actions.onNew() },
     MenuLeaf("Abrir…", enabled = state.blender.features.fileBrowse) { close(); actions.onBrowseOpen() },
+    MenuLeaf("Imágenes de referencia…") { close(); actions.onReferences() },
     MenuSeparator,
     // Una sola entrada "Guardar": sin ruta previa abre el diálogo de nombre por su
     // cuenta. Antes había dos entradas que hacían lo mismo en ese caso.
@@ -180,16 +169,16 @@ internal fun sceneMenu(state: AppUiState, actions: MenuActions, close: () -> Uni
     val scale = state.blender.sceneScale
     val presets = state.sceneScalePresets.ifEmpty { listOf(scale) }
     return buildList {
-        add(MenuHeading("Escala de la escena"))
+        add(MenuHeading("Unidad de trabajo"))
         presets.forEach { preset ->
             add(
-                MenuLeaf(preset.label, selected = preset.id == scale.id, hint = preset.hint) {
+                MenuLeaf("${preset.label} · ${preset.lengthUnit.short}", selected = preset.id == scale.id, hint = preset.hint) {
                     close()
                     actions.onSceneScale(preset.id)
                 },
             )
         }
-        add(MenuNote("No reescala lo ya modelado"))
+        add(MenuNote("Cambia las unidades; conserva el tamaño real. Extruir, Bisel e Inset ajustan su paso al tamaño de la selección."))
     }
 }
 

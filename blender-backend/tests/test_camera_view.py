@@ -12,6 +12,21 @@ from blender_tablet_remote.camera import RemoteCamera
 
 
 class CameraViewTests(unittest.TestCase):
+    def test_one_mm_and_smaller_pieces_fill_view_independent_of_scene_units(self):
+        for meters, unit_scale, mode in itertools.product((.001, .00001), (.001, 1, 1000), ('ORTHO','PERSP')):
+            with self.subTest(meters=meters, unit_scale=unit_scale, mode=mode):
+                camera = RemoteCamera()
+                camera.apply(perspective=mode)
+                size = meters / unit_scale
+                points = [Vector((x*size/2,y*size/2,z*size/2)) for x,y,z in itertools.product((-1,1),repeat=3)]
+                rv = self.region()
+                camera.look_at(Vector(), points, rv)
+                edge = max(abs(c-.5)*2 for p in points for c in camera.project(p,rv))
+                self.assertAlmostEqual(edge,.85,places=4)
+                old = camera.distance
+                camera.zoom(2)
+                self.assertAlmostEqual(camera.distance / old, .5)
+
     def region(self, aspect=1.7, ortho=False):
         matrix = Matrix(((2/aspect,0,0,0),(0,2,0,0),(0,0,-1,-.02),(0,0,-1,0)))
         if ortho:

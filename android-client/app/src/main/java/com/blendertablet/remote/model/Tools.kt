@@ -122,7 +122,7 @@ data class ToolSession(
 
     /** Un paso por cada 4 % de altura; conserva fracciones hasta cruzar el paso. */
     fun viewportNudge(dy: Double): Double = -dy * when {
-        distanceIncrement -> snapStep / 0.04
+        tool in setOf(EditTool.EXTRUDE, EditTool.INSET, EditTool.BEVEL) -> snapStep / 0.04
         tool == EditTool.LOOP_CUT -> 2.0
         else -> 1.0
     }

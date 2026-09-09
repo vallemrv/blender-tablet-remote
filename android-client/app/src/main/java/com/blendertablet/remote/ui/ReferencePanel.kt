@@ -36,7 +36,7 @@ import kotlin.math.roundToInt
 
 /** Reference-board gestures stay on its card; the surrounding canvas keeps its single InputSurface. */
 @Composable
-fun BoxScope.ReferencePanel(modifier: Modifier = Modifier) {
+fun BoxScope.ReferencePanel(modifier: Modifier = Modifier, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val store = remember(context) { ReferenceImages(context.applicationContext) }
     val scope = rememberCoroutineScope()
@@ -46,7 +46,6 @@ fun BoxScope.ReferencePanel(modifier: Modifier = Modifier) {
         onDispose { stopObserving() }
     }
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
-    var open by rememberSaveable { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var large by rememberSaveable { mutableStateOf(false) }
@@ -63,7 +62,6 @@ fun BoxScope.ReferencePanel(modifier: Modifier = Modifier) {
         if (uris.isNotEmpty()) scope.launch {
             busy = true
             error = null
-            open = true
             try {
                 for (uri in uris) {
                     try {
@@ -88,12 +86,7 @@ fun BoxScope.ReferencePanel(modifier: Modifier = Modifier) {
         offset = Offset(offset.x.coerceIn(-horizontalLimit, horizontalLimit), offset.y.coerceIn(0f, verticalLimit))
     }
     Column(modifier.offset { IntOffset(offset.x.roundToInt(), offset.y.roundToInt()) }.onSizeChanged { panelHeight = it.height }, horizontalAlignment = Alignment.CenterHorizontally) {
-        if (!open) FloatingPanel {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconAction(AppIcons.Reference, "Abrir imágenes de referencia") { open = true }
-                PillButton("Referencias") { open = true }
-            }
-        } else FloatingPanel(Modifier.width(cardWidth)) {
+        FloatingPanel(Modifier.width(cardWidth)) {
             Column(Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Referencias · mover", color = Ink.OnPanel, fontSize = 12.sp,
@@ -104,7 +97,7 @@ fun BoxScope.ReferencePanel(modifier: Modifier = Modifier) {
                                     (offset.y + drag.y).coerceIn(0f, verticalLimit))
                             }
                         })
-                    PillButton("Ocultar") { open = false }
+                    PillButton("Ocultar", onClick = onDismiss)
                 }
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     PillButton(if (busy) "Cargando…" else "+ Imagen", enabled = !busy) { launcher.launch(arrayOf("image/*")) }

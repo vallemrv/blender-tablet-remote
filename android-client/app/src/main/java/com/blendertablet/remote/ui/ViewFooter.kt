@@ -52,6 +52,7 @@ fun ViewFooter(
     onOrbit: (Float, Float) -> Unit,
     onRotate180: () -> Unit,
     onProjection: (Projection) -> Unit,
+    onFrameSelected: () -> Unit,
     onMore: () -> Unit,
     onLess: () -> Unit,
     onEditAction: (EditFooterAction) -> Unit,
@@ -108,6 +109,7 @@ fun ViewFooter(
                         NumKey("1", "Frontal / trasera", activeAxisView in setOf("FRONT", "BACK")) { opposite("FRONT", "BACK") }
                         NumKey("2", "Orbitar abajo") { onOrbit(0f, 0.06f) }
                         NumKey("3", "Derecha / izquierda", activeAxisView in setOf("RIGHT", "LEFT")) { opposite("RIGHT", "LEFT") }
+                        PageKey(AppIcons.Frame, "Encuadrar objeto", selected = false, onClick = onFrameSelected)
                     }
                     Spacer(Modifier.height(2.dp))
                     }

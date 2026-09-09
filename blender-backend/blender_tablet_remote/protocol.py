@@ -239,7 +239,7 @@ EDIT_TOOLBAR = {
     "version": 2,
     "families": [
         _toolbar_family(
-            "EXTRUDE", "Extrude", "REGION",
+            "EXTRUDE", "Extruir", "REGION",
             variants=[
                 _toolbar_variant("CURSOR", "A toque", input="REPEAT_TAP"),
                 _toolbar_variant("REGION", "Región", requirements={"selection_modes": ["VERTEX", "EDGE", "FACE"],
@@ -252,7 +252,7 @@ EDIT_TOOLBAR = {
             parameters=_TOOL_PARAMETERS["EXTRUDE"],
         ),
         _toolbar_family(
-            "BEVEL", "Bevel", "BEVEL",
+            "BEVEL", "Bisel", "BEVEL",
             variants=[_toolbar_variant("BEVEL", "Bisel")],
             parameters=_TOOL_PARAMETERS["BEVEL"],
         ),
@@ -263,18 +263,12 @@ EDIT_TOOLBAR = {
             parameters=_TOOL_PARAMETERS["INSET"],
         ),
         _toolbar_family(
-            "LOOP_CUT", "Loop Cut", "LOOP_CUT", input="VIEWPORT_TAP",
-            variants=[_toolbar_variant("LOOP_CUT", "Loop Cut", input="VIEWPORT_TAP")],
+            "LOOP_CUT", "Corte de loop", "LOOP_CUT", input="VIEWPORT_TAP",
+            variants=[_toolbar_variant("LOOP_CUT", "Corte de loop", input="VIEWPORT_TAP")],
             parameters=_TOOL_PARAMETERS["LOOP_CUT"],
         ),
         _toolbar_family(
-            "BRIDGE_EDGE_LOOPS", "Bridge", "BRIDGE_EDGE_LOOPS",
-            requirements={"selection_modes": ["EDGE"], "selection": {"edges": {"min": 6}}},
-            variants=[_toolbar_variant("BRIDGE_EDGE_LOOPS", "Puente entre loops")],
-            parameters=_TOOL_PARAMETERS["BRIDGE_EDGE_LOOPS"],
-        ),
-        _toolbar_family(
-            "CUT", "Cut", "KNIFE", command="tool.begin", payload={},
+            "CUT", "Cortar", "KNIFE", command="tool.begin", payload={},
             variants=[
                 _toolbar_variant("KNIFE", "Cuchillo", input="VIEWPORT_POINT_STROKES",
                                  payload={"tool": "KNIFE"}, parameters=_TOOL_PARAMETERS["KNIFE"]),

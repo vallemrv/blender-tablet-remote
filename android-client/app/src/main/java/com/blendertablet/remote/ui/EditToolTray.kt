@@ -69,7 +69,7 @@ private fun specsFor(tool: EditTool): List<ParamSpec> = when (tool) {
     // 0..1: 0,5 traza el arco circular, por debajo hunde la esquina y 1,0 la remata
     // en pico. El remate exterior va aparte, en su propio botón.
     EditTool.BEVEL -> listOf(
-        ParamSpec("offset", "Ancho", 0.1, false, TransformMode.MOVE),
+        ParamSpec("offset", "Ancho", 0.1, false, TransformMode.MOVE, min = 0.0),
         ParamSpec("segments", "Segmentos", 1.0, true, TransformMode.SCALE, default = 1.0),
         ParamSpec("profile", "Perfil", 0.05, false, TransformMode.SCALE,
                   default = 0.5, min = 0.0, max = 1.0),
@@ -142,6 +142,7 @@ fun EditToolTray(
     // Knife y Bisect tienen su propia bandeja (puntos/pop/cerrar, o el aviso de
     // arrastre y clear inner/outer/fill).
     if (session.tool == EditTool.KNIFE || session.tool == EditTool.BISECT) return
+    var toolUnit by remember(session.sessionId, lengthUnit) { mutableStateOf(lengthUnit) }
     FloatingPanel(modifier) {
         if (session.controls.isNotEmpty()) {
             Column {
@@ -199,12 +200,12 @@ fun EditToolTray(
                     BridgeParams(session, unitScaleLength, onParameter)
                 } else if (session.tool == EditTool.EXTRUDE) {
                     key(session.sessionId, session.parameters["variant"]) {
-                        ExtrudeParams(session, unitScaleLength, lengthUnit, onParameter)
+                        ExtrudeParams(session, unitScaleLength, toolUnit, { toolUnit = it }, onParameter)
                     }
                 } else if (session.tool == EditTool.INSET) {
-                    InsetParams(session, unitScaleLength, lengthUnit, onParameter)
+                    InsetParams(session, unitScaleLength, toolUnit, { toolUnit = it }, onParameter)
                 } else if (session.tool == EditTool.BEVEL) {
-                    BevelParams(session, selectionMode, unitScaleLength, lengthUnit, onParameter)
+                    BevelParams(session, selectionMode, unitScaleLength, toolUnit, { toolUnit = it }, onParameter)
                 } else {
                     for (spec in specsFor(session.tool)) {
                         ParamStepper(
@@ -268,17 +269,19 @@ private fun SnapToggle(
     onParameter: (String, Any?) -> Unit,
     unitScaleLength: Double = 1.0,
     lengthUnit: LengthUnit = LengthUnit.METERS,
+    onUnitChange: ((LengthUnit) -> Unit)? = null,
 ) {
     val options = session.availableSnapTypes
     if (options.isEmpty()) return
     val selected = session.snapType
     SnapControl(options, selected, onSelect = { onParameter("snap_type", it.name) })
-    if (session.tool == EditTool.EXTRUDE || selected == SnapType.INCREMENT || selected == SnapType.GRID) {
+    if (session.tool in setOf(EditTool.EXTRUDE, EditTool.INSET, EditTool.BEVEL) || selected == SnapType.INCREMENT || selected == SnapType.GRID) {
         if (session.tool in setOf(EditTool.EXTRUDE, EditTool.INSET, EditTool.BEVEL)) {
             DistanceSnapStepInput(
                 session.snapStep, unitScaleLength, lengthUnit,
-                showSteppers = session.tool == EditTool.EXTRUDE,
+                showSteppers = true,
                 millimeterDecimals = if (session.tool == EditTool.EXTRUDE) 2 else null,
+                onUnitChange = onUnitChange,
             ) {
                 onParameter("snap_step", it)
             }
@@ -294,7 +297,8 @@ private fun SnapToggle(
  * eje: el backend lo rechaza y aquí se oculta.
  */
 @Composable
-private fun ExtrudeParams(session: ToolSession, unitScaleLength: Double, lengthUnit: LengthUnit, onParameter: (String, Any?) -> Unit) {
+private fun ExtrudeParams(session: ToolSession, unitScaleLength: Double, lengthUnit: LengthUnit,
+    onUnitChange: (LengthUnit) -> Unit, onParameter: (String, Any?) -> Unit) {
     for (spec in specsFor(EditTool.EXTRUDE)) {
         ParamStepper(
             spec = spec,
@@ -309,7 +313,7 @@ private fun ExtrudeParams(session: ToolSession, unitScaleLength: Double, lengthU
     }
     val variant = (session.parameters["variant"] as? String) ?: "REGION"
     if (variant !in setOf("REGION", "MANIFOLD")) {
-        SnapToggle(session, onParameter, unitScaleLength, lengthUnit)
+        SnapToggle(session, onParameter, unitScaleLength, lengthUnit, onUnitChange)
         return
     }
     val constraint = (session.parameters["constraint"] as? String) ?: "FREE"
@@ -323,7 +327,7 @@ private fun ExtrudeParams(session: ToolSession, unitScaleLength: Double, lengthU
             PillButton(label, selected = orientation == wire) { onParameter("orientation", wire) }
         }
     }
-    SnapToggle(session, onParameter, unitScaleLength, lengthUnit)
+    SnapToggle(session, onParameter, unitScaleLength, lengthUnit, onUnitChange)
 }
 
 /** Parámetros de Inset: grosor, profundidad y snap de incremento real (F2/F5). */
@@ -332,6 +336,7 @@ private fun InsetParams(
     session: ToolSession,
     unitScaleLength: Double,
     lengthUnit: LengthUnit,
+    onUnitChange: (LengthUnit) -> Unit,
     onParameter: (String, Any?) -> Unit,
 ) {
     for (spec in specsFor(EditTool.INSET)) {
@@ -339,6 +344,8 @@ private fun InsetParams(
             spec = spec,
             value = session.double(spec.key) ?: defaultValue(spec),
             unitScaleLength = unitScaleLength,
+            stepSize = session.snapStep,
+            lengthUnit = lengthUnit,
             onCommit = { onParameter(spec.key, it) },
         )
     }
@@ -346,7 +353,7 @@ private fun InsetParams(
     PillButton("Costura fija", selected = !boundary) {
         onParameter("boundary", toggledInsetBoundary(boundary))
     }
-    SnapToggle(session, onParameter, unitScaleLength, lengthUnit)
+    SnapToggle(session, onParameter, unitScaleLength, lengthUnit, onUnitChange)
 }
 
 internal fun toggledInsetBoundary(boundary: Boolean): Boolean = !boundary
@@ -365,6 +372,7 @@ private fun BevelParams(
     selectionMode: SelectionMode,
     unitScaleLength: Double,
     lengthUnit: LengthUnit,
+    onUnitChange: (LengthUnit) -> Unit,
     onParameter: (String, Any?) -> Unit,
 ) {
     for (spec in specsFor(EditTool.BEVEL)) {
@@ -372,7 +380,7 @@ private fun BevelParams(
             spec = spec,
             value = session.double(spec.key) ?: defaultValue(spec),
             unitScaleLength = unitScaleLength,
-            stepSize = if (spec.key == "offset" && session.distanceIncrement) session.snapStep else null,
+            stepSize = if (spec.key == "offset") session.snapStep else null,
             lengthUnit = if (spec.key == "offset") lengthUnit else null,
             onCommit = { onParameter(spec.key, it) },
         )
@@ -383,7 +391,7 @@ private fun BevelParams(
         val miter = session.miterOuter()
         PillButton("Final: ${miter.label}") { onParameter("miter_outer", miter.next().wire) }
     }
-    SnapToggle(session, onParameter, unitScaleLength, lengthUnit)
+    SnapToggle(session, onParameter, unitScaleLength, lengthUnit, onUnitChange)
 }
 
 /** Parámetros de Bridge Edge Loops: desfase, fusión, su toggle de fundir y snap del factor. */
@@ -596,8 +604,8 @@ private fun ParamStepper(
     onCommit: (Double) -> Unit,
 ) {
     // null muestra el valor remoto; "" es un borrado intencional durante la edición.
-    var text by remember(spec.key) { mutableStateOf<String?>(null) }
-    var pendingValue by remember(spec.key) { mutableStateOf<Double?>(null) }
+    var text by remember(spec.key, lengthUnit, unitScaleLength) { mutableStateOf<String?>(null) }
+    var pendingValue by remember(spec.key, lengthUnit, unitScaleLength) { mutableStateOf<Double?>(null) }
     LaunchedEffect(value) {
         if (pendingValue?.let { kotlin.math.abs(it - value) < 1e-9 } == true) pendingValue = null
     }
@@ -605,7 +613,7 @@ private fun ParamStepper(
     val formatted = if (lengthUnit != null) {
         val display = moveValueForDisplay(shownValue, lengthUnit.transformStepUnit(), unitScaleLength)
         val decimals = if (lengthUnit == LengthUnit.MILLIMETERS) millimeterDecimals else null
-        "${formatToolDistance(display, decimals)} ${lengthUnit.short}"
+        "${formatToolDistance(display, detailDecimalPlaces(display, decimals))} ${lengthUnit.short}"
     } else format(shownValue, spec.isInt)
 
     fun readDraft(): Double? {

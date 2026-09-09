@@ -18,6 +18,8 @@ import androidx.compose.ui.unit.sp
 import com.blendertablet.remote.MainViewModel
 import com.blendertablet.remote.model.AppUiState
 import com.blendertablet.remote.model.SculptState
+import com.blendertablet.remote.model.transformStepUnit
+import com.blendertablet.remote.model.moveValueForDisplay
 import kotlin.math.roundToInt
 
 /** The brush rail stays open; density operations live behind one explicit button. */
@@ -38,7 +40,15 @@ fun BoxScope.SculptWorkspace(state: AppUiState, vm: MainViewModel) {
             Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(sculpt.brushes.firstOrNull { it.id == sculpt.brush }?.label ?: "Escultura", color = Ink.Accent, fontSize = 13.sp)
-                SculptSlider("Radio", sculpt.radius, .005f.. .2f, { "${(it * 100).roundToInt()} %" }) {
+                SculptSlider("Radio", sculpt.radius, .005f.. .2f, { fraction ->
+                    sculpt.radiusMeters?.let { meters ->
+                        val unit = state.blender.sceneScale.lengthUnit
+                        val value = moveValueForDisplay(meters * fraction / sculpt.radius,
+                            unit.transformStepUnit(), 1.0)
+                        val decimals = (2 - kotlin.math.floor(kotlin.math.log10(value)).toInt()).coerceIn(2, 12)
+                        "≈ ${formatToolDistance(value, decimals)} ${unit.short}"
+                    } ?: "${(fraction * 100).roundToInt()} % de pantalla"
+                }) {
                     vm.sculptSettings(mapOf("radius" to it))
                 }
                 SculptSlider("Fuerza", sculpt.strength, 0f..1f, { "${(it * 100).roundToInt()} %" }) {

@@ -103,12 +103,21 @@ object RadialMenu {
     }
 
     private fun editActions(context: TouchContext): List<ActionId> = buildList {
-        // Caja y Círculo arman el arrastre por forma: selección pura, va primero.
-        // Con selección, Borrar sustituye a Seleccionar todo: así el destructivo
-        // contextual cabe también en Aristas sin superar el tope de ocho sectores.
+        add(ActionId.EDIT_SELECTION_TOOLS)
+        add(ActionId.EDIT_MESH_TOOLS)
+        if (context.hasSelection) {
+            add(ActionId.DUPLICATE)
+            add(ActionId.DELETE)
+        }
+    }
+
+    fun selectionActions(context: TouchContext): List<ActionId> = buildList {
+        // Selection lives in one submenu; destructive mesh operations stay outside.
         add(ActionId.TOOL_BOX)
         add(ActionId.TOOL_CIRCLE)
-        if (!context.hasSelection) add(ActionId.SELECT_ALL)
+        add(ActionId.SELECT_ALL)
+        add(ActionId.DESELECT_ALL)
+        add(ActionId.SELECT_INVERT)
 
         // En caras el último toque conserva también la dirección topológica de la
         // arista más próxima, igual que Alt+click en Blender.
@@ -119,19 +128,7 @@ object RadialMenu {
         // Enlazado (la `L`) siembra con lo seleccionado: sin semilla no hay isla.
         if (context.hasSelection) {
             add(ActionId.SELECT_LINKED)
-            add(ActionId.DUPLICATE)
+            add(ActionId.HIDE_GEOMETRY)
         }
-        // "Mostrar oculto" salió del anillo: es raro comparado con lo demás y no
-        // cabía junto a Enlazado en Aristas, donde el tope de ocho ya iba lleno.
-        // Sigue a un toque, dentro de "Tools de malla".
-
-        // El sector destructivo abre dos intenciones distintas: Borrar y Disolver.
-        // No se gastan dos sectores ni se confunde disolver con ONLY_FACES.
-        if (context.hasSelection) add(ActionId.DELETE)
-
-        // Separar/Split/Normales/Bevel/Subdivide/Bridge y demás viven en el catálogo
-        // de vértice/arista/cara, detrás de un único sector. Borrar se mantiene fuera
-        // porque es frecuente y depende directamente del submodo activo.
-        add(ActionId.EDIT_MESH_TOOLS)
     }
 }

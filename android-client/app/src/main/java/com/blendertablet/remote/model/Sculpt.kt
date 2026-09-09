@@ -7,6 +7,7 @@ data class SculptState(
     val active: Boolean = false,
     val brush: String = "DRAW",
     val radius: Float = .04f,
+    val radiusMeters: Double? = null,
     val strength: Float = .5f,
     val pressureStrength: Boolean = true,
     val pressureSize: Boolean = false,

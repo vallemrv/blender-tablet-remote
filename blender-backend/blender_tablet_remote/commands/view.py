@@ -124,7 +124,9 @@ def frame_selected(payload: dict) -> dict:
     rv3d = _region_view()
     view_layer = bpy.context.view_layer
     selected = [o for o in view_layer.objects if o.select_get()]
-    targets = selected or [o for o in view_layer.objects if o.visible_get()]
+    active = view_layer.objects.active
+    targets = selected or ([active] if active and active.visible_get() and active.type not in {'CAMERA','LIGHT','EMPTY'} else
+                           [o for o in view_layer.objects if o.visible_get() and o.type not in {'CAMERA','LIGHT','EMPTY'}])
     if not targets:
         raise CommandError("Nothing to frame", code="empty_scene")
 

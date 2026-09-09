@@ -84,6 +84,7 @@ object AppIcons {
     val Rotate: ImageVector = Icons.AutoMirrored.Filled.RotateRight
     val Scale: ImageVector = Icons.Default.AspectRatio
     val Reset: ImageVector = Icons.Default.RestartAlt
+    val Frame: ImageVector = Icons.Default.CenterFocusStrong
 
     val Reference: ImageVector = Icons.Default.Image
     fun sculpt(intent: String): ImageVector = when (intent.uppercase()) {
@@ -168,6 +169,7 @@ object AppIcons {
         ActionId.DISSOLVE -> Icons.Default.DeleteSweep
         ActionId.APPLY_TRANSFORMS -> Icons.Default.Transform
         ActionId.EDIT_MESH_TOOLS -> Icons.Default.GridOn
+        ActionId.EDIT_SELECTION_TOOLS -> Icons.Default.SelectAll
         else -> Fallback
     }
 

@@ -15,6 +15,7 @@ object SculptParser {
             available = json.optBoolean("available"), active = json.optBoolean("active"),
             brush = json.optString("brush", "DRAW"),
             radius = number(json, "radius", .04f, .002f, .3f),
+            radiusMeters = json.optDouble("radius_meters").takeIf { it.isFinite() && it > 0 },
             strength = number(json, "strength", .5f, 0f, 1f),
             pressureStrength = json.optBoolean("pressure_strength", true),
             pressureSize = json.optBoolean("pressure_size", false),

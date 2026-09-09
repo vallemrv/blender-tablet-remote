@@ -1,6 +1,6 @@
 # Imágenes de referencia
 
-En la parte superior del workspace, **Referencias** abre un panel de fotos y
+En **Archivo → Imágenes de referencia…** se abre un panel de fotos y
 dibujos. Funciona en Object, Edit, CAD y Sculpt, también sin conexión a Blender.
 
 1. Pulsa **+ Imagen** y elige una o varias imágenes de la tablet.
@@ -8,7 +8,7 @@ dibujos. Funciona en Object, Edit, CAD y Sculpt, también sin conexión a Blende
 3. Arrastra la cabecera **Referencias · mover** para colocar el panel.
 4. Usa dos dedos sobre la imagen para ampliar y desplazar; **Encuadrar referencia**
    recupera la vista completa. **Ampliar/Compacta** cambia el tamaño del panel.
-5. Ajusta **Opacidad** y usa **Ocultar** para recuperar espacio. **Quitar** elimina
+5. Ajusta **Opacidad** y usa **Ocultar** para recuperar espacio; se reabre desde Archivo. **Quitar** elimina
    únicamente la copia de la referencia dentro de la aplicación.
 
 Los gestos del panel no esculpen ni navegan la escena. Fuera del panel sigue

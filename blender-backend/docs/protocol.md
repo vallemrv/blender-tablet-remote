@@ -201,15 +201,21 @@ que un z-buffer de 24 bits sostiene sin artefactos. Solo se reescribe la fila de
 profundidad de la matriz heredada, así que el rayo del toque sigue coincidiendo con lo
 que se ve y la ventana del PC no se toca.
 
-`clip_end` es un mínimo, no una pared: al alejar la cámara la perspectiva amplía el
-fondo hasta `max(clip_end, camera.distance*4)` y ajusta el near para conservar el
-cociente cercano a 10.000. Así el objeto no desaparece por cambiar el encuadre.
+Los valores de clipping del catálogo son metros y se convierten mediante
+`scale_length` al aplicarlos a la cámara. El rango efectivo sigue la distancia:
+`far=max(distance*4,min(clip_end,distance*100))` y
+`near=max(min(clip_start,distance*.01),far/10000)`. Un preset no impone una distancia
+mínima que aleje una pieza pequeña; el zoom admite distancias submilimétricas.
 En ortográfica el rango de profundidad se centra en el pivote y conserva el volumen
 encuadrado: el zoom cambia la ampliación sin cortar la cara delantera al acercarse.
-`view.frame_selected` (doble toque) y `view.frame_all` ajustan los límites de los
+`view.frame_selected` y `view.frame_all` ajustan los límites de los
 objetos al 85 % de la vista con su orientación y proyección, sin modificar la del PC.
 Si la ventana del PC está en ortográfica, se recupera su FOV equivalente antes de
 construir la proyección remota para evitar aplicar dos veces su zoom.
+Android ofrece «Encuadrar objeto» en el panel de vistas. En Edit y CAD los toques
+consecutivos de selección son independientes: no encuadran por doble toque.
+Sin selección, encuadrar toma el objeto activo o la geometría visible, sin incluir
+cámaras, luces ni empties ajenos. La apertura conserva la proyección inicial del PC.
 
 `scale_length` de la escena **no** se modifica: multiplica el tamaño del mundo y
 cambiaría el significado de la geometría existente. `length_unit` sí, porque solo decide
@@ -218,6 +224,27 @@ abrir un `.blend`, el preset inicial se deduce de su unidad real: milímetros se
 `SMALL`, centímetros `MEDIUM` y metros `LARGE`. Una elección posterior del usuario se
 conserva durante esa sesión. `scene_scale.scale_length` contiene siempre el valor real
 del archivo para que el cliente actualice sus conversiones al cargar otra escena.
+
+En `tool.begin`, `parameters.auto_size:true` inicializa EXTRUDE/BEVEL/INSET según
+la selección efectiva (o el objeto si no define una extensión). El paso es el 1 %
+de su menor dimensión útil, redondeado hacia abajo a 1/2/5 por década y limitado
+por el paso del preset. Incluye escala del objeto y `scale_length`. Bisel e Inset
+comienzan en dos pasos; Extruir conserva su distancia inicial. Por ejemplo, una
+pieza de 1 mm empieza con paso 0,01 mm y Bisel 0,02 mm. Android solicita esta
+inicialización al abrir esas herramientas; editar sus valores durante la sesión
+sigue siendo exacto. Los controles de Mover/Escalar conservan su política propia.
+Bisel mide el ancho en mundo incluso con escala de objeto sin aplicar, sin aplicar
+esa escala al objeto. Los botones del campo Paso avanzan según el orden de magnitud
+del paso actual y muestran suficientes decimales para no convertirlo visualmente en cero.
+En esas tres herramientas, Paso se muestra también sin snap y su selector de unidad
+gobierna todos los campos de distancia. Sus botones suman/restan ese paso. El arrastre
+libre usa la misma escala de recorrido (un paso por 4 % de altura) conservando fracciones;
+Incremento/Rejilla redondean en el backend.
+
+El rail Edit contiene Extruir, Bisel, Inset, Corte de loop y Cortar. Bridge permanece
+en el catálogo Malla. El radial separa Selección y Malla y conserva Duplicar y Borrar
+como acciones directas; las herramientas anunciadas en el rail se excluyen del
+catálogo mostrado por Android a partir de sus IDs de familia/variante.
 
 En Mover, `NONE` conserva un arrastre continuo ligado a la vista. `INCREMENT` convierte
 el recorrido en saltos táctiles deliberados: una pantalla completa recorre 40 pasos,
@@ -1467,6 +1494,14 @@ se realiza en Blender 5.2.1. No hay escultura simulada en background.
 El catálogo incluye DRAW, CLAY, INFLATE, CREASE, FLATTEN, GRAB, SMOOTH, MASK y PINCH.
 Android usa sus IDs, etiquetas e intención de icono. `radius` es una fracción de
 la **altura del vídeo**, no píxeles de la tablet ni unidades de la escena.
+`sculpt.radius_meters` añade el radio aproximado en metros sobre el plano del pivote;
+puede ser null sin viewport. Android lo muestra con `≈` en la unidad de trabajo y
+conserva `radius` como parámetro de tamaño en pantalla. No se trata de una cota exacta
+sobre todas las profundidades de una superficie perspectiva.
+El pincel nativo calcula el radio desde píxeles (`use_locked_size:VIEW`), evitando
+el mínimo de 0,001 unidades de `unprojected_size`. La adaptación temporal del
+objeto a la vista nativa incluye su profundidad/escala de proyección y restaura
+su matriz al salir; no reescala la malla persistente ni escribe en `rv3d`.
 
 | Comando | Payload | Resultado |
 |---|---|---|

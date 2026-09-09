@@ -16,6 +16,39 @@ from blender_tablet_remote.errors import CommandError
 
 
 class SculptTests(unittest.TestCase):
+    def test_one_mm_brush_deforms_only_local_patch_and_cancels(self):
+        mode._set_mode('OBJECT')
+        obj=bpy.context.object
+        for vert in obj.data.vertices: vert.co *= .0005
+        obj.data.update()
+        camera.distance=.0025; camera._invalidate()
+        mode._set_mode('SCULPT')
+        sculpt.settings(dict(brush='DRAW',radius=.04,strength=.5,
+                             symmetry=dict(x=False,y=False,z=False)))
+        baseline=[v.co.copy() for v in obj.data.vertices]
+        original_projection=self.rv.view_perspective
+        try:
+            for projection in ('PERSP','ORTHO'):
+                with self.subTest(pc_projection=projection):
+                    self.rv.view_perspective=projection
+                    self.rv.update()
+                    camera._invalidate()
+                    matrix=bpy.context.object.matrix_world.copy()
+                    pc_matrix=self.rv.view_matrix.copy()
+                    u,v=camera.project(Vector((0,0,.0005)), self.rv)
+                    self.assertTrue(self.send('begin',[dict(u=u,v=v,pressure=1,time=0)])['hit'])
+                    displacements=[(vert.co-co).length for vert,co in zip(bpy.context.object.data.vertices,baseline)]
+                    self.assertGreater(max(displacements),1e-8)
+                    outside=[d for d,co in zip(displacements,baseline) if Vector((co.x,co.y,0)).length>.0002]
+                    self.assertLess(max(outside),1e-9)
+                    self.assertEqual(bpy.context.object.matrix_world,matrix)
+                    self.assertEqual(self.rv.view_matrix,pc_matrix)
+                    self.send('cancel')
+                    self.assertLess(max((vert.co-co).length for vert,co in zip(bpy.context.object.data.vertices,baseline)),1e-9)
+        finally:
+            self.rv.view_perspective=original_projection
+            self.rv.update()
+
     def setUp(self):
         sculpt.cancel()
         with view3d_override():
