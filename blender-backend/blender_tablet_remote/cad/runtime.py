@@ -5,7 +5,7 @@ import math
 import bpy
 from mathutils import Vector
 from . import document as model
-from .kernel import kernel, world
+from .kernel import kernel, world, tidy_mesh
 from . import sketch as sketch_geometry
 from ..errors import BadPayload, CommandError
 from ..bpy_utils import find_view3d, undo_push
@@ -28,6 +28,9 @@ class CadRuntime:
         self._empty = model.new_document()
         self.step = .001
         self.increment = True
+        self.construction = False
+        self.active_body_id = None
+        self.show_scene = False
 
     def reset(self):
         self.__init__()
@@ -39,9 +42,11 @@ class CadRuntime:
             # Undo replaces RNA addresses. Keep the workspace, but never hold an
             # old scene preview; explicit file loads call reset_session().
             workspace, active = self.workspace, self.active_sketch_id
+            settings={k:getattr(self,k) for k in ("active_body_id","step","increment","construction","show_scene")}
             hidden, owner = self._hidden, self.workspace_owner
             self.reset()
             self.workspace, self.active_sketch_id = workspace, active
+            for key,value in settings.items(): setattr(self,key,value)
             self._hidden, self.workspace_owner = hidden, owner
             self._scene = identity
         raw = scene.get(model.KEY)
@@ -49,7 +54,7 @@ class CadRuntime:
 
     def isolate(self):
         """Same hide_set technique as view.local, with a separate restoration set."""
-        if not self.workspace or self._save_suspended:
+        if not self.workspace or self._save_suspended or self.show_scene:
             return
         doc = self.doc()
         for obj in bpy.context.view_layer.objects:
@@ -127,6 +132,9 @@ class CadRuntime:
                     verts,faces=kernel.cut(solids[target],(verts,faces))
                     consumed.add(target)
                 solids[feature['id']] = (verts,faces)
+                # Display/export topology is independent of the compact operands;
+                # feeding subdivided quads into later cuts would grow exponentially.
+                verts,faces=tidy_mesh(verts,faces)
                 evaluated.append((feature, [tuple(c/scale for c in v) for v in verts], faces))
         objects = {o[FEATURE_KEY]:o for o in self.objects(doc)}
         keep = {f['id'] for f in doc['features']}
@@ -216,25 +224,27 @@ class CadRuntime:
         rv3d = found[3]
         camera.sync_from_region(rv3d)
         origin, direction = camera.ray(u,v,rv3d)
-        normal = Vector(world(plane,0,0,1))
+        active = next((s for s in self.doc()['sketches'] if s['id']==self.active_sketch_id),{})
+        sketch=plane if isinstance(plane,dict) else dict(plane=plane,offset=active.get('offset',0) if offset is None else offset)
+        basis=model.frame(sketch)
+        normal = Vector(basis['normal'])
         denom = direction.dot(normal)
         if abs(denom) < 1e-7:
             raise CommandError('El plano está de canto; vuelve a la vista del sketch', code='cad_plane_parallel')
-        if offset is None:
-            active = next((s for s in self.doc()['sketches'] if s['id']==self.active_sketch_id),{})
-            offset = active.get('offset',0)
-        distance = (offset / max(bpy.context.scene.unit_settings.scale_length,1e-12) - origin.dot(normal))/denom
+        plane_origin=Vector(basis['origin']) / max(bpy.context.scene.unit_settings.scale_length,1e-12)
+        distance = (plane_origin-origin).dot(normal)/denom
         if distance < 0:
             raise CommandError('El plano queda detrás de la cámara', code='cad_plane_parallel')
         p = (origin + direction*distance) * bpy.context.scene.unit_settings.scale_length
-        return {'XY':(p.x,p.y), 'XZ':(p.x,p.z), 'YZ':(p.y,p.z)}[plane]
+        local=p-Vector(basis['origin'])
+        return local.dot(Vector(basis['x'])),local.dot(Vector(basis['y']))
 
     def focus(self, sketch):
         found = find_view3d()
         if found:
             camera.sync_from_region(found[3])
-        normal = Vector(world(sketch['plane'],0,0,1))
-        up = Vector(world(sketch['plane'],0,1,0))
+        normal = Vector(model.frame(sketch)['normal'])
+        up = Vector(model.frame(sketch)['y'])
         from mathutils import Matrix
         right = up.cross(normal)
         camera.rotation = Matrix((right,up,normal)).transposed().to_quaternion()
@@ -243,10 +253,10 @@ class CadRuntime:
         if bounds:
             lo = [min(p[i] for p in bounds) for i in (0,1)]
             hi = [max(p[i] for p in bounds) for i in (0,1)]
-            camera.location = Vector(world(sketch['plane'],(lo[0]+hi[0])/2,(lo[1]+hi[1])/2,sketch.get('offset',0)))/scale
+            camera.location = Vector(world(sketch,(lo[0]+hi[0])/2,(lo[1]+hi[1])/2))/scale
             camera.distance = max(.15, max(hi[i]-lo[i] for i in (0,1))*2)/scale
         else:
-            camera.location = Vector(world(sketch['plane'],0,0,sketch.get('offset',0)))/scale
+            camera.location = Vector(world(sketch,0,0))/scale
             camera.distance = .2/scale
         camera.perspective = 'ORTHO'
         camera.axis_view = None
@@ -265,10 +275,18 @@ class CadRuntime:
         for sketch in doc['sketches']:
             if self.active_sketch_id and sketch['id'] != self.active_sketch_id:
                 continue
+            if not sketch.get('visible',True) and sketch['id']!=self.active_sketch_id: continue
             entries = sketch['entities'] if self.active_sketch_id else model.closed_entities(sketch)
+            if self.active_sketch_id:
+                origin=camera.project(Vector(world(sketch,0,0))/scale,found[3])
+                if origin is not None:
+                    refs=(self.selection or {}).get('items',[])
+                    selected=any(r['id']=='ORIGIN' for r in refs)
+                    result.append(dict(id='ORIGIN',points=[],closed=False,selected=selected,
+                        handles=[dict(part='POINT',point=origin,selected=selected)],label='0,0',label_point=origin))
             for e in entries:
                 def project(p):
-                    return camera.project(Vector(world(sketch['plane'],*p,sketch.get('offset',0)))/scale,found[3])
+                    return camera.project(Vector(world(sketch,*p))/scale,found[3])
                 points = [project(p) for p in model.outline(e)]
                 if any(p is None for p in points):
                     continue
@@ -283,7 +301,30 @@ class CadRuntime:
                                 selected=any(ref['id']==e['id'] and ref.get('part')==role for ref in refs)))
                 selected_parts=[r.get('part','BODY') for r in refs if r['id']==e['id']]
                 result.append(dict(id=e['id'],points=points,closed=e['type'] not in ('LINE','ARC'),
-                                   selected=selected,handles=handle_points,selected_parts=selected_parts))
+                                   selected=selected,handles=handle_points,selected_parts=selected_parts,construction=e.get('construction',False)))
+            if sketch['id']==self.active_sketch_id:
+                labels={'COINCIDENT':'●','HORIZONTAL':'H','VERTICAL':'V','PARALLEL':'∥',
+                        'PERPENDICULAR':'⊥','TANGENT':'T','EQUAL':'=','FIX':'Fijo','MIDPOINT':'½','SYMMETRIC':'Sim'}
+                unit=bpy.context.scene.unit_settings.length_unit
+                factor,suffix={'MILLIMETERS':(1000,'mm'),'CENTIMETERS':(100,'cm')}.get(unit,(1,'m'))
+                for index,c in enumerate(sketch.get('constraints',[])):
+                    anchors=[]
+                    for ref in c['refs']:
+                        entity=sketch_geometry.get_entity(sketch,ref)
+                        if ref.get('part') in sketch_geometry.handles(entity): anchors.append(tuple(sketch_geometry.point(sketch,ref)))
+                        elif entity['type'] in ('LINE','RECTANGLE'):
+                            if entity['type']=='RECTANGLE' and ref.get('part','BODY')=='BODY': anchors.extend(model.outline(entity))
+                            else: anchors.extend(tuple(p) for p in sketch_geometry.line(sketch,ref))
+                        else: anchors.append((entity['x'],entity['y']))
+                    if not anchors: continue
+                    anchor=tuple(sum(p[i] for p in anchors)/len(anchors) for i in (0,1))
+                    projected=project(anchor)
+                    if projected is None: continue
+                    label=labels.get(c['type'],c['type'])
+                    if c.get('value') is not None:
+                        label=('R ' if c['type']=='RADIUS' else '')+format(c['value']*factor,'.6g')+' '+suffix
+                    result.append(dict(id=c['id'],kind='DIMENSION',points=[],closed=False,selected=False,
+                        label=label,label_point=projected,label_offset=14+(index%4)*15))
         return result
 
     @contextmanager
@@ -308,8 +349,9 @@ class CadRuntime:
                 self.active_sketch_id = None
             if session and session.get('preview'):
                 doc = session['preview']
-            return dict(version=1,workspace=self.workspace,isolated=bool(self.workspace),document=model.public(doc),
-                        active_sketch_id=self.active_sketch_id,selection=self.selection,step=self.step,increment=self.increment,
+            if not any(b['id']==self.active_body_id for b in doc['bodies']): self.active_body_id=doc['bodies'][0]['id']
+            return dict(version=1,workspace=self.workspace,isolated=bool(self.workspace and not self.show_scene),document=model.public(doc),
+                        active_sketch_id=self.active_sketch_id,selection=self.selection,step=self.step,increment=self.increment,construction=self.construction,active_body_id=self.active_body_id or doc['bodies'][0]['id'],show_scene=self.show_scene,
                         session=dict(active=bool(session),id=session['id'] if session else None,
                                      operation=session['operation'] if session else None,
                                      depth=session.get('depth') if session else None,

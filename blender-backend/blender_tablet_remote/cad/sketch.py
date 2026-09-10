@@ -10,11 +10,12 @@ from . import document as model
 from ..errors import BadPayload, CommandError
 
 CONSTRAINTS = ('COINCIDENT', 'HORIZONTAL', 'VERTICAL', 'PARALLEL', 'PERPENDICULAR',
-               'TANGENT', 'EQUAL', 'DISTANCE', 'RADIUS', 'FIX')
+               'TANGENT', 'EQUAL', 'DISTANCE', 'RADIUS', 'FIX', 'MIDPOINT', 'SYMMETRIC')
 
 
 def handles(e):
     typ = e['type']
+    if typ == 'ORIGIN': return {'POINT': (0., 0.)}
     if typ == 'LINE':
         return {'START': (e['x'],e['y']), 'END': (e['x2'],e['y2'])}
     if typ == 'RECTANGLE':
@@ -26,6 +27,7 @@ def handles(e):
 
 
 def get_entity(sketch, ref):
+    if ref.get('id') == 'ORIGIN': return dict(id='ORIGIN', type='ORIGIN', x=0., y=0.)
     return model.find(sketch, 'entities', ref.get('id'))
 
 
@@ -61,7 +63,14 @@ def residual(sketch, c, scale):
     typ, refs = c['type'], c['refs']
     if typ == 'FIX':
         e = get_entity(sketch, refs[0])
+        if 'points' in c:
+            return [(handles(e)[role][i]-p[i])/scale for role,p in c['points'].items() for i in (0,1)]
         return [(e[k]-v)/(1 if k in ('start','sweep') else scale) for k,v in c['values'].items()]
+    if typ == 'SYMMETRIC':
+        return ((point(sketch,refs[0])+point(sketch,refs[1]))*.5-point(sketch,refs[2]))/scale
+    if typ == 'MIDPOINT':
+        a,b = line(sketch,refs[1])
+        return (point(sketch,refs[0])-(a+b)*.5)/scale
     if typ == 'COINCIDENT':
         return (point(sketch,refs[0])-point(sketch,refs[1]))/scale
     if typ == 'DISTANCE':
@@ -106,7 +115,7 @@ def validate_constraints(sketch):
         ids.add(c['id'])
         refs = c.get('refs')
         typ = c['type']
-        count = (1,2) if typ=='DISTANCE' else (1,) if typ in ('FIX','HORIZONTAL','VERTICAL','RADIUS') else (2,)
+        count = (3,) if typ=='SYMMETRIC' else (1,2) if typ=='DISTANCE' else (1,) if typ in ('FIX','HORIZONTAL','VERTICAL','RADIUS') else (2,)
         if not isinstance(refs,list) or len(refs) not in count or (len(refs)==2 and refs[0]==refs[1]):
             raise BadPayload('Número de elementos incorrecto para la restricción')
         for ref in refs:
@@ -115,7 +124,15 @@ def validate_constraints(sketch):
             model.number(c.get('value'),positive=True)
         if typ == 'FIX':
             e = get_entity(sketch,refs[0])
-            if not isinstance(c.get('values'),dict) or set(c['values']) != set(model.FIELDS[e['type']]):
+            if 'points' in c:
+                if not isinstance(c['points'],dict) or not c['points'] or not set(c['points']) <= set(handles(e)) or e['type']=='ORIGIN':
+                    raise BadPayload('Fijación de puntos inválida')
+                for p in c['points'].values():
+                    if not isinstance(p,(list,tuple)) or len(p)!=2: raise BadPayload('Punto fijo inválido')
+                    for value in p: model.number(value)
+                residual(sketch,c,1.)
+                continue
+            if not isinstance(c.get('values'),dict) or set(c['values']) != set(model.FIELDS.get(e['type'],())) or e['type']=='ORIGIN':
                 raise BadPayload('Fijación inválida')
             for value in c['values'].values(): model.number(value)
         residual(sketch,c,1.)
@@ -184,6 +201,7 @@ def move_goals(sketch, refs, dx, dy):
     goals=[]; seen=set()
     for ref in refs:
         e=get_entity(sketch,ref); part=ref.get('part','BODY')
+        if e['type']=='ORIGIN': continue
         points=handles(e)
         single_handle=sum(r['id']==e['id'] for r in refs)==1
         if part in points:
@@ -205,8 +223,48 @@ def move_goals(sketch, refs, dx, dy):
     return goals
 
 
+def _rectangle_corner(sketch, refs):
+    """Expose rectangle sides as a constrained chain, preserving reference roles."""
+    if not refs or len({r['id'] for r in refs})!=1: return refs,None
+    rectangle=get_entity(sketch,refs[0])
+    if rectangle['type']!='RECTANGLE': return refs,None
+    parts=[ref.get('part','BODY') for ref in refs]
+    if len(parts)==1 and parts[0] in ('P0','P1','P2','P3'): corner=int(parts[0][1:])
+    elif len(parts)==2 and all(p.startswith('EDGE') for p in parts):
+        edges=[int(p[4:]) for p in parts]
+        shared=set((edges[0],(edges[0]+1)%4)) & set((edges[1],(edges[1]+1)%4))
+        if len(shared)!=1: raise BadPayload('Elige dos lados contiguos del rectángulo')
+        corner=shared.pop()
+    else: raise BadPayload('Toca una esquina del rectángulo o selecciona dos lados contiguos')
+    ring=model.outline(rectangle)
+    lines=[dict(id=model.uid('entity'),type='LINE',x=a[0],y=a[1],x2=b[0],y2=b[1],
+                construction=rectangle.get('construction',False)) for a,b in zip(ring,ring[1:]+ring[:1])]
+    def remap(ref):
+        if ref['id']!=rectangle['id']: return ref
+        part=ref.get('part','BODY')
+        if part.startswith('EDGE'): return dict(id=lines[int(part[4:])]['id'],part='BODY')
+        if part.startswith('P'): return dict(id=lines[int(part[1:])]['id'],part='START')
+        raise BadPayload('Quita la restricción de figura completa antes de redondear')
+    constraints=[]
+    for c in sketch.get('constraints',[]):
+        if c['type']=='FIX' and c['refs'][0]['id']==rectangle['id']:
+            if 'values' in c:
+                for line in lines: constraints.append(dict(id=model.uid('constraint'),type='FIX',refs=[dict(id=line['id'],part='BODY')],values={k:line[k] for k in model.FIELDS['LINE']}))
+            else:
+                for role,p in c['points'].items(): constraints.append(dict(id=model.uid('constraint'),type='FIX',refs=[remap(dict(id=rectangle['id'],part=role))],points={'START':p}))
+        else:
+            clone=copy.deepcopy(c); clone['refs']=[remap(ref) for ref in c['refs']]; constraints.append(clone)
+    sketch['entities'].remove(rectangle); sketch['entities'].extend(lines)
+    for i,line in enumerate(lines):
+        constraints.append(dict(id=model.uid('constraint'),type='COINCIDENT',refs=[dict(id=line['id'],part='END'),dict(id=lines[(i+1)%4]['id'],part='START')]))
+        constraints.append(dict(id=model.uid('constraint'),type='HORIZONTAL' if i%2==0 else 'VERTICAL',refs=[dict(id=line['id'],part='BODY')]))
+    sketch['constraints']=constraints
+    return [dict(id=lines[(corner-1)%4]['id'],part='BODY'),dict(id=lines[corner]['id'],part='BODY')],rectangle['id']
+
+
 def fillet(sketch, refs, r):
     """Trim two connected straight edges and insert their tangent circular arc."""
+    refs,_ = _rectangle_corner(sketch,refs)
     if len(refs)!=2:
         raise BadPayload('Redondeo: selecciona dos líneas conectadas')
     es=[get_entity(sketch,ref) for ref in refs]
@@ -230,7 +288,7 @@ def fillet(sketch, refs, r):
     for e,role,p in zip(es,(ra,rb),touches):
         kx,ky=('x','y') if role=='START' else ('x2','y2')
         e[kx],e[ky]=map(float,p)
-    arc=dict(id=model.uid('entity'),type='ARC',x=float(center[0]),y=float(center[1]),radius=r,start=angles[0],sweep=sweep)
+    arc=dict(id=model.uid('entity'),type='ARC',x=float(center[0]),y=float(center[1]),radius=r,start=angles[0],sweep=sweep,construction=all(e.get('construction',False) for e in es))
     sketch['entities'].append(arc)
     constraints=sketch.setdefault('constraints',[])
     # Replace exactly the joined corner constraint; preserve all unrelated constraints.

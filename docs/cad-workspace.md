@@ -11,10 +11,10 @@ El rail izquierdo contiene selección, selección múltiple, arrastre, línea,
 rectángulo, cuadrado, círculo, arco y redondeo. El rail derecho contiene las
 restricciones y solo aparece al editar un boceto. Los raíles y bandejas de
 Object/Edit no aparecen en CAD. Cada intención tiene un icono vectorial propio;
-mantenerlo pulsado muestra su función. El árbol se abre con **Bocetos** arriba a
+mantenerlo pulsado muestra su función. El árbol se abre con **Modelo** arriba a
 la izquierda; cada boceto muestra **Editar** junto a su nombre y plano.
 
-Para continuar un boceto existente, toca **Bocetos → Editar [nombre]**. También
+Para continuar un boceto existente, toca **Modelo → Editar [nombre]**. También
 puedes seleccionar un perfil en la vista o una operación en el árbol y pulsar
 **Editar boceto** en la cabecera: abre el boceto de origen, encuadra su plano y
 activa selección, sin duplicarlo. Toca sus puntos/aristas para cambiar las cotas
@@ -36,15 +36,22 @@ actualiza las operaciones dependientes y registra un paso de undo.
   seleccionado; un punto restringido se ajusta a sus grados de libertad. Mover una
   esquina de rectángulo conserva la opuesta; mover el radio del círculo conserva
   su centro. Un toque sin movimiento no crea undo.
-- Redondear: seleccionar dos líneas con un extremo común y elegir el radio.
+- Redondear: seleccionar dos líneas con un extremo común, una esquina de un
+  rectángulo o dos lados contiguos, y elegir **Redondear esquina** y el radio.
   Recorta los lados e inserta un arco con coincidencias, tangencias y radio.
+- Al editar, la vista queda perpendicular al plano; arrastrar para orbitar desplaza
+  la vista y dos dedos permiten pan/zoom sin inclinar el boceto.
 - Dos dedos cancelan el trazo/arrastre actual y permiten navegar. Al soltar se
   consume la última preview válida, sin repetir el sondeo.
 
 Restricciones disponibles: coincidencia entre puntos, horizontal, vertical,
 paralela, perpendicular, tangencia entre línea y círculo/arco, igualdad de
-longitudes o radios, distancia/longitud, radio y fijación de una entidad completa.
-Los botones se habilitan según la selección. Las cotas se editan desde el árbol;
+longitudes o radios, distancia/longitud, radio, punto medio, simetría respecto al
+último de tres puntos y fijación estricta de la selección. El origen (0,0) se puede
+seleccionar desde la vista o el rail y usar como referencia fija.
+Los botones se habilitan según la selección. Las cotas se ven junto a la geometría
+y se editan desde el árbol. Sin selección se ve el modelo completo; al elegir un
+punto/lado se muestran únicamente sus restricciones, con la medida y las referencias;
 cada restricción también puede eliminarse allí. Los cambios incompatibles se
 rechazan conservando el documento y la geometría anteriores.
 
@@ -76,7 +83,7 @@ Un vaciado es una diferencia booleana exacta de Blender sobre mallas evaluadas.
 Consume visualmente su operación destino conservando su dependencia en el árbol.
 Cambiar el perfil, la profundidad o la altura del soporte reconstruye el resultado.
 Un perfil que no intersecta el destino o elimina todo el sólido se rechaza.
-No se pueden borrar/convertir soportes con operaciones o bocetos dependientes:
+No se pueden borrar soportes con operaciones o bocetos dependientes:
 primero se eliminan los dependientes. El árbol permite borrar bocetos sin operaciones.
 
 ## Persistencia y límites
@@ -94,11 +101,30 @@ primero se eliminan los dependientes. El árbol permite borrar bocetos sin opera
   de una red de segmentos cruzados o ramificados.
 - El resultado es una malla. Círculos/arcos mantienen parámetros analíticos en el
   documento y se segmentan al visualizar/evaluar. No es BREP ni exporta STEP.
-- El redondeo es de sketch entre dos líneas conectadas. No es fillet de aristas
+- El redondeo es de sketch entre líneas conectadas o en esquinas de rectángulos. No es fillet de aristas
   del sólido. Vaciar quita un perfil por profundidad; no es una operación Shell
   de espesor automático sobre caras arbitrarias.
-- Los bocetos se apoyan en planos principales o en la cara superior de una
-  operación; todavía no hay referencias persistentes a cualquier cara 3D.
+- **Planos** permite usar XY/XZ/YZ, el plano de otro boceto, una cara superior
+  asociativa o un plano guardado. Un plano nuevo admite desplazamiento XYZ en la
+  unidad elegida y rotación XYZ en grados, relativos al plano de referencia.
+  **Plano desde cara plana** captura el marco de una cara visible; **Ver objetos
+  de la escena** permite elegir referencias externas. Esa referencia conserva su
+  posición capturada, sin seguir cambios topológicos de una cara arbitraria.
+- **Nuevo cuerpo** crea una pieza independiente. El árbol agrupa sus bocetos y
+  operaciones; **Nuevo boceto** está disponible también cuando ya hay otros.
+  El ojo de cada boceto oculta/muestra su overlay sin desactivar las operaciones.
+- **Construcción** dibuja geometría auxiliar discontinua. También puede convertir
+  las figuras seleccionadas; sus restricciones siguen activas y sus contornos
+  nunca extruyen ni abren huecos. Si rompería un perfil usado, se rechaza el cambio.
+- **Crear copia de malla** sale a Object con una copia seleccionada para Edit o
+  Materiales. El original y todo el árbol CAD permanecen editables al regresar.
+- Las extrusiones de rectángulos y contornos convexos pares usan tapas y paredes
+  en quads ordenados. Los perfiles con huecos y vaciados convierten sus parches a
+  quads con puntos medios compartidos, conservando frontera, volumen y conectividad.
+  Las zonas cóncavas se descomponen antes para no crear caras cruzadas. La evaluación
+  booleana conserva operandos compactos; la malla de presentación no se realimenta
+  a cortes posteriores. Es topología editable en quads, sin prometer una cuadrícula
+  regular ni un reparto de polos elegido por un artista.
 - El overlay se proyecta en Blender y se dibuja en el rectángulo del vídeo Android.
   Sus píxeles no se guardan como geometría. El control y el vídeo tienen canales
   separados, por lo que puede existir un pequeño desfase durante la navegación.
@@ -126,3 +152,12 @@ La reapertura de bocetos se verifica con 39 pruebas CAD en Blender gráfico y la
 pruebas de `CadParserTest` en Android. Incluye reapertura desde perfil/operación,
 identidad estable, regeneración del sólido tras editar y ausencia de undo al
 entrar/salir. La suite gráfica comprueba además cámara, persistencia y undo real.
+
+La reconexión recupera el workspace y boceto abierto mediante una identidad privada
+de la instalación Android. Mantiene cámara y ajustes; las previews interrumpidas
+se cancelan y no se reenvían. Cargar otro archivo invalida el estado suspendido.
+
+`test_cad_feedback.py` añade regresiones de origen, fijación por punto/arista,
+construcción, planos inclinados, varios cuerpos, exportación sin perder el árbol,
+redondeo de rectángulos y recuperación de conexión. Sus comprobaciones gráficas
+validan la cámara y las cotas junto con el undo real.

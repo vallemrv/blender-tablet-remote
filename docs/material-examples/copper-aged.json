@@ -1,0 +1,12 @@
+{
+  "format": "tablet-material",
+  "version": 1,
+  "id": "copper-aged",
+  "label": "Cobre envejecido",
+  "color": "#B87746",
+  "surface": {"metallic": 0.85, "roughness": 0.5},
+  "patterns": [
+    {"kind": "noise", "scale": 6, "detail": 5, "color": "#46796B", "amount": 0.8, "bump": 0.003},
+    {"kind": "noise", "scale": 120, "detail": 2, "color": "#47392D", "amount": 0.18, "bump": 0.0005}
+  ]
+}

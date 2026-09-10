@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tablet Material Recipe v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "version",
+    "id",
+    "label"
+  ],
+  "properties": {
+    "format": {
+      "const": "tablet-material"
+    },
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,47}$"
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 48,
+      "pattern": "\\S"
+    },
+    "color": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$",
+      "default": "#B8B8B8"
+    },
+    "surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "roughness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.4
+        },
+        "metallic": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0
+        },
+        "transmission": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0
+        },
+        "ior": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 3,
+          "default": 1.45
+        },
+        "coat": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0
+        }
+      }
+    },
+    "patterns": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "noise",
+              "wood",
+              "bands",
+              "cells"
+            ]
+          },
+          "scale": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 1000,
+            "default": 5
+          },
+          "stretch": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "number",
+              "minimum": 0.01,
+              "maximum": 100,
+              "default": 1
+            },
+            "default": [
+              1,
+              1,
+              1
+            ]
+          },
+          "detail": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 8,
+            "default": 3
+          },
+          "distortion": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 20,
+            "default": 0
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "default": "#303030"
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.5
+          },
+          "bump": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 0.1,
+            "default": 0
+          }
+        }
+      }
+    }
+  }
+}

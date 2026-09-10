@@ -68,7 +68,11 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
-    private val client: RemoteBlenderClient = WebSocketRemoteBlenderClient(viewModelScope)
+    private val resumePreferences = application.getSharedPreferences("workspace_resume", android.content.Context.MODE_PRIVATE)
+    private val sessionKey = resumePreferences.getString("session_key", null) ?: java.util.UUID.randomUUID().toString().also {
+        resumePreferences.edit().putString("session_key", it).apply()
+    }
+    private val client: RemoteBlenderClient = WebSocketRemoteBlenderClient(viewModelScope, sessionKey)
     private val snapPreferences = SnapPreferences(application)
     private val local = MutableStateFlow(AppUiState(
         snapType = snapPreferences.current.type,
@@ -141,7 +145,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 connection == ConnectionStatus.CONNECTED && state.features.cad.available
             }.distinctUntilChanged().collect { ready ->
                 cadStroke = false
-                local.update { it.copy(cadTool = null) }
                 if (ready) client.cadCommand("cad.state")
             }
         }
@@ -290,9 +293,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Detiene MediaCodec antes de que Android invalide los buffers de la Surface. */
-    fun onBackground() { cancelSculptStroke(); h264Stream.pause() }
+    fun onBackground() { cancelCadStroke(); cancelMaterialStroke(); cancelSculptStroke(); h264Stream.pause() }
 
     fun disconnect() {
+        cancelMaterialStroke()
         cancelSculptStroke()
         h264Stream.stopTransport()
         stream.stop()
@@ -335,6 +339,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * cambiar, que es la salida no destructiva.
      */
     fun enterCad() {
+        cancelMaterialStroke()
         cancelSculptStroke()
         if (!client.state.value.features.cad.available) return
         closeSessions()
@@ -350,7 +355,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun cadTool(type: String?) {
         cancelCadStroke()
         local.update { it.copy(cadTool = type?.takeIf { candidate -> candidate in client.state.value.features.cad.entities ||
-            (client.state.value.features.cad.sketchEditing && candidate in listOf("MOVE", "MULTI")) }) }
+            (client.state.value.features.cad.sketchEditing && candidate in listOf("MOVE", "MULTI", "PLANE_FACE")) }) }
     }
     private var cadGestureMode: String? = null
     private var cadDepthStart = .02
@@ -398,6 +403,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    val capturePng = client.capturePng
+    fun clearCapture() = client.clearCapture()
+    fun captureScene() { client.captureScene() }
+    private var materialStrokeId: String? = null
+    fun enterMaterials() {
+        cancelSculptStroke(); cancelCadStroke(); closeSessions(); cancelMaterialStroke()
+        local.update { it.copy(activeTool = ActiveTool.SELECT, shapeTool = ShapeTool.NONE, cadTool = null) }
+        client.materialCommand("mode.set", mapOf("mode" to "MATERIAL"))
+    }
+    fun materialCommand(name: String, values: Map<String, Any?> = emptyMap()) {
+        cancelMaterialStroke()
+        client.materialCommand(name, values)
+    }
+    fun materialSettings(values: Map<String, Any?>) = materialCommand("material.settings", values)
+    fun toggleMaterialStylus() { cancelMaterialStroke(); local.update { it.copy(materialStylusOnly = !it.materialStylusOnly) } }
+    private fun cancelMaterialStroke() {
+        val id = materialStrokeId ?: return
+        materialStrokeId = null
+        client.materialCommand("material.stroke", mapOf("phase" to "cancel", "stroke_id" to id))
+    }
+    private fun materialStroke(phase: GesturePhase, points: List<com.blendertablet.remote.model.SculptPoint>) {
+        if (!client.state.value.material.paintReady) return
+        if (phase == GesturePhase.BEGIN) { cancelMaterialStroke(); materialStrokeId = java.util.UUID.randomUUID().toString() }
+        val id = materialStrokeId ?: return
+        client.materialCommand("material.stroke", mapOf("phase" to phase.name.lowercase(), "stroke_id" to id, "points" to points.map { it.wire() }))
+        if (phase == GesturePhase.END || phase == GesturePhase.CANCEL) materialStrokeId = null
+    }
     private var sculptStrokeId: String? = null
     fun sculptSettings(values: Map<String, Any?>) {
         cancelSculptStroke()
@@ -416,6 +448,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         client.sculptCommand("sculpt.stroke", mapOf("phase" to "cancel", "stroke_id" to id, "points" to emptyList<Any>()))
     }
     fun sculptStroke(phase: GesturePhase, points: List<com.blendertablet.remote.model.SculptPoint>, smooth: Boolean, invert: Boolean) {
+        if (client.state.value.material.active) { materialStroke(phase, points); return }
         if (client.connection.value != ConnectionStatus.CONNECTED || client.state.value.mode != BlenderMode.SCULPT) return
         if (phase == GesturePhase.BEGIN) {
             cancelSculptStroke()
@@ -429,6 +462,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setMode(mode: BlenderMode) {
+        cancelMaterialStroke()
         cancelSculptStroke()
         cancelCadStroke()
         local.update { it.copy(cadTool = null) }
@@ -488,8 +522,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updateInput(input: InputDebug) {
         _inputDebug.value = input
     }
-    fun undo() { cancelSculptStroke(); cancelCadStroke(); client.undo() }
-    fun redo() { cancelSculptStroke(); cancelCadStroke(); client.redo() }
+    fun undo() { cancelMaterialStroke(); cancelSculptStroke(); cancelCadStroke(); client.undo() }
+    fun redo() { cancelMaterialStroke(); cancelSculptStroke(); cancelCadStroke(); client.redo() }
     fun repeatLast() = client.repeatLast()
     fun delete() = client.delete()
     fun duplicate() = client.duplicate()
@@ -506,6 +540,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun pick(u: Float, v: Float, stylus: Boolean = false) {
         if (client.state.value.cad.workspace) {
+            if (local.value.cadTool == "PLANE_FACE") {
+                client.cadCommand("cad.plane.create", mapOf("u" to u, "v" to v))
+                local.update { it.copy(cadTool = null) }
+                return
+            }
             client.cadCommand("cad.select", mapOf("u" to u, "v" to v, "additive" to (local.value.cadTool == "MULTI"))); return
         }
         val surfaceTool = client.toolSession.value

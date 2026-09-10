@@ -29,9 +29,11 @@ def load_all() -> None:
     """Importa los módulos de comandos (rellena REGISTRY por efecto secundario)."""
     from . import (  # noqa: F401
         cad,
+        reconnect,
         file,
         history,
         mesh,
+        material,
         modal,
         mode,
         modifiers,

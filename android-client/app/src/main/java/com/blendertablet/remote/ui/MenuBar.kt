@@ -57,11 +57,11 @@ fun MenuBar(
         MenuAnchor("Archivo", onOpen = actions.onFileMenuOpened) { close ->
             fileMenu(state, actions, close)
         }
-        if (!state.blender.cad.workspace && state.blender.mode != BlenderMode.SCULPT) MenuAnchor("Objeto") { close -> objectMenu(state, actions, close) }
+        if (!state.blender.material.active && !state.blender.cad.workspace && state.blender.mode != BlenderMode.SCULPT) MenuAnchor("Objeto") { close -> objectMenu(state, actions, close) }
         if (state.blender.features.sceneScale) {
             MenuAnchor("Escena") { close -> sceneMenu(state, actions, close) }
         }
-        if (!state.blender.cad.workspace && state.blender.hiddenObjects.isNotEmpty() && state.blender.features.visibility) {
+        if (!state.blender.material.active && !state.blender.cad.workspace && state.blender.hiddenObjects.isNotEmpty() && state.blender.features.visibility) {
             MenuAnchor("Ocultos") { close -> hiddenMenu(state, actions, close) }
         }
         // Modificadores no es un menú: es un panel que se enseña o se esconde, así que
@@ -95,6 +95,7 @@ data class MenuActions(
     val onModifiers: () -> Unit,
     val onSceneScale: (String) -> Unit,
     val onReferences: () -> Unit,
+    val onCapture: () -> Unit,
 )
 
 // ------------------------------------------------------------- árbol de menú
@@ -127,6 +128,7 @@ object MenuSeparator : MenuNode
 private fun fileMenu(state: AppUiState, actions: MenuActions, close: () -> Unit): List<MenuNode> = listOf(
     MenuLeaf("Nuevo") { close(); actions.onNew() },
     MenuLeaf("Abrir…", enabled = state.blender.features.fileBrowse) { close(); actions.onBrowseOpen() },
+    MenuLeaf("Capturar escena…", enabled = state.connection == ConnectionStatus.CONNECTED) { close(); actions.onCapture() },
     MenuLeaf("Imágenes de referencia…") { close(); actions.onReferences() },
     MenuSeparator,
     // Una sola entrada "Guardar": sin ruta previa abre el diálogo de nombre por su

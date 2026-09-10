@@ -78,7 +78,7 @@ fun TopToolbar(
                             vm.toggleAutoMerge()
                         }
                     }
-                    if (!blender.cad.workspace && blender.mode != BlenderMode.SCULPT) {
+                    if (!blender.cad.workspace && blender.mode != BlenderMode.SCULPT && !blender.material.active) {
                     PillButton("Mayús", selected = state.selectionOp == SelectionOp.TOGGLE && !state.shortestPathActive) { vm.toggleSelectionOp(SelectionOp.TOGGLE) }
                     if (inEdit && blender.features.selectionShortestPath) {
                         PillButton("Ctrl", selected = state.shortestPathActive) { vm.toggleShortestPath() }
@@ -87,7 +87,7 @@ fun TopToolbar(
                     }
                     IconAction(Icons.AutoMirrored.Filled.Undo, "Deshacer") { vm.undo() }
                     IconAction(Icons.AutoMirrored.Filled.Redo, "Rehacer") { vm.redo() }
-                    if (!blender.cad.workspace && blender.mode != BlenderMode.SCULPT && blender.features.repeatLast) {
+                    if (!blender.cad.workspace && blender.mode != BlenderMode.SCULPT && !blender.material.active && blender.features.repeatLast) {
                         PillButton("⇧R") { vm.repeatLast() }
                     }
                 }
@@ -133,13 +133,15 @@ fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 IconAction(
                     Icons.Default.ViewInAr, "Object Mode",
-                    selected = blender.mode == BlenderMode.OBJECT && !blender.cad.workspace,
+                    selected = blender.mode == BlenderMode.OBJECT && !blender.cad.workspace && !blender.material.active,
                 ) { vm.setMode(BlenderMode.OBJECT) }
                 IconAction(
                     Icons.Default.Straighten, "Edit Mode",
                     selected = inEdit,
                     enabled = editable,
                 ) { vm.setMode(BlenderMode.EDIT) }
+                if (blender.material.available) IconAction(AppIcons.materials, "Materiales",
+                    selected = blender.material.active, enabled = blender.activeObjectType == "MESH") { vm.enterMaterials() }
                 if (blender.features.cad.available) PillButton("CAD", selected = blender.cad.workspace) { vm.enterCad() }
                 IconAction(
                     AppIcons.sculpt("DRAW"), "Escultura",

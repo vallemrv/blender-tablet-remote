@@ -48,6 +48,9 @@ MAX_MESSAGES_PER_TICK = 256
 # fuera deliberadamente: forzar una captura por cada transform.nudge/value anularía
 # el límite de FPS y monopolizaría el hilo principal con renders.
 IMMEDIATE_FRAME_COMMANDS = {
+    "material.apply",
+    "material.settings",
+    "mode.set",
     "selection.pick",
     "selection.elements",
     "selection.all",
@@ -97,6 +100,8 @@ def start(
     register_handlers()
     from .commands import sculpt
     sculpt.register_handlers()
+    from .materials.runtime import register_handlers as register_materials
+    register_materials()
     log.set_level(2 if verbose else 1)
 
     _token = token or ""
@@ -160,6 +165,8 @@ def stop() -> None:
     unregister_handlers()
     from .commands import sculpt
     sculpt.unregister_handlers()
+    from .materials.runtime import unregister_handlers as unregister_materials
+    unregister_materials()
     _gestures.reset()
     while not _inbox.empty():
         try:
@@ -441,7 +448,11 @@ def _handle(client: WSClient, msg: dict) -> None:
     kind = str(msg.get("type", "command")).lower()
 
     if kind == "_client_gone":
+        from .commands import reconnect
+        reconnect.disconnected(msg["client_id"])
         _gestures.drop_client(msg["client_id"])
+        from .materials.runtime import runtime as materials
+        if materials.owner == msg["client_id"]: materials.leave()
         from .commands.sculpt import owner_disconnected
         owner_disconnected(msg["client_id"])
         from .commands.modal import session
@@ -470,6 +481,12 @@ def _handle(client: WSClient, msg: dict) -> None:
 
     if kind == "gesture":
         try:
+            from .materials.runtime import runtime as materials
+            if materials.active:
+                materials.require(client.id)
+                if str(msg.get('gesture','')).lower() not in {'orbit','pan','zoom','roll'}:
+                    raise CommandError('En Materiales solo se navega o pinta', code='wrong_mode')
+            materials.cancel()
             from .commands.sculpt import cancel as cancel_sculpt
             cancel_sculpt()
             _gestures.handle(client.id, msg)
@@ -541,7 +558,7 @@ def _handle_command(client: WSClient, msg: dict) -> None:
     try:
         # Native sculpt previews own the latest undo step. Close them before
         # any unrelated intention can write geometry or change active context.
-        if not name.startswith("sculpt.") and not name.startswith(("stream.", "scene.")) and name not in {"view.get", "server.ping", "server.capabilities", "file.info", "file.list", "file.locations"}:
+        if not name.startswith("sculpt.") and not name.startswith(("stream.", "scene.")) and name not in {"view.get", "server.ping", "server.capabilities", "server.resume", "file.info", "file.list", "file.locations"}:
             from .commands.sculpt import cancel as cancel_sculpt
             cancel_sculpt()
         if name.startswith("mesh.") and name not in {"mesh.info", "mesh.loop_probe"}:
@@ -554,6 +571,12 @@ def _handle_command(client: WSClient, msg: dict) -> None:
         if name in {"transform.begin", "tool.begin"}:
             from .commands.sessions import cancel_cad
             cancel_cad()
+        from .materials.runtime import runtime as materials
+        if materials.active and not name.startswith(('material.', 'scene.', 'stream.', 'server.')) and name not in {'view.get', 'file.info', 'file.list', 'file.locations'}:
+            materials.require(client.id)
+            materials.cancel()
+            if name.startswith(('transform.', 'tool.', 'mesh.', 'object.', 'selection.', 'modifier.', 'cad.', 'sculpt.')):
+                raise CommandError('Sal de Materiales para cambiar la geometría o selección', code='wrong_mode')
         result = func(payload)
         from .commands import history as command_history
         command_history.remember(name, payload)

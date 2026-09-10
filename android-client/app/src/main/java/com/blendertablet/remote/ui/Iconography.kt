@@ -6,6 +6,7 @@ import androidx.compose.material.icons.automirrored.filled.CallSplit
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.automirrored.filled.ShowChart
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.AccountTree
@@ -75,6 +76,7 @@ import com.blendertablet.remote.model.SnapType
  * y permite reemplazar un símbolo por uno propio sin perseguir usos por toda la UI.
  */
 object AppIcons {
+    val materials: ImageVector get() = Icons.Default.Palette
     val Fallback: ImageVector = Icons.Default.Tune
     val Duplicate: ImageVector = Icons.Default.ContentCopy
     val DuplicateLinked: ImageVector = Icons.Default.AccountTree
@@ -119,6 +121,11 @@ object AppIcons {
         "EQUAL" to "M4,8 L20,8 M4,16 L20,16",
         "DISTANCE" to "M3,3 L3,21 M21,3 L21,21 M3,12 L21,12 M7,8 L3,12 L7,16 M17,8 L21,12 L17,16",
         "RADIUS" to "M3,20 A17,17 0,0 1,20,3 M4,20 L16,8 M11,8 L16,8 L16,13",
+        "MIDPOINT" to "M3,12 L21,12 M3,8 L3,16 M21,8 L21,16 M12,7 L17,17 L7,17 Z",
+        "SYMMETRIC" to "M12,2 L12,6 M12,9 L12,15 M12,18 L12,22 M3,8 L8,12 L3,16 Z M21,8 L16,12 L21,16 Z",
+        "ORIGIN" to "M12,2 L12,22 M2,12 L22,12 M16,12 A4,4 0,1 1,8,12 A4,4 0,1 1,16,12",
+        "CONSTRUCTION" to "M2,18 L6,15 M9,12 L13,9 M16,6 L21,2 M2,2 L5,5 M8,8 L11,11 M14,14 L17,17 M20,20 L22,22",
+        "PLANE_FACE" to "M3,8 L15,3 L22,8 L10,13 Z M10,13 L10,21 M3,8 L3,16 L10,21 L22,16 L22,8",
         "FIX" to "M5,10 L19,10 L19,21 L5,21 Z M8,10 L8,6 A4,4 0,0 1,16,6 L16,10 M12,14 L12,17",
         "EXTRUDE" to "M3,11 L12,15 L21,11 L12,7 Z M3,11 L3,19 L12,23 L21,19 L21,11 M12,15 L12,23 M12,11 L12,1 M8,5 L12,1 L16,5",
         "CUT" to "M3,9 L3,20 L21,20 L21,9 M3,9 L8,9 L8,16 L16,16 L16,9 L21,9 M12,2 L12,12 M9,9 L12,12 L15,9",

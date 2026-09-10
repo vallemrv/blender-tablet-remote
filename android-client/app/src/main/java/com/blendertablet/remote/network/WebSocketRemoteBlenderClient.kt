@@ -52,6 +52,7 @@ import org.json.JSONObject
 
 class WebSocketRemoteBlenderClient(
     private val scope: CoroutineScope,
+    private val sessionKey: String = java.util.UUID.randomUUID().toString(),
     // El endpoint vive dentro de WireGuard. No debe atravesar el proxy HTTP que
     // Android o una VPN puedan publicar mediante ProxySelector: algunos proxies
     // reescriben Sec-WebSocket-Key y OkHttp rechaza correctamente la respuesta.
@@ -67,6 +68,14 @@ class WebSocketRemoteBlenderClient(
     private val _connection = MutableStateFlow(ConnectionStatus.DISCONNECTED)
     private val _state = MutableStateFlow(BlenderState())
     private val _errors = MutableStateFlow<String?>(null)
+    private val _capturePng = MutableStateFlow<String?>(null)
+    override val capturePng: StateFlow<String?> = _capturePng.asStateFlow()
+    override fun clearCapture() { _capturePng.value = null }
+    override fun captureScene() { command("scene.capture") }
+    override fun materialCommand(name: String, payload: Map<String, Any?>) {
+        require(name.startsWith("material.") || (name == "mode.set" && payload["mode"] == "MATERIAL"))
+        command(name, JSONObject(payload))
+    }
     private val _notices = MutableStateFlow<String?>(null)
     // Un duplicado es un instante, no un estado: quien llegue tarde no debe encontrárselo.
     private val _duplicates = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
@@ -224,6 +233,7 @@ class WebSocketRemoteBlenderClient(
         _state.value = _state.value.copy(
             cad = com.blendertablet.remote.model.CadState(),
             sculpt = com.blendertablet.remote.model.SculptState(),
+            material = com.blendertablet.remote.model.MaterialState(),
             features = _state.value.features.copy(cad = com.blendertablet.remote.model.CadCapabilities()),
         )
         val generation = this.generation.incrementAndGet()
@@ -262,6 +272,7 @@ class WebSocketRemoteBlenderClient(
     private var sculptInFlight = false
     private var sculptInFlightId: String? = null
     private var sculptInFlightPhase: String? = null
+    private var sculptInFlightCommand: String = "sculpt.stroke"
     private var sculptStoppedId: String? = null
 
     private fun clearSculptTransport() = synchronized(sculptTransportLock) {
@@ -278,9 +289,10 @@ class WebSocketRemoteBlenderClient(
             if (next.raw != null) {
                 if (socket?.send(next.raw) != true) reportOffline()
             } else {
-                val stroke = next.name == "sculpt.stroke"
+                val stroke = isPaintStroke(next.name)
                 if (stroke) {
                     sculptInFlight = true
+                    sculptInFlightCommand = next.name
                     sculptInFlightId = next.payload.optString("stroke_id")
                     sculptInFlightPhase = next.payload.optString("phase")
                 }
@@ -295,7 +307,7 @@ class WebSocketRemoteBlenderClient(
     private fun acknowledgeSculpt(ok: Boolean, result: JSONObject?) = synchronized(sculptTransportLock) {
         if (!ok) sculptInFlightId?.let { id ->
             sculptStoppedId = id
-            if (sculptInFlightPhase != "cancel") sculptQueue.recoverStroke(id)
+            if (sculptInFlightPhase != "cancel") sculptQueue.recoverStroke(id, sculptInFlightCommand)
             else sculptQueue.removeStroke(id)
         } else if (result?.optBoolean("limit_reached", false) == true) {
             // The backend already committed the last stable preview. Discard the
@@ -334,12 +346,12 @@ class WebSocketRemoteBlenderClient(
     }
 
     private fun sendCommand(name: String, payload: JSONObject = JSONObject()): Boolean = synchronized(sculptTransportLock) {
-        if (name == "sculpt.stroke") {
+        if (isPaintStroke(name)) {
             val phase = payload.optString("phase")
             if (phase == "begin") sculptStoppedId = null
             else if (payload.optString("stroke_id") == sculptStoppedId) return@synchronized true
         }
-        if (name == "sculpt.stroke" || sculptInFlight || !sculptQueue.isEmpty) {
+        if (isPaintStroke(name) || sculptInFlight || !sculptQueue.isEmpty) {
             if (_connection.value != ConnectionStatus.CONNECTED) { reportOffline(); return@synchronized false }
             sculptQueue.add(SculptQueuedMessage(name, payload))
             flushSculptTransport()
@@ -869,7 +881,7 @@ class WebSocketRemoteBlenderClient(
                 if (command == "scene.get_state") stateRequestInFlight.set(false)
                 // El servidor devuelve el estado en "result" (ver docs/protocol.md).
                 val result = message.optJSONObject("result")
-                if (command == "sculpt.stroke") acknowledgeSculpt(message.optBoolean("ok", false), result)
+                if (command != null && isPaintStroke(command)) acknowledgeSculpt(message.optBoolean("ok", false), result)
                 // El hueco queda libre incluso si el nudge falló: si no, un error
                 // dejaría la herramienta sorda al arrastre para siempre.
                 if (command == "tool.nudge") nudgeInFlight = false
@@ -904,6 +916,11 @@ class WebSocketRemoteBlenderClient(
                         else if (command == "tool.drag_line") Unit
                         else _errors.value = message.optString("error", "Error remoto")
                     }
+                    command == "scene.capture" -> { _capturePng.value = result?.optString("png_base64") }
+                    command != null && command.startsWith("material.") -> {
+                        result?.optJSONObject("material")?.let { _state.value = _state.value.copy(material = MaterialParser.state(it)) }
+                        if (command != "material.stroke") requestState()
+                    }
                     command != null && command.startsWith("sculpt.") -> result?.optJSONObject("sculpt")?.let {
                         _state.value = _state.value.copy(sculpt = SculptParser.state(it))
                     }
@@ -926,8 +943,10 @@ class WebSocketRemoteBlenderClient(
                         requestState()
                         if (_state.value.features.cad.available) cadCommand("cad.state")
                     }
+                    command == "server.resume" -> result?.let(::updateState)
                     command == "scene.get_state" -> result?.let(::updateState)
                     command == "server.capabilities" -> result?.let { caps ->
+                        if (caps.optJSONObject("features")?.optBoolean("workspace_resume") == true) command("server.resume", JSONObject().put("session_key", sessionKey))
                         _state.value = _state.value.copy(
                             features = StateParser.features(caps),
                             unitScaleLength = StateParser.unitScaleLength(caps),

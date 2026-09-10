@@ -233,10 +233,13 @@ class CadTests(unittest.TestCase):
         with self.assertRaises(CommandError):
             mode.mode_set(dict(mode='EDIT',**OWNER))
         cad.convert(dict(feature_id=f,**OWNER))
-        self.assertNotIn(FEATURE_KEY,obj)
-        self.assertFalse(runtime.doc()['features'])
+        self.assertIn(FEATURE_KEY,obj)
+        self.assertEqual(runtime.doc()['features'][0]['id'],f)
+        exported=bpy.context.view_layer.objects.active
+        self.assertNotIn(FEATURE_KEY,exported)
+        self.assertIsNot(exported.data,obj.data)
         mode.mode_set(dict(mode='EDIT',**OWNER))
-        self.assertEqual(obj.mode,'EDIT')
+        self.assertEqual(exported.mode,'EDIT')
 
     def test_z_save_reopen_recovers_stable_document_and_rebuild(self):
         e=self.rect()
@@ -336,9 +339,9 @@ class CadTests(unittest.TestCase):
             self.assertAlmostEqual(result[0],.04,places=5)
             self.assertAlmostEqual(result[1],.0225,places=5)
         runtime.focus(runtime.doc()['sketches'][0])
-        before=runtime.status()['overlay'][0]['points']
+        before=next(item for item in runtime.status()['overlay'] if item['id']==e)['points']
         camera.apply(location=(.03,.01,0))
-        after=runtime.status()['overlay'][0]['points']
+        after=next(item for item in runtime.status()['overlay'] if item['id']==e)['points']
         self.assertNotEqual(before,after)
         self.assertEqual(runtime.doc()['sketches'][0]['entities'][0]['id'],e)
 

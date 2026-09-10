@@ -3,7 +3,7 @@
 PROTOCOL_VERSION = "2.0"
 
 ENUMS = {
-    "mode": ["OBJECT", "EDIT", "CAD", "SCULPT"],
+    "mode": ["OBJECT", "EDIT", "CAD", "SCULPT", "MATERIAL"],
     "selection_mode": ["VERTEX", "EDGE", "FACE"],
     "tool": ["SELECT", "MOVE", "ROTATE", "SCALE", "EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE", "BISECT", "REVOLVE", "SWEEP"],
     "modifier_type": ["SUBSURF", "MULTIRES", "ARRAY", "BEVEL", "SOLIDIFY", "BOOLEAN", "MIRROR"],
@@ -399,13 +399,17 @@ for _mode, _actions in EDIT_CATALOG["groups"].items():
                                      payload={"tool": "SWEEP"}, selection=_selection(_mode, edges={"min": 1})))
 
 FEATURES = {
+    "materials": {"version": 1, "recipe_format": "tablet-material", "recipe_version": 1, "paint": "UV_MASK", "mask_size": 1024, "max_layers": 8, "max_objects": 16},
+    "scene_capture": {"version": 1, "mime": "image/png", "camera": "TABLET", "overlays": False},
     "cad": {"version": 1, "planes": ["XY", "XZ", "YZ"],
             "entities": ["LINE", "RECTANGLE", "SQUARE", "CIRCLE", "ARC"], "features": ["EXTRUDE", "CUT"],
             "constraints": ["COINCIDENT", "HORIZONTAL", "VERTICAL", "PARALLEL", "PERPENDICULAR",
-                            "TANGENT", "EQUAL", "DISTANCE", "RADIUS", "FIX"],
-            "sketch_editing": True, "fillet": True,
+                            "TANGENT", "EQUAL", "DISTANCE", "RADIUS", "FIX", "MIDPOINT", "SYMMETRIC"],
+            "sketch_editing": True, "fillet": True, "construction": True, "datum_planes": True,
+            "bodies": True, "origin": True, "mesh_copy": True,
             "length_unit": "METERS", "kernel": "BLENDER_NATIVE_MESH",
             "document_version": 1, "owned_sessions": True, "persistent": True},
+    "workspace_resume": True,
     "history": {"version": 1, "repeat_last": True},
     "context": {"version": 1, "events": ["context.changed"], "selection_counts": True},
     "transform_modal": {"version": 4, "edit_step_selection": True, "modes": ["OBJECT", "EDIT"],

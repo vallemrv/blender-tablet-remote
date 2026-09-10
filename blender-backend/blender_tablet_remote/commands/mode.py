@@ -13,6 +13,7 @@ VALID_MODES = {
     "EDIT",
     "CAD",
     "SCULPT",
+    "MATERIAL",
 }
 
 
@@ -22,6 +23,17 @@ def _set_mode(target: str, owner=None) -> dict:
     from .sculpt import cancel as cancel_sculpt
     cancel_sculpt()
     cancel_cad()
+    from ..materials.runtime import runtime as materials
+    if target == "MATERIAL":
+        if not materials.active: materials.validate_selection()
+        cancel_all()
+        obj = bpy.context.view_layer.objects.active
+        if obj and obj.mode != 'OBJECT':
+            with view3d_override(): bpy.ops.object.mode_set(mode='OBJECT')
+        runtime.leave()
+        materials.enter(owner)
+        return {'mode':'MATERIAL','material':materials.status()}
+    materials.leave()
     if target == "CAD":
         doc = runtime.doc()
         entering = not runtime.workspace

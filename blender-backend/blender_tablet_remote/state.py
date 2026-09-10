@@ -32,6 +32,9 @@ def selection_mode() -> str:
 
 
 def current_mode() -> str:
+    from .materials.runtime import runtime as materials
+    if materials.active:
+        return "MATERIAL"
     from .cad.runtime import runtime
     if runtime.workspace:
         return "CAD"
@@ -61,6 +64,8 @@ def snapshot(include_view: bool = True) -> dict:
     state["cad"] = runtime.status()
     from .commands.sculpt import status as sculpt_status
     state["sculpt"] = sculpt_status()
+    from .materials.runtime import runtime as materials
+    state["material"] = materials.status()
 
     if active is not None:
         state["active"] = object_info(active)

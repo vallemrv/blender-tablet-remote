@@ -9,19 +9,22 @@ data class CadCapabilities(
     val constraints: List<String> = emptyList(),
     val sketchEditing: Boolean = false,
 ) { val available get() = version == 1 && planes.isNotEmpty() }
-data class CadEntity(val id: String, val type: String, val values: Map<String, Double>)
+data class CadEntity(val id: String, val type: String, val values: Map<String, Double>, val construction: Boolean = false)
 data class CadProfile(val id: String, val entityId: String, val label: String)
 data class CadSketch(val id: String, val name: String, val plane: String,
     val entities: List<CadEntity>, val profiles: List<CadProfile>,
-    val constraints: List<CadConstraint> = emptyList())
-data class CadConstraint(val id: String, val type: String, val value: Double?, val entityIds: List<String>)
+    val constraints: List<CadConstraint> = emptyList(), val visible: Boolean = true, val bodyId: String = "", val planeId: String? = null, val planeLabel: String = plane)
+data class CadConstraint(val id: String, val type: String, val value: Double?, val entityIds: List<String>, val refs: List<CadSelection> = emptyList())
 data class CadSelection(val id: String, val part: String = "BODY")
 data class CadFeature(val id: String, val name: String, val sketchId: String,
     val profileId: String, val depth: Double, val enabled: Boolean,
-    val type: String = "EXTRUDE", val targetId: String? = null)
+    val type: String = "EXTRUDE", val targetId: String? = null, val bodyId: String = "")
 data class CadHandle(val part: String, val point: Pair<Float, Float>, val selected: Boolean)
 data class CadOverlay(val id: String, val points: List<Pair<Float, Float>>, val closed: Boolean, val selected: Boolean,
-    val handles: List<CadHandle> = emptyList(), val selectedParts: List<String> = emptyList())
+    val handles: List<CadHandle> = emptyList(), val selectedParts: List<String> = emptyList(), val construction: Boolean = false,
+    val label: String? = null, val labelPoint: Pair<Float, Float>? = null, val labelOffset: Float = 14f)
+data class CadBody(val id: String, val name: String)
+data class CadPlane(val id: String, val name: String, val translation: List<Double>, val rotation: List<Double>)
 data class CadState(
     val workspace: Boolean = false,
     val isolated: Boolean = false,
@@ -43,6 +46,9 @@ data class CadState(
     val step: Double = .001,
     val increment: Boolean = true,
     val transparent: Boolean = false,
+    val construction: Boolean = false, val showScene: Boolean = false,
+    val bodies: List<CadBody> = emptyList(), val activeBodyId: String? = null,
+    val planes: List<CadPlane> = emptyList(),
 ) {
     val activeSketch get() = sketches.firstOrNull { it.id == activeSketchId }
     val selectedEntity get() = sketches.flatMap { it.entities }.firstOrNull { selectionKind == "ENTITY" && it.id == selectionId }

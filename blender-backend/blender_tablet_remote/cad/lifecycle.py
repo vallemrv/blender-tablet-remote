@@ -16,6 +16,8 @@ def save_post(*_):
 
 @persistent
 def load_pre(*_):
+    from ..commands import reconnect
+    reconnect.clear()
     runtime.leave()
 
 

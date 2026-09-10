@@ -78,6 +78,7 @@ object StateParser {
         return BlenderState(
             cad = CadParser.state(json.optJSONObject("cad")),
             sculpt = SculptParser.state(json.optJSONObject("sculpt")),
+            material = MaterialParser.state(json.optJSONObject("material")),
             mode = when {
                 json.optString("mode").startsWith("EDIT") -> BlenderMode.EDIT
                 json.optString("mode") == "SCULPT" -> BlenderMode.SCULPT

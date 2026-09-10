@@ -32,6 +32,8 @@ def cancel_tool(*, restore=True):
 
 
 def cancel_all(*, restore=True):
+    from ..materials.runtime import runtime as materials
+    materials.cancel()
     cancel_transform(restore=restore)
     cancel_tool(restore=restore)
     cancel_cad(restore=restore)

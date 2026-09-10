@@ -6,11 +6,14 @@ circles are tessellated only for evaluation/display. No BREP/STEP claim.
 from abc import ABC, abstractmethod
 from mathutils import Vector
 from mathutils.geometry import delaunay_2d_cdt
-from .document import outline, contains, closed_entities
+from .document import outline, contains, closed_entities, frame
 from ..errors import CommandError
 
 
 def world(plane, x, y, z=0):
+    if isinstance(plane,dict):
+        basis=frame(plane)
+        return tuple(basis['origin'][i]+x*basis['x'][i]+y*basis['y'][i]+z*basis['normal'][i] for i in range(3))
     return {'XY': (x,y,z), 'XZ': (x,-z,y), 'YZ': (z,x,y)}[plane]
 
 
@@ -66,6 +69,26 @@ class BlenderNativeKernel(CadKernel):
 
     def extrude(self, sketch, source, depth):
         rings = region(sketch, source)
+        if len(rings)==1:
+            ring=rings[0]; n=len(ring)
+            # Perimeter order directly defines the walls. Convex even profiles
+            # get quad caps without the arbitrary diagonals of a global CDT.
+            turns=[(b[0]-a[0])*(c[1]-b[1])-(b[1]-a[1])*(c[0]-b[0])
+                   for a,b,c in zip(ring,ring[1:]+ring[:1],ring[2:]+ring[:2])]
+            if n%2==0 and all(t>=-1e-20 for t in turns):
+                vertices=[world(sketch,*p,z) for z in (0,depth) for p in ring]
+                caps=[tuple(range(n))] if n==4 else []
+                if n>4:
+                    center=tuple(sum(p[i] for p in ring)/n for i in (0,1))
+                    vertices.extend(world(sketch,*center,z) for z in (0,depth))
+                    caps=[(2*n,i,(i+1)%n,(i+2)%n) for i in range(0,n,2)]
+                polygons=[]
+                for cap in caps:
+                    polygons.append(tuple(reversed(cap)))
+                    polygons.append(tuple(2*n+1 if i==2*n else i+n for i in cap))
+                polygons.extend((i,(i+1)%n,(i+1)%n+n,i+n) for i in range(n))
+                if depth<0: polygons=[tuple(reversed(f)) for f in polygons]
+                return vertices,polygons
         points, edges = [], []
         for ring in rings:
             start = len(points)
@@ -75,7 +98,7 @@ class BlenderNativeKernel(CadKernel):
         # coordinate lookup for walls. No evaluated index is persisted as identity.
         verts, _, faces, _, _, _ = delaunay_2d_cdt(points, edges, [], 0, 1e-9)
         n = len(verts)
-        vertices = [world(sketch['plane'], p.x,p.y,z+sketch.get('offset',0)) for z in (0,depth) for p in verts]
+        vertices = [world(sketch, p.x,p.y,z) for z in (0,depth) for p in verts]
         polygons = []
         for face in faces:
             center = tuple(sum(verts[i][axis] for i in face)/len(face) for axis in (0,1))
@@ -91,6 +114,56 @@ class BlenderNativeKernel(CadKernel):
         if depth < 0:
             polygons = [tuple(reversed(f)) for f in polygons]
         return vertices, polygons
+
+
+def tidy_mesh(vertices, faces):
+    """Remove boolean tessellation, then form connected planar quads.
+
+    Shared edge midpoints avoid T-junctions. Concave patches are triangulated
+    before splitting so their face centers cannot escape the surface. This is
+    the display mesh; boolean evaluation keeps its compact kernel result.
+    """
+    if all(len(face)==4 for face in faces): return vertices,faces
+    import bmesh
+    bm=bmesh.new()
+    try:
+        verts=[bm.verts.new(v) for v in vertices]
+        for face in faces: bm.faces.new([verts[i] for i in face])
+        bm.normal_update()
+        def concave_faces():
+            result=[]
+            for face in bm.faces:
+                points=[v.co for v in face.verts]
+                turns=[(b-a).cross(c-b).dot(face.normal) for a,b,c in zip(points,points[1:]+points[:1],points[2:]+points[:2])]
+                if len(points)>3 and any(t < -1e-20 for t in turns): result.append(face)
+            return result
+        concave=concave_faces()
+        if concave: bmesh.ops.triangulate(bm,faces=concave)
+        triangles=[f for f in bm.faces if len(f.verts)==3]
+        if triangles:
+            bmesh.ops.join_triangles(bm,faces=triangles,angle_face_threshold=1e-7,angle_shape_threshold=3.14159)
+        bm.normal_update()
+        concave=concave_faces()
+        if concave: bmesh.ops.triangulate(bm,faces=concave)
+        bm.verts.index_update()
+        vertices=[tuple(v.co) for v in bm.verts]
+        polygons=[tuple(v.index for v in f.verts) for f in bm.faces]
+        if all(len(f)==4 for f in polygons): return vertices,polygons
+        # Split the entire connected boundary consistently, including adjoining
+        # quads; splitting only triangles would leave cracks at shared edges.
+        midpoints={}; result=[]
+        for face in polygons:
+            center=tuple(sum(vertices[i][axis] for i in face)/len(face) for axis in range(3))
+            center_id=len(vertices); vertices.append(tuple(center))
+            mids=[]
+            for a,b in zip(face,face[1:]+face[:1]):
+                edge=tuple(sorted((a,b)))
+                if edge not in midpoints:
+                    midpoints[edge]=len(vertices); vertices.append(tuple((vertices[a][axis]+vertices[b][axis])*.5 for axis in range(3)))
+                mids.append(midpoints[edge])
+            result.extend((v,mids[i],center_id,mids[i-1]) for i,v in enumerate(face))
+        return vertices,result
+    finally: bm.free()
 
 
 kernel = BlenderNativeKernel()

@@ -982,7 +982,19 @@ private class GestureView(
                 if (index == 0) path.moveTo(u * width, v * height) else path.lineTo(u * width, v * height)
             }
             if (stroke.closed) path.close()
+            cadPaint.pathEffect = if (stroke.construction) android.graphics.DashPathEffect(floatArrayOf(8f, 6f), 0f) else null
             canvas.drawPath(path, cadPaint)
+            cadPaint.pathEffect = null
+            stroke.labelPoint?.let { (u, v) ->
+                val density = resources.displayMetrics.density
+                cadPaint.style = android.graphics.Paint.Style.FILL
+                cadPaint.textSize = 12f * density
+                cadPaint.color = 0xffffdf91.toInt()
+                cadPaint.setShadowLayer(3f * density, 0f, 0f, android.graphics.Color.BLACK)
+                canvas.drawText(stroke.label.orEmpty(), u * width + 8f * density, v * height - stroke.labelOffset * density, cadPaint)
+                cadPaint.clearShadowLayer()
+                cadPaint.style = android.graphics.Paint.Style.STROKE
+            }
             stroke.selectedParts.filter { it.startsWith("EDGE") }.forEach { part ->
                 val index = part.removePrefix("EDGE").toIntOrNull()
                 if (index != null && index in stroke.points.indices) {

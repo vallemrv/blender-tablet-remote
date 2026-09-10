@@ -75,3 +75,16 @@ Instala el ZIP generado desde las preferencias de Blender, activa el add-on y ha
 **Arrancar con Blender** si quieres que el servidor se levante automáticamente. En la
 tablet instala el APK, configura la IP del PC, puerto 8765 y token. El puerto MJPEG lo
 anuncia el backend. No expongas estos puertos directamente a Internet; usa la VPN.
+
+### Materiales, pintura y capturas
+
+El workspace **Materiales** aísla uno o varios objetos y ofrece presets cotidianos
+(Plástico, Aluminio, Hierro, Cristal, Roca, Madera, Mercurio…), una paleta sencilla,
+acabados, ambientes y pintura de materiales con lápiz o dedo. Los presets personalizados
+se importan como recetas JSON documentadas y las imágenes pintadas se guardan dentro
+del `.blend`. **Archivo → Capturar escena** guarda un PNG limpio de la vista actual
+desde cualquier modo.
+
+- [Guía de Materiales y límites de pintura](docs/material-workspace.md)
+- [Formato de recetas para IA y otros generadores](docs/material-recipe-v1.md)
+- [JSON Schema v1](docs/material-recipe-v1.schema.json)

@@ -9,12 +9,40 @@
     "entities": [
       "LINE",
       "RECTANGLE",
-      "CIRCLE"
+      "SQUARE",
+      "CIRCLE",
+      "ARC"
     ],
     "features": [
-      "EXTRUDE"
+      "EXTRUDE",
+      "CUT"
     ],
-    "length_unit": "METERS"
+    "constraints": [
+      "COINCIDENT",
+      "HORIZONTAL",
+      "VERTICAL",
+      "PARALLEL",
+      "PERPENDICULAR",
+      "TANGENT",
+      "EQUAL",
+      "DISTANCE",
+      "RADIUS",
+      "FIX",
+      "MIDPOINT",
+      "SYMMETRIC"
+    ],
+    "sketch_editing": true,
+    "fillet": true,
+    "construction": true,
+    "datum_planes": true,
+    "bodies": true,
+    "origin": true,
+    "mesh_copy": true,
+    "length_unit": "METERS",
+    "kernel": "BLENDER_NATIVE_MESH",
+    "document_version": 1,
+    "owned_sessions": true,
+    "persistent": true
   },
   "commands": [
     {
@@ -120,6 +148,94 @@
       "command": "cad.convert",
       "payload": {
         "feature_id": "feature_fixture"
+      }
+    },
+    {
+      "command": "cad.sketch.visibility",
+      "payload": {
+        "sketch_id": "sketch_fixture",
+        "visible": false
+      }
+    },
+    {
+      "command": "cad.entity.construction",
+      "payload": {
+        "construction": true
+      }
+    },
+    {
+      "command": "cad.settings",
+      "payload": {
+        "construction": true,
+        "step": 0.001
+      }
+    },
+    {
+      "command": "cad.body.create",
+      "payload": {}
+    },
+    {
+      "command": "cad.body.activate",
+      "payload": {
+        "body_id": "body_fixture"
+      }
+    },
+    {
+      "command": "cad.plane.create",
+      "payload": {
+        "base": "XY",
+        "translation": [
+          0,
+          0,
+          0.01
+        ],
+        "rotation": [
+          0,
+          30,
+          0
+        ]
+      }
+    },
+    {
+      "command": "cad.plane.set",
+      "payload": {
+        "plane_id": "plane_fixture",
+        "translation": [
+          0,
+          0,
+          0.02
+        ]
+      }
+    },
+    {
+      "command": "cad.constraint.add",
+      "payload": {
+        "type": "MIDPOINT"
+      }
+    },
+    {
+      "command": "cad.constraint.set",
+      "payload": {
+        "constraint_id": "constraint_fixture",
+        "value": 0.02
+      }
+    },
+    {
+      "command": "cad.constraint.delete",
+      "payload": {
+        "constraint_id": "constraint_fixture"
+      }
+    },
+    {
+      "command": "cad.fillet",
+      "payload": {
+        "radius": 0.005
+      }
+    },
+    {
+      "command": "server.resume",
+      "payload": {
+        "session_key": "fixture-resume-1234567890ab"
       }
     }
   ],

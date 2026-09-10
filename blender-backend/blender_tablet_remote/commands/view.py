@@ -35,7 +35,15 @@ def _region_view():
     return rv3d
 
 
+def _sketch_locked():
+    from ..cad.runtime import runtime
+    return runtime.workspace and runtime.active_sketch_id is not None
+
+
 def orbit_delta(dx: float, dy: float) -> None:
+    if _sketch_locked():
+        pan_delta(dx, dy)
+        return
     _region_view()
     camera.orbit(dx, dy, ORBIT_SENSITIVITY)
 
@@ -60,7 +68,7 @@ def roll_delta(angle: float) -> None:
     -> escena horaria.
     """
     _region_view()
-    camera.roll(-angle)
+    if not _sketch_locked(): camera.roll(-angle)
 
 
 def _view_state() -> dict:
@@ -154,7 +162,7 @@ def axis(payload: dict) -> dict:
     if name not in valid:
         raise BadPayload(f"'axis' must be one of {', '.join(sorted(valid))}")
     _region_view()
-    camera.set_axis_view(name)
+    if not _sketch_locked(): camera.set_axis_view(name)
     return camera.as_dict()
 
 
@@ -167,6 +175,7 @@ def perspective(payload: dict) -> dict:
         mode = "ORTHO" if camera.perspective == "PERSP" else "PERSP"
     if mode not in ("PERSP", "ORTHO"):
         raise BadPayload("'mode' must be PERSP, ORTHO or TOGGLE")
+    if _sketch_locked(): mode = "ORTHO"
     changed = camera.perspective != mode
     camera.perspective = mode
     return dict(camera.as_dict(), changed=changed)
@@ -353,8 +362,8 @@ def set_view(payload: dict) -> dict:
         raise BadPayload("'perspective' must be PERSP or ORTHO")
     camera.apply(
         location=payload.get("location"),
-        rotation=rotation,
+        rotation=None if _sketch_locked() else rotation,
         distance=get_float(payload, "distance", camera.distance) if "distance" in payload else None,
-        perspective=str(projection).upper() if projection is not None else None,
+        perspective="ORTHO" if _sketch_locked() else str(projection).upper() if projection is not None else None,
     )
     return camera.as_dict()

@@ -5,7 +5,8 @@
 La tablet Android es una interfaz táctil para Blender, no un escritorio remoto.
 Blender conserva el motor 3D; Android muestra una cámara remota y envía intención
 adaptada a dedo y stylus. El alcance actual es Object Mode, Edit Mode, Sculpt
-(`docs/sculpt-workspace.md`) y el workspace CAD paramétrico (`docs/cad-workspace.md`).
+(`docs/sculpt-workspace.md`), CAD paramétrico (`docs/cad-workspace.md`) y Materiales
+(`docs/material-workspace.md`).
 
 ## Estructura
 
@@ -396,7 +397,7 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   destino en el árbol y reconstruye desde los parámetros. La transparencia se
   limita a GPUOffScreen mediante un contexto que restaura el sombreado siempre.
 - Un boceto sobre la cara superior sigue el plano/altura de su operación soporte.
-  Los soportes con dependientes no se borran ni convierten implícitamente.
+  Los soportes con dependientes no se borran; crear una copia de malla conserva sus referencias.
 - La iconografía se resuelve por intención desde `ui/Iconography.kt`; las pantallas no
   eligen símbolos ni mantienen tablas de iconos propias.
 
@@ -412,3 +413,57 @@ bash blender-backend/tools/build_addon.sh
 
 Antes de entregar, revisar el diff, compilar ambos artefactos afectados y comprobar que
 no quedan archivos o referencias temporales.
+
+## Materiales y capturas
+
+- Materiales es un workspace (`mode: MATERIAL`) y Blender permanece en Object.
+  Fija hasta 16 mallas seleccionadas; aislamiento y ambientes existen solo dentro
+  de la captura GPU y se restauran siempre, sin persistir visibilidad ni tocar `rv3d`.
+- Los presets se describen mediante Tablet Material Recipe v1: JSON acotado,
+  compilado a nodos nativos, sin código ejecutable. Contrato, esquema y ejemplos
+  en `docs/material-recipe-v1.md`; guía en `docs/material-workspace.md`.
+- Elegir material/color/acabado configura el pincel; Aplicar a todo sustituye la
+  base explícitamente con un undo. Los objetos enlazados ajenos conservan sus datos.
+- La pintura mezcla shaders mediante máscaras de 1024² empaquetadas y un atlas UV
+  privado; no reemplaza las UV existentes. Ocho capas de materiales distintos;
+  trazos consecutivos iguales continúan la superior. Borrar retira esa máscara.
+- Las previews de pintura tienen propietario/ID, copias de malla, material e imagen
+  y un único undo al confirmar. END no pinta otra muestra. Cancelación, desconexión
+  y save_pre restauran; un trazo vacío no crea undo. La cola Android ordena muestras
+  y navegación con una petición en vuelo, compartida con Sculpt sin mezclar comandos.
+- La profundidad de pintura procede de una pasada Workbench auxiliar con la cámara
+  remota; Eevee entrega el color. Las superficies ocultas no reciben muestras.
+- Archivo → Capturar escena produce un PNG desde GPUOffScreen en cualquier modo,
+  sin overlays nativos, marcadores ni UI. Conserva la preview y el aislamiento actual;
+  no crea undo. Android permite elegir dónde guardarlo mediante su selector de archivos.
+
+
+## Pulido de feedback (septiembre 2026)
+
+- CAD bloquea orientación y proyección durante el boceto; orbit desplaza la vista,
+  pan/zoom siguen activos. El origen reservado `ORIGIN/POINT` es fijo y seleccionable.
+- Fijar restringe solo puntos/extremos de aristas seleccionados; figura completa
+  fija todos sus parámetros. Selección múltiple comparte un undo. Punto medio y
+  simetría (último punto = centro) usan el mismo solver, también con el origen.
+- Construcción conserva restricciones y se excluye de los perfiles. El panel de
+  restricciones filtra IDs y roles compartidos con la selección; las cotas se
+  proyectan en backend y muestran unidades. Los bocetos tienen visibilidad propia.
+- Redondeo admite dos líneas o una esquina de rectángulo; convierte el rectángulo
+  a una cadena restringida y conserva las operaciones que usan el perfil.
+- Los cuerpos agrupan bocetos/operaciones independientes. Los planos guardados
+  admiten desplazamiento métrico y giro local XYZ en grados, con referencias a
+  boceto/cara superior. Una cara arbitraria guarda su marco capturado, sin índices
+  evaluados persistentes; su adquisición pasa por `commands/snap.py`.
+- `cad.convert` crea una copia de malla y sale a Object con ella seleccionada;
+  conserva el original, el documento y todos los dependientes. No elimina histórico.
+- Las extrusiones simples usan perímetro y tapas ordenados en quads. Huecos y
+  booleanos materializan parches en quads con puntos medios compartidos; las zonas
+  cóncavas se descomponen antes. Los operandos booleanos conservan su malla compacta:
+  nunca se realimenta la subdivisión de presentación a operaciones posteriores.
+- Materiales conserva tinte y acabado al cambiar de preset salvo valores explícitos.
+  Óxido/Suciedad/Arañazos configuran el pincel de detalle sin sustituir la base.
+  La pintura indexa muestras visibles por teselas y reutiliza atlas/profundidad
+  solo mientras su geometría/UV y cámara coincidan.
+- `server.resume` vincula una identidad privada Android con el workspace suspendido.
+  Desconexión cancela previews y restaura visibilidad; reconectar recupera cámara,
+  boceto y ajustes confirmados. Cargar otro archivo invalida la recuperación.

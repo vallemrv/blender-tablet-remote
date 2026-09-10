@@ -1,0 +1,12 @@
+{
+  "format": "tablet-material",
+  "version": 1,
+  "id": "blue-marble",
+  "label": "Mármol azul",
+  "color": "#DCE5EE",
+  "surface": {"roughness": 0.18, "coat": 0.3},
+  "patterns": [
+    {"kind": "bands", "scale": 3.5, "stretch": [1, 0.3, 1.4], "distortion": 8, "detail": 6, "color": "#245878", "amount": 0.65, "bump": 0.0002},
+    {"kind": "noise", "scale": 48, "detail": 3, "color": "#FFFFFF", "amount": 0.12}
+  ]
+}

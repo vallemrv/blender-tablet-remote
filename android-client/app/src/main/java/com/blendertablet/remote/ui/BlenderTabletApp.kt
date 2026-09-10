@@ -164,6 +164,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     val h264Size by vm.h264Size.collectAsStateWithLifecycle()
     val remoteFiles by vm.remoteFiles.collectAsStateWithLifecycle()
 
+    CaptureSceneDelivery(vm)
+
     var quickMenuAt by remember { mutableStateOf<Pair<Float, Float>?>(null) }
     // El ojo vive en el estado del ViewModel, no aquí: apagar los controles apaga
     // también los overlays del servidor, y esa parte no es local.
@@ -175,8 +177,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     var pendingDiscard by remember { mutableStateOf<PendingDiscard?>(null) }
     var modifiersOpen by remember { mutableStateOf(false) }
     var referencesOpen by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(state.blender.activeObject, state.blender.mode, state.blender.features.modifiers, state.blender.cad.workspace) {
-        if (state.blender.cad.workspace || !state.blender.features.modifiers || state.blender.mode != BlenderMode.OBJECT || state.blender.activeObjectType != "MESH") modifiersOpen = false
+    LaunchedEffect(state.blender.activeObject, state.blender.mode, state.blender.features.modifiers, state.blender.cad.workspace, state.blender.material.active) {
+        if (state.blender.material.active || state.blender.cad.workspace || !state.blender.features.modifiers || state.blender.mode != BlenderMode.OBJECT || state.blender.activeObjectType != "MESH") modifiersOpen = false
     }
 
     // El toast de error se auto-descarta: un aviso que no caduca es ruido permanente.
@@ -226,6 +228,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
         },
         onSceneScale = vm::setSceneScale,
         onReferences = { referencesOpen = true },
+        onCapture = vm::captureScene,
     )
 
     val session by vm.transformSession.collectAsStateWithLifecycle()
@@ -236,13 +239,14 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     // Hay una bandeja horizontal inferior ocupando el borde de abajo: la de
     // transformación, la de herramienta paramétrica o el aviso de Loop Cut esperando
     // toque. Mientras exista, el teclado de vistas se eleva para no solaparse.
+    val materialActive = state.blender.material.active
     val sculptActive = state.blender.mode == BlenderMode.SCULPT
-    val trayPresent = sculptActive || state.blender.cad.workspace || bottomTrayVisible(
+    val trayPresent = materialActive || sculptActive || state.blender.cad.workspace || bottomTrayVisible(
         session.active, toolSession.active, state.activeTool, state.loopCutAwaitingTap,
         toolSessionArmed = toolSession.armed,
     )
     val trayInset by animateDpAsState(
-        targetValue = if (sculptActive) 132.dp else if (state.blender.cad.workspace) 132.dp else if (trayPresent) Metrics.TrayInset else 0.dp,
+        targetValue = if (materialActive) 154.dp else if (sculptActive) 132.dp else if (state.blender.cad.workspace) 132.dp else if (trayPresent) Metrics.TrayInset else 0.dp,
         animationSpec = tween(160),
         label = "tray-inset",
     )
@@ -288,16 +292,16 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             h264Active = h264Active,
             h264Size = h264Size,
             input = viewportInput,
-            sculptEnabled = sculptActive && state.connection == ConnectionStatus.CONNECTED,
-            sculptStylusOnly = state.sculptStylusOnly,
-            sculptRadius = state.blender.sculpt.radius,
-            sculptPressureSize = state.blender.sculpt.pressureSize,
-            sculptCursorStyle = SculptCursorStyle(
+            sculptEnabled = (sculptActive || materialActive) && state.connection == ConnectionStatus.CONNECTED,
+            sculptStylusOnly = if (materialActive) state.materialStylusOnly else state.sculptStylusOnly,
+            sculptRadius = if (materialActive) state.blender.material.radius else state.blender.sculpt.radius,
+            sculptPressureSize = !materialActive && state.blender.sculpt.pressureSize,
+            sculptCursorStyle = if (materialActive) SculptCursorStyle() else SculptCursorStyle(
                 smooth = state.sculptSmooth || state.blender.sculpt.brush == "SMOOTH",
                 invert = state.sculptInvert,
                 mask = state.blender.sculpt.brush == "MASK",
             ),
-            cadDrawingEnabled = state.connection == ConnectionStatus.CONNECTED && state.blender.cad.workspace && ((state.blender.cad.activeSketchId != null && state.cadTool != null && state.cadTool != "MULTI") ||
+            cadDrawingEnabled = state.connection == ConnectionStatus.CONNECTED && state.blender.cad.workspace && ((state.blender.cad.activeSketchId != null && state.cadTool != null && state.cadTool !in listOf("MULTI", "PLANE_FACE")) ||
                 (state.blender.features.cad.sketchEditing && state.blender.cad.sessionActive && state.blender.cad.operation in listOf("EXTRUDE", "CUT"))),
             cadOverlay = if (state.blender.cad.workspace) state.blender.cad.overlay else emptyList(),
             shapeTool = if (state.blender.cad.workspace) ShapeTool.NONE else state.shapeTool,
@@ -307,14 +311,14 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 state.blender.features.knifeDrag,
             tweakActive = !state.blender.cad.workspace && state.activeTool == ActiveTool.TWEAK &&
                 state.blender.mode == BlenderMode.EDIT,
-            longPressEnabled = !sculptActive && !state.blender.cad.workspace && toolSession.input != "REPEAT_TAP" && viewportLongPressEnabled(session.active, toolSession.active),
+            longPressEnabled = !materialActive && !sculptActive && !state.blender.cad.workspace && toolSession.input != "REPEAT_TAP" && viewportLongPressEnabled(session.active, toolSession.active),
             repeatTap = toolSession.armed && toolSession.input == "REPEAT_TAP",
             independentTaps = state.blender.mode == BlenderMode.EDIT || state.blender.cad.workspace,
             // Los marcadores de transformación ya forman parte del fotograma.
             snapCandidate = if (state.blender.cad.workspace) null else toolSession.snapCandidate,
             cancelPickOnNavigation = toolSession.input == "FACE_PAIR",
             proportionalCircle = if (state.blender.cad.workspace) null else session.proportionalCircle,
-            navigationOrbitEnabled = (sculptActive || navigationOrbitVisible(
+            navigationOrbitEnabled = (materialActive || sculptActive || navigationOrbitVisible(
                 session.active,
                 toolSession.active,
                 state.activeTool,
@@ -370,7 +374,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     modifier = Modifier.align(Alignment.TopStart).padding(Metrics.EdgeMargin),
                 )
 
-                if (!state.blender.cad.workspace && !sculptActive) {
+                if (!materialActive && !state.blender.cad.workspace && !sculptActive) {
                 val modifiersAvailable = state.blender.features.modifiers &&
                     state.blender.mode == BlenderMode.OBJECT && state.blender.activeObjectType == "MESH"
 
@@ -515,6 +519,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 }
                 if (state.blender.cad.workspace) CadWorkspace(state, vm)
                 if (sculptActive) SculptWorkspace(state, vm)
+                if (materialActive) MaterialWorkspace(state, vm)
                 if (referencesOpen) ReferencePanel(Modifier.align(Alignment.TopCenter).padding(top = 76.dp),
                     onDismiss = { referencesOpen = false })
 

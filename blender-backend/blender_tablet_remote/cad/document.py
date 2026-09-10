@@ -18,7 +18,7 @@ def uid(prefix):
 
 
 def new_document():
-    return dict(version=VERSION, revision=0, id=uid('doc'), sketches=[], features=[])
+    return dict(version=VERSION, revision=0, id=uid('doc'), sketches=[], features=[], planes=[], bodies=[dict(id=uid('body'),name='Cuerpo 1')])
 
 
 def loads(raw):
@@ -32,6 +32,9 @@ def loads(raw):
             raise ValueError('missing collections')
         if not isinstance(doc.get('id'),str) or not doc['id']:
             raise ValueError('invalid document ID')
+        doc.setdefault('planes',[])
+        doc.setdefault('bodies',[dict(id='body_'+doc['id'],name='Cuerpo 1')])
+        if not isinstance(doc['planes'],list) or not isinstance(doc['bodies'],list) or not doc['bodies']: raise ValueError('invalid bodies/planes')
         ids = {doc['id']}
         if not isinstance(doc.get('revision', 0), int) or doc.get('revision', 0) < 0:
             raise ValueError('invalid revision')
@@ -39,8 +42,17 @@ def loads(raw):
             if not isinstance(value, str) or not value or value in ids:
                 raise ValueError('duplicate or missing ID')
             ids.add(value)
+        for body in doc['bodies']:
+            unique(body['id'])
+            if not isinstance(body.get('name'),str): raise ValueError('invalid body name')
+        for plane in doc['planes']:
+            unique(plane['id'])
+            validate_plane(plane)
         for sketch in doc['sketches']:
             unique(sketch['id'])
+            sketch.setdefault('body_id',doc['bodies'][0]['id'])
+            find(doc,'bodies',sketch['body_id'])
+            if not isinstance(sketch.get('visible',True),bool): raise ValueError('invalid visibility')
             if not isinstance(sketch.get('name'),str):
                 raise ValueError('invalid sketch name')
             if sketch['plane'] not in PLANES:
@@ -57,6 +69,8 @@ def loads(raw):
             if not isinstance(feature.get('name'),str):
                 raise ValueError('invalid feature name')
             sketch, _ = profile(doc, feature['profile_id'])
+            feature.setdefault('body_id',sketch['body_id'])
+            find(doc,'bodies',feature['body_id'])
             if feature['type'] not in ('EXTRUDE', 'CUT') or sketch['id'] != feature['sketch_id'] or not isinstance(feature['enabled'], bool):
                 raise ValueError('invalid feature')
             number(feature['depth'], positive=True)
@@ -106,8 +120,8 @@ def closed_entities(sketch):
     A chain profile identity derives from its member IDs, never mesh topology.
     """
     import hashlib
-    result = [e for e in sketch['entities'] if e['type'] in ('RECTANGLE', 'CIRCLE')]
-    edges = [e for e in sketch['entities'] if e['type'] in ('LINE', 'ARC')]
+    result = [e for e in sketch['entities'] if not e.get('construction',False) and e['type'] in ('RECTANGLE', 'CIRCLE')]
+    edges = [e for e in sketch['entities'] if not e.get('construction',False) and e['type'] in ('LINE', 'ARC')]
     remaining = {e['id']: e for e in edges}
     def near(a, b):
         return math.dist(a,b) < 1e-7
@@ -175,6 +189,7 @@ def contains(ring, point):
 
 
 def validate_entity(e):
+    if not isinstance(e.get('construction',False),bool): raise BadPayload('construction debe ser booleano')
     if e.get('type') not in TYPES:
         raise BadPayload('Tipo de entidad CAD no compatible')
     for key in FIELDS[e['type']]:
@@ -186,20 +201,81 @@ def validate_entity(e):
     return e
 
 
+def base_frame(plane='XY', offset=0):
+    x,y,n={'XY':([1,0,0],[0,1,0],[0,0,1]), 'XZ':([1,0,0],[0,0,1],[0,-1,0]),
+           'YZ':([0,1,0],[0,0,1],[1,0,0])}[plane]
+    return dict(origin=[v*offset for v in n],x=x,y=y,normal=n)
+
+
+def frame(sketch):
+    if sketch.get('plane_id') or sketch.get('support_id'): return sketch['frame']
+    return base_frame(sketch['plane'],sketch.get('offset',0))
+
+
+def validate_plane(plane):
+    if not isinstance(plane.get('name'),str) or plane.get('base','XY') not in PLANES:
+        raise BadPayload('Plano no válido')
+    for key in ('translation','rotation'):
+        values=plane.get(key,[0,0,0])
+        if not isinstance(values,list) or len(values)!=3: raise BadPayload('El plano requiere tres coordenadas y tres ángulos')
+        for v in values: number(v)
+    if 'face_frame' in plane:
+        import numpy as np
+        f=plane['face_frame']
+        for key in ('origin','x','y','normal'):
+            if not isinstance(f.get(key),list) or len(f[key])!=3: raise BadPayload('Referencia de cara inválida')
+            for v in f[key]: number(v)
+        basis=np.array([f['x'],f['y'],f['normal']])
+        if not np.allclose(basis@basis.T,np.eye(3),atol=1e-5) or np.linalg.det(basis)<.999:
+            raise BadPayload('La referencia debe ser ortonormal')
+
+
 def resolve_supports(doc):
-    """Top-plane attachment follows the referenced feature's dimensions."""
+    """Resolve datum planes and associative top faces without evaluated mesh IDs."""
+    import numpy as np
     visiting=set(); resolved=set()
+    def enter(item):
+        if item['id'] in visiting: raise BadPayload('Dependencia circular entre planos y bocetos')
+        visiting.add(item['id'])
+    def finish(item):
+        visiting.remove(item['id']); resolved.add(item['id'])
+    def supported(feature_id):
+        f=find(doc,'features',feature_id)
+        source=find(doc,'sketches',f['sketch_id']); resolve(source)
+        result=copy.deepcopy(frame(source))
+        depth=f['depth'] if f['type']=='EXTRUDE' else 0
+        result['origin']=[v+n*depth for v,n in zip(result['origin'],result['normal'])]
+        return result,source
+    def resolve_plane(plane):
+        if plane['id'] in resolved: return
+        enter(plane); validate_plane(plane)
+        if plane.get('reference_sketch_id'):
+            source=find(doc,'sketches',plane['reference_sketch_id']); resolve(source); base=frame(source)
+        elif plane.get('support_id'): base,_=supported(plane['support_id'])
+        else: base=plane.get('face_frame') or base_frame(plane.get('base','XY'))
+        basis=np.array([base['x'],base['y'],base['normal']],dtype=float).T
+        origin=np.array(base['origin'])+basis@np.array(plane.get('translation',[0,0,0]))
+        rx,ry,rz=map(math.radians,plane.get('rotation',[0,0,0]))
+        cx,sx,cy,sy,cz,sz=math.cos(rx),math.sin(rx),math.cos(ry),math.sin(ry),math.cos(rz),math.sin(rz)
+        rot=np.array([[cz,-sz,0],[sz,cz,0],[0,0,1]])@np.array([[cy,0,sy],[0,1,0],[-sy,0,cy]])@np.array([[1,0,0],[0,cx,-sx],[0,sx,cx]])
+        basis=basis@rot
+        plane['frame']=dict(origin=origin.tolist(),x=basis[:,0].tolist(),y=basis[:,1].tolist(),normal=basis[:,2].tolist())
+        finish(plane)
     def resolve(sketch):
         if sketch['id'] in resolved: return
-        if sketch['id'] in visiting: raise BadPayload('Dependencia circular entre bocetos')
-        visiting.add(sketch['id'])
-        if sketch.get('support_id'):
-            f=find(doc,'features',sketch['support_id'])
-            source=find(doc,'sketches',f['sketch_id'])
-            resolve(source)
+        enter(sketch)
+        if sketch.get('plane_id'):
+            plane=find(doc,'planes',sketch['plane_id']); resolve_plane(plane)
+            sketch['frame']=copy.deepcopy(plane['frame'])
+        elif sketch.get('support_id'):
+            supported_frame,source=supported(sketch['support_id'])
+            feature=find(doc,'features',sketch['support_id'])
             sketch['plane']=source['plane']
-            sketch['offset']=source.get('offset',0)+(f['depth'] if f['type']=='EXTRUDE' else 0)
-        visiting.remove(sketch['id']); resolved.add(sketch['id'])
+            sketch['offset']=source.get('offset',0)+(feature['depth'] if feature['type']=='EXTRUDE' else 0)
+            sketch['frame']=supported_frame
+        else: sketch['frame']=base_frame(sketch['plane'],sketch.get('offset',0))
+        finish(sketch)
+    for plane in doc.get('planes',[]): resolve_plane(plane)
     for sketch in doc['sketches']: resolve(sketch)
 
 
@@ -207,4 +283,5 @@ def public(doc):
     result = copy.deepcopy(doc)
     for sketch in result['sketches']:
         sketch['profiles'] = profiles(sketch)
+        sketch['plane_label'] = find(result,'planes',sketch['plane_id'])['name'] if sketch.get('plane_id') else sketch['plane']
     return result

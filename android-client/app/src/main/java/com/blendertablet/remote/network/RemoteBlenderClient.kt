@@ -37,6 +37,10 @@ data class StreamEndpoint(
 data class StreamAlternative(val format: String, val path: String)
 
 interface RemoteBlenderClient {
+    val capturePng: StateFlow<String?>
+    fun clearCapture()
+    fun materialCommand(name: String, payload: Map<String, Any?> = emptyMap())
+    fun captureScene()
     fun sculptCommand(name: String, payload: Map<String, Any?> = emptyMap()) {}
 
     fun cadCommand(name: String, payload: Map<String, Any?> = emptyMap())

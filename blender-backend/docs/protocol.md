@@ -308,7 +308,7 @@ seleccionada la copia, equivalente a `Shift+D` antes de moverla.
 
 ### Modos
 
-`mode.object`, `mode.edit`, `mode.toggle`, `mode.set` (`mode`: `OBJECT`, `EDIT`, `CAD` o `SCULPT`).
+`mode.object`, `mode.edit`, `mode.toggle`, `mode.set` (`mode`: `OBJECT`, `EDIT`, `CAD`, `SCULPT` o `MATERIAL`).
 
 ### Selección
 
@@ -1393,7 +1393,8 @@ de banda y configuración de latencia interactiva.
 `features.cad` anuncia `version:1`, `planes:[XY,XZ,YZ]`,
 `entities:[LINE,RECTANGLE,SQUARE,CIRCLE,ARC]`, `features:[EXTRUDE,CUT]`,
 `sketch_editing:true`, `fillet:true`, `length_unit:METERS` y `constraints` con
-`COINCIDENT,HORIZONTAL,VERTICAL,PARALLEL,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,RADIUS,FIX`.
+`COINCIDENT,HORIZONTAL,VERTICAL,PARALLEL,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,RADIUS,FIX,MIDPOINT,SYMMETRIC`.
+También anuncia `construction`, `datum_planes`, `bodies`, `origin` y `mesh_copy`.
 Las extensiones se negocian por capabilities; se instala el APK junto con el ZIP.
 `mode.set {mode:CAD}` activa el espacio CAD (Blender permanece en Object).
 OBJECT/EDIT salen de CAD y cancelan cualquier preview. Los objetos evaluados CAD
@@ -1420,7 +1421,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | Comando | Payload | Efecto |
 | --- | --- | --- |
 | `cad.state` | `{}` | Consulta documento y preview |
-| `cad.sketch.create` | `{plane:"XY",offset?}` o `{support_id}` | Crea y activa sketch sobre plano/cara superior |
+| `cad.sketch.create` | `{plane:"XY",offset?,body_id?}` o `{support_id}`, `{plane_id}`, `{reference_sketch_id}` | Crea y activa boceto; reutiliza planos sin duplicar geometría |
 | `cad.sketch.activate` | `{sketch_id}` | Edita sketch existente, encuadra su plano |
 | `cad.sketch.finish` | `{}` | Sale del dibujo conservando perfiles seleccionables |
 | `cad.select` | `{kind:"ENTITY\|PROFILE\|FEATURE",id,part?,additive?}` o `{u,v,additive?}` | Selección de puntos/aristas o perfiles; aditiva alterna pertenencia |
@@ -1434,17 +1435,23 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.session.cancel` | `{}` | Restaura documento y geometría originales |
 | `cad.feature.set` | `{feature_id,depth?,enabled?}` | Edita o suprime feature |
 | `cad.feature.delete` | `{feature_id}` | Borra feature y resultado |
-| `cad.convert` | `{feature_id}` | Convierte resultado a malla independiente |
-
-| `cad.settings` | `{step?,increment?}` | Paso métrico positivo y snap, sin undo ni cambio geométrico |
+| `cad.convert` | `{feature_id}` | Crea una copia de malla seleccionada y sale a Object; conserva documento y operaciones, incluidos dependientes |
+| `cad.settings` | `{step?,increment?,construction?,show_scene?}` | Paso métrico positivo y snap, sin undo ni cambio geométrico |
 | `cad.drag.begin` | `{u,v}` | Adquiere un punto/arista; conserva el grupo si ya pertenece a él |
 | `cad.drag.update` | `{u,v}` | Reconstruye y resuelve restricciones desde baseline |
 | `cad.drag.end` | `{}` | Confirma último candidato con un undo; un toque no crea undo |
 | `cad.constraint.add` | `{type,value?}` | Restringe la selección; DISTANCE/RADIUS requieren metros |
-| `cad.constraint.set` | `{constraint_id,value}` | Cambia una cota persistente y resuelve dependientes |
-| `cad.constraint.delete` | `{constraint_id}` | Elimina una restricción del sketch activo |
-| `cad.fillet` | `{radius}` | Redondea dos líneas conectadas seleccionadas |
+| `cad.constraint.set` | `{constraint_id,value,sketch_id?}` | Cambia una cota persistente y resuelve dependientes |
+| `cad.constraint.delete` | `{constraint_id,sketch_id?}` | Elimina una restricción del sketch activo |
+| `cad.fillet` | `{radius}` | Redondea dos líneas conectadas, una esquina de rectángulo o dos lados contiguos; conserva restricciones y operaciones dependientes |
 | `cad.sketch.delete` | `{sketch_id}` | Elimina un boceto sin operaciones dependientes |
+| `cad.sketch.visibility` | `{sketch_id,visible}` | Muestra/oculta el overlay; el boceto activo siempre se ve |
+| `cad.entity.construction` | `{construction}` | Cambia las figuras seleccionadas a auxiliares o perfiles; rechaza romper una operación dependiente |
+| `cad.body.create` | `{}` | Crea y activa otro cuerpo independiente |
+| `cad.body.activate` | `{body_id}` | Elige el cuerpo de los nuevos bocetos, sin undo |
+| `cad.plane.create` | `{base?,translation?,rotation?,reference_sketch_id?,support_id?}` o `{u,v}` | Plano persistente; posición en metros y ángulos locales XYZ en grados; un toque usa una cara plana visible |
+| `cad.plane.set` | `{plane_id,translation?,rotation?}` | Ajusta el plano y reconstruye bocetos/sólidos dependientes |
+
 
 `selection.items` contiene `{kind,id,part}`; `selection.kind/id/part` conserva el
 último elemento para el inspector. Roles: LINE START/END/BODY; RECTANGLE P0..P3 y
@@ -1456,7 +1463,17 @@ nunca de índices evaluados. La línea adquiere extremos mediante la política c
 de `commands/snap.py` y guarda restricciones COINCIDENT al confirmar.
 
 Cada sketch contiene `constraints:[{id,type,refs:[{id,part}],value?,values?}]`.
-FIX guarda `values` de todos los parámetros de una entidad; no fija solo un punto.
+FIX guarda `points:{rol:[x,y]}` para los puntos/los extremos de una arista,
+y `values` únicamente al seleccionar la figura completa. Una selección múltiple
+crea una fijación por referencia dentro de un único undo. El origen reservado
+`{id:"ORIGIN",part:"POINT"}` existe en cada boceto, es siempre (0,0) y nunca es un
+parámetro del solver. MIDPOINT recibe punto + lado (en cualquier orden al crear);
+SYMMETRIC recibe tres puntos, con el centro en último lugar. COINCIDENT admite el
+origen. La construcción participa en las restricciones y queda fuera de perfiles.
+`overlay` anuncia `construction` para líneas discontinuas y `label`, `label_point`,
+`label_offset` para cotas/etiquetas; las entradas `kind:DIMENSION` no son seleccionables.
+Las medidas del overlay usan la unidad de escena. El panel Android filtra por IDs
+y roles compartidos con la selección, incluidos extremos de aristas.
 El solver admite 300 parámetros y resuelve el conjunto completo; una cota escrita
 es exacta y el arrastre proyecta el objetivo sobre la libertad permitida. Los
 conflictos devuelven `cad_constraint_conflict`, sin cambiar la escena persistente.
@@ -1466,7 +1483,7 @@ No se anuncia un conteo de grados de libertad de un solver general.
 recorre `gesture / 0.04 * step`; Incremento lo redondea a pasos enteros. La
 profundidad permanece positiva (mínimo 1e-7 m). CUT extruye en dirección negativa
 desde el plano del sketch y resta su volumen de `target_id`; al evaluar oculta el
-resultado previo consumido. No admite borrar/convertir soportes con dependientes.
+resultado previo consumido. No admite borrar soportes con dependientes; crear una copia de malla sí los conserva.
 La preview CUT anuncia `session.transparent:true`; solo la captura GPU usa rayos X
 al 35 %, restaurando el sombreado inmediatamente incluso si falla el render.
 
@@ -1478,6 +1495,12 @@ como huecos. Contornos abiertos no se pueden extruir; intersecciones/tangencias 
 valores no finitos o degenerados producen errores explícitos sin perder la última
 geometría válida. El kernel V1 genera malla nativa; no anuncia STEP, BREP ni solver
 general. Rectángulos conservan lados horizontales/verticales y círculos diámetro.
+La malla materializada tiene quads: perímetro ordenado para extrusiones simples;
+para huecos/booleanos, parches convexos con centros y puntos medios compartidos.
+Se conserva la frontera sin grietas y los parches cóncavos se descomponen antes.
+Esta malla de presentación/exportación no es el operando de las operaciones
+siguientes, que usan la evaluación compacta del kernel para evitar crecimiento
+exponencial al encadenar vaciados.
 
 `document.revision` aumenta con cada transacción confirmada y vuelve al valor
 correspondiente al usar undo/redo. `session.depth` describe la preview de EXTRUDE/CUT y
@@ -1493,7 +1516,24 @@ y no altera el registro del aislamiento Object. Salir de CAD, desconectar su
 propietario o detener el servidor restaura la visibilidad. Guardar y los puntos de
 undo registran la visibilidad original; al terminar se reaplica la vista CAD. Los
 handlers de guardado cubren también Guardar desde Blender. Convertir a malla sale
-de CAD y deja seleccionado el objeto convertido.
+de CAD y deja seleccionada una copia con datos propios. El original conserva su
+protección CAD y el árbol no pierde ninguna operación. `show_scene:true` permite
+ver referencias ajenas durante la elección de planos sin borrar sus flags previos.
+
+`document.planes` contiene `{id,name,base,translation:[x,y,z],rotation:[rx,ry,rz]}`
+con referencia opcional a `reference_sketch_id`, `support_id` o `face_frame`.
+La evaluación produce una base ortonormal `{origin,x,y,normal}` en metros.
+Un boceto con `plane_id` sigue ese plano; los planos relativos a otro boceto o a
+una cara superior siguen a su soporte. Una cara elegida por toque guarda su marco
+en ese instante, sin persistir índices de polígonos ni prometer seguimiento de
+cambios topológicos posteriores. Se rechazan ciclos de referencias.
+`document.bodies` contiene `{id,name}`; bocetos y operaciones llevan `body_id`.
+Los documentos anteriores se normalizan a un cuerpo inicial al leerlos.
+`active_body_id`, `construction` y `show_scene` son estado del workspace.
+
+Mientras `active_sketch_id` esté activo, la cámara remota permanece ortogonal al
+boceto: orbit se traduce a pan, roll/vistas de eje no cambian orientación y la
+perspectiva permanece ORTHO. Zoom/pan siguen funcionando y no escriben en `rv3d`.
 
 Al entrar en CAD con un documento existente se encuadra su sketch activo válido
 o el primero, sin activar la edición. Repetir CAD mientras ya está abierto conserva
@@ -1583,3 +1623,91 @@ Las imágenes de **Referencias** son copias privadas de la tablet y no amplían 
 protocolo ni se insertan en el documento CAD o `.blend`. Véanse las guías
 [de escultura](../../docs/sculpt-workspace.md) y
 [de referencias](../../docs/reference-images.md).
+
+## Materiales y captura de escena (v1)
+
+`features.materials` anuncia `{version:1, recipe_format:"tablet-material",
+recipe_version:1, paint:"UV_MASK", mask_size:1024, max_layers:8, max_objects:16}`.
+`features.scene_capture` anuncia `{version:1, mime:"image/png", camera:"TABLET",
+overlays:false}`. Se añade `MATERIAL` a `enums.mode`; el modo nativo de Blender
+continúa siendo Object. El snapshot de escena incluye `material` y anuncia
+`mode: "MATERIAL"` durante el workspace.
+
+| Comando | Payload | Resultado |
+|---|---|---|
+| `mode.set` | `{mode:"MATERIAL"}` | Aísla la selección actual de 1–16 mallas; `{mode,material}` |
+| `material.state` | `{}` | `{material: estado}` |
+| `material.catalog` | `{}` | `{format,version,presets:[recetas completas]}` |
+| `material.import` | `{recipe: receta}` | Guarda/actualiza un preset personalizado en la escena; `{material}`; un undo |
+| `material.settings` | Campos opcionales descritos debajo | Configura el siguiente pincel/aplicación; `{material}`; no cambia la base |
+| `material.apply` | `{}` | Asigna la receta/color/acabado a todo el grupo; `{material}`; un undo |
+| `material.stroke` | `{phase,stroke_id,points}` | `{finished:bool}`; fases `begin/update/end/cancel` |
+| `scene.capture` | `{}` | `{mime:"image/png",width,height,png_base64}` |
+
+Estado `material`: `available`, `active`, `targets` (nombres fijados al entrar),
+`preset`, `color`, `finish`, `erase`, `radius`, `strength`, `environment`,
+`paint_ready`, `presets:[{id,label,color}]`, `finishes:[{id,label}]`,
+`environments:[{id,label}]`. Se recibe desde `scene.get_state` y los snapshots
+`scene.changed`; las respuestas de `material.stroke` no se interpretan como escenas.
+
+Settings: `preset` (ID del catálogo), `color` (`#RRGGBB` sRGB), `finish`
+(`natural/polished/worn`), `erase` (booleano), `radius` (0,005–0,25, fracción de
+altura del vídeo), `strength` (0–1), `environment` (`studio/day/warm/soft`). Elegir
+preset restaura su color y el acabado Natural. Se validan todos los campos antes
+de cambiar el estado. Importar selecciona el nuevo preset y su color.
+
+Cada muestra lleva `{u,v,pressure}` normalizados en `[0,1]`, origen arriba a la izquierda.
+Hasta 128 muestras por petición; los campos de tiempo enviados por Android se ignoran
+porque el orden ya lo fija el canal. `stroke_id` es un texto de 1–80 caracteres.
+`begin` abre un baseline; `update` prolonga el recorrido; `end` no sondea ni pinta
+puntos adicionales y confirma lo visible. `cancel`, desconexión, guardado o una
+intención incompatible restauran la preview. Un trazo sin cambios no crea undo.
+
+La sesión tiene propietario y no admite mutaciones de otro cliente. Las sesiones
+transform/tool/CAD/Sculpt son excluyentes con la pintura. Android reutiliza la cola
+ordenada de trazos con una petición en vuelo: recuperarse de un error de
+`material.stroke` envía `material.stroke/cancel`, nunca `sculpt.stroke`.
+
+La máscara se proyecta contra las posiciones de la superficie evaluada y la
+profundidad de GPUOffScreen con la cámara remota. Workbench proporciona esa
+profundidad en una captura auxiliar; Eevee proporciona el color. Los cambios de
+sombreado/visibilidad se restauran incluso ante errores. No se escribe `rv3d`.
+Las UV privadas no sustituyen las UV del artista. Materiales e imágenes confirmados
+son inmutables entre pasos de undo; cada nueva preview usa copias propias. Las
+imágenes se empaquetan antes de confirmar. Repetir un material en la capa superior
+continúa su máscara; cambiarlo crea otra capa (hasta ocho).
+
+`scene.capture` se ejecuta en el pump, usa la misma cámara y resolución del vídeo,
+y devuelve un PNG sin overlays o marcadores adicionales. No necesita consumidores
+HTTP ni cambia el transporte activo. Conserva las previews. Android guarda el PNG
+mediante su selector de documentos. Una captura dentro de un workspace aislado
+incluye ese aislamiento, como la imagen de la tablet.
+
+Especificación replicable, esquema y ejemplos de recetas:
+[`docs/material-recipe-v1.md`](../../docs/material-recipe-v1.md).
+Guía y límites de pintura: [`docs/material-workspace.md`](../../docs/material-workspace.md).
+
+
+## Recuperación del workspace tras reconectar
+
+`features.workspace_resume:true` anuncia `server.resume {session_key}`. Android
+persiste una clave aleatoria privada (24–80 caracteres alfanuméricos, `_` o `-`)
+y la registra después de recibir capabilities en cada conexión autenticada.
+El comando devuelve un snapshot de escena y `restored:boolean`.
+Al perder el socket se cancelan todas las previews y se restaura la visibilidad,
+conservando hasta 16 estados de workspace en memoria. La misma instalación puede
+recuperar CAD (boceto, cuerpo, selección confirmada, cámara y ajustes) o Materiales
+(objetos y pincel) si sigue siendo la misma escena y ningún workspace ajeno está
+activo. Los modos nativos Object/Edit/Sculpt ya sobreviven a la desconexión.
+La carga de otro archivo invalida los estados. La clave no sustituye al token de
+autenticación ni se guarda en el `.blend`.
+
+En Materiales, `material.settings` conserva tinte y acabado cuando se omiten,
+incluso si cambia `preset`. Cada preset del estado anuncia `category:base|detail`.
+Óxido, Suciedad y Arañazos son recetas para detalle; el selector configura también
+su color explícito y acabado natural en el mismo gesto. Elegirlos no sustituye
+la base; únicamente `material.apply` aplica a todo. El cálculo de pintura usa
+proyección/visibilidad por trazo y un índice de teselas; el atlas se reutiliza por
+identidad de geometría/UV evaluadas, invalidándose tras editar la malla en el PC.
+La profundidad se reutiliza con cámara y geometría idénticas; cambia al navegar
+o editar, y permanece fija durante el trazo cuya cámara también es fija.

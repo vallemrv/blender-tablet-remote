@@ -105,6 +105,7 @@ class ViewportCapture:
         self.quality = 70
         self._sculpt_depth = None
         self._offscreen = None
+        self._material_depth_offscreen = None
         self._offscreen_size = (0, 0)
 
         self._last_capture = 0.0
@@ -215,7 +216,7 @@ class ViewportCapture:
 
     # ---------------------------------------------------------------- captura
 
-    def _grab_offscreen(self) -> bool:
+    def _grab_offscreen(self, clean=False):
         found = _find_view3d_space()
         if found is None:
             return False
@@ -225,7 +226,7 @@ class ViewportCapture:
         width = max(2, int(region.width * scale) & ~1)   # pares: los encoders lo agradecen
         height = max(2, int(region.height * scale) & ~1)
 
-        if not self.encoder.ensure(width, height, self.fps, self.quality, self.wanted_formats()):
+        if not clean and not self.encoder.ensure(width, height, self.fps, self.quality, self.wanted_formats()):
             self.enabled = False
             return False
 
@@ -245,9 +246,31 @@ class ViewportCapture:
         camera.sync_from_region(rv3d)
 
         from ..cad.runtime import runtime as cad_runtime
-        with _multires_surface(), _sculpt_grid(space), offscreen.bind(), cad_runtime.preview_shading(space):
+        from ..materials.runtime import runtime as materials
+        with _multires_surface(), _sculpt_grid(space), offscreen.bind(), cad_runtime.preview_shading(space), materials.presentation(space, clean):
             fb = gpu.state.active_framebuffer_get()
             fb.clear(color=(0.0, 0.0, 0.0, 1.0), depth=1.0)
+            if materials.needs_depth(camera.perspective_matrix(rv3d), width, height):
+                # Eevee's final color pass does not expose its scene depth on this
+                # framebuffer. Obtain visibility with the same evaluated geometry
+                # and camera through Workbench before drawing the material color.
+                saved_type, saved_xray = space.shading.type, space.shading.show_xray
+                try:
+                    space.shading.type = 'SOLID'
+                    space.shading.show_xray = False
+                    if self._material_depth_offscreen is None:
+                        self._material_depth_offscreen = gpu.types.GPUOffScreen(width, height)
+                    depth_screen = self._material_depth_offscreen
+                    with depth_screen.bind():
+                        depth_fb = gpu.state.active_framebuffer_get()
+                        depth_fb.clear(color=(0., 0., 0., 1.), depth=1.)
+                        depth_screen.draw_view3d(bpy.context.scene, bpy.context.view_layer, space, region,
+                            camera.view_matrix(), camera.projection_matrix(rv3d), do_color_management=True)
+                        materials.capture_depth(depth_fb, camera.perspective_matrix(rv3d), width, height)
+                finally:
+                    space.shading.type, space.shading.show_xray = saved_type, saved_xray
+                fb = gpu.state.active_framebuffer_get()
+                fb.clear(color=(0.0, 0.0, 0.0, 1.0), depth=1.0)
             offscreen.draw_view3d(
                 bpy.context.scene,
                 bpy.context.view_layer,
@@ -265,11 +288,15 @@ class ViewportCapture:
                                       width, height)
             else:
                 self._sculpt_depth = None
-            draw_transform_markers(rv3d, width, height)
+            if not clean and not materials.active:
+                draw_transform_markers(rv3d, width, height)
             buffer = fb.read_color(0, 0, width, height, 4, 0, "UBYTE")
 
         # `buffer` es un gpu.types.Buffer; bytes() lo copia y deja que el resto del
         # trabajo ocurra fuera del hilo principal.
+        if clean:
+            from .png import encode_png
+            return encode_png(bytes(buffer), width, height), width, height
         self.encoder.submit(bytes(buffer))
         return True
 
@@ -301,6 +328,9 @@ class ViewportCapture:
             return self._offscreen
         if self._offscreen is not None:
             self._offscreen.free()
+        if self._material_depth_offscreen is not None:
+            self._material_depth_offscreen.free()
+            self._material_depth_offscreen = None
         self._offscreen = gpu.types.GPUOffScreen(width, height)
         self._offscreen_size = (width, height)
         log.info("viewport capture at %dx%d", width, height)
@@ -313,6 +343,9 @@ class ViewportCapture:
         self.enabled = False
         self._sculpt_depth = None
         self.encoder.stop()
+        if self._material_depth_offscreen is not None:
+            self._material_depth_offscreen.free()
+            self._material_depth_offscreen = None
         if self._offscreen is not None:
             try:
                 self._offscreen.free()

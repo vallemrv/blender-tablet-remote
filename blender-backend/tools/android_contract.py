@@ -30,4 +30,4 @@ for item in fixture['commands']:
         assert '"'+item['command']+'"' in android, 'Android missing '+item['command']
 for key in ('active_sketch_id','can_confirm','profile_id'):
     assert '"'+key+'"' in android,key
-print('CAD v1: capability, 17 commands and state fixture match backend + Android.')
+print(f'CAD v1: capability, {len(fixture["commands"])} commands and state fixture match backend + Android.')

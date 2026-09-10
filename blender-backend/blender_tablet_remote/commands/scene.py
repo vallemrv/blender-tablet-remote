@@ -20,6 +20,20 @@ def get_state(payload: dict) -> dict:
     return result
 
 
+@command("scene.capture")
+def capture(payload: dict) -> dict:
+    import base64
+    from .. import bridge
+    from ..errors import CommandError
+    if bridge._capture is None:
+        raise CommandError('La captura requiere el servidor de vídeo', code='no_viewport')
+    result = bridge._capture._grab_offscreen(clean=True)
+    if not result:
+        raise CommandError('No hay una vista 3D disponible', code='no_viewport')
+    data, width, height = result
+    return {'mime':'image/png','width':width,'height':height,'png_base64':base64.b64encode(data).decode('ascii')}
+
+
 @command("scene.list_objects")
 def list_objects(payload: dict) -> dict:
     return {"objects": state.scene_objects()}

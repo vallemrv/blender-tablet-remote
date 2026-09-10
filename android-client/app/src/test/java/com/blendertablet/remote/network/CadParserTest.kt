@@ -129,4 +129,25 @@ class CadParserTest {
         assertEquals(listOf("TANGENT", "COINCIDENT"), caps.constraints)
     }
 
+    @Test fun constructionPlanesBodiesDimensionsAndConstraintRolesSurvive() {
+        val state = CadParser.state(JSONObject("""{
+          "version":1,"workspace":true,"construction":true,"active_body_id":"body","show_scene":true,"active_sketch_id":"s",
+          "document":{"bodies":[{"id":"body","name":"Carcasa"}],
+            "planes":[{"id":"plane","name":"Inclinado","translation":[0,0,0.01],"rotation":[0,30,0]}],
+            "sketches":[{"id":"s","body_id":"body","plane_id":"plane","plane_label":"Inclinado","visible":false,
+              "entities":[{"id":"line","type":"LINE","construction":true}],
+              "constraints":[{"id":"mid","type":"MIDPOINT","refs":[{"id":"ORIGIN","part":"POINT"},{"id":"line","part":"BODY"}]}]}]},
+          "overlay":[{"id":"mid","kind":"DIMENSION","label":"20 mm","label_point":[0.4,0.6]},{"id":"line","construction":true}]}
+        """))
+        assertTrue(state.construction && state.showScene)
+        assertEquals("Carcasa",state.bodies.single().name)
+        assertEquals(30.0,state.planes.single().rotation[1],0.0)
+        assertFalse(state.activeSketch!!.visible)
+        assertEquals("Inclinado",state.activeSketch!!.planeLabel)
+        assertTrue(state.activeSketch!!.entities.single().construction)
+        assertEquals("POINT",state.activeSketch!!.constraints.single().refs.first().part)
+        assertEquals("20 mm",state.overlay.first().label)
+        assertTrue(state.overlay.last().construction)
+    }
+
 }

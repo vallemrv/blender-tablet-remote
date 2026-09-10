@@ -446,6 +446,7 @@ data class BlenderState(
     val mode: BlenderMode = BlenderMode.OBJECT,
     val cad: CadState = CadState(),
     val sculpt: SculptState = SculptState(),
+    val material: MaterialState = MaterialState(),
     val activeObject: String? = null,
     val selectedObjects: List<String> = emptyList(),
     val selectionMode: SelectionMode = SelectionMode.VERTEX,
@@ -517,6 +518,7 @@ data class InputDebug(
 )
 
 data class AppUiState(
+    val materialStylusOnly: Boolean = true,
     val connection: ConnectionStatus = ConnectionStatus.DISCONNECTED,
     /** Reintentos encadenados sin éxito. 0 mientras la conexión aguanta. */
     val retryAttempt: Int = 0,
