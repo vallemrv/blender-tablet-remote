@@ -1394,7 +1394,8 @@ de banda y configuración de latencia interactiva.
 `entities:[LINE,RECTANGLE,SQUARE,CIRCLE,ARC]`, `features:[EXTRUDE,CUT]`,
 `sketch_editing:true`, `fillet:true`, `length_unit:METERS` y `constraints` con
 `COINCIDENT,HORIZONTAL,VERTICAL,PARALLEL,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,RADIUS,FIX,MIDPOINT,SYMMETRIC`.
-También anuncia `construction`, `datum_planes`, `bodies`, `origin` y `mesh_copy`.
+También anuncia `construction`, `datum_planes`, `bodies`, `origin`, `mesh_copy`,
+`smart_cursor` y `selection_delete`.
 Las extensiones se negocian por capabilities; se instala el APK junto con el ZIP.
 `mode.set {mode:CAD}` activa el espacio CAD (Blender permanece en Object).
 OBJECT/EDIT salen de CAD y cancelan cualquier preview. Los objetos evaluados CAD
@@ -1428,7 +1429,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.entity.begin` | `{type:"LINE\|RECTANGLE\|SQUARE\|CIRCLE\|ARC",u,v}` | Inicia dibujo reversible |
 | `cad.entity.update` | `{u,v}` | Actualiza extremo desde baseline |
 | `cad.entity.set` | `{entity_id,values:{width?,height?,diameter?,radius?,start?,sweep?,x?,y?,x2?,y2?}}` | Edita dimensiones y reconstruye dependientes |
-| `cad.entity.delete` | `{entity_id}` | Borra entidad sin dependencias |
+| `cad.entity.delete` | `{entity_id}` o `{}` | Borra una figura completa o la selección de puntos/aristas/figuras en un undo; protege perfiles usados |
 | `cad.extrude.begin` | `{profile_id,depth,operation:"EXTRUDE\|CUT",target_id?}` | Preview aditiva o sustractiva; CUT exige destino |
 | `cad.extrude.update` | `{depth}` o `{gesture,baseline_depth}` | Cota exacta o delta vertical desde inicio del gesto, positivo hacia arriba |
 | `cad.session.confirm` | `{}` | Confirma candidato estable, un undo |
@@ -1437,9 +1438,10 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.feature.delete` | `{feature_id}` | Borra feature y resultado |
 | `cad.convert` | `{feature_id}` | Crea una copia de malla seleccionada y sale a Object; conserva documento y operaciones, incluidos dependientes |
 | `cad.settings` | `{step?,increment?,construction?,show_scene?}` | Paso métrico positivo y snap, sin undo ni cambio geométrico |
-| `cad.drag.begin` | `{u,v}` | Adquiere un punto/arista; conserva el grupo si ya pertenece a él |
+| `cad.drag.begin` | `{u,v}` | Sondea y conserva selección previa; prepara arrastre del grupo si cubre el elemento, sin cambiar selección todavía |
 | `cad.drag.update` | `{u,v}` | Reconstruye y resuelve restricciones desde baseline |
-| `cad.drag.end` | `{}` | Confirma último candidato con un undo; un toque no crea undo |
+| `cad.drag.end` | `{}` | Sin UPDATE alterna el elemento sondeado en BEGIN; con arrastre confirma el último candidato. Nunca vuelve a sondear |
+| `cad.select_all` | `{action:"SELECT\|DESELECT"}` | Selecciona todas las figuras del boceto (también construcción, nunca origen) o limpia la selección, sin undo |
 | `cad.constraint.add` | `{type,value?}` | Restringe la selección; DISTANCE/RADIUS requieren metros |
 | `cad.constraint.set` | `{constraint_id,value,sketch_id?}` | Cambia una cota persistente y resuelve dependientes |
 | `cad.constraint.delete` | `{constraint_id,sketch_id?}` | Elimina una restricción del sketch activo |
@@ -1461,6 +1463,22 @@ prioridad a puntos dentro de su radio, corrige el aspecto y luego prueba aristas
 los roles seleccionados. Los perfiles de cadenas usan IDs derivados de sus miembros,
 nunca de índices evaluados. La línea adquiere extremos mediante la política común
 de `commands/snap.py` y guarda restricciones COINCIDENT al confirmar.
+
+El cursor CAD único envía BEGIN al bajar y UPDATE solo al superar el umbral táctil.
+La primera muestra que cruza el umbral se envía inmediatamente; las siguientes
+respetan la cadencia de entrada. Un arrastre limitado por restricciones sigue siendo
+arrastre aunque no produzca geometría nueva: END no lo convierte en deselección.
+Un toque vacío limpia la selección; arrastrar vacío la conserva. Cancelar o navegar
+con dos dedos restaura también la selección anterior. Una referencia BODY cubre
+los puntos/lados de su figura al adquirir el grupo; un lado cubre sus extremos.
+`cad.select` aditivo desde el árbol usa la misma política de alternar pertenencia.
+
+Borrar un lado de rectángulo conserva los lados restantes como líneas con sus
+referencias y restricciones válidas. Una esquina retira sus dos lados incidentes.
+En líneas, arcos y círculos no se persisten primitivas sin sus puntos definitorios:
+el borrado de un punto retira su primitiva. Se limpian solo las restricciones que
+pierden alguna referencia. Un perfil de una operación no puede quedar abierto o
+inexistente: se rechaza la transacción (`cad_dependency`) sin borrar dependientes.
 
 Cada sketch contiene `constraints:[{id,type,refs:[{id,part}],value?,values?}]`.
 FIX guarda `points:{rol:[x,y]}` para los puntos/los extremos de una arista,

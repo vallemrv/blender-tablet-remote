@@ -135,7 +135,6 @@ object AppIcons {
         "PLANE_XY" to "M2,17 L9,8 L22,8 L15,17 Z M7,13 L17,13 M9,4 L9,7",
         "PLANE_XZ" to "M3,20 L3,5 L20,5 L20,20 Z M3,20 L9,14 M9,14 L17,14 M9,14 L9,8",
         "PLANE_YZ" to "M7,3 L19,8 L19,22 L7,17 Z M10,16 L16,18 M10,16 L10,8",
-        "MULTI" to "M3,3 L3,17 L7,13 L11,20 L14,18 L10,11 L16,11 Z M19,2 L19,8 M16,5 L22,5",
         "SELECT" to "M5,3 L5,20 L10,15 L14,22 L17,20 L13,13 L21,13 Z",
     )
     private val cadVectors by lazy {
@@ -150,7 +149,6 @@ object AppIcons {
     fun cad(intent: String): ImageVector = when (intent) {
         "FINISH" -> Icons.Default.Check
         "CANCEL" -> Icons.Default.Close
-        "MOVE" -> Move
         "MODEL" -> Icons.Default.AccountTree
         "DELETE" -> Icons.Default.Delete
         "CONVERT" -> Icons.Default.ViewInAr

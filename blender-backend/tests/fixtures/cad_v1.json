@@ -32,6 +32,8 @@
       "SYMMETRIC"
     ],
     "sketch_editing": true,
+    "smart_cursor": true,
+    "selection_delete": true,
     "fillet": true,
     "construction": true,
     "datum_planes": true,
@@ -236,6 +238,12 @@
       "command": "server.resume",
       "payload": {
         "session_key": "fixture-resume-1234567890ab"
+      }
+    },
+    {
+      "command": "cad.select_all",
+      "payload": {
+        "action": "SELECT"
       }
     }
   ],

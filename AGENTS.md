@@ -475,3 +475,15 @@ no quedan archivos o referencias temporales.
   Las cotas del boceto se editan en borrador y se aplican juntas con un comando;
   Extruir/Vaciar conserva la preview inmediata y acumula pasos ante respuestas
   atrasadas. Los campos métricos usan el paso CAD; los angulares, grados.
+
+- CAD tiene un único cursor: cada toque alterna la pertenencia a la selección y
+  arrastrar adquiere/mueve el elemento, conservando el grupo si ya lo cubría la
+  selección. Android exige superar el umbral táctil antes de UPDATE; END consume
+  el sondeo de BEGIN/última preview sin raycast nuevo. Un toque no modifica geometría
+  ni crea undo; cancelar/dos dedos restaura también la selección anterior.
+- Dibujos abre siempre el árbol de bocetos/figuras, separado de la pestaña de
+  restricciones contextuales. Seleccionar todo/Deseleccionar todo y Borrar selección
+  están en la bandeja. Borrar un lado de rectángulo conserva los demás como líneas;
+  una esquina retira sus dos lados. Un extremo/centro de otra primitiva elimina
+  esa primitiva, nunca guarda una figura incompleta. El origen no se borra y romper
+  un perfil usado se rechaza sin eliminar operaciones ni cambiar el documento.

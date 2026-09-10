@@ -355,7 +355,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun cadTool(type: String?) {
         cancelCadStroke()
         local.update { it.copy(cadTool = type?.takeIf { candidate -> candidate in client.state.value.features.cad.entities ||
-            (client.state.value.features.cad.sketchEditing && candidate in listOf("MOVE", "MULTI", "PLANE_FACE")) }) }
+            (client.state.value.features.cad.sketchEditing && candidate == "PLANE_FACE") }) }
     }
     private var cadGestureMode: String? = null
     private var cadDepthStart = .02
@@ -378,11 +378,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     cadStroke = true; cadGestureMode = "DEPTH"; cadDepthStart = cad.depth
                     return
                 }
-                val type = local.value.cadTool ?: return
-                if (cad.activeSketchId == null || type == "MULTI") return
+                val type = local.value.cadTool
+                if (cad.activeSketchId == null || type == "PLANE_FACE") return
                 cadStroke = true
-                cadGestureMode = if (type == "MOVE") "DRAG" else "DRAW"
-                client.cadCommand(if (type == "MOVE") "cad.drag.begin" else "cad.entity.begin", mapOf("type" to type, "u" to u, "v" to v))
+                cadGestureMode = if (type == null) "DRAG" else "DRAW"
+                client.cadCommand(if (type == null) "cad.drag.begin" else "cad.entity.begin", mapOf("type" to type, "u" to u, "v" to v))
             }
             GesturePhase.UPDATE -> if (cadStroke) {
                 when (cadGestureMode) {
@@ -525,7 +525,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun undo() { cancelMaterialStroke(); cancelSculptStroke(); cancelCadStroke(); client.undo() }
     fun redo() { cancelMaterialStroke(); cancelSculptStroke(); cancelCadStroke(); client.redo() }
     fun repeatLast() = client.repeatLast()
-    fun delete() = client.delete()
+    fun delete() {
+        val cad = client.state.value.cad
+        if (cad.workspace) {
+            if (cad.activeSketchId != null) cadCommand("cad.entity.delete")
+            else cad.selectedFeature?.let { cadCommand("cad.feature.delete", mapOf("feature_id" to it.id)) }
+        } else client.delete()
+    }
     fun duplicate() = client.duplicate()
     fun runDuplicateVariant(linked: Boolean) {
         local.update { it.copy(duplicateLinked = linked) }
@@ -545,7 +551,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 local.update { it.copy(cadTool = null) }
                 return
             }
-            client.cadCommand("cad.select", mapOf("u" to u, "v" to v, "additive" to (local.value.cadTool == "MULTI"))); return
+            client.cadCommand("cad.select", mapOf("u" to u, "v" to v, "additive" to (client.state.value.cad.activeSketchId != null))); return
         }
         val surfaceTool = client.toolSession.value
         if (surfaceTool.armed && surfaceTool.input == "REPEAT_TAP") {
@@ -742,8 +748,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Acciones contextuales de selección (Edit y Object). */
-    fun selectAll() = client.selectAll(true)
-    fun deselectAll() = client.selectAll(false)
+    fun selectAll() {
+        if (client.state.value.cad.workspace) {
+            if (client.state.value.cad.activeSketchId != null) {
+                cadTool(null); cadCommand("cad.select_all", mapOf("action" to "SELECT"))
+            }
+        } else client.selectAll(true)
+    }
+    fun deselectAll() {
+        if (client.state.value.cad.workspace) {
+            if (client.state.value.cad.activeSketchId != null) cadCommand("cad.select_all", mapOf("action" to "DESELECT"))
+        } else client.selectAll(false)
+    }
     fun invertSelection() = client.invertSelection()
     fun hideSelection() = client.hideSelection()
     fun hideObject(name: String? = null) = client.hideObjects(name?.let(::listOf))

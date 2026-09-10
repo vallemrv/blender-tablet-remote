@@ -60,6 +60,7 @@ fun InputSurface(
     sculptCursorStyle: SculptCursorStyle = SculptCursorStyle(),
     onSculptStroke: (GesturePhase, List<SculptPoint>, Boolean, Boolean) -> Unit = { _, _, _, _ -> },
     cadDrawingEnabled: Boolean = false,
+    cadCursorEnabled: Boolean = false,
     onCadGesture: (GesturePhase, Float, Float) -> Unit = { _, _, _ -> },
     cadOverlay: List<com.blendertablet.remote.model.CadOverlay> = emptyList(),
     knifeActive: Boolean = false,
@@ -99,6 +100,7 @@ fun InputSurface(
             view.sculptRadius = sculptRadius
             view.sculptPressureSize = sculptPressureSize
             view.sculptCursorStyle = sculptCursorStyle
+            view.cadCursorEnabled = cadCursorEnabled
             view.cadDrawingEnabled = cadDrawingEnabled
             view.onCadGesture = onCadGesture
             view.cadOverlay = cadOverlay
@@ -272,6 +274,7 @@ private class GestureView(
     var onCadGesture: (GesturePhase, Float, Float) -> Unit = { _, _, _ -> }
     var cadOverlay: List<com.blendertablet.remote.model.CadOverlay> = emptyList()
     private var cadDrawing = false
+    var cadCursorEnabled = false
     private val cadPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
         style = android.graphics.Paint.Style.STROKE
         strokeWidth = 2.5f * resources.displayMetrics.density
@@ -454,7 +457,10 @@ private class GestureView(
                 }
                 else if (cadDrawing) {
                     shapeCurrentX = event.x; shapeCurrentY = event.y
-                    if (event.eventTime - lastDispatchAt >= KNIFE_DISPATCH_MS) {
+                    val wasMoved = moved
+                    val slop = if (isStylus(downToolType)) stylusTouchSlop else systemTouchSlop
+                    moved = moved || hypot(event.x - startX, event.y - startY) > slop
+                    if ((!cadCursorEnabled || moved) && ((!wasMoved && moved) || event.eventTime - lastDispatchAt >= KNIFE_DISPATCH_MS)) {
                         onCadGesture(GesturePhase.UPDATE, nx(shapeCurrentX), ny(shapeCurrentY))
                         lastDispatchAt = event.eventTime
                     }

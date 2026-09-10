@@ -27,6 +27,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
     val capabilities = state.blender.features.cad
     val connected = state.connection == ConnectionStatus.CONNECTED
     var modelVisible by rememberSaveable { mutableStateOf(true) }
+    var constraintsVisible by rememberSaveable { mutableStateOf(false) }
     var planesOpen by remember { mutableStateOf(false) }
     var unit by remember(state.blender.sceneScale.lengthUnit) { mutableStateOf(state.blender.sceneScale.lengthUnit) }
     var pendingDimension by remember(cad.activeSketchId, cad.selection) { mutableStateOf<String?>(null) }
@@ -44,7 +45,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
     fun command(name: String, vararg values: Pair<String, Any?>) { if (connected) vm.cadCommand(name, mapOf(*values)) }
     fun editSketch(sketchId: String) {
         vm.cadTool(null)
-        modelVisible = true
+        modelVisible = true; constraintsVisible = false
         command("cad.sketch.activate", "sketch_id" to sketchId)
     }
     fun beginFeature(operation: String) {
@@ -54,7 +55,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
     }
     FloatingPanel(Modifier.align(Alignment.TopStart).padding(start = Metrics.EdgeMargin, top = 76.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            PillButton(if (editing && cad.selection.isNotEmpty()) "Restricciones" else "Modelo · ${cad.sketches.size} bocetos", selected = modelVisible) { modelVisible = !modelVisible }
+            PillButton("Dibujos · ${cad.sketches.sumOf { it.entities.size }}", selected = modelVisible && !constraintsVisible) {
+                modelVisible = !modelVisible || constraintsVisible; constraintsVisible = false
+            }
             Text(if (editing) "${cad.activeSketch?.name} · ${cad.activeSketch?.planeLabel}" else "Sólidos CAD", color = Ink.OnPanel, fontSize = 13.sp,
                 modifier = Modifier.padding(horizontal = 8.dp))
             PillButton("Planos", enabled = connected && !cad.sessionActive) { planesOpen = true }
@@ -70,13 +73,11 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
         }
     }
     ToolRail(Modifier.align(Alignment.CenterStart).padding(start = Metrics.EdgeMargin, top = 120.dp, bottom = 160.dp).heightIn(max = availableHeight)) {
-        CadAction("SELECT", "Seleccionar puntos, aristas o perfiles", selected = state.cadTool == null, enabled = !cad.sessionActive) { vm.cadTool(null) }
+        CadAction("SELECT", "Cursor · tocar alterna selección · arrastrar mueve", selected = state.cadTool == null, enabled = !cad.sessionActive) { vm.cadTool(null) }
         if (editing) {
             if (capabilities.sketchEditing) {
-                CadAction("MULTI", "Selección múltiple · toca para añadir o quitar", selected = state.cadTool == "MULTI", enabled = !cad.sessionActive) { vm.cadTool("MULTI") }
-                CadAction("MOVE", "Mover puntos o aristas con el lápiz", selected = state.cadTool == "MOVE") { vm.cadTool("MOVE") }
                 CadAction("ORIGIN", "Seleccionar origen fijo (0,0)", enabled = !cad.sessionActive) {
-                    command("cad.select", "kind" to "ENTITY", "id" to "ORIGIN", "part" to "POINT", "additive" to (state.cadTool == "MULTI"))
+                    command("cad.select", "kind" to "ENTITY", "id" to "ORIGIN", "part" to "POINT", "additive" to true)
                 }
                 CadAction("CONSTRUCTION", "Dibujar geometría auxiliar · no forma parte del perfil", selected = cad.construction, enabled = !cad.sessionActive) {
                     command("cad.settings", "construction" to !cad.construction)
@@ -117,12 +118,15 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
         cad.selection.any { selected -> c.refs.any { ref -> cadRefsTouch(selected, ref) } }
     }
     val contextual = editing && cad.selection.isNotEmpty()
-    if (modelVisible && (!contextual || contextualConstraints.isNotEmpty())) FloatingPanel(
+    if (modelVisible) FloatingPanel(
         Modifier.align(Alignment.CenterStart).padding(start = 80.dp, top = 132.dp, bottom = 170.dp).width(310.dp).heightIn(max = availableHeight)
     ) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(if (contextual) "Restricciones de la selección" else "Modelo CAD", color = Ink.OnPanel, fontSize = 14.sp)
-            if (!contextual) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PillButton("Dibujos", selected = !constraintsVisible) { constraintsVisible = false }
+                PillButton("Restricciones", selected = constraintsVisible, enabled = editing) { constraintsVisible = true }
+            }
+            if (!constraintsVisible) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     PillButton("Nuevo cuerpo", enabled = !cad.sessionActive) { command("cad.body.create") }
                     PillButton("Nuevo boceto", enabled = !cad.sessionActive) { planesOpen = true }
@@ -141,10 +145,17 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                         if (!editing) sketch.profiles.forEach { profile ->
                             PillButton(profile.label, selected = cad.selectionId == profile.id, enabled = !cad.sessionActive) { command("cad.select", "kind" to "PROFILE", "id" to profile.id) }
                         }
-                        if (editing) sketch.constraints.forEach { c ->
-                            CadConstraintRow(c, sketch, unit, !cad.sessionActive,
-                                { editingConstraint = c },
-                                { command("cad.constraint.delete", "constraint_id" to c.id, "sketch_id" to sketch.id) })
+                        if (sketch.id == cad.activeSketchId) sketch.entities.forEachIndexed { index, drawing ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(AppIcons.cad(drawing.type), null, tint = Ink.Muted, modifier = Modifier.size(20.dp))
+                                PillButton("${cadLabel(drawing.type)} ${index + 1}", selected = cad.selection.any { it.id == drawing.id }, enabled = connected && !cad.sessionActive) {
+                                    vm.cadTool(null)
+                                    command("cad.select", "kind" to "ENTITY", "id" to drawing.id, "part" to "BODY", "additive" to true)
+                                }
+                                CadAction("DELETE", "Borrar ${cadLabel(drawing.type)} ${index + 1}", enabled = connected && !cad.sessionActive) {
+                                    command("cad.entity.delete", "entity_id" to drawing.id)
+                                }
+                            }
                         }
                     }
                     cad.features.filter { it.bodyId == body.id }.forEach { feature ->
@@ -153,9 +164,14 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                         }
                     }
                 }
-            } else contextualConstraints.forEach { c ->
+            } else if (contextual) contextualConstraints.forEach { c ->
                 CadConstraintRow(c, cad.activeSketch!!, unit, !cad.sessionActive, { editingConstraint = c; pendingDimension = null },
                     { command("cad.constraint.delete", "constraint_id" to c.id) })
+            } else cad.sketches.forEach { sketch ->
+                if (sketch.constraints.isNotEmpty()) Text(sketch.name, color = Ink.Muted, fontSize = 12.sp)
+                sketch.constraints.forEach { c -> CadConstraintRow(c, sketch, unit, !cad.sessionActive,
+                    { editingConstraint = c; pendingDimension = null },
+                    { command("cad.constraint.delete", "constraint_id" to c.id, "sketch_id" to sketch.id) }) }
             }
         }
     }
@@ -168,7 +184,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
     var resetInputs by remember(editScope) { mutableIntStateOf(0) }
     val drafts = remember(editScope, resetInputs) { mutableStateMapOf<String, Double?>() }
     val validDrafts = drafts.values.all { it != null }
-    val entity = cad.selectedEntity?.takeUnless { cad.sessionActive || pendingDimension != null || editingConstraint != null || state.cadTool == "MOVE" }
+    val entity = cad.selectedEntity?.takeUnless { cad.sessionActive || pendingDimension != null || editingConstraint != null }
     val feature = cad.selectedFeature?.takeUnless { cad.sessionActive || editing }
     fun acceptValues() {
         if (!connected || !validDrafts) return
@@ -215,26 +231,30 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                 drafts.isNotEmpty() && !depthPreview -> "Cotas pendientes · ✓ aplica los cambios · × descarta"
                 depthPreview -> "${cadLabel(cad.operation)} · desliza arriba/abajo para profundidad · dos dedos navegan" + if (cad.transparent) " · transparencia automática" else ""
                 state.cadTool == "PLANE_FACE" -> "Toca una cara plana para guardar su plano; después abre Planos para crear el boceto"
-                state.cadTool == "MOVE" -> "Arrastra un punto o una arista · la selección se mueve respetando sus restricciones"
-                state.cadTool == "MULTI" -> "Toca puntos o aristas para añadir/quitar · elige una restricción en el rail derecho"
                 state.cadTool == "ARC" -> "Arrastra centro → inicio del arco · ajusta radio y ángulo en la bandeja"
                 state.cadTool != null -> "${cadLabel(state.cadTool!!)} · arrastra para dibujar · dos dedos navegan"
-                editing -> "Selecciona puntos o aristas · ajusta sus cotas · mantén −/+ para repetir más rápido"
+                editing -> "Cursor: toca para seleccionar o quitar · arrastra para mover el grupo · dos dedos navegan"
                 selectedSketch != null -> "${selectedSketch.name} seleccionado · Editar boceto abre su geometría"
-                else -> "Abre Modelo para editar un boceto · o crea uno en Planos y selecciona un perfil para extruir"
+                else -> "Abre Dibujos para editar un boceto · o crea uno en Planos y selecciona un perfil para extruir"
             }, color = Ink.Muted, fontSize = 12.sp)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 key(editScope, resetInputs) {
                     Row(Modifier.weight(1f).horizontalScroll(parameterScroll), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (editing && !cad.sessionActive) {
-                            PillButton("Seleccionar", selected = state.cadTool == null, enabled = connected) { vm.cadTool(null) }
-                            if (capabilities.sketchEditing) PillButton("Mover", selected = state.cadTool == "MOVE", enabled = connected) { vm.cadTool("MOVE") }
+                            Text("${cad.selection.size} seleccionados", color = Ink.Muted, fontSize = 11.sp)
+                            PillButton("Seleccionar todo", enabled = connected && cad.activeSketch?.entities?.isNotEmpty() == true) {
+                                vm.selectAll()
+                            }
+                            PillButton("Deseleccionar todo", enabled = connected && cad.selection.isNotEmpty()) {
+                                vm.deselectAll()
+                            }
+                            PillButton("Borrar selección", enabled = connected && cad.selection.any { it.id != "ORIGIN" }) { vm.delete() }
                             PillButton("Redondear esquina", enabled = connected && (cad.selection.size == 2 || cad.selectedEntity?.type == "RECTANGLE")) { pendingDimension = "FILLET" }
                             cad.selectedEntity?.let { selected -> PillButton("Construcción", selected = selected.construction, enabled = connected) {
                                 command("cad.entity.construction", "construction" to !selected.construction)
                             } }
                         }
-                        if (capabilities.sketchEditing && (state.cadTool == "MOVE" || depthPreview)) {
+                        if (capabilities.sketchEditing && ((editing && state.cadTool == null) || depthPreview)) {
                             SnapControl(listOf(SnapType.NONE, SnapType.INCREMENT), if (cad.increment) SnapType.INCREMENT else SnapType.NONE,
                                 { command("cad.settings", "increment" to (it == SnapType.INCREMENT)) })
                         }
@@ -262,7 +282,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                                     maximum = if (field == "sweep") 359.99 else 10000.0,
                                     onDone = ::acceptValues) { drafts[field] = it?.takeIf { value -> field != "sweep" || kotlin.math.abs(value) in .01..359.99 } }
                             }
-                            CadAction("DELETE", "Borrar figura", enabled = connected) { command("cad.entity.delete", "entity_id" to selected.id) }
                         }
                         if (!editing && !cad.sessionActive && "CUT" in capabilities.features) {
                             var expanded by remember { mutableStateOf(false) }

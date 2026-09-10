@@ -181,11 +181,12 @@ class CadRuntime:
 
     def cancel(self, restore=True):
         if self.session:
-            original = self.session['baseline']
+            session=self.session
+            original = session['baseline']
             self.session = None
             if restore and self._scene == bpy.context.scene.as_pointer():
-                self.rebuild(original)
-            self.selection = None
+                if session['operation']!='DRAG' or session.get('preview'): self.rebuild(original)
+            self.selection = copy.deepcopy(session.get('selection_before')) if session['operation']=='DRAG' and restore else None
 
     def begin(self, payload, operation):
         self.require_workspace()

@@ -223,6 +223,73 @@ def move_goals(sketch, refs, dx, dy):
     return goals
 
 
+def delete_selected(sketch, refs):
+    """Delete analytic drawings or selected rectangle sides, keeping surviving rules.
+
+    A primitive cannot exist without its defining point: deleting a line/arc
+    endpoint or circle center removes that primitive. Rectangle corners remove
+    their two incident sides; the other sides become constrained lines.
+    """
+    requests={}
+    for ref in refs:
+        if ref['id']=='ORIGIN': continue
+        e=get_entity(sketch,ref)
+        requests.setdefault(e['id'],set()).add(ref.get('part','BODY'))
+    removed=set(); replacements={}; entities=[]
+    for e in sketch['entities']:
+        parts=requests.get(e['id'])
+        if not parts:
+            entities.append(e); continue
+        if e['type']!='RECTANGLE' or 'BODY' in parts:
+            removed.add(e['id']); continue
+        deleted=set()
+        for part in parts:
+            if part in ('P0','P1','P2','P3'):
+                index=int(part[1:]); deleted.update((index,(index-1)%4))
+            elif part in ('EDGE0','EDGE1','EDGE2','EDGE3'): deleted.add(int(part[4:]))
+            else: raise BadPayload('Selecciona un punto o lado del rectángulo')
+        ring=model.outline(e)
+        lines={i:dict(id=model.uid('entity'),type='LINE',x=a[0],y=a[1],x2=b[0],y2=b[1],
+                      construction=e.get('construction',False))
+               for i,(a,b) in enumerate(zip(ring,ring[1:]+ring[:1])) if i not in deleted}
+        replacements[e['id']]=lines
+        entities.extend(lines.values())
+    def remap(ref):
+        if ref['id'] in removed: return None
+        if ref['id'] not in replacements: return copy.deepcopy(ref)
+        lines=replacements[ref['id']]; part=ref.get('part','BODY')
+        if part.startswith('EDGE'):
+            line=lines.get(int(part[4:])); return dict(id=line['id'],part='BODY') if line else None
+        if part in ('P0','P1','P2','P3'):
+            index=int(part[1:])
+            if index in lines: return dict(id=lines[index]['id'],part='START')
+            if (index-1)%4 in lines: return dict(id=lines[(index-1)%4]['id'],part='END')
+        return None
+    constraints=[]
+    for c in sketch.get('constraints',[]):
+        if c['type']=='FIX' and c['refs'][0]['id'] in replacements:
+            lines=replacements[c['refs'][0]['id']]
+            if 'values' in c:
+                for line in lines.values():
+                    constraints.append(dict(id=model.uid('constraint'),type='FIX',refs=[dict(id=line['id'],part='BODY')],values={k:line[k] for k in model.FIELDS['LINE']}))
+            else:
+                for role,point_value in c['points'].items():
+                    ref=remap(dict(id=c['refs'][0]['id'],part=role))
+                    if ref: constraints.append(dict(id=model.uid('constraint'),type='FIX',refs=[ref],points={ref['part']:point_value}))
+            continue
+        mapped=[remap(r) for r in c['refs']]
+        if all(r is not None for r in mapped):
+            clone=copy.deepcopy(c); clone['refs']=mapped; constraints.append(clone)
+    for lines in replacements.values():
+        for index,line in lines.items():
+            constraints.append(dict(id=model.uid('constraint'),type='HORIZONTAL' if index%2==0 else 'VERTICAL',refs=[dict(id=line['id'],part='BODY')]))
+            neighbor=lines.get((index+1)%4)
+            if neighbor:
+                constraints.append(dict(id=model.uid('constraint'),type='COINCIDENT',refs=[dict(id=line['id'],part='END'),dict(id=neighbor['id'],part='START')]))
+    sketch['entities']=entities; sketch['constraints']=constraints
+    solve(sketch)
+
+
 def _rectangle_corner(sketch, refs):
     """Expose rectangle sides as a constrained chain, preserving reference roles."""
     if not refs or len({r['id'] for r in refs})!=1: return refs,None

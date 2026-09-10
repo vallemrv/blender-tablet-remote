@@ -191,14 +191,25 @@ def sketch_visibility(payload):
 
 @command('cad.entity.delete')
 def entity_delete(payload):
+    selection=copy.deepcopy(_refs())
+    if runtime.session:
+        runtime.require(payload); runtime.cancel()
     def change(doc):
-        sketch,e = model.entity(doc,payload.get('entity_id'))
-        if any(f['sketch_id']==sketch['id'] for f in doc['features']):
-            raise CommandError('El sketch tiene extrusiones; elimina primero sus features',code='cad_dependency')
-        sketch['entities'].remove(e)
-        sketch['constraints']=[c for c in sketch.get('constraints',[]) if not any(r['id']==e['id'] for r in c['refs'])]
-    result = runtime.transaction(payload,change,'CAD eliminar entidad')
-    runtime.selection = None
+        if payload.get('entity_id'):
+            sketch,e=model.entity(doc,payload['entity_id'])
+            refs=[dict(id=e['id'],part='BODY')]
+        else:
+            sketch=model.find(doc,'sketches',runtime.active_sketch_id)
+            refs=[r for r in selection if r.get('kind')=='ENTITY' and r['id']!='ORIGIN']
+        if not refs: raise BadPayload('Selecciona dibujos, puntos o aristas; el origen no se borra')
+        geometry.delete_selected(sketch,refs)
+        for feature in doc['features']:
+            if feature['sketch_id']==sketch['id']:
+                try: model.profile(doc,feature['profile_id'])
+                except CommandError as exc:
+                    raise CommandError('El borrado abriría un perfil utilizado; elimina primero su operación CAD',code='cad_dependency') from exc
+    runtime.transaction(payload,change,'CAD borrar selección')
+    runtime.selection=None
     return runtime.status()
 
 
@@ -367,6 +378,35 @@ def _set_selection(refs):
     runtime.selection=dict(refs[-1],items=refs) if refs else None
 
 
+def _covers(selected, hit):
+    if selected['id']!=hit['id']: return False
+    part=selected.get('part','BODY'); target=hit.get('part','BODY')
+    if part=='BODY' or part==target: return True
+    if part.startswith('EDGE') and target.startswith('P'):
+        index=int(part[4:])
+        return target in ('P'+str(index),'P'+str((index+1)%4))
+    return False
+
+
+def _toggle_refs(refs, hit):
+    if hit is None: return []
+    if any(_covers(r,hit) for r in refs):
+        return [r for r in refs if not _covers(r,hit)]
+    return [r for r in refs if not _covers(hit,r)]+[hit]
+
+
+@command('cad.select_all')
+def select_all(payload):
+    runtime.require_workspace()
+    if runtime.session:
+        runtime.require(payload); runtime.cancel()
+    action=payload.get('action','SELECT')
+    if action not in ('SELECT','DESELECT'): raise BadPayload('action: SELECT o DESELECT')
+    sketch=model.find(runtime.doc(),'sketches',runtime.active_sketch_id)
+    _set_selection([dict(kind='ENTITY',id=e['id'],part='BODY') for e in sketch['entities']] if action=='SELECT' else [])
+    return runtime.status()
+
+
 @command('cad.select')
 def select(payload):
     runtime.require_workspace()
@@ -386,11 +426,7 @@ def select(payload):
         else: raise BadPayload('Selección CAD no compatible')
     else: ref=_pick(payload)
     refs=copy.deepcopy(_refs()) if payload.get('additive') else []
-    if ref:
-        old=next((r for r in refs if r['id']==ref['id'] and r.get('part')==ref.get('part')),None)
-        if old: refs.remove(old)
-        else: refs.append(ref)
-    _set_selection(refs)
+    _set_selection(_toggle_refs(refs,ref))
     return runtime.status()
 
 
@@ -416,15 +452,18 @@ def settings(payload):
 def drag_begin(payload):
     runtime.require_workspace()
     if not runtime.active_sketch_id: raise BadPayload('Abre un boceto para mover sus puntos')
+    if runtime.session:
+        runtime.require(payload); runtime.cancel()
     hit=_pick(payload)
-    if hit is None: return runtime.status()
+    selection_before=copy.deepcopy(runtime.selection)
     refs=copy.deepcopy(_refs())
-    if not any(r['id']==hit['id'] and r.get('part')==hit.get('part') for r in refs): refs=[hit]
     sketch=model.find(runtime.doc(),'sketches',runtime.active_sketch_id)
-    start=runtime.point(payload,sketch)
+    if hit and not any(_covers(r,hit) for r in refs): refs=[hit]
+    start=runtime.point(payload,sketch) if hit else None
     session=runtime.begin(payload,'DRAG')
-    session.update(sketch_id=sketch['id'],refs=refs,start=start)
-    _set_selection(refs)
+    session.update(sketch_id=sketch['id'],refs=refs,start=start,hit=hit,
+                   selection_before=selection_before,dragged=False)
+    # A tap toggles only on END; a second finger can still cancel without changing selection.
     return runtime.status()
 
 
@@ -433,6 +472,9 @@ def drag_update(payload):
     if not runtime.session: return runtime.status()
     session=runtime.require(payload)
     if session['operation']!='DRAG': raise BadPayload('La sesión no es de arrastre')
+    session['dragged']=True
+    if session.get('hit') is None: return runtime.status()
+    _set_selection(session['refs'])
     doc=copy.deepcopy(session['baseline']); sketch=model.find(doc,'sketches',session['sketch_id'])
     p=runtime.point(payload,sketch); dx,dy=[p[i]-session['start'][i] for i in (0,1)]
     if runtime.increment: dx,dy=[round(d/runtime.step)*runtime.step for d in (dx,dy)]
@@ -455,6 +497,10 @@ def drag_end(payload):
     session=runtime.require(payload)
     if session['operation']!='DRAG': raise BadPayload('La sesión no es de arrastre')
     if session.get('candidate'): return confirm(payload)
+    if not session.get('dragged'):
+        previous=session.get('selection_before') or {}
+        refs=previous.get('items',[previous] if previous else [])
+        _set_selection(_toggle_refs(refs,session.get('hit')))
     runtime.session=None
     return runtime.status()
 

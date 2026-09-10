@@ -161,6 +161,11 @@ corresponda, sin marca especial.
         principal + piezas adicionales), como en un CAD paramétrico multi-body habitual.
 
 ### Mejoras / estética / refinamientos generales
+- [ ] 🔧 en revisión (Codex, 11-09) — Un solo cursor inteligente CAD: tocar añade o
+      quita selección, arrastrar selecciona y mueve, sin herramientas separadas de
+      selección múltiple/Mover. Añadir Seleccionar todo, Deseleccionar todo,
+      Borrar selección y acceso permanente a Dibujos con sus figuras.
+
 - [ ] 🔧 en revisión (Codex, 10-09) — Unificar la bandeja inferior CAD: Paso y
       dimensiones con −/+ y repetición acelerada, campos compactos como Edit y
       cancelar/aceptar fijos a la derecha con los mismos iconos rojo/verde.

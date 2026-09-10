@@ -7,19 +7,19 @@ es la fuente de la geometría.
 
 ## Interfaz de sketch
 
-El rail izquierdo contiene selección, selección múltiple, arrastre, línea,
+El rail izquierdo contiene un cursor único, línea,
 rectángulo, cuadrado, círculo, arco y redondeo. El rail derecho contiene las
 restricciones y solo aparece al editar un boceto. Los raíles y bandejas de
 Object/Edit no aparecen en CAD. Cada intención tiene un icono vectorial propio;
-mantenerlo pulsado muestra su función. El árbol se abre con **Modelo** arriba a
+mantenerlo pulsado muestra su función. El árbol se abre con **Dibujos** arriba a
 la izquierda; cada boceto muestra **Editar** junto a su nombre y plano.
 
-Para continuar un boceto existente, toca **Modelo → Editar [nombre]**. También
+Para continuar un boceto existente, toca **Dibujos → Editar [nombre]**. También
 puedes seleccionar un perfil en la vista o una operación en el árbol y pulsar
 **Editar boceto** en la cabecera: abre el boceto de origen, encuadra su plano y
 activa selección, sin duplicarlo. Toca sus puntos/aristas para cambiar las cotas
-en la bandeja o activa **Mover** para arrastrarlos. Elegir una figura en el rail
-activa dibujo; volver a **Seleccionar** permite editar lo que ya existe.
+en la bandeja o arrástralos directamente con el cursor. Elegir una figura en el rail
+activa dibujo; volver al **Cursor** permite editar lo que ya existe.
 **Finalizar boceto**, siempre visible en la cabecera durante la edición, vuelve
 a los sólidos. Entrar/salir del boceto no crea undo; cambiar su geometría sí
 actualiza las operaciones dependientes y registra un paso de undo.
@@ -30,16 +30,17 @@ actualiza las operaciones dependientes y registra un paso de undo.
   lados; cambiar su ancho también modifica su alto.
 - Círculo: arrastrar centro → radio. Arco: arrastrar centro → inicio; inicialmente
   barre 90° y permite editar radio, ángulo inicial y barrido en grados.
-- Seleccionar: tocar un punto o arista. El cursor con `+` permite añadir/quitar
-  elementos para aplicar restricciones o mover un grupo.
-- Mover: arrastrar un punto o una arista. Conserva el grupo al tocar un miembro
-  seleccionado; un punto restringido se ajusta a sus grados de libertad. Mover una
+- Cursor: tocar un punto o arista lo añade a la selección; tocarlo otra vez lo
+  quita. Los toques sucesivos seleccionan varios sin activar otra herramienta.
+  Tocar vacío limpia la selección; arrastrar vacío no la altera.
+- Con el mismo cursor, arrastrar un punto o una arista lo selecciona y mueve.
+  Conserva el grupo al tocar un miembro seleccionado; un punto restringido se ajusta a sus grados de libertad. Mover una
   esquina de rectángulo conserva la opuesta; mover el radio del círculo conserva
   su centro. Un toque sin movimiento no crea undo.
 - Redondear: seleccionar dos líneas con un extremo común, una esquina de un
   rectángulo o dos lados contiguos, y elegir **Redondear esquina** y el radio.
   Recorta los lados e inserta un arco con coincidencias, tangencias y radio.
-- Al editar, la vista queda perpendicular al plano; arrastrar para orbitar desplaza
+- Al editar, la vista queda perpendicular al plano; el manejador de órbita desplaza
   la vista y dos dedos permiten pan/zoom sin inclinar el boceto.
 - Dos dedos cancelan el trazo/arrastre actual y permiten navegar. Al soltar se
   consume la última preview válida, sin repetir el sondeo.
@@ -49,6 +50,16 @@ paralela, perpendicular, tangencia entre línea y círculo/arco, igualdad de
 longitudes o radios, distancia/longitud, radio, punto medio, simetría respecto al
 último de tres puntos y fijación estricta de la selección. El origen (0,0) se puede
 seleccionar desde la vista o el rail y usar como referencia fija.
+El panel **Dibujos** siempre permite acceder a bocetos y figuras, incluso con
+selección activa. Sus filas seleccionan figuras completas y ofrecen papelera;
+**Restricciones** es una pestaña separada. La bandeja añade **Seleccionar todo**,
+**Deseleccionar todo** y **Borrar selección**. El origen queda fuera de Seleccionar
+todo y no se borra. Borrar una arista de rectángulo conserva sus otros lados como
+líneas; borrar una esquina retira los dos lados incidentes. Un extremo de línea/
+arco o el centro/radio de un círculo pertenece a la figura: borrarlo retira esa
+figura completa. Se conservan las restricciones de los elementos supervivientes.
+El borrado de un perfil utilizado se rechaza antes de cambiar el documento.
+
 Los botones se habilitan según la selección. Las cotas se ven junto a la geometría
 y se editan desde el árbol. Sin selección se ve el modelo completo; al elegir un
 punto/lado se muestran únicamente sus restricciones, con la medida y las referencias;
@@ -174,3 +185,7 @@ se cancelan y no se reenvían. Cargar otro archivo invalida el estado suspendido
 construcción, planos inclinados, varios cuerpos, exportación sin perder el árbol,
 redondeo de rectángulos y recuperación de conexión. Sus comprobaciones gráficas
 validan la cámara y las cotas junto con el undo real.
+
+`test_cad_cursor.py` verifica toques aditivos, deselección, adquisición por arrastre,
+conservación del grupo, cancelación, ausencia de undo vacío y borrados atómicos de
+figuras/lados/puntos, con protección de perfiles utilizados por sólidos.
