@@ -467,3 +467,11 @@ no quedan archivos o referencias temporales.
 - `server.resume` vincula una identidad privada Android con el workspace suspendido.
   Desconexión cancela previews y restaura visibilidad; reconectar recupera cámara,
   boceto y ajustes confirmados. Cargar otro archivo invalida la recuperación.
+
+- La bandeja inferior CAD usa `CompactNumericField`, `StepperButton` y el campo
+  de paso compartido de `SnapControl.kt`; mantener −/+ acelera la repetición
+  común de 180 a 80 ms después de 400 ms, sin multiplicar la cota elegida.
+  Cancelar/aceptar permanecen fijos a la derecha con `RoundAction` rojo/verde.
+  Las cotas del boceto se editan en borrador y se aplican juntas con un comando;
+  Extruir/Vaciar conserva la preview inmediata y acumula pasos ante respuestas
+  atrasadas. Los campos métricos usan el paso CAD; los angulares, grados.

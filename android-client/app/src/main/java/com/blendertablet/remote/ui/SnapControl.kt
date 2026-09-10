@@ -235,17 +235,12 @@ private fun formatScaleStep(value: Double): String =
 
 /** CAD is already in metres; the surrounding tray owns its shared display unit. */
 @Composable
-internal fun CadSnapStepInput(step: Double, unit: LengthUnit, onChange: (Double) -> Unit) {
-    val factor = when (unit) { LengthUnit.MILLIMETERS -> 1000.0; LengthUnit.CENTIMETERS -> 100.0; LengthUnit.METERS -> 1.0 }
-    var draft by remember(unit) { mutableStateOf<String?>(null) }
-    Text("Paso", color = Ink.Faint, fontSize = 11.sp)
-    CompactNumericField(value = draft ?: (step * factor).toBigDecimal().stripTrailingZeros().toPlainString(),
-        onValueChange = { draft = it }, modifier = Modifier.width(84.dp), textAlign = TextAlign.End,
-        placeholder = unit.short, onDone = {
-            draft?.replace(',', '.')?.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 }?.let { onChange(it / factor); draft = null }
-        })
-    Text(unit.short, color = Ink.Muted, fontSize = 12.sp)
-    IconAction(AppIcons.cad("FINISH"), "Aplicar paso", enabled = draft?.replace(',', '.')?.toDoubleOrNull()?.let { it.isFinite() && it > 0 } == true) {
-        draft?.replace(',', '.')?.toDoubleOrNull()?.let { onChange(it / factor); draft = null }
-    }
+internal fun CadSnapStepInput(
+    step: Double,
+    unit: LengthUnit,
+    onUnitChange: (LengthUnit) -> Unit,
+    onChange: (Double) -> Unit,
+) {
+    DistanceSnapStepInput(step = step, unitScaleLength = 1.0, defaultUnit = unit,
+        showSteppers = true, millimeterDecimals = 2, onUnitChange = onUnitChange, onChange = onChange)
 }

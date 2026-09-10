@@ -7,6 +7,8 @@ import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.AccountTree
@@ -135,8 +137,6 @@ object AppIcons {
         "PLANE_YZ" to "M7,3 L19,8 L19,22 L7,17 Z M10,16 L16,18 M10,16 L10,8",
         "MULTI" to "M3,3 L3,17 L7,13 L11,20 L14,18 L10,11 L16,11 Z M19,2 L19,8 M16,5 L22,5",
         "SELECT" to "M5,3 L5,20 L10,15 L14,22 L17,20 L13,13 L21,13 Z",
-        "FINISH" to "M3,12 L9,18 L21,5",
-        "CANCEL" to "M5,5 L19,19 M19,5 L5,19",
     )
     private val cadVectors by lazy {
         cadPaths.mapValues { (name, data) ->
@@ -148,6 +148,8 @@ object AppIcons {
         }
     }
     fun cad(intent: String): ImageVector = when (intent) {
+        "FINISH" -> Icons.Default.Check
+        "CANCEL" -> Icons.Default.Close
         "MOVE" -> Move
         "MODEL" -> Icons.Default.AccountTree
         "DELETE" -> Icons.Default.Delete

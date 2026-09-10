@@ -9,6 +9,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
@@ -160,89 +162,137 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
     if (planesOpen) CadPlanesDialog(cad, unit, { planesOpen = false }, { name, values -> vm.cadCommand(name, values) }, {
         planesOpen = false; vm.cadTool("PLANE_FACE")
     })
+    val focusManager = LocalFocusManager.current
+    val editScope = listOf(cad.documentId, cad.activeSketchId, cad.selection, cad.selectionId,
+        cad.sessionId, cad.revision, state.cadTool, pendingDimension, editingConstraint?.id)
+    var resetInputs by remember(editScope) { mutableIntStateOf(0) }
+    val drafts = remember(editScope, resetInputs) { mutableStateMapOf<String, Double?>() }
+    val validDrafts = drafts.values.all { it != null }
+    val entity = cad.selectedEntity?.takeUnless { cad.sessionActive || pendingDimension != null || editingConstraint != null || state.cadTool == "MOVE" }
+    val feature = cad.selectedFeature?.takeUnless { cad.sessionActive || editing }
+    fun acceptValues() {
+        if (!connected || !validDrafts) return
+        focusManager.clearFocus()
+        when {
+            depthPreview -> {
+                drafts["depth"]?.let { command("cad.extrude.update", "depth" to it) }
+                if (cad.canConfirm) command("cad.session.confirm")
+            }
+            pendingDimension != null -> {
+                val type = pendingDimension!!
+                val value = drafts["constraint"] ?: cad.step * 5
+                if (type == "FILLET") command("cad.fillet", "radius" to value)
+                else command("cad.constraint.add", "type" to type, "value" to value)
+                pendingDimension = null
+            }
+            editingConstraint != null -> {
+                val constraint = editingConstraint!!
+                command("cad.constraint.set", "constraint_id" to constraint.id,
+                    "sketch_id" to cad.sketches.firstOrNull { sketch -> sketch.constraints.any { it.id == constraint.id } }?.id,
+                    "value" to (drafts["constraint"] ?: constraint.value))
+                editingConstraint = null
+            }
+            entity != null && drafts.isNotEmpty() -> command("cad.entity.set", "entity_id" to entity.id, "values" to drafts.toMap())
+            feature != null && drafts["depth"] != null -> command("cad.feature.set", "feature_id" to feature.id, "depth" to drafts["depth"])
+        }
+    }
+    fun discardValues() {
+        focusManager.clearFocus()
+        if (depthPreview) command("cad.session.cancel")
+        pendingDimension = null; editingConstraint = null; resetInputs++
+    }
+    val canAccept = connected && validDrafts && when {
+        depthPreview -> cad.canConfirm
+        pendingDimension != null -> true
+        else -> drafts.isNotEmpty()
+    }
+    val parameterScroll = rememberScrollState()
+    val hasValues = depthPreview || pendingDimension != null || editingConstraint != null || entity != null || feature != null
     FloatingPanel(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(Metrics.EdgeMargin)) {
-        Column(Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(cad.error ?: when {
                 !connected -> "Reconectando · recuperando el documento de Blender"
+                drafts.isNotEmpty() && !depthPreview -> "Cotas pendientes · ✓ aplica los cambios · × descarta"
                 depthPreview -> "${cadLabel(cad.operation)} · desliza arriba/abajo para profundidad · dos dedos navegan" + if (cad.transparent) " · transparencia automática" else ""
                 state.cadTool == "PLANE_FACE" -> "Toca una cara plana para guardar su plano; después abre Planos para crear el boceto"
                 state.cadTool == "MOVE" -> "Arrastra un punto o una arista · la selección se mueve respetando sus restricciones"
                 state.cadTool == "MULTI" -> "Toca puntos o aristas para añadir/quitar · elige una restricción en el rail derecho"
-                state.cadTool == "ARC" -> "Arrastra centro → inicio del arco · ajusta el radio y el ángulo en la bandeja"
+                state.cadTool == "ARC" -> "Arrastra centro → inicio del arco · ajusta radio y ángulo en la bandeja"
                 state.cadTool != null -> "${cadLabel(state.cadTool!!)} · arrastra para dibujar · dos dedos navegan"
-                editing -> "Seleccionar · toca puntos o aristas para editar sus cotas · Mover permite arrastrarlos · Finalizar boceto vuelve a los sólidos"
-                selectedSketch != null -> "${selectedSketch.name} seleccionado · Editar boceto abre su geometría y actualiza las operaciones dependientes"
-                else -> "Abre Bocetos para editar uno existente · o crea uno en XY/XZ/YZ y selecciona un perfil para extruir"
+                editing -> "Selecciona puntos o aristas · ajusta sus cotas · mantén −/+ para repetir más rápido"
+                selectedSketch != null -> "${selectedSketch.name} seleccionado · Editar boceto abre su geometría"
+                else -> "Abre Modelo para editar un boceto · o crea uno en Planos y selecciona un perfil para extruir"
             }, color = Ink.Muted, fontSize = 12.sp)
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (editing && !cad.sessionActive) {
-                    PillButton("Seleccionar", selected = state.cadTool == null, enabled = connected) { vm.cadTool(null) }
-                    if (capabilities.sketchEditing) PillButton("Mover", selected = state.cadTool == "MOVE", enabled = connected) { vm.cadTool("MOVE") }
-                    PillButton("Redondear esquina", enabled = connected && (cad.selection.size == 2 || cad.selectedEntity?.type == "RECTANGLE")) { pendingDimension = "FILLET" }
-                    if (cad.selectedEntity != null) PillButton("Construcción", selected = cad.selectedEntity!!.construction, enabled = connected) {
-                        command("cad.entity.construction", "construction" to !cad.selectedEntity!!.construction)
-                    }
-                }
-                CadUnitSelector(unit) { unit = it }
-                if (capabilities.sketchEditing && (state.cadTool == "MOVE" || depthPreview)) {
-                    SnapControl(listOf(SnapType.NONE, SnapType.INCREMENT), if (cad.increment) SnapType.INCREMENT else SnapType.NONE,
-                        { command("cad.settings", "increment" to (it == SnapType.INCREMENT)) })
-                    CadSnapStepInput(cad.step, unit) { command("cad.settings", "step" to it) }
-                }
-                editingConstraint?.let { constraint ->
-                    CadDimension(cadLabel(constraint.type), constraint.value ?: 0.0, unit, constraint.id) {
-                        command("cad.constraint.set", "constraint_id" to constraint.id, "sketch_id" to cad.sketches.firstOrNull { s -> s.constraints.any { it.id == constraint.id } }?.id, "value" to it); editingConstraint = null
-                    }
-                    CadAction("CANCEL", "Cerrar cota") { editingConstraint = null }
-                }
-                pendingDimension?.let { type ->
-                    CadDimension(if (type == "DISTANCE") "Distancia" else "Radio", cad.step * 5, unit, type) { value ->
-                        if (type == "FILLET") command("cad.fillet", "radius" to value)
-                        else command("cad.constraint.add", "type" to type, "value" to value)
-                        pendingDimension = null
-                    }
-                    CadAction("CANCEL", "Cerrar cota") { pendingDimension = null }
-                }
-                cad.selectedEntity?.takeUnless { cad.sessionActive || pendingDimension != null || editingConstraint != null || state.cadTool == "MOVE" }?.let { entity ->
-                    val fields = when (entity.type) {
-                        "RECTANGLE" -> listOf("width" to "Ancho", "height" to "Alto")
-                        "CIRCLE" -> listOf("diameter" to "Diámetro", "x" to "Centro X", "y" to "Centro Y")
-                        "ARC" -> listOf("radius" to "Radio", "start" to "Inicio", "sweep" to "Ángulo")
-                        else -> listOf("x" to "X inicio", "y" to "Y inicio", "x2" to "X final", "y2" to "Y final")
-                    }
-                    fields.forEach { (key, label) ->
-                        CadDimension(label, entity.values[key] ?: 0.0, unit, entity.id + key, degrees = key in listOf("start", "sweep")) {
-                            command("cad.entity.set", "entity_id" to entity.id, "values" to mapOf(key to it))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                key(editScope, resetInputs) {
+                    Row(Modifier.weight(1f).horizontalScroll(parameterScroll), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (editing && !cad.sessionActive) {
+                            PillButton("Seleccionar", selected = state.cadTool == null, enabled = connected) { vm.cadTool(null) }
+                            if (capabilities.sketchEditing) PillButton("Mover", selected = state.cadTool == "MOVE", enabled = connected) { vm.cadTool("MOVE") }
+                            PillButton("Redondear esquina", enabled = connected && (cad.selection.size == 2 || cad.selectedEntity?.type == "RECTANGLE")) { pendingDimension = "FILLET" }
+                            cad.selectedEntity?.let { selected -> PillButton("Construcción", selected = selected.construction, enabled = connected) {
+                                command("cad.entity.construction", "construction" to !selected.construction)
+                            } }
+                        }
+                        if (capabilities.sketchEditing && (state.cadTool == "MOVE" || depthPreview)) {
+                            SnapControl(listOf(SnapType.NONE, SnapType.INCREMENT), if (cad.increment) SnapType.INCREMENT else SnapType.NONE,
+                                { command("cad.settings", "increment" to (it == SnapType.INCREMENT)) })
+                        }
+                        CadSnapStepInput(cad.step, unit, { unit = it }) { command("cad.settings", "step" to it) }
+                        editingConstraint?.let { constraint ->
+                            CadDimension(cadLabel(constraint.type), drafts["constraint"] ?: constraint.value ?: 0.0, unit, constraint.id,
+                                step = cad.step, enabled = connected, minimum = .0000001, onDone = ::acceptValues) { drafts["constraint"] = it }
+                        }
+                        pendingDimension?.let { type ->
+                            CadDimension(if (type == "DISTANCE") "Distancia" else "Radio", drafts["constraint"] ?: cad.step * 5, unit, type,
+                                step = cad.step, enabled = connected, minimum = .0000001, onDone = ::acceptValues) { drafts["constraint"] = it }
+                        }
+                        entity?.let { selected ->
+                            val fields = when (selected.type) {
+                                "RECTANGLE" -> listOf("width" to "Ancho", "height" to "Alto")
+                                "CIRCLE" -> listOf("diameter" to "Diámetro", "x" to "Centro X", "y" to "Centro Y")
+                                "ARC" -> listOf("radius" to "Radio", "start" to "Inicio", "sweep" to "Ángulo")
+                                else -> listOf("x" to "X inicio", "y" to "Y inicio", "x2" to "X final", "y2" to "Y final")
+                            }
+                            fields.forEach { (field, label) ->
+                                val degrees = field in listOf("start", "sweep")
+                                CadDimension(label, drafts[field] ?: selected.values[field] ?: 0.0, unit, selected.id + field,
+                                    degrees = degrees, step = if (degrees) 1.0 else cad.step, enabled = connected,
+                                    minimum = if (field in listOf("width", "height", "diameter", "radius")) .0000001 else -10000.0,
+                                    maximum = if (field == "sweep") 359.99 else 10000.0,
+                                    onDone = ::acceptValues) { drafts[field] = it?.takeIf { value -> field != "sweep" || kotlin.math.abs(value) in .01..359.99 } }
+                            }
+                            CadAction("DELETE", "Borrar figura", enabled = connected) { command("cad.entity.delete", "entity_id" to selected.id) }
+                        }
+                        if (!editing && !cad.sessionActive && "CUT" in capabilities.features) {
+                            var expanded by remember { mutableStateOf(false) }
+                            Box {
+                                PillButton("Destino: ${target?.name ?: "elegir sólido"}", enabled = connected && targets.isNotEmpty()) { expanded = true }
+                                DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
+                                    targets.forEach { item -> DropdownMenuItem(text = { Text(item.name) }, onClick = { cutTarget = item.id; expanded = false }) }
+                                }
+                            }
+                        }
+                        if (depthPreview) {
+                            fun preview(value: Double) { drafts.remove("depth"); command("cad.extrude.update", "depth" to value) }
+                            CadDimension("Profundidad", cad.depth, unit, cad.sessionId.orEmpty(), step = cad.step,
+                                minimum = .0000001, enabled = connected, onNudge = ::preview,
+                                onDone = { drafts["depth"]?.let(::preview) }) { drafts["depth"] = it }
+                        } else feature?.let { selected ->
+                            CadDimension("Profundidad", drafts["depth"] ?: selected.depth, unit, selected.id,
+                                step = cad.step, minimum = .0000001, enabled = connected, onDone = ::acceptValues) { drafts["depth"] = it }
+                            CadAction("VISIBLE", if (selected.enabled) "Ocultar" else "Mostrar", selected = selected.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to selected.id, "enabled" to !selected.enabled) }
+                            CadAction("CONVERT", "Crear copia de malla (conserva el modelo CAD)", enabled = selected.enabled && connected) { command("cad.convert", "feature_id" to selected.id) }
+                            CadAction("DELETE", "Borrar operación", enabled = connected) { command("cad.feature.delete", "feature_id" to selected.id) }
                         }
                     }
-                    CadAction("DELETE", "Borrar figura") { command("cad.entity.delete", "entity_id" to entity.id) }
                 }
-                if (!editing && !cad.sessionActive && "CUT" in capabilities.features) {
-                    var expanded by remember { mutableStateOf(false) }
-                    Box {
-                        PillButton("Destino: ${target?.name ?: "elegir sólido"}", enabled = targets.isNotEmpty()) { expanded = true }
-                        DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
-                            targets.forEach { item -> DropdownMenuItem(text = { Text(item.name) }, onClick = { cutTarget = item.id; expanded = false }) }
-                        }
-                    }
-                }
-                if (depthPreview) {
-                    var pendingDepth by remember(cad.sessionId) { mutableStateOf<Double?>(null) }
-                    LaunchedEffect(cad.depth) { if (pendingDepth?.let { kotlin.math.abs(it - cad.depth) < 1e-9 } == true) pendingDepth = null }
-                    fun nudge(direction: Int) {
-                        val value = ((pendingDepth ?: cad.depth) + direction * cad.step).coerceAtLeast(.0000001)
-                        pendingDepth = value; command("cad.extrude.update", "depth" to value)
-                    }
-                    StepperButton("−", enabled = connected) { nudge(-1) }
-                    CadDimension("Profundidad", cad.depth, unit, "depth") { command("cad.extrude.update", "depth" to it) }
-                    StepperButton("+", enabled = connected) { nudge(1) }
-                    CadAction("FINISH", "Confirmar ${cadLabel(cad.operation)}", enabled = cad.canConfirm && connected) { command("cad.session.confirm") }
-                    CadAction("CANCEL", "Cancelar preview") { command("cad.session.cancel") }
-                } else cad.selectedFeature?.let { feature ->
-                    CadDimension("Profundidad", feature.depth, unit, feature.id) { command("cad.feature.set", "feature_id" to feature.id, "depth" to it) }
-                    CadAction("VISIBLE", if (feature.enabled) "Ocultar" else "Mostrar", selected = feature.enabled) { command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled) }
-                    CadAction("CONVERT", "Crear copia de malla (conserva el modelo CAD)", enabled = feature.enabled && connected) { command("cad.convert", "feature_id" to feature.id) }
-                    CadAction("DELETE", "Borrar operación") { command("cad.feature.delete", "feature_id" to feature.id) }
+                if (hasValues) {
+                    Spacer(Modifier.width(10.dp))
+                    RoundAction(AppIcons.cad("CANCEL"), if (depthPreview) "Descartar preview" else "Descartar cotas", Ink.Bad, ::discardValues)
+                    Spacer(Modifier.width(4.dp))
+                    RoundAction(AppIcons.cad("FINISH"), if (depthPreview) "Confirmar ${cadLabel(cad.operation)}" else "Aplicar cotas",
+                        if (canAccept) Ink.Ok else Ink.Faint, { if (canAccept) acceptValues() })
                 }
             }
         }
@@ -299,27 +349,36 @@ private fun CadAction(intent: String, description: String, selected: Boolean = f
     }
 }
 
+/** Same compact fields and accelerating buttons as Edit; CAD wire values are metres. */
 @Composable
-private fun CadUnitSelector(unit: LengthUnit, onUnit: (LengthUnit) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        PillButton(unit.short) { expanded = true }
-        DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
-            LengthUnit.entries.forEach { item -> DropdownMenuItem(text = { Text(item.short) }, onClick = { onUnit(item); expanded = false }) }
-        }
-    }
-}
-
-@Composable
-private fun CadDimension(label: String, meters: Double, unit: LengthUnit, identity: String, degrees: Boolean = false, onApply: (Double) -> Unit) {
+private fun CadDimension(
+    label: String, meters: Double, unit: LengthUnit, identity: String,
+    step: Double, enabled: Boolean, degrees: Boolean = false,
+    minimum: Double = -10000.0, maximum: Double = 10000.0,
+    onNudge: ((Double) -> Unit)? = null,
+    onDone: () -> Unit,
+    onDraft: (Double?) -> Unit,
+) {
     val factor = if (degrees) 1.0 else when (unit) { LengthUnit.MILLIMETERS -> 1000.0; LengthUnit.CENTIMETERS -> 100.0; LengthUnit.METERS -> 1.0 }
-    var draft by remember(identity, unit) { mutableStateOf<String?>(null) }
-    val text = draft ?: String.format(Locale.US, "%.4f", meters * factor).trimEnd('0').trimEnd('.')
-    val value = text.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() }
-    OutlinedTextField(value = text, onValueChange = { draft = it }, label = { Text(label) },
-        suffix = { Text(if (degrees) "°" else unit.short) }, singleLine = true, isError = value == null,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.width(126.dp))
-    CadAction("FINISH", "Aplicar $label", enabled = value != null) { value?.let { onApply(it / factor); draft = null } }
+    val input = remember(identity, factor) { CadNumberDraft() }
+    SideEffect { input.acknowledge(meters) }
+    val value = input.read(meters, factor, minimum, maximum)
+    fun nudge(direction: Int) {
+        val next = input.nudge(meters, factor, step, direction, minimum, maximum) ?: return
+        if (onNudge != null) onNudge(next) else onDraft(next)
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, color = Ink.Faint, fontSize = 11.sp)
+        StepperButton("−", enabled && value != null && value > minimum) { nudge(-1) }
+        val displayed = (input.pending ?: meters) * factor
+        CompactNumericField(value = input.text ?: formatToolDistance(displayed, detailDecimalPlaces(displayed, if (degrees || unit == LengthUnit.MILLIMETERS) 2 else 4)),
+            onValueChange = { if (enabled) { input.text = it; onDraft(input.read(meters, factor, minimum, maximum)) } },
+            modifier = Modifier.width(84.dp), textAlign = TextAlign.End, placeholder = if (degrees) "°" else unit.short,
+            textColor = if (value == null) Ink.Bad else if (enabled) Ink.OnPanel else Ink.Faint,
+            onDone = { if (enabled && value != null) { input.pending = value; input.text = null; onDone() } })
+        Text(if (degrees) "°" else unit.short, color = Ink.Muted, fontSize = 12.sp)
+        StepperButton("+", enabled && value != null && value < maximum) { nudge(1) }
+    }
 }
 
 

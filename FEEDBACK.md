@@ -161,6 +161,10 @@ corresponda, sin marca especial.
         principal + piezas adicionales), como en un CAD paramétrico multi-body habitual.
 
 ### Mejoras / estética / refinamientos generales
+- [ ] 🔧 en revisión (Codex, 10-09) — Unificar la bandeja inferior CAD: Paso y
+      dimensiones con −/+ y repetición acelerada, campos compactos como Edit y
+      cancelar/aceptar fijos a la derecha con los mismos iconos rojo/verde.
+
 - [ ] 🔧 en revisión (Codex, 10-09) — La malla generada por extrude/vaciado (`cad/kernel.py`) sale con topología sucia
       (n-gons/triángulos sueltos) porque depende del resultado bruto del booleano de
       Blender. Construir las caras de forma ordenada (quads siguiendo el perímetro del

@@ -60,6 +60,19 @@ boceto. Es un solver acotado a estas restricciones, no el motor completo de
 FreeCAD. No anuncia un estado «totalmente restringido» ni restricciones que no
 pueda evaluar. Los rectángulos siguen alineados a los ejes de su plano.
 
+## Bandeja de cotas
+
+Paso y dimensiones usan los campos compactos y botones −/+ de las otras bandejas.
+Mantener un botón inicia la repetición a los 400 ms y acelera de 180 a 80 ms entre
+pasos; soltar no añade otro incremento. La unidad elegida junto a Paso gobierna
+las cotas métricas. Los campos angulares permanecen en grados.
+
+Al editar un boceto o una operación confirmada, las cotas quedan en borrador:
+**✓** las aplica juntas y **×** las descarta. Ambos botones permanecen fijos a la
+derecha aunque desplaces los parámetros. En la preview de Extruir/Vaciar, −/+
+actualiza la profundidad visible inmediatamente; ✓ confirma y × cancela la sesión.
+Las respuestas antiguas de Blender no hacen perder pulsaciones acumuladas.
+
 ## Extruir y vaciar con el lápiz
 
 1. Crear un boceto XY/XZ/YZ y dibujar un perfil cerrado. También se reconocen
