@@ -10,7 +10,7 @@ data class CadCapabilities(
     val sketchEditing: Boolean = false,
 ) { val available get() = version == 1 && planes.isNotEmpty() }
 data class CadEntity(val id: String, val type: String, val values: Map<String, Double>, val construction: Boolean = false,
-    val dimensions: List<CadMeasure> = emptyList(), val isFillet: Boolean = false, val isSquare: Boolean = false)
+    val dimensions: List<CadMeasure> = emptyList(), val isFillet: Boolean = false, val isSquare: Boolean = false, val reference: Boolean = false)
 data class CadMeasure(val field: String, val label: String, val constraintType: String,
     val valueFactor: Double, val refs: List<CadSelection>, val constraintIds: List<String>)
 data class CadDimensionOption(val value: Double, val constraintId: String?)
@@ -29,6 +29,11 @@ data class CadOverlay(val id: String, val points: List<Pair<Float, Float>>, val 
     val label: String? = null, val labelPoint: Pair<Float, Float>? = null, val labelOffset: Float = 14f)
 data class CadBody(val id: String, val name: String)
 data class CadPlane(val id: String, val name: String, val translation: List<Double>, val rotation: List<Double>)
+data class CadSurfaceItem(val id: String, val kind: String, val objectName: String, val featureId: String?, val planar: Boolean)
+data class CadMeasurement(val label: String, val value: Double, val unit: String)
+data class CadSurface(val mode: String = "PROFILE", val selection: List<CadSurfaceItem> = emptyList(),
+    val measurements: List<CadMeasurement> = emptyList(), val canSketch: Boolean = false)
+data class CadHistoryNode(val id: String, val kind: String, val name: String, val bodyId: String, val sketchId: String?)
 data class CadState(
     val workspace: Boolean = false,
     val isolated: Boolean = false,
@@ -54,10 +59,11 @@ data class CadState(
     val bodies: List<CadBody> = emptyList(), val activeBodyId: String? = null,
     val planes: List<CadPlane> = emptyList(),
     val dimensionOptions: Map<String, CadDimensionOption> = emptyMap(),
+    val surface: CadSurface = CadSurface(), val history: List<CadHistoryNode> = emptyList(),
 ) {
     val activeSketch get() = sketches.firstOrNull { it.id == activeSketchId }
     val selectedEntity get() = sketches.flatMap { it.entities }.firstOrNull { selectionKind == "ENTITY" && it.id == selectionId }
-    val selectedFeature get() = features.firstOrNull { selectionKind == "FEATURE" && it.id == selectionId }
+    val selectedFeature get() = features.firstOrNull { (selectionKind == "FEATURE" && it.id == selectionId) || (selectionKind == "SURFACE" && it.id == surface.selection.lastOrNull()?.featureId) }
     /** Resolve the source document sketch, including profiles made from several entities. */
     val selectedSketch get() = sketches.firstOrNull { sketch ->
         when (selectionKind) {

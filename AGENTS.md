@@ -503,3 +503,24 @@ no quedan archivos o referencias temporales.
   tramos recortados, para conservar el tamaño y la igualdad de un cuadrado.
 - Cotas y reglas ofrece Editar y Quitar explícitos. El valor inicial de una nueva
   medida procede de la geometría; si ya existe se abre esa cota, no otra superpuesta.
+
+- CAD diferencia la edición del boceto de la selección del sólido. Perfiles/Caras/
+  Aristas/Puntos selecciona hasta dos referencias visibles para medir. El sondeo
+  permanece en `commands/snap.py`: agrupa caras coplanares conectadas y omite sus
+  aristas internas; las divisiones collineales se seleccionan como una arista.
+  El resaltado se dibuja dentro de GPUOffScreen, nunca duplicado en Android.
+- Boceto en cara consume la cara resaltada sin repetir raycast y crea plano+boceto
+  en un solo undo. Las caras superiores CAD conservan soporte asociativo; otras
+  caras guardan su marco. Las selecciones del sólido son transitorias y se invalidan
+  al cambiar geometría o transformación; no persisten índices de la malla evaluada.
+- En un boceto, Proyectar referencia fija copia los contornos seleccionados a
+  construcción en su plano, con FIX y un undo. Permite acotar desde esos elementos;
+  es una copia fija, no promete asociación topológica con cualquier cara/arista.
+- Finalizar boceto restaura una vista 3D orbital, con encuadre del resultado, sin
+  escribir `rv3d`. Extruir/Vaciar muestran su preview en 3D. Un perfil nuevo queda
+  seleccionado al finalizar para poder extruir/vaciar sin volver a buscarlo.
+- La lista CAD muestra solo figuras/reglas del boceto activo al editar. En 3D
+  muestra el último nodo del cuerpo; Ver historial despliega la secuencia y sigue
+  el último paso. `order` conserva el orden de creación de bocetos/operaciones.
+  Los bocetos consumidos se ocultan por defecto; el ojo conserva una elección
+  explícita de visibilidad. Las caras seleccionadas nunca aparecen en captura limpia.

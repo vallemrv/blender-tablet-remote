@@ -1395,7 +1395,8 @@ de banda y configuración de latencia interactiva.
 `sketch_editing:true`, `fillet:true`, `length_unit:METERS` y `constraints` con
 `COINCIDENT,HORIZONTAL,VERTICAL,PARALLEL,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,RADIUS,FIX,MIDPOINT,SYMMETRIC`.
 También anuncia `construction`, `datum_planes`, `bodies`, `origin`, `mesh_copy`,
-`smart_cursor`, `selection_delete`, `editable_dimensions` y `fillet_remove`.
+`smart_cursor`, `selection_delete`, `editable_dimensions`, `fillet_remove`,
+`solid_selection`, `face_sketch`, `project_reference` y `history_order`.
 Las extensiones se negocian por capabilities; se instala el APK junto con el ZIP.
 `mode.set {mode:CAD}` activa el espacio CAD (Blender permanece en Object).
 OBJECT/EDIT salen de CAD y cancelan cualquier preview. Los objetos evaluados CAD
@@ -1452,8 +1453,15 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.entity.construction` | `{construction}` | Cambia las figuras seleccionadas a auxiliares o perfiles; rechaza romper una operación dependiente |
 | `cad.body.create` | `{}` | Crea y activa otro cuerpo independiente |
 | `cad.body.activate` | `{body_id}` | Elige el cuerpo de los nuevos bocetos, sin undo |
-| `cad.plane.create` | `{base?,translation?,rotation?,reference_sketch_id?,support_id?}` o `{u,v}` | Plano persistente; posición en metros y ángulos locales XYZ en grados; un toque usa una cara plana visible |
+| `cad.plane.create` | `{base?,translation?,rotation?,reference_sketch_id?,support_id?}` | Plano persistente; posición en metros y ángulos locales XYZ en grados |
 | `cad.plane.set` | `{plane_id,translation?,rotation?}` | Ajusta el plano y reconstruye bocetos/sólidos dependientes |
+| `cad.surface.mode` | `{mode:"PROFILE\|FACE\|EDGE\|VERTEX"}` | Elige selección del boceto/perfiles o referencias del sólido, sin undo |
+| `cad.surface.select` | `{u,v}` | Alterna una referencia visible; conserva hasta dos para medir |
+| `cad.surface.clear` | `{}` | Limpia las referencias transitorias |
+| `cad.sketch.on_face` | `{}` | Crea un boceto en la cara plana resaltada, sin repetir sondeo y con un undo |
+| `cad.reference.project` | `{}` | Copia las referencias seleccionadas a construcción fija en el boceto activo |
+| `cad.view.solid` | `{}` | Sale del plano de boceto, restaura la vista 3D orbital y encuadra |
+
 
 
 `selection.items` contiene `{kind,id,part}`; `selection.kind/id/part` conserva el
@@ -1579,8 +1587,8 @@ Mientras `active_sketch_id` esté activo, la cámara remota permanece ortogonal 
 boceto: orbit se traduce a pan, roll/vistas de eje no cambian orientación y la
 perspectiva permanece ORTHO. Zoom/pan siguen funcionando y no escriben en `rv3d`.
 
-Al entrar en CAD con un documento existente se encuadra su sketch activo válido
-o el primero, sin activar la edición. Repetir CAD mientras ya está abierto conserva
+Al entrar en CAD se conserva la edición del boceto activo si existe; en caso
+contrario se encuadra el resultado en 3D, sin activar la edición. Repetir CAD mientras ya está abierto conserva
 la vista. Solo cambia la cámara remota; `rv3d` permanece intacto.
 
 ## Escultura y presión del lápiz
@@ -1755,3 +1763,37 @@ proyección/visibilidad por trazo y un índice de teselas; el atlas se reutiliza
 identidad de geometría/UV evaluadas, invalidándose tras editar la malla en el PC.
 La profundidad se reutiliza con cámara y geometría idénticas; cambia al navegar
 o editar, y permanece fija durante el trazo cuya cámara también es fija.
+
+
+## Referencias de sólidos y navegación CAD
+
+`cad.state.surface` contiene `mode`, `selection:[{id,kind,object,feature_id?,planar}]`,
+`measurements:[{label,value,unit}]` y `can_sketch`. Las unidades de medida son
+`LENGTH` (metros), `AREA` (m²) y `ANGLE` (grados). No son órdenes para reescalar
+la malla; miden la geometría seleccionada. Una tercera referencia inicia otra pareja.
+La primera se resalta en azul y la segunda en naranja dentro de GPUOffScreen.
+La captura limpia excluye estos marcadores.
+
+El sondeo de `commands/snap.py` usa malla evaluada y oclusión común. Una cara es un
+parche coplanar conectado; se omiten aristas internas coplanares y se unen fragmentos
+collineales de una misma arista. Los datos evaluados solo se retienen en memoria,
+validados contra geometría y matriz del objeto. No se guardan sus índices en CAD.
+Si la geometría cambia, las referencias se invalidan antes de crear un boceto.
+`cad.sketch.on_face` consume el marco elegido; no hace otro raycast. La cara superior
+CAD se vincula a su operación; otras caras conservan un marco capturado. Los planos
+implícitos sin otros usuarios se retiran al borrar su boceto.
+
+`cad.reference.project` transforma los segmentos elegidos a coordenadas locales
+del plano y crea entidades LINE `construction:true,reference:true` con FIX.
+Se descartan proyecciones degeneradas y se respeta el límite del solver. Es una
+copia estática que permite cotas contra geometría existente, no asociación BREP.
+
+El documento público añade `history:[{id,kind,name,body_id,sketch_id?}]` en orden de
+creación. `kind` es SKETCH o FEATURE. Los nodos persistentes usan `order`; documentos
+anteriores se normalizan sin cambiar IDs. Android muestra solo el boceto activo
+al editar y el último nodo del cuerpo en 3D, con historial completo desplegable.
+La visibilidad automática oculta bocetos consumidos; `cad.sketch.visibility`
+guarda `visibility_explicit:true` para respetar la decisión del usuario.
+Finalizar boceto no crea undo ni modifica `rv3d`; restaura una vista 3D y selecciona
+el perfil nuevo pendiente o el último resultado. La preview de Extruir/Vaciar
+se presenta también en 3D, conservando los gestos de profundidad y navegación.

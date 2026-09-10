@@ -79,6 +79,16 @@ corresponda, sin marca especial.
 ## Materiales / Texturas (modo pintura de materiales)
 
 ### Bugs generales
+- [ ] ⚠️ CRÍTICO (crash/congelado, 11-09) — Blender se ha quedado congelado o ha crasheado
+      al poner el viewport en Wireframe estando en modo Materiales/Texturas. Hipótesis con
+      base en el código: `materials/runtime.py` `presentation()` se ejecuta en cada frame de
+      captura (`streaming/capture.py:251`) y fuerza `shading.type='MATERIAL'` para capturar,
+      restaurando el valor guardado al terminar. Si el usuario pone manualmente Wireframe,
+      cada frame hace `WIREFRAME → MATERIAL → captura → WIREFRAME` a la velocidad de
+      streaming (30-60 fps), y cambiar `shading.type` en bucle a esa frecuencia es una
+      operación cara (recompila shaders/estado GPU) — causa probable del cuelgue. Sin
+      traceback capturado todavía; si vuelve a pasar, guardar la salida del terminal del
+      backend en el momento del fallo.
 - [ ] 🔧 en revisión (Codex, 10-09) — Rendimiento: el modo de materiales va con mucho lag, igual que le pasaba a Sculpt.
       Revisar si es la misma causa que ya se diagnosticó/resolvió allí (cola de vídeo H.264,
       depsgraph desactualizado) o si es un cuello de botella propio de
@@ -168,6 +178,12 @@ corresponda, sin marca especial.
         principal + piezas adicionales), como en un CAD paramétrico multi-body habitual.
 
 ### Mejoras / estética / refinamientos generales
+- [ ] 🔧 en revisión (Codex, 11-09) — Selección de caras/aristas/puntos del sólido
+      para medir y proyectar referencias al croquis; cara resaltada y Boceto en
+      cara directo. Finalizar recupera una vista 3D orbital. El panel muestra solo
+      el boceto activo al editar y el último nodo en 3D, con historial desplegable
+      que sigue el último paso; los bocetos consumidos se ocultan automáticamente.
+
 - [ ] 🔧 en revisión (Codex, 11-09) — Un solo cursor inteligente CAD: tocar añade o
       quita selección, arrastrar selecciona y mueve, sin herramientas separadas de
       selección múltiple/Mover. Añadir Seleccionar todo, Deseleccionar todo,

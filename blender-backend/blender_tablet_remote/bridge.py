@@ -48,6 +48,11 @@ MAX_MESSAGES_PER_TICK = 256
 # fuera deliberadamente: forzar una captura por cada transform.nudge/value anularía
 # el límite de FPS y monopolizaría el hilo principal con renders.
 IMMEDIATE_FRAME_COMMANDS = {
+    "cad.surface.select",
+    "cad.surface.clear",
+    "cad.sketch.on_face",
+    "cad.sketch.finish",
+    "cad.view.solid",
     "material.apply",
     "material.settings",
     "mode.set",

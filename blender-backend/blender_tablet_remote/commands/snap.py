@@ -563,3 +563,124 @@ def query_sketch_endpoint(overlay, u, v, aspect, previous=None):
             candidates.append(dict(id=item['id']+':'+handle['part'],entity_id=item['id'],
                                    part=handle['part'],distance=distance))
     return choose_sticky_candidate(candidates,previous,.018)
+
+
+def _cad_mesh(obj):
+    """Evaluated surface plus adjacency; coplanar tessellation is not a CAD edge."""
+    mesh=obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data
+    matrix=obj.matrix_world
+    points=[matrix@v.co for v in mesh.vertices]
+    faces=[tuple(p.vertices) for p in mesh.polygons]
+    normals=[]; centers=[]; adjacency={}
+    normal_matrix=matrix.to_3x3().inverted_safe().transposed()
+    for index,poly in enumerate(mesh.polygons):
+        normals.append((normal_matrix@poly.normal).normalized())
+        centers.append(matrix@poly.center)
+        for a,b in zip(faces[index],faces[index][1:]+faces[index][:1]):
+            adjacency.setdefault(tuple(sorted((a,b))),[]).append(index)
+    for edge in mesh.edges: adjacency.setdefault(tuple(sorted(edge.vertices)),[])
+    def coplanar(a,b):
+        return normals[a].dot(normals[b])>1-1e-7
+    edges=[edge for edge,linked in adjacency.items() if len(linked)!=2 or not coplanar(*linked)]
+    return mesh,points,faces,normals,centers,adjacency,edges
+
+
+def query_cad_surface(payload, kind):
+    """CAD selection uses visible geometry and the shared candidate policy."""
+    if kind not in ('FACE','EDGE','VERTEX'): raise BadPayload('Selecciona Cara, Arista o Punto')
+    found=find_view3d()
+    if found is None: raise CommandError('Se necesita un viewport',code='no_viewport')
+    rv3d=found[3]; viewport=found[1].spaces.active
+    camera.sync_from_region(rv3d)
+    u,v=get_float(payload,'u',.5),get_float(payload,'v',.5)
+    if not(0<=u<=1 and 0<=v<=1): raise BadPayload('Toca dentro de la vista')
+    aspect=max(found[2].width,1)/max(found[2].height,1)
+    graphs={}; selected=None
+    if kind=='FACE':
+        hit=query_candidate(dict(payload,snap_type='FACE'))
+        if not hit.get('hit'): return None
+        obj=bpy.data.objects.get(hit['object'])
+        if obj is None or obj.type!='MESH': return None
+        graph=_cad_mesh(obj); graphs[obj.name]=graph
+        index=hit['element']
+        if not isinstance(index,int) or not 0<=index<len(graph[2]): return None
+        selected=(obj,index)
+    else:
+        candidates=[]; depsgraph=bpy.context.evaluated_depsgraph_get()
+        for obj in bpy.context.view_layer.objects:
+            if obj.type!='MESH' or not obj.visible_get(viewport=viewport): continue
+            graph=_cad_mesh(obj); graphs[obj.name]=graph
+            points,edges=graph[1],graph[6]
+            vertices={i for edge in edges for i in edge}
+            if kind=='VERTEX':
+                linked={i for edge in graph[5] for i in edge}
+                vertices.update(i for i in range(len(points)) if i not in linked)
+            sources=edges if kind=='EDGE' else [(i,) for i in sorted(vertices)]
+            for source in sources:
+                a=points[source[0]]; pa=camera.project(a,rv3d)
+                if pa is None: continue
+                if len(source)==1: position=a; screen=pa
+                else:
+                    b=points[source[1]]; pb=camera.project(b,rv3d)
+                    if pb is None: continue
+                    dx,dy=(pb[0]-pa[0])*aspect,pb[1]-pa[1]
+                    t=max(0.,min(1.,((u-pa[0])*aspect*dx+(v-pa[1])*dy)/max(dx*dx+dy*dy,1e-20)))
+                    screen=(pa[0]+(pb[0]-pa[0])*t,pa[1]+(pb[1]-pa[1])*t)
+                    projection=camera.perspective_matrix(rv3d)
+                    wa=(projection@a.to_4d()).w; wb=(projection@b.to_4d()).w
+                    world_t=t*wa/max((1-t)*wb+t*wa,1e-12)
+                    position=a.lerp(b,world_t)
+                distance=(((u-screen[0])*aspect)**2+(v-screen[1])**2)**.5
+                if distance>.028 or not _visible(position,screen,depsgraph,rv3d,set(),viewport): continue
+                candidates.append(dict(id=obj.name+':'+str(source),distance=distance,object=obj.name,source=source))
+        chosen=choose_sticky_candidate(candidates,None,.028)
+        if chosen is None: return None
+        selected=(bpy.data.objects[chosen['object']],chosen['source'])
+    obj,source=selected; mesh,points,faces,normals,centers,adjacency,edges=graphs[obj.name]
+    data=dict(kind=kind,object=obj.name,feature_id=obj.get('btr_cad_feature_id'),
+              mesh_pointer=obj.data.as_pointer(),matrix=[list(row) for row in obj.matrix_world],
+              segments=[],triangles=[],points=[],planar=False)
+    if kind=='FACE':
+        chosen={source}; pending=[source]
+        origin=centers[source]; normal=normals[source]
+        tolerance=max((p-origin).length for p in points)*1e-6+1e-9
+        while pending:
+            face=pending.pop()
+            for edge in zip(faces[face],faces[face][1:]+faces[face][:1]):
+                for neighbor in adjacency.get(tuple(sorted(edge)),[]):
+                    if neighbor in chosen: continue
+                    if normals[neighbor].dot(normal)>1-1e-7 and all(abs((points[i]-origin).dot(normal))<=tolerance for i in faces[neighbor]):
+                        chosen.add(neighbor); pending.append(neighbor)
+        boundary=[edge for edge,linked in adjacency.items() if sum(i in chosen for i in linked)==1]
+        mesh.calc_loop_triangles()
+        data['triangles']=[[list(points[i]) for i in tri.vertices] for tri in mesh.loop_triangles if tri.polygon_index in chosen]
+        data['segments']=[[list(points[i]) for i in edge] for edge in boundary]
+        data['points']=[list(points[i]) for i in sorted({i for f in chosen for i in faces[f]})]
+        weights=[(Vector(b)-Vector(a)).cross(Vector(c)-Vector(a)).length*.5 for a,b,c in data['triangles']]
+        area=sum(weights)
+        center=sum(((Vector(a)+Vector(b)+Vector(c))/3*w for (a,b,c),w in zip(data['triangles'],weights)),Vector())/area if area>1e-20 else origin
+        data['normal']=list(normal); data['center']=list(center)
+        data['planar']=all(abs((Vector(p)-origin).dot(normal))<=tolerance for p in data['points'])
+        data['id']=obj.name+':FACE:'+str(min(chosen))
+    elif kind=='EDGE':
+        # Join collinear pieces introduced by quad materialization into one edge.
+        a,b=(points[i] for i in source); direction=(b-a).normalized()
+        incident={}
+        for edge in edges:
+            for vertex in edge: incident.setdefault(vertex,[]).append(edge)
+        chosen={tuple(source)}; vertices=set(source); pending=list(source); checked={tuple(source)}
+        while pending:
+            for edge in incident[pending.pop()]:
+                if edge in checked: continue
+                checked.add(edge)
+                p,q=(points[i] for i in edge)
+                if (q-p).length<1e-12: continue
+                if abs((q-p).normalized().dot(direction))>1-1e-7:
+                    chosen.add(edge)
+                    pending.extend(i for i in edge if i not in vertices); vertices.update(edge)
+        data['segments']=[[list(points[i]) for i in edge] for edge in sorted(chosen)]
+        data['points']=[list(points[i]) for i in sorted(vertices)]
+        data['id']=obj.name+':EDGE:'+str(min(chosen))
+    else:
+        data['points']=[list(points[source[0]])]; data['id']=obj.name+':VERTEX:'+str(source[0])
+    return data

@@ -22,7 +22,13 @@ object CadParser {
         val document = j.optJSONObject("document")
         val session = j.optJSONObject("session")
         val selection = j.optJSONObject("selection")
+        val surface = j.optJSONObject("surface")
         return CadState(
+            history = objects(document?.optJSONArray("history")).map { CadHistoryNode(it.optString("id"),it.optString("kind"),it.optString("name"),it.optString("body_id"),it.id("sketch_id")) },
+            surface = CadSurface(surface?.optString("mode", "PROFILE") ?: "PROFILE",
+                objects(surface?.optJSONArray("selection")).map { CadSurfaceItem(it.optString("id"),it.optString("kind"),it.optString("object"),it.id("feature_id"),it.optBoolean("planar")) },
+                objects(surface?.optJSONArray("measurements")).mapNotNull { m -> m.optDouble("value").takeIf { it.isFinite() }?.let { CadMeasurement(m.optString("label"),it,m.optString("unit")) } },
+                surface?.optBoolean("can_sketch") == true),
             workspace = j.optBoolean("workspace"), isolated = j.optBoolean("isolated"),
             revision = document?.optLong("revision", 0) ?: 0, documentId = document?.id("id"),
             sketches = objects(document?.optJSONArray("sketches")).map { sketch ->
@@ -34,7 +40,7 @@ object CadParser {
                             }.toMap(), entity.optBoolean("construction"),
                             objects(entity.optJSONArray("dimensions")).map { d -> CadMeasure(d.optString("field"),d.optString("label"),d.optString("constraint_type"),
                                 d.optDouble("value_factor",1.0), objects(d.optJSONArray("refs")).map { CadSelection(it.optString("id"),it.optString("part","BODY")) },
-                                strings(d.optJSONArray("constraint_ids"))) }, entity.optBoolean("is_fillet"),entity.optBoolean("is_square"))
+                                strings(d.optJSONArray("constraint_ids"))) }, entity.optBoolean("is_fillet"),entity.optBoolean("is_square"),entity.optBoolean("reference"))
                     }, objects(sketch.optJSONArray("profiles")).map { CadProfile(it.optString("id"), it.optString("entity_id"), it.optString("label", "Perfil")) },
                     objects(sketch.optJSONArray("constraints")).map { c -> CadConstraint(c.optString("id"), c.optString("type"),
                         c.optDouble("value").takeIf { it.isFinite() }, objects(c.optJSONArray("refs")).map { it.optString("id") },

@@ -167,16 +167,20 @@ class FeedbackTests(CadTests):
 
     def test_planar_face_reference_uses_shared_visible_pick_and_rejects_nonplanar(self):
         from blender_tablet_remote.commands import snap
-        bpy.ops.mesh.primitive_cube_add(location=(.1,.2,.3))
-        obj=bpy.context.object
-        hit=dict(object=obj.name,position=[.1,.2,.31],normal=[0,0,1],vertices=[[-.01,-.01,.01],[.01,-.01,.01],[.01,.01,.01],[-.01,.01,.01]])
-        with patch.object(snap,'query_face_frame',return_value=hit) as pick:
-            cad.plane_create(dict(u=.5,v=.5,**OWNER)); pick.assert_called_once()
+        bpy.ops.mesh.primitive_cube_add(location=(.1,.2,.3)); obj=bpy.context.object
+        cad.settings(dict(show_scene=True,**OWNER)); cad.surface_mode(dict(mode='FACE',**OWNER))
+        points=[[.09,.19,.31],[.11,.19,.31],[.11,.21,.31],[.09,.21,.31]]
+        hit=dict(id='face-test',kind='FACE',object=obj.name,feature_id=None,planar=True,normal=[0,0,1],center=[.1,.2,.31],
+                 points=points,segments=[[a,b] for a,b in zip(points,points[1:]+points[:1])],triangles=[points[:3],[points[0],points[2],points[3]]])
+        with patch.object(snap,'query_cad_surface',return_value=hit) as pick:
+            cad.surface_select(dict(u=.5,v=.5,**OWNER)); pick.assert_called_once()
+        with patch.object(snap,'query_cad_surface',side_effect=AssertionError('second raycast')): cad.sketch_on_face(OWNER)
         plane=runtime.doc()['planes'][0]
-        self.assertTrue(np.allclose(plane['frame']['origin'],hit['position']))
-        before=copy.deepcopy(runtime.doc())
-        hit['vertices'][-1][-1]+=.01
-        with patch.object(snap,'query_face_frame',return_value=hit),self.assertRaises(CommandError): cad.plane_create(dict(u=.5,v=.5,**OWNER))
+        self.assertTrue(np.allclose(plane['frame']['origin'],hit['center']))
+        before=copy.deepcopy(runtime.doc()); hit['planar']=False
+        cad.surface_mode(dict(mode='FACE',**OWNER))
+        with patch.object(snap,'query_cad_surface',return_value=hit): cad.surface_select(dict(u=.5,v=.5,**OWNER))
+        with self.assertRaises(CommandError): cad.sketch_on_face(OWNER)
         self.assertEqual(runtime.doc(),before)
 
     def test_resume_restores_workspace_sketch_and_camera_without_preview(self):

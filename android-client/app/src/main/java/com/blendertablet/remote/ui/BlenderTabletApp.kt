@@ -301,9 +301,9 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 invert = state.sculptInvert,
                 mask = state.blender.sculpt.brush == "MASK",
             ),
-            cadDrawingEnabled = state.connection == ConnectionStatus.CONNECTED && state.blender.cad.workspace && ((state.blender.cad.activeSketchId != null && state.cadTool != "PLANE_FACE") ||
+            cadDrawingEnabled = state.connection == ConnectionStatus.CONNECTED && state.blender.cad.workspace && ((state.blender.cad.activeSketchId != null && state.blender.cad.surface.mode == "PROFILE") ||
                 (state.blender.features.cad.sketchEditing && state.blender.cad.sessionActive && state.blender.cad.operation in listOf("EXTRUDE", "CUT"))),
-            cadCursorEnabled = state.blender.cad.workspace && state.blender.cad.activeSketchId != null && state.cadTool == null,
+            cadCursorEnabled = state.blender.cad.workspace && state.blender.cad.activeSketchId != null && state.blender.cad.surface.mode == "PROFILE" && state.cadTool == null,
             cadOverlay = if (state.blender.cad.workspace) state.blender.cad.overlay else emptyList(),
             shapeTool = if (state.blender.cad.workspace) ShapeTool.NONE else state.shapeTool,
             fixedCircleRadius = state.circleRadius,

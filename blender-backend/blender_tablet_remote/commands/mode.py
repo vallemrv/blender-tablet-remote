@@ -46,9 +46,9 @@ def _set_mode(target: str, owner=None) -> dict:
         runtime.workspace_owner = owner
         runtime.isolate()
         if entering and doc['sketches']:
-            sketch = next((s for s in doc['sketches'] if s['id'] == runtime.active_sketch_id),
-                          doc['sketches'][0])
-            runtime.focus(sketch)
+            sketch = next((s for s in doc['sketches'] if s['id'] == runtime.active_sketch_id), None)
+            if sketch: runtime.focus(sketch)
+            else: runtime.solid_view()
         return {"mode": "CAD", "cad": runtime.status()}
     obj = bpy.context.view_layer.objects.active
     if target in {"EDIT", "SCULPT"} and obj and obj.get(FEATURE_KEY):

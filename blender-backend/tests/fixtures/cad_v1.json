@@ -32,6 +32,10 @@
       "SYMMETRIC"
     ],
     "sketch_editing": true,
+    "solid_selection": true,
+    "face_sketch": true,
+    "project_reference": true,
+    "history_order": true,
     "editable_dimensions": true,
     "fillet_remove": true,
     "smart_cursor": true,
@@ -253,6 +257,35 @@
       "payload": {
         "entity_id": "arc_fixture"
       }
+    },
+    {
+      "command": "cad.surface.mode",
+      "payload": {
+        "mode": "FACE"
+      }
+    },
+    {
+      "command": "cad.surface.select",
+      "payload": {
+        "u": 0.5,
+        "v": 0.5
+      }
+    },
+    {
+      "command": "cad.surface.clear",
+      "payload": {}
+    },
+    {
+      "command": "cad.sketch.on_face",
+      "payload": {}
+    },
+    {
+      "command": "cad.reference.project",
+      "payload": {}
+    },
+    {
+      "command": "cad.view.solid",
+      "payload": {}
     }
   ],
   "state": {

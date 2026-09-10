@@ -31,32 +31,32 @@ def sketch_create(payload):
     plane = str(payload.get('plane','XY')).upper()
     if plane not in model.PLANES:
         raise BadPayload('Plano CAD no compatible')
-    def change(doc):
-        offset=model.number(payload.get('offset',0))
-        support_id=payload.get('support_id')
-        if support_id:
-            feature=model.find(doc,'features',support_id)
-            source,_=model.profile(doc,feature['profile_id'])
-            plane_local=source['plane']
-            offset=source.get('offset',0)+(feature['depth'] if feature['type']=='EXTRUDE' else 0)
-        else: plane_local=plane
-        sketch = dict(id=model.uid('sketch'),name='Boceto '+str(len(doc['sketches'])+1),plane=plane_local,
-                      offset=offset,entities=[],constraints=[],visible=True,body_id=payload.get('body_id') or runtime.active_body_id or doc['bodies'][0]['id'])
-        model.find(doc,'bodies',sketch['body_id'])
-        if payload.get('plane_id'):
-            model.find(doc,'planes',payload['plane_id']); sketch['plane_id']=payload['plane_id']
-        if support_id: sketch['support_id']=support_id
-        if payload.get('reference_sketch_id'):
-            source=model.find(doc,'sketches',payload['reference_sketch_id'])
-            for key in ('plane','offset','plane_id','support_id'):
-                if key in source: sketch[key]=source[key]
-        doc['sketches'].append(sketch)
-        model.resolve_supports(doc)
-        runtime.active_body_id=sketch['body_id']
-        runtime.active_sketch_id = sketch['id']
-        runtime.selection = None
-        runtime.focus(sketch)
-    return runtime.transaction(payload,change,'CAD crear sketch')
+    return runtime.transaction(payload,lambda doc: _new_sketch(doc,payload),'CAD crear sketch')
+
+
+def _new_sketch(doc,payload):
+    offset=model.number(payload.get('offset',0))
+    support_id=payload.get('support_id')
+    if support_id:
+        feature=model.find(doc,'features',support_id)
+        source,_=model.profile(doc,feature['profile_id'])
+        plane_local=source['plane']
+        offset=source.get('offset',0)+(feature['depth'] if feature['type']=='EXTRUDE' else 0)
+    else: plane_local=str(payload.get('plane','XY')).upper()
+    sketch = dict(id=model.uid('sketch'),name='Boceto '+str(len(doc['sketches'])+1),plane=plane_local,
+                  offset=offset,entities=[],constraints=[],visible=True,order=model.next_order(doc),body_id=payload.get('body_id') or runtime.active_body_id or doc['bodies'][0]['id'])
+    model.find(doc,'bodies',sketch['body_id'])
+    if payload.get('plane_id'):
+        model.find(doc,'planes',payload['plane_id']); sketch['plane_id']=payload['plane_id']
+    if support_id: sketch['support_id']=support_id
+    if payload.get('reference_sketch_id'):
+        source=model.find(doc,'sketches',payload['reference_sketch_id'])
+        for key in ('plane','offset','plane_id','support_id'):
+            if key in source: sketch[key]=source[key]
+    doc['sketches'].append(sketch)
+    model.resolve_supports(doc)
+    runtime.enter_sketch(sketch)
+    return sketch
 
 
 @command('cad.sketch.activate')
@@ -66,10 +66,7 @@ def sketch_activate(payload):
         runtime.require(payload)
         runtime.cancel()
     sketch = model.find(runtime.doc(),'sketches',payload.get('sketch_id'))
-    runtime.active_sketch_id = sketch['id']
-    runtime.active_body_id = sketch.get('body_id')
-    runtime.selection = None
-    runtime.focus(sketch)
+    runtime.enter_sketch(sketch)
     return runtime.status()
 
 
@@ -79,8 +76,17 @@ def sketch_finish(payload):
     if runtime.session:
         runtime.require(payload)
         runtime.cancel()
-    runtime.active_sketch_id = None
-    runtime.selection = None
+    active=runtime.active_sketch_id
+    runtime.solid_view()
+    doc=runtime.doc()
+    features=[f for f in doc['features'] if f['enabled'] and f.get('body_id')==runtime.active_body_id]
+    sketch=next((s for s in doc['sketches'] if s['id']==active),None)
+    profiles=model.profiles(sketch) if sketch else []
+    if profiles and not any(f['sketch_id']==active for f in doc['features']):
+        runtime.selection=dict(kind='PROFILE',id=profiles[-1]['id'])
+    elif features:
+        runtime.selection=dict(kind='FEATURE',id=features[-1]['id']); _activate_feature(doc,features[-1]['id'])
+    else: runtime.selection=None
     return runtime.status()
 
 
@@ -187,7 +193,9 @@ def entity_construction(payload):
 def sketch_visibility(payload):
     value=payload.get('visible')
     if not isinstance(value,bool): raise BadPayload('visible debe ser booleano')
-    def change(doc): model.find(doc,'sketches',payload.get('sketch_id'))['visible']=value
+    def change(doc):
+        sketch=model.find(doc,'sketches',payload.get('sketch_id'))
+        sketch['visible']=value; sketch['visibility_explicit']=True
     return runtime.transaction(payload,change,'CAD visibilidad de boceto')
 
 
@@ -228,7 +236,7 @@ def extrude_begin(payload):
         if not target['enabled']: raise BadPayload('El sólido destino está desactivado')
     session = runtime.begin(payload,operation)
     feature = dict(id=model.uid('feature'),name=('Vaciado ' if operation=='CUT' else 'Extrusión ')+str(len(doc['features'])+1),
-                   type=operation,sketch_id=sketch['id'],profile_id='profile_'+e['id'],depth=depth,enabled=True,body_id=target['body_id'] if target else sketch['body_id'])
+                   type=operation,order=model.next_order(doc),sketch_id=sketch['id'],profile_id='profile_'+e['id'],depth=depth,enabled=True,body_id=target['body_id'] if target else sketch['body_id'])
     if target: feature['target_id']=target['id']
     preview = copy.deepcopy(session['baseline'])
     preview['features'].append(feature)
@@ -239,7 +247,7 @@ def extrude_begin(payload):
         raise
     session.update(feature_id=feature['id'],preview=preview,candidate=feature['id'],depth=depth)
     runtime.selection = dict(kind='FEATURE',id=feature['id'])
-    runtime.active_sketch_id = None
+    runtime.solid_view()
     return runtime.status()
 
 
@@ -424,7 +432,8 @@ def select(payload):
             if sketch['id']!=runtime.active_sketch_id: raise BadPayload('Abre el boceto antes de seleccionar sus entidades')
         elif kind=='PROFILE': model.profile(doc,identifier)
         elif kind=='FEATURE':
-            model.find(doc,'features',identifier); _activate_feature(doc,identifier)
+            feature=model.find(doc,'features',identifier); _activate_feature(doc,identifier)
+            runtime.active_body_id=feature.get('body_id')
         else: raise BadPayload('Selección CAD no compatible')
     else: ref=_pick(payload)
     refs=copy.deepcopy(_refs()) if payload.get('additive') else []
@@ -605,7 +614,12 @@ def sketch_delete(payload):
     def change(doc):
         if any(f['sketch_id']==identifier for f in doc['features']) or any(p.get('reference_sketch_id')==identifier for p in doc.get('planes',[])):
             raise CommandError('Elimina primero las operaciones del boceto',code='cad_dependency')
-        doc['sketches'].remove(model.find(doc,'sketches',identifier))
+        removed=model.find(doc,'sketches',identifier)
+        doc['sketches'].remove(removed)
+        plane_id=removed.get('plane_id')
+        if plane_id and not any(s.get('plane_id')==plane_id for s in doc['sketches']):
+            plane=model.find(doc,'planes',plane_id)
+            if plane.get('implicit'): doc['planes'].remove(plane)
     runtime.transaction(payload,change,'CAD eliminar boceto')
     if runtime.active_sketch_id==identifier: runtime.active_sketch_id=None
     runtime.selection=None
@@ -626,7 +640,8 @@ def body_activate(payload):
     runtime.require_workspace()
     if runtime.session: raise CommandError('Termina la preview antes de cambiar de cuerpo',code='session_active')
     body=model.find(runtime.doc(),'bodies',payload.get('body_id'))
-    runtime.active_body_id=body['id']; runtime.active_sketch_id=None; runtime.selection=None
+    runtime.active_body_id=body['id']; runtime.selection=None
+    runtime.solid_view()
     return runtime.status()
 
 
@@ -637,20 +652,7 @@ def plane_create(payload):
                    translation=payload.get('translation',[0,0,0]),rotation=payload.get('rotation',[0,0,0]))
         for key in ('reference_sketch_id','support_id'):
             if payload.get(key): plane[key]=payload[key]
-        if 'u' in payload:
-            from .snap import query_face_frame
-            from mathutils import Vector
-            hit=query_face_frame(payload)
-            if hit is None: raise BadPayload('Toca una cara plana visible')
-            obj=bpy.data.objects[hit['object']]; matrix=obj.matrix_world
-            location=Vector(hit['position'])
-            vertices=[matrix@Vector(v) for v in hit['vertices']]
-            normal=(matrix.to_3x3().inverted().transposed()@Vector(hit['normal'])).normalized()
-            tolerance=max((v-vertices[0]).length for v in vertices)*1e-5+1e-9
-            if any(abs((v-vertices[0]).dot(normal))>tolerance for v in vertices): raise BadPayload('La cara no es plana')
-            x=(vertices[1]-vertices[0]).normalized(); y=normal.cross(x).normalized(); x=y.cross(normal).normalized()
-            scale=bpy.context.scene.unit_settings.scale_length
-            plane['face_frame']=dict(origin=list(location*scale),x=list(x),y=list(y),normal=list(normal))
+        if 'u' in payload or 'v' in payload: raise BadPayload('Selecciona una cara y pulsa Boceto en cara')
         model.validate_plane(plane); doc['planes'].append(plane); model.resolve_supports(doc)
     return runtime.transaction(payload,change,'CAD crear plano')
 
@@ -664,4 +666,105 @@ def plane_set(payload):
         model.validate_plane(plane)
     result=runtime.transaction(payload,change,'CAD colocar plano')
     if runtime.active_sketch_id: runtime.focus(model.find(runtime.doc(),'sketches',runtime.active_sketch_id))
+    return runtime.status()
+
+
+@command('cad.surface.mode')
+def surface_mode(payload):
+    runtime.require_workspace()
+    if runtime.session: raise CommandError('Termina la preview antes de seleccionar referencias',code='session_active')
+    value=payload.get('mode')
+    if value not in ('PROFILE','FACE','EDGE','VERTEX'): raise BadPayload('Selección: PROFILE, FACE, EDGE o VERTEX')
+    runtime.surface.mode=value
+    if value=='PROFILE': runtime.surface.clear(); runtime.selection=None
+    return runtime.status()
+
+
+@command('cad.surface.select')
+def surface_select(payload):
+    runtime.require_workspace()
+    if runtime.session: raise CommandError('Termina la preview antes de medir',code='session_active')
+    runtime.surface.select(payload)
+    last=runtime.surface.items[-1] if runtime.surface.items else None
+    runtime.selection=dict(kind='SURFACE',id=last['id'],feature_id=last['feature_id']) if last else None
+    if last and last['feature_id'] and not runtime.active_sketch_id:
+        runtime.active_body_id=model.find(runtime.doc(),'features',last['feature_id']).get('body_id')
+    return runtime.status()
+
+
+@command('cad.surface.clear')
+def surface_clear(payload):
+    runtime.require_workspace(); runtime.surface.clear(); runtime.selection=None
+    return runtime.status()
+
+
+@command('cad.sketch.on_face')
+def sketch_on_face(payload):
+    frame=runtime.surface.face_frame()  # The visible selection, never a second raycast.
+    source=runtime.surface.items[0]
+    def change(doc):
+        from mathutils import Vector
+        plane=dict(id=model.uid('plane'),name='Cara de '+source['object'],base='XY',implicit=True,
+                   translation=[0,0,0],rotation=[0,0,0],face_frame=frame)
+        feature=next((f for f in doc['features'] if f['id']==source['feature_id']),None)
+        if feature:
+            source_sketch=model.find(doc,'sketches',feature['sketch_id']); base=model.frame(source_sketch)
+            normal=Vector(base['normal']); top=Vector(base['origin'])+normal*(feature['depth'] if feature['type']=='EXTRUDE' else 0)
+            delta=Vector(frame['origin'])-top
+            if Vector(frame['normal']).dot(normal)>1-1e-6 and abs(delta.dot(normal))<1e-7:
+                plane.pop('face_frame'); plane['support_id']=feature['id']
+                plane['translation']=[delta.dot(Vector(base['x'])),delta.dot(Vector(base['y'])),0.]
+                plane['rotation']=[0.,0.,math.degrees(math.atan2(Vector(frame['x']).dot(Vector(base['y'])),Vector(frame['x']).dot(Vector(base['x']))))]
+        model.validate_plane(plane); doc['planes'].append(plane)
+        _new_sketch(doc,dict(plane_id=plane['id'],body_id=feature.get('body_id') if feature else None))
+        from ..bpy_utils import find_view3d
+        from ..camera import camera
+        found=find_view3d()
+        if found: camera.look_at(Vector(source['center']),[Vector(p) for p in source['points']],found[3])
+    return runtime.transaction(payload,change,'CAD boceto en cara seleccionada')
+
+
+@command('cad.reference.project')
+def project_reference(payload):
+    from mathutils import Vector
+    runtime.surface.validate()
+    items=copy.deepcopy(runtime.surface.items)
+    if not items or any(i['kind']=='VERTEX' for i in items): raise BadPayload('Selecciona una arista o cara para proyectarla')
+    def change(doc):
+        sketch=model.find(doc,'sketches',runtime.active_sketch_id); frame=model.frame(sketch)
+        scale=bpy.context.scene.unit_settings.scale_length; origin=Vector(frame['origin'])
+        def project(point):
+            offset=Vector(point)*scale-origin
+            return (offset.dot(Vector(frame['x'])),offset.dot(Vector(frame['y'])))
+        segments=[]
+        for item in items:
+            if item['kind']=='EDGE':
+                a,b=map(Vector,item['segments'][0]); direction=(b-a).normalized()
+                points=sorted(item['points'],key=lambda p:Vector(p).dot(direction))
+                segments.append((points[0],points[-1]))
+            else: segments.extend(item['segments'])
+        unique=set(); created=[]
+        for a,b in segments:
+            a,b=project(a),project(b)
+            if math.dist(a,b)<1e-7: continue
+            identity=tuple(sorted(tuple(round(v,10) for v in p) for p in (a,b)))
+            if identity in unique: continue
+            unique.add(identity)
+            entity=dict(id=model.uid('entity'),type='LINE',x=a[0],y=a[1],x2=b[0],y2=b[1],construction=True,reference=True)
+            sketch['entities'].append(entity); created.append(entity['id'])
+            sketch.setdefault('constraints',[]).append(dict(id=model.uid('constraint'),type='FIX',
+                refs=[dict(id=entity['id'],part='BODY')],values={k:entity[k] for k in model.FIELDS['LINE']}))
+        if not created: raise BadPayload('La referencia se proyecta como un punto; elige otra arista')
+        geometry.solve(sketch)
+    runtime.transaction(payload,change,'CAD proyectar referencia fija')
+    runtime.surface.clear(); runtime.surface.mode='PROFILE'; runtime.selection=None
+    return runtime.status()
+
+
+@command('cad.view.solid')
+def view_solid(payload):
+    runtime.require_workspace()
+    if runtime.session:
+        runtime.require(payload); runtime.cancel()
+    runtime.solid_view()
     return runtime.status()

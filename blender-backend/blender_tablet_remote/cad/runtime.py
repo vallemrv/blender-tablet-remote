@@ -31,6 +31,9 @@ class CadRuntime:
         self.construction = False
         self.active_body_id = None
         self.show_scene = False
+        self._solid_view = None
+        from .surface import SurfaceSelection
+        self.surface = SurfaceSelection()
 
     def reset(self):
         self.__init__()
@@ -42,7 +45,7 @@ class CadRuntime:
             # Undo replaces RNA addresses. Keep the workspace, but never hold an
             # old scene preview; explicit file loads call reset_session().
             workspace, active = self.workspace, self.active_sketch_id
-            settings={k:getattr(self,k) for k in ("active_body_id","step","increment","construction","show_scene")}
+            settings={k:getattr(self,k) for k in ("active_body_id","step","increment","construction","show_scene","_solid_view")}
             hidden, owner = self._hidden, self.workspace_owner
             self.reset()
             self.workspace, self.active_sketch_id = workspace, active
@@ -74,6 +77,7 @@ class CadRuntime:
 
     def leave(self):
         self.cancel()
+        self.surface.clear()
         self.restore_visibility()
         self.workspace = False
         self.workspace_owner = None
@@ -240,6 +244,49 @@ class CadRuntime:
         local=p-Vector(basis['origin'])
         return local.dot(Vector(basis['x'])),local.dot(Vector(basis['y']))
 
+    def enter_sketch(self, sketch):
+        found=find_view3d()
+        if found: camera.sync_from_region(found[3])
+        if self.active_sketch_id is None: self._solid_view=camera.as_dict()
+        self.active_sketch_id=sketch['id']; self.active_body_id=sketch.get('body_id')
+        self.selection=None; self.surface.mode='PROFILE'; self.surface.clear()
+        self.focus(sketch)
+
+    def solid_view(self, *, frame=True):
+        """End plane editing and return to an orbitable view of the visible result."""
+        found=find_view3d()
+        if found: camera.sync_from_region(found[3])
+        previous=self._solid_view
+        was_editing=self.active_sketch_id is not None
+        self.active_sketch_id=None; self._solid_view=None
+        self.surface.mode='PROFILE'; self.surface.clear()
+        if previous: camera.apply(**{k:previous[k] for k in ('location','rotation','distance','perspective')})
+        elif was_editing:
+            from mathutils import Euler
+            camera.apply(rotation=Euler((math.radians(60),0,math.radians(45))).to_quaternion(),perspective='PERSP')
+        # A stored plane-aligned view is still flat: provide an oblique overview.
+        direction=camera.rotation@Vector((0,0,1))
+        if max(abs(v) for v in direction)>.999:
+            from mathutils import Euler
+            camera.apply(rotation=Euler((math.radians(60),0,math.radians(45))).to_quaternion())
+        if frame:
+            doc=self.doc()
+            targets=[o for o in self.objects(doc) if o.visible_get()]
+            body_features={f['id'] for f in doc['features'] if f.get('body_id')==self.active_body_id}
+            body_targets=[o for o in targets if o.get(FEATURE_KEY) in body_features]
+            if targets and found:
+                from ..commands.view import _bounds
+                center,corners=_bounds(body_targets or targets); camera.look_at(center,corners,found[3])
+            elif found:
+                sketches=[s for s in model.history(doc) if s['kind']=='SKETCH' and (not self.active_body_id or s.get('body_id')==self.active_body_id)]
+                if sketches:
+                    sketch=sketches[-1]; scale=max(float(bpy.context.scene.unit_settings.scale_length),1e-12)
+                    corners=[Vector(world(sketch,*p))/scale for e in sketch['entities'] for p in model.outline(e)]
+                    if corners:
+                        low=Vector(tuple(min(p[i] for p in corners) for i in range(3)))
+                        high=Vector(tuple(max(p[i] for p in corners) for i in range(3)))
+                        camera.look_at((low+high)*.5,corners,found[3])
+
     def focus(self, sketch):
         found = find_view3d()
         if found:
@@ -276,7 +323,8 @@ class CadRuntime:
         for sketch in doc['sketches']:
             if self.active_sketch_id and sketch['id'] != self.active_sketch_id:
                 continue
-            if not sketch.get('visible',True) and sketch['id']!=self.active_sketch_id: continue
+            selected_profile=(self.selection or {}).get('kind')=='PROFILE' and any(p['id']==self.selection['id'] for p in model.profiles(sketch))
+            if not model.sketch_visible(doc,sketch) and sketch['id']!=self.active_sketch_id and not selected_profile: continue
             entries = sketch['entities'] if self.active_sketch_id else model.closed_entities(sketch)
             if self.active_sketch_id:
                 origin=camera.project(Vector(world(sketch,0,0))/scale,found[3])
@@ -356,7 +404,7 @@ class CadRuntime:
             refs=(self.selection or {}).get('items',[])
             numeric=dimensions.offers(sketch,[r for r in refs if r.get('kind')=='ENTITY']) if sketch else {}
             return dict(version=1,workspace=self.workspace,isolated=bool(self.workspace and not self.show_scene),document=model.public(doc),
-                        dimension_options=numeric,
+                        dimension_options=numeric,surface=self.surface.status(),
                         active_sketch_id=self.active_sketch_id,selection=self.selection,step=self.step,increment=self.increment,construction=self.construction,active_body_id=self.active_body_id or doc['bodies'][0]['id'],show_scene=self.show_scene,
                         session=dict(active=bool(session),id=session['id'] if session else None,
                                      operation=session['operation'] if session else None,

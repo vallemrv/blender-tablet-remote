@@ -77,6 +77,8 @@ def loads(raw):
             if feature['type'] == 'CUT' and feature.get('target_id') not in seen_features:
                 raise ValueError('invalid cut dependency')
             seen_features.add(feature['id'])
+        for index,node in enumerate(history(doc),1):
+            find(doc,'sketches' if node['kind']=='SKETCH' else 'features',node['id']).setdefault('order',index)
         resolve_supports(doc)
         return doc
     except (ValueError, TypeError, KeyError, CommandError) as exc:
@@ -279,9 +281,34 @@ def resolve_supports(doc):
     for sketch in doc['sketches']: resolve(sketch)
 
 
+def sketch_visible(doc, sketch):
+    return bool(sketch.get('visible',True) and (sketch.get('visibility_explicit',False) or
+        not any(f['sketch_id']==sketch['id'] and f['enabled'] for f in doc['features'])))
+
+
+def history(doc):
+    nodes=[]; seen=set()
+    # Older documents had no order. Preserve feature order and place each source
+    # sketch immediately before its first operation; unused sketches follow.
+    for feature in doc['features']:
+        sketch=find(doc,'sketches',feature['sketch_id'])
+        if sketch['id'] not in seen:
+            nodes.append(dict(sketch,kind='SKETCH')); seen.add(sketch['id'])
+        nodes.append(dict(feature,kind='FEATURE'))
+    nodes.extend(dict(s,kind='SKETCH') for s in doc['sketches'] if s['id'] not in seen)
+    order={node['id']:node.get('order',index) for index,node in enumerate(nodes,1)}
+    return sorted(nodes,key=lambda node:order[node['id']])
+
+
+def next_order(doc):
+    return max([n.get('order',i) for i,n in enumerate(history(doc),1)]+[0])+1
+
+
 def public(doc):
     result = copy.deepcopy(doc)
+    result['history']=[{k:n[k] for k in ('id','kind','name','body_id','sketch_id') if k in n} for n in history(doc)]
     for sketch in result['sketches']:
+        sketch['visible']=sketch_visible(doc,sketch)
         sketch['profiles'] = profiles(sketch)
         from . import dimensions, sketch as geometry
         sketch['constraints']=dimensions.visible_constraints(sketch)

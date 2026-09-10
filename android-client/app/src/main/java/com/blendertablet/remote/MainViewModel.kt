@@ -354,8 +354,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun cadTool(type: String?) {
         cancelCadStroke()
-        local.update { it.copy(cadTool = type?.takeIf { candidate -> candidate in client.state.value.features.cad.entities ||
-            (client.state.value.features.cad.sketchEditing && candidate == "PLANE_FACE") }) }
+        if (client.state.value.cad.surface.mode != "PROFILE") client.cadCommand("cad.surface.mode", mapOf("mode" to "PROFILE"))
+        local.update { it.copy(cadTool = type?.takeIf { candidate -> candidate in client.state.value.features.cad.entities }) }
+    }
+    fun cadSurfaceMode(mode: String) {
+        cancelCadStroke()
+        local.update { it.copy(cadTool = null) }
+        client.cadCommand("cad.surface.mode", mapOf("mode" to mode))
     }
     private var cadGestureMode: String? = null
     private var cadDepthStart = .02
@@ -379,7 +384,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     return
                 }
                 val type = local.value.cadTool
-                if (cad.activeSketchId == null || type == "PLANE_FACE") return
+                if (cad.activeSketchId == null || cad.surface.mode != "PROFILE") return
                 cadStroke = true
                 cadGestureMode = if (type == null) "DRAG" else "DRAW"
                 client.cadCommand(if (type == null) "cad.drag.begin" else "cad.entity.begin", mapOf("type" to type, "u" to u, "v" to v))
@@ -528,6 +533,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun delete() {
         val cad = client.state.value.cad
         if (cad.workspace) {
+            if (cad.surface.mode != "PROFILE") { cadCommand("cad.surface.clear"); return }
             if (cad.activeSketchId != null) {
                 val rounding = cad.selectedEntity?.takeIf { it.isFillet && cad.selection.map { ref -> ref.id }.distinct().size == 1 }
                 if (rounding != null) cadCommand("cad.fillet.remove", mapOf("entity_id" to rounding.id))
@@ -550,10 +556,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun pick(u: Float, v: Float, stylus: Boolean = false) {
         if (client.state.value.cad.workspace) {
-            if (local.value.cadTool == "PLANE_FACE") {
-                client.cadCommand("cad.plane.create", mapOf("u" to u, "v" to v))
-                local.update { it.copy(cadTool = null) }
-                return
+            if (client.state.value.cad.surface.mode != "PROFILE") {
+                client.cadCommand("cad.surface.select", mapOf("u" to u, "v" to v)); return
             }
             client.cadCommand("cad.select", mapOf("u" to u, "v" to v, "additive" to (client.state.value.cad.activeSketchId != null))); return
         }

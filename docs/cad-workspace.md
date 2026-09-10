@@ -11,10 +11,10 @@ El rail izquierdo contiene un cursor único, línea,
 rectángulo, cuadrado, círculo, arco y redondeo. El rail derecho contiene las
 restricciones y solo aparece al editar un boceto. Los raíles y bandejas de
 Object/Edit no aparecen en CAD. Cada intención tiene un icono vectorial propio;
-mantenerlo pulsado muestra su función. El árbol se abre con **Dibujos** arriba a
+mantenerlo pulsado muestra su función. El panel se abre con **Modelo** (en 3D) o **Boceto activo** (al editar), arriba a
 la izquierda; cada boceto muestra **Editar** junto a su nombre y plano.
 
-Para continuar un boceto existente, toca **Dibujos → Editar [nombre]**. También
+Para continuar un boceto existente, toca **Modelo → Ver historial → Editar [nombre]**. También
 puedes seleccionar un perfil en la vista o una operación en el árbol y pulsar
 **Editar boceto** en la cabecera: abre el boceto de origen, encuadra su plano y
 activa selección, sin duplicarlo. Toca sus puntos/aristas para cambiar las cotas
@@ -50,8 +50,8 @@ paralela, perpendicular, tangencia entre línea y círculo/arco, igualdad de
 longitudes o radios, distancia/longitud, radio, punto medio, simetría respecto al
 último de tres puntos y fijación estricta de la selección. El origen (0,0) se puede
 seleccionar desde la vista o el rail y usar como referencia fija.
-El panel **Dibujos** siempre permite acceder a bocetos y figuras, incluso con
-selección activa. Sus filas seleccionan figuras completas y ofrecen papelera;
+Al editar, **Boceto activo → Figuras** contiene solo las figuras de ese boceto.
+Sus filas seleccionan figuras completas y ofrecen papelera;
 **Cotas y reglas** es una pestaña separada. La bandeja añade **Seleccionar todo**,
 **Deseleccionar todo** y **Borrar selección**. El origen queda fuera de Seleccionar
 todo y no se borra. Borrar una arista de rectángulo conserva sus otros lados como
@@ -100,7 +100,7 @@ otro lado equivalente reutiliza la cota: no apila duplicados. El valor inicial
 procede del tamaño real del dibujo, no del paso de la herramienta. Dos puntos
 siguen permitiendo una distancia independiente cuando representan otra medida.
 
-En **Dibujos**, un arco de redondeo aparece como **Redondeo**. Selecciónalo para
+En **Figuras**, un arco de redondeo aparece como **Redondeo**. Selecciónalo para
 editar su Radio; no se ofrecen ángulos que contradigan sus tangencias. **Quitar
 redondeo** —o su papelera— restituye la esquina y conserva el perfil y las
 extrusiones que lo utilizan. Los lados recortados muestran **Lado completo**:
@@ -108,6 +108,45 @@ la longitud y sus igualdades se miden hasta las esquinas virtuales. Así, variar
 el radio no obliga a cambiar la cota de un cuadrado para compensar el recorte.
 Un radio que no cabe o un cambio incompatible con otras reglas se rechaza sin
 alterar el documento. Estas transacciones conservan un único undo.
+
+## Elegir caras, medir y usar referencias
+
+En 3D, **Caras**, **Aristas** y **Puntos** permiten seleccionar directamente el
+sólido. La primera referencia se resalta en azul y la segunda en naranja dentro
+del vídeo. Tocar una seleccionada la retira; **Limpiar** deja la vista sin
+referencias. Las caras coplanares forman una sola selección, sin confundir su
+cuadrícula interna con aristas reales. Se muestran longitud, área/perímetro y,
+con dos elementos compatibles, distancia o ángulo. Las caras paralelas muestran
+separación entre planos; una arista/punto y una cara, distancia al plano.
+
+Para dibujar en una cara: **Caras → tocar la cara resaltada → Boceto en cara**.
+El botón usa exactamente la selección visible, crea plano+boceto en un solo undo
+y orienta la vista al plano. Una cara superior CAD sigue a su operación soporte;
+una cara arbitraria conserva el marco capturado. Si el sólido cambia antes de
+confirmar, la selección se invalida y hay que volver a elegirla.
+
+Durante un boceto, **Medir desde sólido** permite elegir las referencias 3D sin
+mover su geometría. **Proyectar referencia fija** las copia como construcción fija
+en el plano del boceto; vuelve al cursor y usa esos puntos/aristas para acotar.
+La referencia no entra en la extrusión ni cambia las piezas originales. Es una
+copia fija, no un enlace topológico dinámico a cualquier arista del sólido.
+
+## Vista 3D y árbol contextual
+
+**Finalizar boceto** recupera la vista 3D anterior y encuadra el resultado. Si esa
+vista era frontal, se ofrece una vista oblicua. Un dedo orbita en 3D; durante una
+preview de profundidad, el manejador de órbita y dos dedos permiten navegar.
+El botón **Vista 3D** vuelve a encuadrar. Nada de esto modifica la cámara del PC.
+Un perfil nuevo queda seleccionado al finalizar para iniciar Extruir o Vaciar.
+
+Mientras editas, el panel muestra únicamente el boceto activo: **Figuras** y
+**Cotas y reglas**. Al salir, muestra el **Último paso** del cuerpo; **Ver historial**
+despliega la secuencia de bocetos y operaciones y desplaza la lista al final cuando
+se añade un nodo. Los cuerpos se eligen mediante el desplegable del panel.
+Los bocetos usados por una operación se ocultan automáticamente. El ojo permite
+mostrarlos explícitamente y conserva esa elección al guardar.
+
+Referencia de organización: [lista de operaciones plegable de Onshape](https://www.onshape.com/en/resource-center/tech-tips/feature-list-organization).
 
 ## Extruir y vaciar con el lápiz
 
@@ -118,8 +157,8 @@ alterar el documento. Estas transacciones conservan un único undo.
    paso. Con Incremento avanza en saltos; sin snap conserva las fracciones.
    La bandeja permite editar el paso, la profundidad exacta y los botones −/+.
 4. Confirmar crea un undo; cancelar restaura el resultado anterior.
-5. Para vaciar desde arriba, seleccionar el sólido en el árbol y crear un boceto
-   sobre su cara superior con el icono de boceto. Su plano sigue la altura de la
+5. Para vaciar desde arriba, seleccionar **Caras**, tocar la cara superior y pulsar
+   **Boceto en cara**. Su plano sigue la altura de la
    operación de soporte. Dibujar el hueco y finalizar el boceto.
 6. Seleccionar ese perfil, elegir el sólido **Destino** y pulsar **Vaciar**.
    La profundidad entra en dirección contraria a la normal del boceto. El lápiz,
@@ -156,7 +195,7 @@ primero se eliminan los dependientes. El árbol permite borrar bocetos sin opera
 - **Planos** permite usar XY/XZ/YZ, el plano de otro boceto, una cara superior
   asociativa o un plano guardado. Un plano nuevo admite desplazamiento XYZ en la
   unidad elegida y rotación XYZ en grados, relativos al plano de referencia.
-  **Plano desde cara plana** captura el marco de una cara visible; **Ver objetos
+  **Boceto en cara** consume la cara resaltada; **Ver objetos
   de la escena** permite elegir referencias externas. Esa referencia conserva su
   posición capturada, sin seguir cambios topológicos de una cara arbitraria.
 - **Nuevo cuerpo** crea una pieza independiente. El árbol agrupa sus bocetos y
@@ -218,3 +257,7 @@ figuras/lados/puntos, con protección de perfiles utilizados por sólidos.
 `test_cad_dimensions.py` cubre radio editable y eliminación del redondeo con sólido
 dependiente, medidas libres/fijas, cotas equivalentes, duplicados antiguos,
 valores iniciales reales y conservación del tamaño al redondear un cuadrado.
+
+`test_cad_surface.py` verifica selección visible real, medición en metros, proyección,
+invalidez de referencias antiguas, vuelta a 3D sin tocar el PC y orden del árbol.
+La prueba GPU comprueba el resaltado completo y su exclusión de las capturas limpias.

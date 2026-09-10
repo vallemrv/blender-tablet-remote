@@ -175,4 +175,20 @@ class CadParserTest {
         assertEquals(.005,cad.dimensionOptions["RADIUS"]!!.value,0.0)
     }
 
+    @Test fun solidReferencesMeasurementsAndLatestHistoryNodeSurviveParsing() {
+        val cad=CadParser.state(JSONObject("""{"version":1,"selection":{"kind":"SURFACE","id":"face"},
+          "surface":{"mode":"FACE","can_sketch":true,"selection":[{"id":"face","kind":"FACE","object":"Pieza","feature_id":"f","planar":true}],
+            "measurements":[{"label":"Área","value":0.0036,"unit":"AREA"}]},
+          "document":{"features":[{"id":"f","name":"Extrusión","sketch_id":"s"}],
+            "history":[{"id":"s","kind":"SKETCH","name":"Boceto","body_id":"b"},{"id":"f","kind":"FEATURE","name":"Extrusión","body_id":"b","sketch_id":"s"}]}}
+        """))
+        assertTrue(cad.surface.canSketch)
+        assertEquals("FACE",cad.surface.mode)
+        assertEquals("f",cad.selectedFeature?.id)
+        assertEquals(.0036,cad.surface.measurements.single().value,0.0)
+        assertEquals("AREA",cad.surface.measurements.single().unit)
+        assertEquals("f",cad.history.last().id)
+        assertEquals("s",cad.history.last().sketchId)
+    }
+
 }
