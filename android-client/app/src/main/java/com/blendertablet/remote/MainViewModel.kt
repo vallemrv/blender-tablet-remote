@@ -653,7 +653,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun viewPerspective(projection: Projection) = client.viewPerspective(projection)
 
     /** Wireframe/sólido del viewport capturado (botón de la barra superior). */
-    fun toggleShading() = client.viewShading("TOGGLE")
+    fun toggleShading() {
+        if (!client.state.value.material.active) client.viewShading("TOGGLE")
+    }
 
     fun toggleProportional() {
         val enabled = !client.state.value.editSettings.proportional

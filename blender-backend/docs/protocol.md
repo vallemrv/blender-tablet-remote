@@ -1797,3 +1797,10 @@ guarda `visibility_explicit:true` para respetar la decisión del usuario.
 Finalizar boceto no crea undo ni modifica `rv3d`; restaura una vista 3D y selecciona
 el perfil nuevo pendiente o el último resultado. La preview de Extruir/Vaciar
 se presenta también en 3D, conservando los gestos de profundidad y navegación.
+
+
+En Materiales/Texturas, `view.shading {mode:WIREFRAME|TOGGLE}` se normaliza a
+`SOLID`; Android no ofrece ese control. La captura también normaliza un Wireframe
+preexistente o activado desde el PC antes de tomar el estado que restaurará.
+El resultado conserva Solid, evitando el ciclo Wireframe/Material entre frames.
+Fuera de Materiales, `view.shading` conserva su comportamiento habitual.

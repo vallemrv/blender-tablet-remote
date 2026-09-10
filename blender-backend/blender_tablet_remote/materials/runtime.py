@@ -95,6 +95,10 @@ class Runtime:
     def presentation(self, space, clean=False):
         hidden = []
         shading = space.shading
+        # Wireframe is unavailable in painting. Normalize it before taking the
+        # restoration snapshot, including changes made directly on the desktop.
+        if self.active and shading.type == 'WIREFRAME':
+            shading.type = 'SOLID'
         props = ('type','use_scene_lights','use_scene_world','studio_light','studiolight_intensity',
                  'studiolight_rotate_z','studiolight_background_alpha','studiolight_background_blur')
         saved = {p:getattr(shading,p) for p in props} if self.active else {}

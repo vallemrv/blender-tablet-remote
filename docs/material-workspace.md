@@ -128,3 +128,8 @@ En la regresión de 262 144 texeles y 128 aplicaciones, el cálculo por teselas 
 42,5 ms). Es una medición del cálculo de pintura, no una medida extremo a extremo
 ni una garantía de FPS. La prueba gráfica comprueba pintura, cancelación, undo/redo,
 conservación de máscaras al guardar y restauración de la visibilidad del PC.
+
+Wireframe se ha retirado de Materiales/Texturas. Las peticiones antiguas o en vuelo
+se normalizan a Solid. Si Wireframe ya estaba activo o se activa desde el PC,
+la siguiente captura pasa a Solid y conserva ese estado al terminar, evitando
+restaurar Wireframe entre fotogramas. Los demás ajustes del viewport se restauran.

@@ -237,6 +237,9 @@ def shading(payload: dict) -> dict:
     """
     found = _shading_space()
     mode = str(payload.get("mode", "TOGGLE")).upper()
+    from ..materials.runtime import runtime as materials
+    if materials.active and mode in {"WIREFRAME", "TOGGLE"}:
+        mode = "SOLID"
     if mode == "TOGGLE":
         if found is None:
             raise CommandError("No 3D viewport available", code="no_viewport")

@@ -32,6 +32,8 @@ def requests():
             assert caps['features']['workspace_resume']
             cmd('server.resume',{'session_key':'network-resume-key-1234567890'})
             assert cmd('mode.set',{'mode':'MATERIAL'})['material']['active']
+            for shading in ('WIREFRAME','TOGGLE'):
+                assert cmd('view.shading',{'mode':shading})['shading']=='SOLID'
             state=cmd('scene.get_state')
             assert state['mode']=='MATERIAL' and state['material']['targets']==['Cube']
             cmd('material.settings',{'preset':'wood'})

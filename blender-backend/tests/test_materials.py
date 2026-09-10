@@ -1,6 +1,8 @@
 """blender -b --factory-startup --python-exit-code 1 --python tests/test_materials.py"""
 import sys
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 from pathlib import Path
 import json
 import math
@@ -22,6 +24,35 @@ class MaterialsTests(unittest.TestCase):
         runtime.preset='wood';runtime.tint='#B87D43';runtime.erase=False;runtime.finish='natural'
 
     def tearDown(self): runtime.leave()
+
+    def test_wireframe_requests_are_normalized_to_solid_only_in_materials(self):
+        from blender_tablet_remote.commands import view
+        shading=SimpleNamespace(type='SOLID',show_xray_wireframe=False,xray_alpha_wireframe=.2)
+        space=SimpleNamespace(shading=shading)
+        with patch.object(view,'_shading_space',return_value=(None,space)):
+            for mode in ('WIREFRAME','TOGGLE','SOLID'):
+                self.assertEqual(view.shading({'mode':mode})['shading'],'SOLID')
+                self.assertEqual(shading.type,'SOLID')
+            runtime.leave()
+            self.assertEqual(view.shading({'mode':'WIREFRAME'})['shading'],'WIREFRAME')
+            self.assertTrue(shading.show_xray_wireframe)
+
+    def test_paint_capture_never_restores_wireframe_even_after_failure(self):
+        shading=SimpleNamespace(type='WIREFRAME',use_scene_lights=True,use_scene_world=True,
+            studio_light='studio.exr',studiolight_intensity=.7,studiolight_rotate_z=.3,
+            studiolight_background_alpha=.4,studiolight_background_blur=.2)
+        space=SimpleNamespace(shading=shading,overlay=SimpleNamespace(show_overlays=True),show_gizmo=True)
+        before=vars(shading).copy(); before['type']='SOLID'
+        for _ in range(2):
+            with self.assertRaises(RuntimeError):
+                with runtime.presentation(space):
+                    self.assertEqual(shading.type,'MATERIAL')
+                    raise RuntimeError('capture interrupted')
+            self.assertEqual(vars(shading),before)
+            self.assertTrue(space.overlay.show_overlays); self.assertTrue(space.show_gizmo)
+        runtime.leave(); shading.type='WIREFRAME'
+        with runtime.presentation(space): self.assertEqual(shading.type,'WIREFRAME')
+        self.assertEqual(shading.type,'WIREFRAME')
 
     def test_all_presets_compile_and_invalid_recipe_is_atomic(self):
         for recipe in recipes.BUILTINS:

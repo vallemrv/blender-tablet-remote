@@ -79,7 +79,7 @@ corresponda, sin marca especial.
 ## Materiales / Texturas (modo pintura de materiales)
 
 ### Bugs generales
-- [ ] ⚠️ CRÍTICO (crash/congelado, 11-09) — Blender se ha quedado congelado o ha crasheado
+- [ ] 🔧 en revisión (Codex, 11-09) — ⚠️ CRÍTICO (crash/congelado, 11-09) — Blender se ha quedado congelado o ha crasheado
       al poner el viewport en Wireframe estando en modo Materiales/Texturas. Hipótesis con
       base en el código: `materials/runtime.py` `presentation()` se ejecuta en cada frame de
       captura (`streaming/capture.py:251`) y fuerza `shading.type='MATERIAL'` para capturar,
@@ -89,6 +89,9 @@ corresponda, sin marca especial.
       operación cara (recompila shaders/estado GPU) — causa probable del cuelgue. Sin
       traceback capturado todavía; si vuelve a pasar, guardar la salida del terminal del
       backend en el momento del fallo.
+      Cambio aplicado: control Wireframe retirado de Materiales, peticiones antiguas
+      normalizadas a Solid y Wireframe preexistente normalizado antes de capturar.
+      Pendiente de confirmar en tablet/PC; no se da por probada la causa del crash.
 - [ ] 🔧 en revisión (Codex, 10-09) — Rendimiento: el modo de materiales va con mucho lag, igual que le pasaba a Sculpt.
       Revisar si es la misma causa que ya se diagnosticó/resolvió allí (cola de vídeo H.264,
       depsgraph desactualizado) o si es un cuello de botella propio de

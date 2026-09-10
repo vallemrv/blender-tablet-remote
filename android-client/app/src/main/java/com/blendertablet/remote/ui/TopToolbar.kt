@@ -58,7 +58,7 @@ fun TopToolbar(
         if (chromeVisible) {
             FloatingPanel {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    if (blender.features.shading) {
+                    if (blender.features.shading && !blender.material.active) {
                         IconAction(
                             Icons.Default.Grid4x4, "Wireframe",
                             selected = blender.view.shading == Shading.WIREFRAME,

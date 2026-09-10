@@ -524,3 +524,9 @@ no quedan archivos o referencias temporales.
   el último paso. `order` conserva el orden de creación de bocetos/operaciones.
   Los bocetos consumidos se ocultan por defecto; el ojo conserva una elección
   explícita de visibilidad. Las caras seleccionadas nunca aparecen en captura limpia.
+
+- Wireframe no está disponible en Materiales/Texturas: Android oculta el control
+  y el backend convierte WIREFRAME/TOGGLE a SOLID mientras ese workspace está activo.
+  Si el viewport ya estaba en Wireframe, incluso por un cambio desde el PC, la
+  captura lo normaliza a Solid antes de guardar su estado de restauración. Así no
+  se restaura Wireframe después de cada frame. Los demás flags se restauran siempre.
