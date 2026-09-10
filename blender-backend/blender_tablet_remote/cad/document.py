@@ -283,5 +283,12 @@ def public(doc):
     result = copy.deepcopy(doc)
     for sketch in result['sketches']:
         sketch['profiles'] = profiles(sketch)
+        from . import dimensions, sketch as geometry
+        sketch['constraints']=dimensions.visible_constraints(sketch)
+        for e in sketch['entities']:
+            e['dimensions']=dimensions.describe(sketch,e)
+            e['is_square']=dimensions.is_square(sketch,e)
+            e['is_fillet']=geometry.fillet_sides(sketch,e) is not None
+            if e['type']=='LINE': e['length']=math.dist(*geometry.measure_line(sketch,dict(id=e['id'],part='BODY')))
         sketch['plane_label'] = find(result,'planes',sketch['plane_id'])['name'] if sketch.get('plane_id') else sketch['plane']
     return result

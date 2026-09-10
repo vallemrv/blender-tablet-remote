@@ -351,7 +351,12 @@ class CadRuntime:
             if session and session.get('preview'):
                 doc = session['preview']
             if not any(b['id']==self.active_body_id for b in doc['bodies']): self.active_body_id=doc['bodies'][0]['id']
+            from . import dimensions
+            sketch=next((s for s in doc['sketches'] if s['id']==self.active_sketch_id),None)
+            refs=(self.selection or {}).get('items',[])
+            numeric=dimensions.offers(sketch,[r for r in refs if r.get('kind')=='ENTITY']) if sketch else {}
             return dict(version=1,workspace=self.workspace,isolated=bool(self.workspace and not self.show_scene),document=model.public(doc),
+                        dimension_options=numeric,
                         active_sketch_id=self.active_sketch_id,selection=self.selection,step=self.step,increment=self.increment,construction=self.construction,active_body_id=self.active_body_id or doc['bodies'][0]['id'],show_scene=self.show_scene,
                         session=dict(active=bool(session),id=session['id'] if session else None,
                                      operation=session['operation'] if session else None,

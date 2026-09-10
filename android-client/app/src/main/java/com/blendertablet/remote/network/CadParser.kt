@@ -29,9 +29,12 @@ object CadParser {
                 CadSketch(sketch.optString("id"), sketch.optString("name", "Boceto"), sketch.optString("plane", "XY"),
                     objects(sketch.optJSONArray("entities")).map { entity ->
                         CadEntity(entity.optString("id"), entity.optString("type"),
-                            listOf("x", "y", "width", "height", "diameter", "x2", "y2", "radius", "start", "sweep").mapNotNull { key ->
+                            listOf("x", "y", "width", "height", "diameter", "x2", "y2", "radius", "start", "sweep", "length").mapNotNull { key ->
                                 entity.optDouble(key).takeIf { it.isFinite() }?.let { key to it }
-                            }.toMap(), entity.optBoolean("construction"))
+                            }.toMap(), entity.optBoolean("construction"),
+                            objects(entity.optJSONArray("dimensions")).map { d -> CadMeasure(d.optString("field"),d.optString("label"),d.optString("constraint_type"),
+                                d.optDouble("value_factor",1.0), objects(d.optJSONArray("refs")).map { CadSelection(it.optString("id"),it.optString("part","BODY")) },
+                                strings(d.optJSONArray("constraint_ids"))) }, entity.optBoolean("is_fillet"),entity.optBoolean("is_square"))
                     }, objects(sketch.optJSONArray("profiles")).map { CadProfile(it.optString("id"), it.optString("entity_id"), it.optString("label", "Perfil")) },
                     objects(sketch.optJSONArray("constraints")).map { c -> CadConstraint(c.optString("id"), c.optString("type"),
                         c.optDouble("value").takeIf { it.isFinite() }, objects(c.optJSONArray("refs")).map { it.optString("id") },
@@ -63,6 +66,11 @@ object CadParser {
             selection = objects(selection?.optJSONArray("items")).map { CadSelection(it.optString("id"), it.optString("part", "BODY")) },
             step = j.optDouble("step", .001).takeIf { it.isFinite() && it > 0 } ?: .001,
             increment = j.optBoolean("increment", true), transparent = session?.optBoolean("transparent") == true,
+            dimensionOptions = listOf("DISTANCE", "RADIUS").mapNotNull { type ->
+                j.optJSONObject("dimension_options")?.optJSONObject(type)?.let { option ->
+                    option.optDouble("value").takeIf { it.isFinite() && it > 0 }?.let { type to CadDimensionOption(it,option.id("constraint_id")) }
+                }
+            }.toMap(),
             construction = j.optBoolean("construction"), showScene = j.optBoolean("show_scene"), activeBodyId = j.id("active_body_id"),
             bodies = objects(document?.optJSONArray("bodies")).map { CadBody(it.optString("id"),it.optString("name")) },
             planes = objects(document?.optJSONArray("planes")).map { p -> CadPlane(p.optString("id"),p.optString("name"),

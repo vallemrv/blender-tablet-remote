@@ -528,7 +528,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun delete() {
         val cad = client.state.value.cad
         if (cad.workspace) {
-            if (cad.activeSketchId != null) cadCommand("cad.entity.delete")
+            if (cad.activeSketchId != null) {
+                val rounding = cad.selectedEntity?.takeIf { it.isFillet && cad.selection.map { ref -> ref.id }.distinct().size == 1 }
+                if (rounding != null) cadCommand("cad.fillet.remove", mapOf("entity_id" to rounding.id))
+                else cadCommand("cad.entity.delete")
+            }
             else cad.selectedFeature?.let { cadCommand("cad.feature.delete", mapOf("feature_id" to it.id)) }
         } else client.delete()
     }

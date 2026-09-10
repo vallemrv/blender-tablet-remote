@@ -1395,7 +1395,7 @@ de banda y configuración de latencia interactiva.
 `sketch_editing:true`, `fillet:true`, `length_unit:METERS` y `constraints` con
 `COINCIDENT,HORIZONTAL,VERTICAL,PARALLEL,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,RADIUS,FIX,MIDPOINT,SYMMETRIC`.
 También anuncia `construction`, `datum_planes`, `bodies`, `origin`, `mesh_copy`,
-`smart_cursor` y `selection_delete`.
+`smart_cursor`, `selection_delete`, `editable_dimensions` y `fillet_remove`.
 Las extensiones se negocian por capabilities; se instala el APK junto con el ZIP.
 `mode.set {mode:CAD}` activa el espacio CAD (Blender permanece en Object).
 OBJECT/EDIT salen de CAD y cancelan cualquier preview. Los objetos evaluados CAD
@@ -1428,7 +1428,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.select` | `{kind:"ENTITY\|PROFILE\|FEATURE",id,part?,additive?}` o `{u,v,additive?}` | Selección de puntos/aristas o perfiles; aditiva alterna pertenencia |
 | `cad.entity.begin` | `{type:"LINE\|RECTANGLE\|SQUARE\|CIRCLE\|ARC",u,v}` | Inicia dibujo reversible |
 | `cad.entity.update` | `{u,v}` | Actualiza extremo desde baseline |
-| `cad.entity.set` | `{entity_id,values:{width?,height?,diameter?,radius?,start?,sweep?,x?,y?,x2?,y2?}}` | Edita dimensiones y reconstruye dependientes |
+| `cad.entity.set` | `{entity_id,values:{width?,height?,diameter?,radius?,start?,sweep?,length?,x?,y?,x2?,y2?}}` | Edita dimensiones y reconstruye dependientes |
 | `cad.entity.delete` | `{entity_id}` o `{}` | Borra una figura completa o la selección de puntos/aristas/figuras en un undo; protege perfiles usados |
 | `cad.extrude.begin` | `{profile_id,depth,operation:"EXTRUDE\|CUT",target_id?}` | Preview aditiva o sustractiva; CUT exige destino |
 | `cad.extrude.update` | `{depth}` o `{gesture,baseline_depth}` | Cota exacta o delta vertical desde inicio del gesto, positivo hacia arriba |
@@ -1442,10 +1442,11 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.drag.update` | `{u,v}` | Reconstruye y resuelve restricciones desde baseline |
 | `cad.drag.end` | `{}` | Sin UPDATE alterna el elemento sondeado en BEGIN; con arrastre confirma el último candidato. Nunca vuelve a sondear |
 | `cad.select_all` | `{action:"SELECT\|DESELECT"}` | Selecciona todas las figuras del boceto (también construcción, nunca origen) o limpia la selección, sin undo |
-| `cad.constraint.add` | `{type,value?}` | Restringe la selección; DISTANCE/RADIUS requieren metros |
-| `cad.constraint.set` | `{constraint_id,value,sketch_id?}` | Cambia una cota persistente y resuelve dependientes |
+| `cad.constraint.add` | `{type,value?,refs?}` | Restringe selección o referencias explícitas del boceto activo; una cota equivalente se actualiza conservando ID |
+| `cad.constraint.set` | `{constraint_id,value,sketch_id?}` | Cambia la cota canónica y resuelve dependientes; Radio de redondeo ajusta su contacto |
 | `cad.constraint.delete` | `{constraint_id,sketch_id?}` | Elimina una restricción del sketch activo |
 | `cad.fillet` | `{radius}` | Redondea dos líneas conectadas, una esquina de rectángulo o dos lados contiguos; conserva restricciones y operaciones dependientes |
+| `cad.fillet.remove` | `{entity_id}` | Quita un redondeo, extiende los lados hasta la esquina y remapea el perfil usado por sólidos, con un undo |
 | `cad.sketch.delete` | `{sketch_id}` | Elimina un boceto sin operaciones dependientes |
 | `cad.sketch.visibility` | `{sketch_id,visible}` | Muestra/oculta el overlay; el boceto activo siempre se ve |
 | `cad.entity.construction` | `{construction}` | Cambia las figuras seleccionadas a auxiliares o perfiles; rechaza romper una operación dependiente |
@@ -1479,6 +1480,31 @@ En líneas, arcos y círculos no se persisten primitivas sin sus puntos definito
 el borrado de un punto retira su primitiva. Se limpian solo las restricciones que
 pierden alguna referencia. Un perfil de una operación no puede quedar abierto o
 inexistente: se rechaza la transacción (`cad_dependency`) sin borrar dependientes.
+
+Las entidades públicas anuncian `dimensions:[{field,label,constraint_type,
+value_factor,refs:[{id,part}],constraint_ids:[]}]`, `is_square` e `is_fillet`.
+`constraint_ids` vacío significa medida libre; si tiene IDs, editar el campo
+mediante `cad.entity.set` actualiza esa cota en lugar de imponer un valor paralelo.
+Diámetro usa `value_factor:0.5` para su restricción RADIUS; los demás usan 1.
+LINE publica `length` derivada y admite editarla. El cuadrado solo anuncia Lado.
+Coordenadas y ángulos siguen siendo parámetros geométricos; FIX continúa imponiendo
+su bloqueo, no se desactiva implícitamente al editar una cota.
+
+`dimension_options:{DISTANCE?:{value,constraint_id?},RADIUS?:{value,constraint_id?}}`
+describe las cotas disponibles para la selección con su medida actual. Android
+abre la existente si tiene ID. Se normalizan lados opuestos de rectángulos,
+mediciones equivalentes por extremos y cantidades enlazadas por EQUAL. Los
+duplicados antiguos tienen un solo control público y se fusionan en almacenamiento
+al editar/eliminar. No se anuncia detección general de redundancia algebraica.
+
+Los redondeos se reconocen por sus coincidencias y tangencias con dos líneas, sin
+requerir metadatos nuevos en archivos anteriores. Radio y el campo numérico usan
+la misma cota; eliminar RADIUS libera la medida sin quitar el arco. Quitar el
+redondeo es la operación explícita `cad.fillet.remove`, que conserva las otras
+reglas y las dependencias. DISTANCE de un lado y EQUAL de longitudes se evalúan
+hasta las esquinas virtuales cuando el lado participa en un redondeo. El sondeo,
+el trazo visible y las distancias entre puntos explícitos siguen usando los puntos
+reales; no se persisten coordenadas de pantalla ni referencias RNA.
 
 Cada sketch contiene `constraints:[{id,type,refs:[{id,part}],value?,values?}]`.
 FIX guarda `points:{rol:[x,y]}` para los puntos/los extremos de una arista,

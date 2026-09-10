@@ -32,6 +32,8 @@
       "SYMMETRIC"
     ],
     "sketch_editing": true,
+    "editable_dimensions": true,
+    "fillet_remove": true,
     "smart_cursor": true,
     "selection_delete": true,
     "fillet": true,
@@ -244,6 +246,12 @@
       "command": "cad.select_all",
       "payload": {
         "action": "SELECT"
+      }
+    },
+    {
+      "command": "cad.fillet.remove",
+      "payload": {
+        "entity_id": "arc_fixture"
       }
     }
   ],

@@ -472,7 +472,7 @@ no quedan archivos o referencias temporales.
   de paso compartido de `SnapControl.kt`; mantener −/+ acelera la repetición
   común de 180 a 80 ms después de 400 ms, sin multiplicar la cota elegida.
   Cancelar/aceptar permanecen fijos a la derecha con `RoundAction` rojo/verde.
-  Las cotas del boceto se editan en borrador y se aplican juntas con un comando;
+  Las medidas del boceto se editan en borrador y se aplican juntas con un comando;
   Extruir/Vaciar conserva la preview inmediata y acumula pasos ante respuestas
   atrasadas. Los campos métricos usan el paso CAD; los angulares, grados.
 
@@ -487,3 +487,19 @@ no quedan archivos o referencias temporales.
   una esquina retira sus dos lados. Un extremo/centro de otra primitiva elimina
   esa primitiva, nunca guarda una figura incompleta. El origen no se borra y romper
   un perfil usado se rechaza sin eliminar operaciones ni cambiar el documento.
+
+- Las cotas CAD tienen una única fuente: editar Radio/Diámetro/Lado/Longitud actualiza
+  la cota que gobierna esa medida. Añadir una cota equivalente reutiliza su ID;
+  lados opuestos de rectángulos e igualdades explícitas comparten medida. Los
+  duplicados antiguos se muestran como una cota y se fusionan al editar/quitar.
+- El cuadrado anuncia un único Lado: Igualdad mantiene sus lados iguales, no fija
+  su tamaño. Los campos distinguen «sin cota» de «cota», con Fijar medida/Quitar cota;
+  quitar la medida conserva la figura y la igualdad. La bandeja usa los descriptores
+  `dimensions` del backend, sin duplicar el mapa de medidas en Compose.
+- Los redondeos se reconocen por sus coincidencias y tangencias, también en archivos
+  anteriores. Editar su radio reconstruye el contacto con las dos líneas; Quitar
+  redondeo restituye la esquina y actualiza el perfil de las operaciones dependientes.
+  Las medidas/igualdades de lados redondeados usan las esquinas virtuales, no los
+  tramos recortados, para conservar el tamaño y la igualdad de un cuadrado.
+- Cotas y reglas ofrece Editar y Quitar explícitos. El valor inicial de una nueva
+  medida procede de la geometría; si ya existe se abre esa cota, no otra superpuesta.

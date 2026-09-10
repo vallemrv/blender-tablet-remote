@@ -9,7 +9,11 @@ data class CadCapabilities(
     val constraints: List<String> = emptyList(),
     val sketchEditing: Boolean = false,
 ) { val available get() = version == 1 && planes.isNotEmpty() }
-data class CadEntity(val id: String, val type: String, val values: Map<String, Double>, val construction: Boolean = false)
+data class CadEntity(val id: String, val type: String, val values: Map<String, Double>, val construction: Boolean = false,
+    val dimensions: List<CadMeasure> = emptyList(), val isFillet: Boolean = false, val isSquare: Boolean = false)
+data class CadMeasure(val field: String, val label: String, val constraintType: String,
+    val valueFactor: Double, val refs: List<CadSelection>, val constraintIds: List<String>)
+data class CadDimensionOption(val value: Double, val constraintId: String?)
 data class CadProfile(val id: String, val entityId: String, val label: String)
 data class CadSketch(val id: String, val name: String, val plane: String,
     val entities: List<CadEntity>, val profiles: List<CadProfile>,
@@ -49,6 +53,7 @@ data class CadState(
     val construction: Boolean = false, val showScene: Boolean = false,
     val bodies: List<CadBody> = emptyList(), val activeBodyId: String? = null,
     val planes: List<CadPlane> = emptyList(),
+    val dimensionOptions: Map<String, CadDimensionOption> = emptyMap(),
 ) {
     val activeSketch get() = sketches.firstOrNull { it.id == activeSketchId }
     val selectedEntity get() = sketches.flatMap { it.entities }.firstOrNull { selectionKind == "ENTITY" && it.id == selectionId }

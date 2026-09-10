@@ -52,7 +52,7 @@ longitudes o radios, distancia/longitud, radio, punto medio, simetría respecto 
 seleccionar desde la vista o el rail y usar como referencia fija.
 El panel **Dibujos** siempre permite acceder a bocetos y figuras, incluso con
 selección activa. Sus filas seleccionan figuras completas y ofrecen papelera;
-**Restricciones** es una pestaña separada. La bandeja añade **Seleccionar todo**,
+**Cotas y reglas** es una pestaña separada. La bandeja añade **Seleccionar todo**,
 **Deseleccionar todo** y **Borrar selección**. El origen queda fuera de Seleccionar
 todo y no se borra. Borrar una arista de rectángulo conserva sus otros lados como
 líneas; borrar una esquina retira los dos lados incidentes. Un extremo de línea/
@@ -78,11 +78,36 @@ Mantener un botón inicia la repetición a los 400 ms y acelera de 180 a 80 ms e
 pasos; soltar no añade otro incremento. La unidad elegida junto a Paso gobierna
 las cotas métricas. Los campos angulares permanecen en grados.
 
-Al editar un boceto o una operación confirmada, las cotas quedan en borrador:
+Al editar un boceto o una operación confirmada, las medidas quedan en borrador:
 **✓** las aplica juntas y **×** las descarta. Ambos botones permanecen fijos a la
 derecha aunque desplaces los parámetros. En la preview de Extruir/Vaciar, −/+
 actualiza la profundidad visible inmediatamente; ✓ confirma y × cancela la sesión.
 Las respuestas antiguas de Blender no hacen perder pulsaciones acumuladas.
+
+## Medida libre, cota y redondeo
+
+Un cuadrado tiene **lados iguales**, pero su tamaño no queda fijado por dibujarlo.
+Por eso muestra un único campo **Lado**. Un campo **sin cota** describe el tamaño
+actual; **Fijar medida** la convierte en una cota que se conserva al arrastrar.
+El campo pasa a indicar **cota**: editarlo cambia esa misma restricción. **Quitar
+cota** retira esa medida fija conservando el dibujo y sus otras reglas. Fijar
+geometría u otras restricciones todavía pueden limitar el cambio. Quitar Igualdad
+convierte el cuadrado en un rectángulo con Ancho y Alto independientes.
+
+**Cotas y reglas → Editar** abre la medida existente; su papelera y **Quitar cota**
+la retiran. El panel se actualiza al borrar o deshacer. Añadir la misma medida en
+otro lado equivalente reutiliza la cota: no apila duplicados. El valor inicial
+procede del tamaño real del dibujo, no del paso de la herramienta. Dos puntos
+siguen permitiendo una distancia independiente cuando representan otra medida.
+
+En **Dibujos**, un arco de redondeo aparece como **Redondeo**. Selecciónalo para
+editar su Radio; no se ofrecen ángulos que contradigan sus tangencias. **Quitar
+redondeo** —o su papelera— restituye la esquina y conserva el perfil y las
+extrusiones que lo utilizan. Los lados recortados muestran **Lado completo**:
+la longitud y sus igualdades se miden hasta las esquinas virtuales. Así, variar
+el radio no obliga a cambiar la cota de un cuadrado para compensar el recorte.
+Un radio que no cabe o un cambio incompatible con otras reglas se rechaza sin
+alterar el documento. Estas transacciones conservan un único undo.
 
 ## Extruir y vaciar con el lápiz
 
@@ -189,3 +214,7 @@ validan la cámara y las cotas junto con el undo real.
 `test_cad_cursor.py` verifica toques aditivos, deselección, adquisición por arrastre,
 conservación del grupo, cancelación, ausencia de undo vacío y borrados atómicos de
 figuras/lados/puntos, con protección de perfiles utilizados por sólidos.
+
+`test_cad_dimensions.py` cubre radio editable y eliminación del redondeo con sólido
+dependiente, medidas libres/fijas, cotas equivalentes, duplicados antiguos,
+valores iniciales reales y conservación del tamaño al redondear un cuadrado.

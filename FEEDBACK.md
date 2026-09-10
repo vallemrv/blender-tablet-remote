@@ -117,6 +117,13 @@ corresponda, sin marca especial.
 > según se vaya pudiendo avanzar, seguramente faltan más restricciones que las aquí listadas.
 
 ### Bugs generales
+- [ ] 🔧 en revisión (Codex, 11-09) — No se podían modificar/quitar redondeos ni
+      gestionar claramente las cotas; los campos y las restricciones competían.
+      Ahora Radio/Lado/Longitud editan su cota, los duplicados equivalentes se
+      reutilizan, Cotas y reglas muestra Editar/Quitar y Quitar redondeo recupera
+      la esquina conservando el sólido. Cuadrado muestra Lado y distingue igualdad
+      de lados de tamaño fijado. Los redondeos conservan las medidas completas.
+
 - [ ] 🔧 en revisión (Codex, 10-09) — Al editar un boceto, se puede rotar libremente el viewport (orbit). Debería quedar
       bloqueado en vista ortogonal al plano del boceto mientras se está editando, como en
       cualquier CAD paramétrico (FreeCAD, SolidWorks, Fusion).

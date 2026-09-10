@@ -405,7 +405,7 @@ FEATURES = {
             "entities": ["LINE", "RECTANGLE", "SQUARE", "CIRCLE", "ARC"], "features": ["EXTRUDE", "CUT"],
             "constraints": ["COINCIDENT", "HORIZONTAL", "VERTICAL", "PARALLEL", "PERPENDICULAR",
                             "TANGENT", "EQUAL", "DISTANCE", "RADIUS", "FIX", "MIDPOINT", "SYMMETRIC"],
-            "sketch_editing": True, "smart_cursor": True, "selection_delete": True, "fillet": True, "construction": True, "datum_planes": True,
+            "sketch_editing": True, "editable_dimensions": True, "fillet_remove": True, "smart_cursor": True, "selection_delete": True, "fillet": True, "construction": True, "datum_planes": True,
             "bodies": True, "origin": True, "mesh_copy": True,
             "length_unit": "METERS", "kernel": "BLENDER_NATIVE_MESH",
             "document_version": 1, "owned_sessions": True, "persistent": True},

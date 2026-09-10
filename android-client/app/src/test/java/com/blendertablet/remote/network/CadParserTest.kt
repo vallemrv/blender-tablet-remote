@@ -150,4 +150,29 @@ class CadParserTest {
         assertTrue(state.overlay.last().construction)
     }
 
+    @Test fun canonicalMeasureSpecsAndFilletsAreAvailableToTheSameControls() {
+        val cad = CadParser.state(JSONObject("""{"version":1,"active_sketch_id":"s",
+          "dimension_options":{"RADIUS":{"value":0.005,"constraint_id":"r"}},
+          "document":{"sketches":[{"id":"s","entities":[
+            {"id":"arc","type":"ARC","radius":0.005,"is_fillet":true,"dimensions":[
+              {"field":"radius","label":"Radio del redondeo","constraint_type":"RADIUS","value_factor":1,
+               "refs":[{"id":"arc","part":"BODY"}],"constraint_ids":["r"]}]},
+            {"id":"square","type":"RECTANGLE","is_square":true,"width":0.04,"height":0.04,"dimensions":[
+              {"field":"width","label":"Lado","constraint_type":"DISTANCE","value_factor":1,
+               "refs":[{"id":"square","part":"EDGE0"}],"constraint_ids":[]}]},
+            {"id":"circle","type":"CIRCLE","diameter":0.02,"dimensions":[
+              {"field":"diameter","label":"Diámetro","constraint_type":"RADIUS","value_factor":0.5,
+               "refs":[{"id":"circle","part":"BODY"}],"constraint_ids":[]}]}]}]}}
+        """))
+        val entities=cad.activeSketch!!.entities
+        assertTrue(entities[0].isFillet)
+        assertEquals(listOf("r"),entities[0].dimensions.single().constraintIds)
+        assertTrue(entities[1].isSquare)
+        assertEquals("Lado",entities[1].dimensions.single().label)
+        assertEquals("EDGE0",entities[1].dimensions.single().refs.single().part)
+        assertEquals(.5,entities[2].dimensions.single().valueFactor,0.0)
+        assertEquals("r",cad.dimensionOptions["RADIUS"]!!.constraintId)
+        assertEquals(.005,cad.dimensionOptions["RADIUS"]!!.value,0.0)
+    }
+
 }

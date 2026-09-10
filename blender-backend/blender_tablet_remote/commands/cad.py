@@ -5,6 +5,7 @@ import bpy
 from . import command
 from ..cad import document as model
 from ..cad import sketch as geometry
+from ..cad import dimensions
 from ..cad.runtime import runtime, FEATURE_KEY, DOC_KEY
 from ..errors import BadPayload, CommandError
 from ..bpy_utils import undo_push
@@ -161,10 +162,11 @@ def entity_set(payload):
         raise BadPayload('Faltan las dimensiones')
     def change(doc):
         sketch, e = model.entity(doc,payload.get('entity_id'))
-        allowed = set(model.FIELDS[e['type']])
+        allowed = set(model.FIELDS[e['type']]) | ({'length'} if e['type']=='LINE' else set())
         if not set(changes)<=allowed:
             raise BadPayload('Dimensión no compatible con la entidad')
-        goals=[dict(id=e['id'],field=k,value=model.number(v)) for k,v in changes.items()]
+        values={k:model.number(v) for k,v in changes.items()}
+        goals=dimensions.set_values(sketch,e,values)
         geometry.solve(sketch,goals)
     return runtime.transaction(payload,change,'CAD editar dimensiones')
 
@@ -510,7 +512,10 @@ def constraint_add(payload):
     typ=str(payload.get('type','')).upper()
     def change(doc):
         sketch=model.find(doc,'sketches',runtime.active_sketch_id)
-        refs=[{k:r[k] for k in ('id','part') if k in r} for r in _refs() if r['kind']=='ENTITY']
+        source=payload.get('refs') if 'refs' in payload else [r for r in _refs() if r['kind']=='ENTITY']
+        if not isinstance(source,list) or not all(isinstance(r,dict) and isinstance(r.get('id'),str) and isinstance(r.get('part','BODY'),str) for r in source):
+            raise BadPayload('Referencias de cota inválidas')
+        refs=[dict(id=r['id'],part=r.get('part','BODY')) for r in source]
         c=dict(id=model.uid('constraint'),type=typ,refs=refs)
         if typ in ('DISTANCE','RADIUS'): c['value']=model.number(payload.get('value'),positive=True)
         if typ=='MIDPOINT' and len(refs)==2:
@@ -526,8 +531,11 @@ def constraint_add(payload):
                     fixed['points']={role:list(geometry.handles(e)[role]) for role in roles}
                 else: fixed['values']={k:e[k] for k in model.FIELDS[e['type']]}
                 sketch.setdefault('constraints',[]).append(fixed)
+        elif typ in dimensions.NUMERIC:
+            c=dimensions.put(sketch,c)
         else: sketch.setdefault('constraints',[]).append(c)
-        geometry.solve(sketch)
+        if typ in dimensions.NUMERIC: dimensions.solve_dimension(sketch,c)
+        else: geometry.solve(sketch)
     return runtime.transaction(payload,change,'CAD restringir boceto')
 
 
@@ -535,8 +543,8 @@ def constraint_add(payload):
 def constraint_delete(payload):
     def change(doc):
         sketch=model.find(doc,'sketches',payload.get('sketch_id') or runtime.active_sketch_id)
-        constraints=sketch.setdefault('constraints',[])
-        constraints.remove(model.find(sketch,'constraints',payload.get('constraint_id')))
+        c=model.find(sketch,'constraints',payload.get('constraint_id'))
+        dimensions.remove(sketch,c)
     return runtime.transaction(payload,change,'CAD quitar restricción')
 
 
@@ -560,14 +568,34 @@ def fillet(payload):
     return runtime.status()
 
 
+@command('cad.fillet.remove')
+def fillet_remove(payload):
+    def change(doc):
+        sketch,arc=model.entity(doc,payload.get('entity_id'))
+        old_profiles=model.closed_entities(sketch)
+        geometry.remove_fillet(sketch,arc)
+        new_profiles=model.closed_entities(sketch)
+        for feature in doc['features']:
+            before=next((p for p in old_profiles if 'profile_'+p['id']==feature['profile_id'] and arc['id'] in p.get('members',[])),None)
+            if before:
+                members=set(before['members'])-{arc['id']}
+                after=next((p for p in new_profiles if set(p.get('members',[]))==members),None)
+                if after is None: raise BadPayload('No se puede cerrar el perfil al quitar este redondeo')
+                feature['profile_id']='profile_'+after['id']
+    runtime.transaction(payload,change,'CAD quitar redondeo')
+    runtime.selection=None
+    return runtime.status()
+
+
 @command('cad.constraint.set')
 def constraint_set(payload):
     def change(doc):
         sketch=model.find(doc,'sketches',payload.get('sketch_id') or runtime.active_sketch_id)
         c=model.find(sketch,'constraints',payload.get('constraint_id'))
         if c['type'] not in ('RADIUS','DISTANCE'): raise BadPayload('Esta restricción no tiene una cota editable')
-        c['value']=model.number(payload.get('value'),positive=True)
-        geometry.solve(sketch)
+        updated=dict(c,value=model.number(payload.get('value'),positive=True))
+        c=dimensions.put(sketch,updated)
+        dimensions.solve_dimension(sketch,c)
     return runtime.transaction(payload,change,'CAD editar restricción')
 
 
