@@ -417,7 +417,8 @@ no quedan archivos o referencias temporales.
 ## Materiales y capturas
 
 - Materiales es un workspace (`mode: MATERIAL`) y Blender permanece en Object.
-  Fija hasta 16 mallas seleccionadas; aislamiento y ambientes existen solo dentro
+  Permite seleccionar hasta 16 mallas sin salir y muestra la escena visible.
+  Aislamiento opcional y ambientes existen solo dentro
   de la captura GPU y se restauran siempre, sin persistir visibilidad ni tocar `rv3d`.
 - Los presets se describen mediante Tablet Material Recipe v1: JSON acotado,
   compilado a nodos nativos, sin código ejecutable. Contrato, esquema y ejemplos
@@ -530,3 +531,30 @@ no quedan archivos o referencias temporales.
   Si el viewport ya estaba en Wireframe, incluso por un cambio desde el PC, la
   captura lo normaliza a Solid antes de guardar su estado de restauración. Así no
   se restaura Wireframe después de cada frame. Los demás flags se restauran siempre.
+
+- La apariencia se compone en un orden fijo: receta del catálogo, acabado encima
+  —cada acabado escribe solo los parámetros que define— y ajustes sueltos de
+  `surface` encima de todo. Sin tinte, cada material se compila con su propio color:
+  recorrer el catálogo no arrastra el color del anterior y el tinte es una decisión
+  explícita y reversible (`color:null`). Elegir acabado descarta los ajustes; ajustar
+  marca `custom`. El grano añade una capa teñida con el color efectivo sin tocar la
+  receta. `material.save` guarda esa composición como preset propio de la escena.
+- Materiales reparte su interfaz en cuatro superficies con una pregunta cada una:
+  rail izquierdo (modo Seleccionar/Pintar/Borrar y trazo), barra superior (objetos,
+  aislar, zona, luz), panel derecho plegable (base, tinte, acabado, Aplicar, detalle)
+  y bandeja inferior (tamaño, intensidad y una sola línea de ayuda, la del obstáculo
+  actual). Lo que se usa durante el trazo vive en el rail, sin plegarse ni abrirse.
+- Materiales permite Seleccionar/Pintar y una lista de objetos para piezas interiores.
+  Selección vacía permite navegar, volver a seleccionar y salir. La profundidad incluye
+  los oclusores visibles; Aislar selección sirve para pintar dentro de una carcasa.
+- Zona limita pincel y relleno a caras seleccionadas en Edit o caras completas de un
+  grupo de vértices. Guardar zona copia la malla para no alterar objetos enlazados;
+  los atributos de delimitación por modificadores son temporales. Rellenar crea un
+  único undo y una zona vacía conserva el baseline. El atlas conserva sus límites
+  de 20 000 caras base / 200 000 evaluadas; aplicar una base completa no usa atlas.
+- Redondo, Aerógrafo y Salpicado cambian la huella, independientemente del material.
+  La cobertura conserva la presión cero y no depende de la partición de paquetes.
+- Cristal activa transmisión por rayos y grosor superficial cero conectado al output,
+  para que Eevee no salte por detrás del objeto omitiendo su interior. Ray tracing se
+  activa solo en captura y se restaura al terminar. No es óptica volumétrica ni cáusticas.
+  Compilar un preset corregido nunca modifica los materiales ya usados por otros objetos.

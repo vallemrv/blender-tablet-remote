@@ -10,6 +10,7 @@ Estados de cada línea (no se borran las líneas, así queda historial de qué s
 - `- [ ] 🔧 en revisión (Codex, dd-mm)` — se ha intentado arreglar/implementar, pero falta
   que el usuario lo pruebe en la tablet. No pasa a `[x]` hasta que se confirme.
 - `- [x] (verificado dd-mm)` — probado en la tablet y confirmado que funciona.
+- `- [x] (aprobado dd-mm)` — estado implementado aceptado por el usuario para cerrar la incidencia.
 - Si al probar sigue fallando: volver a `- [ ]` y añadir `(reabierto dd-mm: qué sigue mal)`.
 
 Los hallazgos nuevos se añaden como bullets nuevos en la sección/modo/herramienta que
@@ -51,12 +52,21 @@ corresponda, sin marca especial.
   - [ ]
 - **Align**
   - [ ]
+- **Modificadores**
+  - [ ] Al colapsar el rail de modificadores y volver a abrirlo, el plegado/desplegado de
+        cada modificador se pierde y todos vuelven a aparecer expandidos. Causa probable en
+        `ModifierPanel.kt:183` (`var expanded by remember(item.name) { mutableStateOf(true) }`):
+        al ocultarse el rail el composable sale de composición y ese estado se reinicia al
+        valor por defecto. Debe recordar qué modificadores tenía plegados el usuario.
 
 ### Mejoras / estética / refinamientos generales
 - [ ]
 
 ### Mejoras / estética / refinamientos por herramienta
-- [ ]
+- **Modificadores**
+  - [ ] Cuando hay más de un modificador, que se comporten en acordeón (colapsados por
+        defecto, o solo uno expandido a la vez) en vez de mostrarse todos expandidos a la
+        vez y ocupar tanto espacio vertical en el rail.
 
 ---
 
@@ -78,8 +88,25 @@ corresponda, sin marca especial.
 
 ## Materiales / Texturas (modo pintura de materiales)
 
+- [x] (aprobado 11-09) — Seleccionar objetos sin salir de Pintar, ver el
+      conjunto y acceder a piezas interiores. Añadidos Seleccionar/Pintar, lista con
+      selección múltiple y Aislar selección opcional, sin persistir ocultaciones.
+- [x] (aprobado 11-09) — Zonas para texturizar: caras seleccionadas en
+      Edit, grupos de vértices existentes y guardar la selección como grupo con nombre.
+      Pincel y Aplicar a zona respetan caras completas; requieren base previa.
+- [x] (aprobado 11-09) — Detalle con pinceles distintos: Redondo,
+      Aerógrafo y Salpicado, independientes del material de detalle elegido.
+- [x] (aprobado 11-09) — Aclarado el aviso de 20 000 caras: limita el
+      atlas del pincel por malla base, no aplicar materiales completos. Se muestra
+      antes de pintar; el límite se conserva por resolución/coste del atlas 1024².
+- [x] (aprobado 11-09) — Cristal para objetos con piezas interiores:
+      escena visible, transmisión por rayos y grosor superficial cero conectado para
+      evitar que Eevee salte detrás de toda la esfera. Prueba GPU con/sin objeto
+      interior; aproximación interactiva, no cáusticas ni óptica de volumen macizo.
+      Aspecto y manejo aceptados por el usuario al cerrar esta entrega.
+
 ### Bugs generales
-- [ ] 🔧 en revisión (Codex, 11-09) — ⚠️ CRÍTICO (crash/congelado, 11-09) — Blender se ha quedado congelado o ha crasheado
+- [x] (aprobado 11-09) — ⚠️ CRÍTICO (crash/congelado, 11-09) — Blender se ha quedado congelado o ha crasheado
       al poner el viewport en Wireframe estando en modo Materiales/Texturas. Hipótesis con
       base en el código: `materials/runtime.py` `presentation()` se ejecuta en cada frame de
       captura (`streaming/capture.py:251`) y fuerza `shading.type='MATERIAL'` para capturar,
@@ -91,13 +118,13 @@ corresponda, sin marca especial.
       backend en el momento del fallo.
       Cambio aplicado: control Wireframe retirado de Materiales, peticiones antiguas
       normalizadas a Solid y Wireframe preexistente normalizado antes de capturar.
-      Pendiente de confirmar en tablet/PC; no se da por probada la causa del crash.
-- [ ] 🔧 en revisión (Codex, 10-09) — Rendimiento: el modo de materiales va con mucho lag, igual que le pasaba a Sculpt.
+      Cambio aceptado por el usuario; no se da por probada la causa del crash.
+- [x] (aprobado 11-09) — Rendimiento: el modo de materiales va con mucho lag, igual que le pasaba a Sculpt.
       Revisar si es la misma causa que ya se diagnosticó/resolvió allí (cola de vídeo H.264,
       depsgraph desactualizado) o si es un cuello de botella propio de
       `materials/painting.py` (la pintura procesa el trazo punto a punto sobre píxeles del
       atlas). Tiene que ir fluido para pintar con el lápiz en tiempo real.
-- [ ] 🔧 en revisión (Codex, 10-09) — Confirmado en código (`commands/material.py:41`): al cambiar el preset de material
+- [x] (aprobado 11-09) — Confirmado en código (`commands/material.py:41`): al cambiar el preset de material
       (p. ej. de "Plástico" a "Hierro") el tinte/color personalizado se resetea al color por
       defecto del preset nuevo, porque `MaterialWorkspace.kt` solo envía `preset` sin
       `color` y el backend interpreta la ausencia de `color` en el payload como "usa el
@@ -107,13 +134,13 @@ corresponda, sin marca especial.
       mismo gesto.
 
 ### Mejoras / estética / refinamientos generales
-- [ ] 🔧 en revisión (Codex, 10-09) — Falta una forma de pintar detalles localizados distintos de la base (p. ej. pinceladas
+- [x] (aprobado 11-09) — Falta una forma de pintar detalles localizados distintos de la base (p. ej. pinceladas
       de óxido sobre una bola metalizada). Hoy solo hay presets de "material completo"
       (Plástico, Hierro, Madera...) pensados para aplicarse a todo el objeto o pintarse con
       el mismo preset activo. Sería útil tener presets pensados para detalle/desgaste
       (óxido, suciedad, arañazos) diseñados para pintarse en capas sobre una base ya
       aplicada, sin sustituirla.
-- [ ] 🔧 en revisión (Codex, 10-09) — Pensar la experiencia como un ayudante para gente sin experiencia en shading (el caso
+- [x] (aprobado 11-09) — Pensar la experiencia como un ayudante para gente sin experiencia en shading (el caso
       del usuario): guiar el flujo base → tinte → acabado → detalle, y dejar claro en la UI
       que el tinte es independiente del preset elegido (para evitar el bug de arriba y la
       sensación de "perder el preset").
@@ -130,78 +157,80 @@ corresponda, sin marca especial.
 > según se vaya pudiendo avanzar, seguramente faltan más restricciones que las aquí listadas.
 
 ### Bugs generales
-- [ ] 🔧 en revisión (Codex, 11-09) — No se podían modificar/quitar redondeos ni
+- [x] (aprobado 11-09) — No se podían modificar/quitar redondeos ni
       gestionar claramente las cotas; los campos y las restricciones competían.
       Ahora Radio/Lado/Longitud editan su cota, los duplicados equivalentes se
       reutilizan, Cotas y reglas muestra Editar/Quitar y Quitar redondeo recupera
       la esquina conservando el sólido. Cuadrado muestra Lado y distingue igualdad
       de lados de tamaño fijado. Los redondeos conservan las medidas completas.
 
-- [ ] 🔧 en revisión (Codex, 10-09) — Al editar un boceto, se puede rotar libremente el viewport (orbit). Debería quedar
+- [x] (aprobado 11-09) — Al editar un boceto, se puede rotar libremente el viewport (orbit). Debería quedar
       bloqueado en vista ortogonal al plano del boceto mientras se está editando, como en
       cualquier CAD paramétrico (FreeCAD, SolidWorks, Fusion).
-- [ ] 🔧 en revisión (Codex, 10-09) — Falta un punto fijo en el origen de coordenadas (0,0) del boceto contra el que se
+- [x] (aprobado 11-09) — Falta un punto fijo en el origen de coordenadas (0,0) del boceto contra el que se
       pueda restringir (simetría, coincidente, etc.). Sin origen de referencia no hay forma
       fiable de anclar el boceto en el espacio.
-- [ ] 🔧 en revisión (Codex, 10-09) — Faltan cotas (dimensiones) que muestren la medida de cada restricción aplicada. Sin
+- [x] (aprobado 11-09) — Faltan cotas (dimensiones) que muestren la medida de cada restricción aplicada. Sin
       esto no se puede saber qué tamaño/posición tiene realmente el boceto mientras se edita.
-- [ ] 🔧 en revisión (Codex, 10-09) — La restricción de "fijar" (candado) sobre un punto o arista actualmente parece afectar
+- [x] (aprobado 11-09) — La restricción de "fijar" (candado) sobre un punto o arista actualmente parece afectar
       a todo el boceto en vez de restringir solo el/los elemento(s) seleccionado(s). Debe
       limitarse estrictamente a la selección.
-- [ ] 🔧 en revisión (Codex, 10-09) — Historial/pila de bocetos y restricciones: al entrar a editar un boceto no aparecía (o
+- [x] (aprobado 11-09) — Historial/pila de bocetos y restricciones: al entrar a editar un boceto no aparecía (o
       no se veía claramente). Ha terminado apareciendo pero la presentación es confusa/lioso
       de leer — revisar diseño de esa pila.
 
 ### Bugs por herramienta / restricción
 - **Fillet**
-  - [ ] 🔧 en revisión (Codex, 10-09) — No existe todavía (herramienta imprescindible de uso habitual en diseño).
+  - [x] (aprobado 11-09) — No existe todavía (herramienta imprescindible de uso habitual en diseño).
 - **Geometría de construcción**
-  - [ ] 🔧 en revisión (Codex, 10-09) — No existe todavía (imprescindible para poder apoyar restricciones sin que la
+  - [x] (aprobado 11-09) — No existe todavía (imprescindible para poder apoyar restricciones sin que la
         geometría de construcción forme parte del perfil final).
 - **Restricciones**
-  - [ ] 🔧 en revisión (Codex, 10-09) — Falta restricción de punto medio / centro de arista.
+  - [x] (aprobado 11-09) — Falta restricción de punto medio / centro de arista.
   - [ ] Pendiente de revisar qué otras restricciones faltan — bloqueado hasta poder avanzar
         más en una pieza real de prueba.
 - **Convertir a malla ("crear malla")**
-  - [ ] 🔧 en revisión (Codex, 10-09) — Al pulsar crear malla se pierde el modelo paramétrico CAD (el árbol de bocetos y
+  - [x] (aprobado 11-09) — Al pulsar crear malla se pierde el modelo paramétrico CAD (el árbol de bocetos y
         operaciones). Debe conservarse el modelo CAD y solo generarse/mostrarse la malla
         resultante como representación, sin destruir el histórico paramétrico — para poder
         seguir viendo y editando en modo CAD después.
 - **Planos**
-  - [ ] 🔧 en revisión (Codex, 10-09) — No existe sistema de planos: falta poder elegir un plano de boceto ya existente o una
+  - [x] (aprobado 11-09) — No existe sistema de planos: falta poder elegir un plano de boceto ya existente o una
         cara plana del objeto como referencia para un nuevo boceto.
-  - [ ] 🔧 en revisión (Codex, 10-09) — Falta poder crear planos nuevos y posicionarlos/orientarlos respecto al objeto
+  - [x] (aprobado 11-09) — Falta poder crear planos nuevos y posicionarlos/orientarlos respecto al objeto
         (offset, ángulo), necesario para hacer perforaciones u operaciones sobre formas
         curvas donde no vale ninguno de los planos base.
 - **Bocetos (gestión)**
-  - [ ] 🔧 en revisión (Codex, 10-09) — Falta poder crear más de un boceto en la misma pieza.
-  - [ ] 🔧 en revisión (Codex, 10-09) — Falta poder ocultar/mostrar bocetos ya creados.
+  - [x] (aprobado 11-09) — Falta poder crear más de un boceto en la misma pieza.
+  - [x] (aprobado 11-09) — Falta poder ocultar/mostrar bocetos ya creados.
 - **Cuerpos / Piezas (multi-body)**
-  - [ ] 🔧 en revisión (Codex, 10-09) — Falta poder crear piezas/cuerpos distintos dentro del mismo diseño (p. ej. un cuerpo
+  - [x] (aprobado 11-09) — Falta poder crear piezas/cuerpos distintos dentro del mismo diseño (p. ej. un cuerpo
         principal + piezas adicionales), como en un CAD paramétrico multi-body habitual.
 
 ### Mejoras / estética / refinamientos generales
-- [ ] 🔧 en revisión (Codex, 11-09) — Selección de caras/aristas/puntos del sólido
+- [x] (aprobado 11-09) — Selección de caras/aristas/puntos del sólido
       para medir y proyectar referencias al croquis; cara resaltada y Boceto en
       cara directo. Finalizar recupera una vista 3D orbital. El panel muestra solo
       el boceto activo al editar y el último nodo en 3D, con historial desplegable
       que sigue el último paso; los bocetos consumidos se ocultan automáticamente.
 
-- [ ] 🔧 en revisión (Codex, 11-09) — Un solo cursor inteligente CAD: tocar añade o
-      quita selección, arrastrar selecciona y mueve, sin herramientas separadas de
-      selección múltiple/Mover. Añadir Seleccionar todo, Deseleccionar todo,
-      Borrar selección y acceso permanente a Dibujos con sus figuras.
+- [x] (verificado 11-09) — Acceso permanente a Dibujos con sus figuras.
 
-- [ ] 🔧 en revisión (Codex, 10-09) — Unificar la bandeja inferior CAD: Paso y
+- [x] (aprobado 11-09) — Un solo cursor inteligente CAD: tocar añade o
+      quita selección, arrastrar selecciona y mueve, sin herramientas separadas de
+      selección múltiple/Mover. Añadir Seleccionar todo, Deseleccionar todo y
+      Borrar selección.
+
+- [x] (aprobado 11-09) — Unificar la bandeja inferior CAD: Paso y
       dimensiones con −/+ y repetición acelerada, campos compactos como Edit y
       cancelar/aceptar fijos a la derecha con los mismos iconos rojo/verde.
 
-- [ ] 🔧 en revisión (Codex, 10-09) — La malla generada por extrude/vaciado (`cad/kernel.py`) sale con topología sucia
+- [x] (aprobado 11-09) — La malla generada por extrude/vaciado (`cad/kernel.py`) sale con topología sucia
       (n-gons/triángulos sueltos) porque depende del resultado bruto del booleano de
       Blender. Construir las caras de forma ordenada (quads siguiendo el perímetro del
       sketch, como haría el módulo Part de FreeCAD) para no tener que retopologizar a mano
       después y poder usar directamente las tools de Edit Mode sobre el resultado.
-- [ ] 🔧 en revisión (Codex, 10-09) — Panel de historial de restricciones con comportamiento contextual:
+- [x] (aprobado 11-09) — Panel de historial de restricciones con comportamiento contextual:
   - Sin nada seleccionado: mostrar todo el historial de bocetos y restricciones (como ahora).
   - Con un punto/arista seleccionado: mostrar solo las restricciones asociadas a ese
     elemento (quizás en un riel/panel aparte), y no mostrar nada si el elemento no tiene
@@ -215,7 +244,7 @@ corresponda, sin marca especial.
 ## Transversal (streaming, conexión, UI general, no ligado a un modo)
 
 ### Bugs
-- [ ] 🔧 en revisión (Codex, 10-09) — Si la app en la tablet pierde el foco (p. ej. al consultar una referencia en otra app)
+- [x] (aprobado 11-09) — Si la app en la tablet pierde el foco (p. ej. al consultar una referencia en otra app)
       y luego lo recupera, el modo vuelve a Object en vez de mantener el modo/estado en el
       que estaba (p. ej. editando un boceto en CAD). Obliga a re-entrar a edición de boceto
       y volver a activar CAD cada vez. Sería deseable congelar el estado (en el server o
@@ -265,3 +294,11 @@ Pruebas: `test_materials.py`, `test_materials_viewport.py`,
 `test_materials_network.py`, `test_cad_feedback.py`, `test_cad_sketch.py`,
 `test_capture_deadline.py`, pruebas H.264, contrato CAD y suite unitaria Android.
 APK y ZIP deben instalarse juntos porque se ha ampliado el contrato.
+
+## Cierre aprobado (11-09-2026)
+
+El usuario acepta todo el trabajo implementado y autoriza su commit y push para
+cerrar esta etapa. Las entradas que estaban en revisión quedan aprobadas con su
+estado actual, incluidas sus limitaciones; esta aceptación no añade verificaciones
+que no se hayan realizado. Los hallazgos aún sin implementar conservan su estado
+pendiente. La sección de verificación anterior describe las comprobaciones de su fecha.

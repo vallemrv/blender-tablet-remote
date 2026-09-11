@@ -488,7 +488,7 @@ def _handle(client: WSClient, msg: dict) -> None:
         try:
             from .materials.runtime import runtime as materials
             if materials.active:
-                materials.require(client.id)
+                materials.require(client.id, targets=False)
                 if str(msg.get('gesture','')).lower() not in {'orbit','pan','zoom','roll'}:
                     raise CommandError('En Materiales solo se navega o pinta', code='wrong_mode')
             materials.cancel()
@@ -578,7 +578,7 @@ def _handle_command(client: WSClient, msg: dict) -> None:
             cancel_cad()
         from .materials.runtime import runtime as materials
         if materials.active and not name.startswith(('material.', 'scene.', 'stream.', 'server.')) and name not in {'view.get', 'file.info', 'file.list', 'file.locations'}:
-            materials.require(client.id)
+            materials.require(client.id, targets=False)
             materials.cancel()
             if name.startswith(('transform.', 'tool.', 'mesh.', 'object.', 'selection.', 'modifier.', 'cad.', 'sculpt.')):
                 raise CommandError('Sal de Materiales para cambiar la geometría o selección', code='wrong_mode')

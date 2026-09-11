@@ -98,6 +98,98 @@ def catalog():
     return [copy.deepcopy(r) for r in BUILTINS] + list(custom.values())
 
 
+SURFACE_LIMITS = {'roughness': (0., 1.), 'metallic': (0., 1.), 'transmission': (0., 1.), 'ior': (1., 3.), 'coat': (0., 1.)}
+
+# Receta neutra para describir un preset que ya no está en el archivo abierto.
+FALLBACK = validate(recipe('unknown', 'Material', '#B8B8B8'))
+
+# Cada acabado escribe solo lo que define: un acabado de brillo no debe decidir
+# si el material era metal, y el resto de la receta sigue mandando.
+FINISHES = [
+    dict(id='natural', label='Natural', hint='La superficie original del material.', surface={}),
+    dict(id='polished', label='Pulido', hint='Reflejo nítido, como recién bruñido.', surface=dict(roughness=.12)),
+    dict(id='satin', label='Satinado', hint='Brillo suave, entre el espejo y el mate.', surface=dict(roughness=.45, coat=.3)),
+    dict(id='matte', label='Mate', hint='Sin brillo: la luz se difumina.', surface=dict(roughness=1., coat=0.)),
+    dict(id='worn', label='Gastado', hint='Roce y uso: brillo apagado e irregular.', surface=dict(roughness=.8)),
+    dict(id='metal', label='Metálico', hint='Reflejo de metal; el color tiñe el reflejo.', surface=dict(metallic=1., roughness=.25, transmission=0.)),
+    dict(id='varnish', label='Barnizado', hint='Una laca transparente por encima.', surface=dict(coat=1., roughness=.25)),
+    dict(id='translucent', label='Translúcido', hint='Deja pasar la luz, como el cristal.', surface=dict(transmission=1., roughness=.05, metallic=0., ior=1.45)),
+]
+
+# Nombres y extremos en lenguaje llano: el usuario no tiene por qué saber qué es
+# el IOR para entender que va de aire a diamante.
+SURFACE_CONTROLS = [
+    dict(id='roughness', label='Pulido', low='Espejo', high='Mate', min=0., max=1.),
+    dict(id='metallic', label='Metal', low='No metal', high='Metal puro', min=0., max=1.),
+    dict(id='transmission', label='Transparencia', low='Opaco', high='Cristal', min=0., max=1.),
+    dict(id='ior', label='Densidad óptica', low='Aire', high='Diamante', min=1., max=3.),
+    dict(id='coat', label='Barniz', low='Seco', high='Laca', min=0., max=1.),
+]
+
+# El grano se añade encima de la receta: una textura más, con el vocabulario de
+# quien mira el objeto («escamas») y no el del nodo de Blender («voronoi»).
+GRAINS = [
+    dict(id='none', label='Liso', hint='Sin textura añadida.'),
+    dict(id='noise', label='Granulado', hint='Grano irregular, como piedra o pintura gruesa.'),
+    dict(id='wood', label='Vetas', hint='Anillos alargados, como la madera.'),
+    dict(id='bands', label='Cepillado', hint='Rayas finas en una dirección, como metal cepillado.'),
+    dict(id='cells', label='Escamas', hint='Celdas irregulares, como cuero o piel.'),
+]
+GRAIN_STRETCH = {'noise': [1, 1, 1], 'wood': [1, 1, 3], 'bands': [1, .04, .04], 'cells': [1, 1, 1]}
+GRAIN_MAX_BUMP = .02
+
+
+def finish_surface(finish):
+    match = next((f for f in FINISHES if f['id'] == finish), None)
+    if match is None: raise BadPayload('Acabado desconocido')
+    return dict(match['surface'])
+
+
+def surface_values(values):
+    """Ajustes sueltos de superficie; los que no vienen los sigue poniendo el acabado."""
+    if not isinstance(values, dict) or set(values) - set(SURFACE_LIMITS):
+        raise BadPayload('Ajuste de superficie desconocido')
+    return {key: number(value, *SURFACE_LIMITS[key], key) for key, value in values.items()}
+
+
+def shade(value, factor):
+    """Oscurece un color sRGB: el grano se tiñe solo, sin pedir un segundo color."""
+    rgb = [int(color(value)[i:i+2], 16) for i in (1, 3, 5)]
+    return '#%02X%02X%02X' % tuple(int(round(channel * factor)) for channel in rgb)
+
+
+def grain_pattern(kind, scale, amount, relief, tint):
+    """Una capa de textura descrita con los tres controles que ve el usuario."""
+    if kind not in {g['id'] for g in GRAINS}: raise BadPayload('Grano desconocido')
+    if kind == 'none': return None
+    return dict(kind=kind, scale=number(scale, 1, 200, 'grain_scale'), stretch=list(GRAIN_STRETCH[kind]),
+        detail=3., distortion=4. if kind in {'wood', 'bands'} else 0., color=shade(tint, .45),
+        amount=number(amount, 0, 1, 'grain_amount'), bump=number(relief, 0, 1, 'grain_relief') * GRAIN_MAX_BUMP)
+
+
+def unique_id(label, taken):
+    """ID legible a partir del nombre escrito; los IDs son del contrato, no del usuario."""
+    base = re.sub(r'[^a-z0-9]+', '-', label.lower()).strip('-')[:40]
+    if not base or not base[0].isalpha(): base = 'material-' + base.strip('-')
+    candidate, index = base[:47], 2
+    while candidate in taken:
+        candidate = f'{base[:44]}-{index}'
+        index += 1
+    return candidate
+
+
+def configure_transmission(material):
+    """Trace from the surface, so automatic whole-object thickness cannot skip contents."""
+    material.use_raytrace_refraction=True
+    material.thickness_mode='SPHERE'
+    nodes,links=material.node_tree.nodes,material.node_tree.links
+    output=next(n for n in nodes if n.type=='OUTPUT_MATERIAL' and n.is_active_output)
+    if not output.inputs['Thickness'].is_linked:
+        value=nodes.new('ShaderNodeValue'); value.label='Superficie de cristal · conserva el interior'
+        value.outputs[0].default_value=0.
+        links.new(value.outputs[0],output.inputs['Thickness'])
+
+
 def compile_material(raw, tint=None):
     """Create one native shader. Validation completes before Blender data is created."""
     import bpy
@@ -107,10 +199,16 @@ def compile_material(raw, tint=None):
     encoded = json.dumps(r, sort_keys=True)
     for existing in bpy.data.materials:
         if existing.get(KEY) == encoded and not existing.get('tablet_layers',0):
-            return existing
+            transmitting=r['surface']['transmission']>0
+            output=next((n for n in existing.node_tree.nodes if n.type=='OUTPUT_MATERIAL' and n.is_active_output),None)
+            if existing.use_raytrace_refraction==transmitting and (not transmitting or
+                    (output and output.inputs['Thickness'].is_linked)):
+                return existing
     material = bpy.data.materials.new(r['label'])
     try:
         material.use_nodes = True
+        material.use_raytrace_refraction = r['surface']['transmission'] > 0
+        material.thickness_mode = 'SPHERE'
         material.diffuse_color = linear(r['color'])
         material[KEY] = encoded
         nodes, links = material.node_tree.nodes, material.node_tree.links
@@ -121,6 +219,7 @@ def compile_material(raw, tint=None):
         for key, socket in {'roughness':'Roughness','metallic':'Metallic','transmission':'Transmission Weight','ior':'IOR','coat':'Coat Weight'}.items():
             bsdf.inputs[socket].default_value = r['surface'][key]
         links.new(bsdf.outputs['BSDF'], out.inputs['Surface'])
+        if material.use_raytrace_refraction: configure_transmission(material)
         coord = nodes.new('ShaderNodeTexCoord')
         previous_color = None
         previous_normal = None

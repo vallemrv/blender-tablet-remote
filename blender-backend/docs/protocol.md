@@ -1687,26 +1687,62 @@ continúa siendo Object. El snapshot de escena incluye `material` y anuncia
 
 | Comando | Payload | Resultado |
 |---|---|---|
-| `mode.set` | `{mode:"MATERIAL"}` | Aísla la selección actual de 1–16 mallas; `{mode,material}` |
+| `mode.set` | `{mode:"MATERIAL"}` | Toma la selección actual de 1–16 mallas y muestra la escena; `{mode,material}` |
 | `material.state` | `{}` | `{material: estado}` |
 | `material.catalog` | `{}` | `{format,version,presets:[recetas completas]}` |
 | `material.import` | `{recipe: receta}` | Guarda/actualiza un preset personalizado en la escena; `{material}`; un undo |
+| `material.save` | `{label}` | Guarda la apariencia actual (receta, color, acabado, ajustes y grano) como preset propio con ID derivado del nombre; lo selecciona; `{material}`; un undo |
 | `material.settings` | Campos opcionales descritos debajo | Configura el siguiente pincel/aplicación; `{material}`; no cambia la base |
-| `material.apply` | `{}` | Asigna la receta/color/acabado a todo el grupo; `{material}`; un undo |
+| `material.apply` | `{}` | Asigna la receta/color/acabado a los objetos o zona seleccionados; `{material}`; un undo |
+| `material.select` | `{objects:[nombres]}` o `{u,v,additive?:bool}` | Cambia la selección sin salir ni crear undo; lista vacía permitida; `{material}` |
+| `material.group` | `{name}` | Guarda los vértices seleccionados en Edit como grupo en cada objeto; no sobrescribe grupos; un undo; `{material}` |
 | `material.stroke` | `{phase,stroke_id,points}` | `{finished:bool}`; fases `begin/update/end/cancel` |
 | `scene.capture` | `{}` | `{mime:"image/png",width,height,png_base64}` |
 
-Estado `material`: `available`, `active`, `targets` (nombres fijados al entrar),
-`preset`, `color`, `finish`, `erase`, `radius`, `strength`, `environment`,
-`paint_ready`, `presets:[{id,label,color}]`, `finishes:[{id,label}]`,
-`environments:[{id,label}]`. Se recibe desde `scene.get_state` y los snapshots
+Estado `material`: `available`, `active`, `targets` (nombres seleccionados),
+`preset`, `color` (color efectivo), `tinted` (hay tinte propio en vez del color del
+material), `finish`, `custom` (hay ajustes sueltos encima del acabado),
+`surface:{roughness,metallic,transmission,ior,coat}` (valores efectivos),
+`surface_controls:[{id,label,low,high,min,max}]` (etiquetas de los extremos),
+`grain`, `grain_scale`, `grain_amount`, `grain_relief`, `grains:[{id,label,hint}]`,
+`erase`, `radius`, `strength`, `environment`,
+`paint_ready`, `presets:[{id,label,color}]`, `finishes:[{id,label,hint}]`,
+`environments:[{id,label}]`, `objects:[{id,label}]` (mallas visibles de la escena),
+`interaction:SELECT|PAINT`, `isolate`, `brush:ROUND|AIRBRUSH|SPRAY`, `brushes:[{id,label}]`,
+`scope:ALL|SELECTED|GROUP:<nombre>`, `regions:[{id,label}]`, `paint_limit:20000`,
+`paint_blocked` (alguna selección supera el límite de caras base). Se recibe desde `scene.get_state` y los snapshots
 `scene.changed`; las respuestas de `material.stroke` no se interpretan como escenas.
 
-Settings: `preset` (ID del catálogo), `color` (`#RRGGBB` sRGB), `finish`
-(`natural/polished/worn`), `erase` (booleano), `radius` (0,005–0,25, fracción de
+Settings: `preset` (ID del catálogo), `color` (`#RRGGBB` sRGB, o `null` para usar el
+color propio del material), `finish`
+(`natural/polished/satin/matte/worn/metal/varnish/translucent`), `surface`
+(subconjunto de `{roughness,metallic,transmission,coat}` 0–1 e `ior` 1–3),
+`grain` (`none/noise/wood/bands/cells`), `grain_scale` (1–200), `grain_amount` (0–1),
+`grain_relief` (0–1), `erase` (booleano), `radius` (0,005–0,25, fracción de
 altura del vídeo), `strength` (0–1), `environment` (`studio/day/warm/soft`). Elegir
-preset restaura su color y el acabado Natural. Se validan todos los campos antes
-de cambiar el estado. Importar selecciona el nuevo preset y su color.
+preset conserva el tinte, el acabado y los ajustes si no se envían explícitamente.
+También admite `interaction`, `isolate`, `brush` y `scope` descritos arriba. Se validan
+todos los campos antes de cambiar el estado. Importar selecciona el nuevo preset con
+su propio color, sin tinte ni ajustes heredados.
+
+La apariencia se compone en un orden fijo: receta del catálogo, después el acabado
+—que escribe solo los parámetros que define— y después los ajustes sueltos de
+`surface`. Enviar `finish` descarta esos ajustes (elegir un acabado es empezar desde
+él); enviar `surface` los mantiene sobre el acabado vigente y marca `custom`. El
+grano añade una capa de textura teñida con el color efectivo, sin modificar la receta
+del catálogo y respetando el límite de ocho capas.
+
+Por defecto se ve toda la escena visible; `isolate` solo oculta los demás objetos
+durante la captura. Se puede elegir una pieza interior desde la lista, aislarla,
+pintar y volver a mostrar el conjunto. La profundidad incluye todos los oclusores
+visibles. Seleccionar o cambiar ajustes cancela antes cualquier trazo activo.
+
+`SELECTED` limita a caras seleccionadas en Edit. `GROUP:<nombre>` incluye caras
+cuyos vértices pertenecen al grupo con peso positivo. La zona se propaga por
+modificadores mediante un atributo de caras temporal; no persiste índices evaluados.
+Aplicar a una zona rellena su máscara completa, incluidas caras ocultas; el pincel
+solo pinta la parte visible. Una zona vacía falla sin cambios. Requiere una base
+aplicada al objeto completo. Guardar grupos separa mallas compartidas.
 
 Cada muestra lleva `{u,v,pressure}` normalizados en `[0,1]`, origen arriba a la izquierda.
 Hasta 128 muestras por petición; los campos de tiempo enviados por Android se ignoran
@@ -1754,10 +1790,12 @@ activo. Los modos nativos Object/Edit/Sculpt ya sobreviven a la desconexión.
 La carga de otro archivo invalida los estados. La clave no sustituye al token de
 autenticación ni se guarda en el `.blend`.
 
-En Materiales, `material.settings` conserva tinte y acabado cuando se omiten,
-incluso si cambia `preset`. Cada preset del estado anuncia `category:base|detail`.
-Óxido, Suciedad y Arañazos son recetas para detalle; el selector configura también
-su color explícito y acabado natural en el mismo gesto. Elegirlos no sustituye
+En Materiales, `material.settings` conserva tinte, acabado y ajustes cuando se omiten,
+incluso si cambia `preset`. Sin tinte (`tinted:false`) cada material se compila con su
+propio color, de modo que recorrer el catálogo no arrastra el color del anterior.
+Cada preset del estado anuncia `category:base|detail`.
+Óxido, Suciedad y Arañazos son recetas para detalle; el selector devuelve el color al
+del material (`color:null`) y el acabado a natural en el mismo gesto. Elegirlos no sustituye
 la base; únicamente `material.apply` aplica a todo. El cálculo de pintura usa
 proyección/visibilidad por trazo y un índice de teselas; el atlas se reutiliza por
 identidad de geometría/UV evaluadas, invalidándose tras editar la malla en el PC.

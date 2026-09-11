@@ -8,11 +8,42 @@ import hashlib
 import bpy
 import numpy as np
 from ..errors import CommandError
-from .recipes import compile_material, KEY
+from .recipes import compile_material, configure_transmission, KEY
 
 UV_NAME = 'TabletPaintUV'
 SIZE = 1024
 MAX_LAYERS = 8
+MAX_BASE_FACES = 20000
+REGION_ATTRIBUTE = '.tablet_paint_region'
+
+
+def check_size(obj):
+    count=len(obj.data.polygons)
+    if count>MAX_BASE_FACES:
+        raise CommandError(f'{obj.name}: {count:,} caras base. El pincel admite 20 000; puedes aplicar la base '
+                           'al objeto completo o pintar una base simplificada con Subdivisión sin aplicar.', code='paint_mesh_limit')
+
+
+def atlas(obj, cache=None, scope='ALL'):
+    """The face mask propagates through modifiers; never indexes evaluated faces as base faces."""
+    check_size(obj)
+    if scope=='ALL': return _atlas(obj,cache)
+    mesh=obj.data
+    if scope=='SELECTED':
+        selected=[p.select for p in mesh.polygons]
+    else:
+        group=obj.vertex_groups.get(scope.removeprefix('GROUP:'))
+        if group is None: raise CommandError('Este objeto no tiene el grupo elegido',code='paint_region_missing')
+        vertices={v.index for v in mesh.vertices if any(g.group==group.index and g.weight>0 for g in v.groups)}
+        selected=[all(v in vertices for v in p.vertices) for p in mesh.polygons]
+    if not any(selected): raise CommandError('La zona no contiene caras completas. Selecciónalas en Edit o elige otro grupo.',code='paint_region_empty')
+    attribute=mesh.attributes.new(REGION_ATTRIBUTE,'FLOAT','FACE')
+    name=attribute.name
+    try:
+        attribute.data.foreach_set('value',selected); mesh.update()
+        return _atlas(obj,cache,region=name)
+    finally:
+        mesh.attributes.remove(mesh.attributes[name]); mesh.update()
 
 
 def surface_key(obj, mesh=None, *, include_uv=False):
@@ -30,10 +61,8 @@ def surface_key(obj, mesh=None, *, include_uv=False):
     return digest.digest()
 
 
-def atlas(obj, cache=None):
+def _atlas(obj, cache=None, region=None):
     mesh = obj.data
-    if len(mesh.polygons) > 20000:
-        raise CommandError('Pintura: usa una malla de hasta 20 000 caras; los modificadores pueden añadir detalle', code='paint_mesh_limit')
     uv = mesh.uv_layers.get(UV_NAME)
     if uv is None:
         uv = mesh.uv_layers.new(name=UV_NAME)
@@ -57,12 +86,19 @@ def atlas(obj, cache=None):
     uv = mesh.uv_layers.get(UV_NAME)
     if uv is None: raise CommandError('El modificador no conserva la superficie pintable', code='paint_uv_missing')
     key=surface_key(obj,mesh,include_uv=True)
+    mask=None
+    if region:
+        attr=mesh.attributes.get(region)
+        if attr is None: raise CommandError('El modificador no conserva la zona elegida',code='paint_region_missing')
+        mask=np.empty(len(mesh.polygons),dtype=np.float32); attr.data.foreach_get('value',mask)
+        key+=(mask>.5).tobytes()
     cached=cache.get(obj.name) if cache is not None else None
     if cached and cached[0]==key: return cached[1],cached[2]
     mesh.calc_loop_triangles()
     # Compact atlas: only occupied texels carry a world surface sample.
     indexes, positions = [], []
     for tri in mesh.loop_triangles:
+        if mask is not None and mask[tri.polygon_index]<=.5: continue
         t = np.array([uv.data[l].uv[:] for l in tri.loops]) * SIZE - .5
         lo = np.maximum(0, np.floor(t.min(axis=0)).astype(int))
         hi = np.minimum(SIZE-1, np.ceil(t.max(axis=0)).astype(int))
@@ -95,6 +131,8 @@ def make_layer(obj, recipe, tint, erase=False):
         # Consecutive strokes of the same material share a logical layer, while
         # each committed material points at its own packed image snapshot.
         material = old.copy()
+        if old.use_raytrace_refraction or (not erase and source.use_raytrace_refraction):
+            configure_transmission(material)
         previous = bpy.data.images[old['tablet_top_mask']]
         image = previous.copy()
         pixels = np.empty(SIZE*SIZE*4,dtype=np.float32)
@@ -109,6 +147,8 @@ def make_layer(obj, recipe, tint, erase=False):
         raise CommandError('Máximo ocho capas. Deshaz la última o aplica un material a todo para comenzar de nuevo', code='paint_layer_limit')
     material = old.copy()
     material.name = old.name + ' · pintura'
+    material.use_raytrace_refraction = old.use_raytrace_refraction or source.use_raytrace_refraction
+    if material.use_raytrace_refraction: configure_transmission(material)
     image = bpy.data.images.new('Pintura · '+obj.name, width=SIZE, height=SIZE, alpha=False, float_buffer=False)
     image.colorspace_settings.name = 'Non-Color'
     zeros = np.zeros(SIZE*SIZE*4, dtype=np.float32)
@@ -134,7 +174,8 @@ def make_layer(obj, recipe, tint, erase=False):
         gout = group.nodes.new('NodeGroupOutput')
         for link in source.node_tree.links:
             if link.to_node.type == 'OUTPUT_MATERIAL':
-                group.links.new(mapping[link.from_node].outputs[link.from_socket.identifier],gout.inputs[0])
+                if link.to_socket.name=='Surface':
+                    group.links.new(mapping[link.from_node].outputs[link.from_socket.identifier],gout.inputs[0])
             else:
                 group.links.new(mapping[link.from_node].outputs[link.from_socket.identifier],mapping[link.to_node].inputs[link.to_socket.identifier])
         layer = nodes.new('ShaderNodeGroup'); layer.node_tree = group
@@ -191,7 +232,7 @@ def project_surface(indexes, positions, frame):
     return ids, xy, bins, columns, aspect
 
 
-def paint_projected(projection, pixels, points, radius, strength, erase=False):
+def paint_projected(projection, pixels, points, radius, strength, erase=False, brush='ROUND'):
     """Only visit tiles touched by each dab; the immutable projection is reused."""
     indexes, xy, bins, columns, aspect = projection
     changed = False
@@ -208,6 +249,18 @@ def paint_projected(projection, pixels, points, radius, strength, erase=False):
         delta = xy[candidates]-center
         d = np.sqrt(np.einsum('ij,ij->i',delta,delta))
         amount = np.clip((1-d/radius)*4,0,1)*strength*pressure
+        if brush=='AIRBRUSH':
+            amount=np.maximum(0,1-(d/radius)**2)**3*strength*pressure
+        elif brush=='SPRAY':
+            # Stable screen-space droplets: packet boundaries never reseed a dab.
+            cell_size=radius*.12
+            cells=np.floor(xy[candidates]/cell_size)
+            def noise(a,b):
+                value=np.sin(cells[:,0]*a+cells[:,1]*b)*43758.5453
+                return value-np.floor(value)
+            droplet=(cells+np.column_stack((noise(127.1,311.7),noise(269.5,183.3))))*cell_size
+            spot=np.linalg.norm(xy[candidates]-droplet,axis=1)/(cell_size*.24)
+            amount=np.maximum(0,1-spot)*np.maximum(0,1-d/radius)*strength*pressure
         active = amount > 0
         ids = indexes[candidates[active]]
         if not len(ids): continue

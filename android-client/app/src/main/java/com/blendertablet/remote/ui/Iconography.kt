@@ -17,7 +17,11 @@ import androidx.compose.material.icons.filled.Adjust
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.BlurOn
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.Draw
+import androidx.compose.material.icons.filled.FormatColorReset
+import androidx.compose.material.icons.filled.Grain
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.CropFree
@@ -92,6 +96,21 @@ object AppIcons {
     val Multires: ImageVector = Icons.Default.Layers
 
     val Reference: ImageVector = Icons.Default.Image
+
+    /** Modos, trazos y ayudas del taller de materiales; el rail solo pide intención. */
+    fun material(intent: String): ImageVector = when (intent.uppercase()) {
+        "SELECT" -> Icons.Default.TouchApp
+        "PAINT" -> Icons.Default.Brush
+        "ERASE" -> Icons.Default.FormatColorReset
+        "ROUND" -> Icons.Default.Lens
+        "AIRBRUSH" -> Icons.Default.BlurOn
+        "SPRAY" -> Icons.Default.Grain
+        "STYLUS" -> Icons.Default.Draw
+        "ISOLATE" -> Icons.Default.CenterFocusStrong
+        "SAVE_ZONE" -> Icons.Default.BookmarkAdd
+        else -> Fallback
+    }
+
     fun sculpt(intent: String): ImageVector = when (intent.uppercase()) {
         "DRAW" -> Icons.Default.Brush
         "CLAY" -> Icons.Default.Layers

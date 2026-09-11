@@ -44,7 +44,7 @@ def step():
             original=(space.shading.type,space.overlay.show_overlays,space.show_gizmo)
             try:
                 with runtime.presentation(space,True):
-                    assert other.hide_get()
+                    assert not other.hide_get(), 'Materiales debe mostrar las otras piezas'
                     raise ValueError('intentional test failure')
             except ValueError: pass
             assert (space.shading.type,space.overlay.show_overlays,space.show_gizmo)==original

@@ -36,12 +36,22 @@ def requests():
                 assert cmd('view.shading',{'mode':shading})['shading']=='SOLID'
             state=cmd('scene.get_state')
             assert state['mode']=='MATERIAL' and state['material']['targets']==['Cube']
+            assert state['material']['interaction']=='PAINT' and not state['material']['isolate']
+            assert cmd('material.select',{'objects':[]})['material']['targets']==[]
+            cmd('view.orbit',{'dx':0.,'dy':0.})
+            cmd('material.settings',{'interaction':'SELECT','brush':'SPRAY'})
+            assert cmd('material.select',{'objects':['Cube']})['material']['targets']==['Cube']
+            cmd('material.settings',{'interaction':'PAINT','brush':'ROUND'})
             cmd('material.settings',{'preset':'wood'})
             cmd('material.apply')
             denied=client.request({'type':'gesture','gesture':'move','phase':'begin'})
             assert not denied['ok'] and denied['code']=='wrong_mode'
             before=cmd('scene.capture');assert before['mime']=='image/png'
             (out/'material-before.png').write_bytes(base64.b64decode(before['png_base64']))
+            cmd('material.settings',{'interaction':'SELECT'})
+            assert cmd('material.select',{'u':.5,'v':.5})['material']['targets']==['Cube']
+            cmd('material.settings',{'interaction':'PAINT'})
+            cmd('scene.capture')  # Selection invalidates the old depth frame.
             cmd('material.settings',{'preset':'plastic','color':'#FF3010','radius':.08})
             cmd('material.stroke',{'phase':'begin','stroke_id':'network','points':[{'u':.5,'v':.5,'pressure':1}]})
             cmd('material.stroke',{'phase':'update','stroke_id':'network','points':[{'u':.56,'v':.5,'pressure':1}]})
@@ -63,6 +73,7 @@ def requests():
                 (out/(mode.lower()+'.png')).write_bytes(base64.b64decode(png['png_base64']))
             cmd('object.select',{'name':'Cube'})
             cmd('mode.set',{'mode':'MATERIAL'})
+            cmd('material.settings',{'brush':'SPRAY','isolate':True,'interaction':'SELECT'})
         # Owner disconnect is enqueued ahead of the next client's commands.
         with WSClient(port=19865,timeout=45) as observer:
             reply=observer.command('scene.get_state')
@@ -70,6 +81,8 @@ def requests():
         with WSClient(port=19865,timeout=45) as replacement:
             reply=replacement.command('server.resume',{'session_key':'network-resume-key-1234567890'})
             assert reply['ok'] and reply['result']['restored'] and reply['result']['mode']=='MATERIAL',reply
+            settings=reply['result']['material']
+            assert settings['brush']=='SPRAY' and settings['isolate'] and settings['interaction']=='SELECT',settings
             assert replacement.command('material.settings',{'preset':'iron','color':'#DD1122'})['ok']
             reply=replacement.command('mode.set',{'mode':'CAD'})
             assert reply['ok'],reply

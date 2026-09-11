@@ -222,5 +222,106 @@ class MaterialsTests(unittest.TestCase):
         self.assertEqual(runtime.preset,r['id'])
         with self.assertRaises(BadPayload):material.import_recipe({'recipe':recipes.BUILTINS[0],'_client_id':'test'})
 
+    def test_select_objects_empty_selection_owner_and_shared_meshes(self):
+        runtime.apply()
+        second=self.obj.copy();bpy.context.collection.objects.link(second)
+        original=second.data
+        bpy.context.view_layer.update()
+        with self.assertRaises(CommandError): material.select({'_client_id':'other','objects':[second.name]})
+        material.select({'_client_id':'test','objects':[second.name]})
+        runtime.tint='#11FF22';runtime.apply()
+        self.assertIs(self.obj.data,original)
+        self.assertIsNot(second.data,original)
+        self.assertEqual(runtime.targets,[second.name])
+        material.select({'_client_id':'test','objects':[]})
+        material.settings({'_client_id':'test','interaction':'SELECT'})
+        self.assertFalse(runtime.status()['paint_ready'])
+        material.select({'_client_id':'test','objects':[self.obj.name]})
+        self.assertEqual(runtime.targets,[self.obj.name])
+
+    def test_scene_visible_isolation_and_raytracing_restore_after_error(self):
+        second=self.obj.copy();bpy.context.collection.objects.link(second)
+        shading=SimpleNamespace(type='SOLID',use_scene_lights=True,use_scene_world=True,
+            studio_light='studio.exr',studiolight_intensity=.7,studiolight_rotate_z=.3,
+            studiolight_background_alpha=.4,studiolight_background_blur=.2)
+        space=SimpleNamespace(shading=shading,overlay=SimpleNamespace(show_overlays=True),show_gizmo=True)
+        bpy.context.scene.eevee.use_raytracing=False
+        with runtime.presentation(space):
+            self.assertFalse(second.hide_get())
+            self.assertTrue(bpy.context.scene.eevee.use_raytracing)
+        runtime.isolate=True
+        with self.assertRaises(ValueError):
+            with runtime.presentation(space):
+                self.assertTrue(second.hide_get())
+                raise ValueError('interrupted')
+        self.assertFalse(second.hide_get())
+        self.assertFalse(bpy.context.scene.eevee.use_raytracing)
+
+    def test_region_apply_and_groups_preserve_other_faces_and_shared_mesh(self):
+        runtime.apply()
+        original=self.obj.data
+        for p in original.polygons: p.select=p.index==0
+        selected_vertices=set(original.polygons[0].vertices)
+        for v in original.vertices: v.select=v.index in selected_vertices
+        twin=self.obj.copy();bpy.context.collection.objects.link(twin)
+        all_ids,_=painting.atlas(self.obj)
+        face_ids,_=painting.atlas(self.obj,scope='SELECTED')
+        self.assertGreater(len(all_ids),len(face_ids)*4)
+        self.assertFalse(any(a.name.startswith(painting.REGION_ATTRIBUTE) for a in original.attributes))
+        material.group({'_client_id':'test','name':'Cara frontal'})
+        self.assertIs(twin.data,original)
+        self.assertIsNot(self.obj.data,original)
+        group_ids,_=painting.atlas(self.obj,scope=runtime.scope)
+        np.testing.assert_array_equal(face_ids,group_ids)
+        runtime.tint='#FF0000';runtime.apply()
+        mask=bpy.data.images[self.obj.data.materials[0]['tablet_top_mask']]
+        pixels=np.array(mask.pixels[:]).reshape(-1,4)
+        self.assertTrue(np.all(pixels[face_ids,0]==1))
+        other=np.setdiff1d(all_ids,face_ids)
+        self.assertTrue(np.all(pixels[other,0]==0))
+        self.assertEqual(twin.data.materials[0].get('tablet_layers',0),0)
+
+    def test_empty_region_is_atomic_and_modifiers_keep_region(self):
+        runtime.apply(); original=self.obj.data
+        for p in original.polygons: p.select=False
+        runtime.scope='SELECTED'
+        with self.assertRaises(CommandError): runtime.apply()
+        self.assertIs(self.obj.data,original)
+        self.assertIsNone(runtime.stroke)
+        original.polygons[0].select=True
+        sub=self.obj.modifiers.new('Subdivision','SUBSURF');sub.levels=1
+        ids,positions=painting.atlas(self.obj,scope='SELECTED')
+        self.assertGreater(len(ids),0)
+        normal=np.array(original.polygons[0].normal)
+        self.assertTrue(np.all(positions@normal>0))
+
+    def test_distinct_brushes_and_zero_pressure(self):
+        side=160
+        xx,yy=np.meshgrid((np.arange(side)+.5)/side,(np.arange(side)+.5)/side)
+        positions=np.column_stack((xx.ravel()*2-1,1-yy.ravel()*2,np.zeros(side*side)))
+        projection=painting.project_surface(np.arange(side*side),positions,(np.full((side,side),.5),np.eye(4),side,side))
+        results=[]
+        for brush in ('ROUND','AIRBRUSH','SPRAY'):
+            pixels=np.zeros(side*side*4,dtype=np.float32)
+            self.assertFalse(painting.paint_projected(projection,pixels,[dict(u=.5,v=.5,pressure=0)],.3,1,brush=brush))
+            self.assertTrue(painting.paint_projected(projection,pixels,[dict(u=.5,v=.5,pressure=1)],.3,1,brush=brush))
+            results.append(pixels[::4].sum())
+        self.assertGreater(results[0],results[1]*1.5)
+        self.assertGreater(results[1],results[2]*2)
+
+    def test_glass_flags_apply_to_base_and_painted_layer(self):
+        glass=next(r for r in recipes.BUILTINS if r['id']=='glass')
+        mat=recipes.compile_material(glass)
+        self.assertTrue(mat.use_raytrace_refraction)
+        self.assertTrue(next(n for n in mat.node_tree.nodes if n.type=='OUTPUT_MATERIAL').inputs['Thickness'].is_linked)
+        # Upgrading a prior preset must not edit a material already on another object.
+        mat.use_raytrace_refraction=False
+        upgraded=recipes.compile_material(glass)
+        self.assertIsNot(upgraded,mat)
+        self.assertFalse(mat.use_raytrace_refraction)
+        runtime.apply();painting.atlas(self.obj)
+        mat,_,_=painting.make_layer(self.obj,glass,'#FFFFFF')
+        self.assertTrue(mat.use_raytrace_refraction)
+
 result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(MaterialsTests))
 if not result.wasSuccessful():raise SystemExit(1)

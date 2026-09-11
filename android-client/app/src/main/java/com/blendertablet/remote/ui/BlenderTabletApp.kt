@@ -246,7 +246,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
         toolSessionArmed = toolSession.armed,
     )
     val trayInset by animateDpAsState(
-        targetValue = if (materialActive) 154.dp else if (sculptActive) 132.dp else if (state.blender.cad.workspace) 132.dp else if (trayPresent) Metrics.TrayInset else 0.dp,
+        targetValue = if (materialActive) 104.dp else if (sculptActive) 132.dp else if (state.blender.cad.workspace) 132.dp else if (trayPresent) Metrics.TrayInset else 0.dp,
         animationSpec = tween(160),
         label = "tray-inset",
     )
@@ -292,7 +292,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             h264Active = h264Active,
             h264Size = h264Size,
             input = viewportInput,
-            sculptEnabled = (sculptActive || materialActive) && state.connection == ConnectionStatus.CONNECTED,
+            sculptEnabled = (sculptActive || (materialActive && state.blender.material.interaction == "PAINT")) && state.connection == ConnectionStatus.CONNECTED,
             sculptStylusOnly = if (materialActive) state.materialStylusOnly else state.sculptStylusOnly,
             sculptRadius = if (materialActive) state.blender.material.radius else state.blender.sculpt.radius,
             sculptPressureSize = !materialActive && state.blender.sculpt.pressureSize,
@@ -314,7 +314,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 state.blender.mode == BlenderMode.EDIT,
             longPressEnabled = !materialActive && !sculptActive && !state.blender.cad.workspace && toolSession.input != "REPEAT_TAP" && viewportLongPressEnabled(session.active, toolSession.active),
             repeatTap = toolSession.armed && toolSession.input == "REPEAT_TAP",
-            independentTaps = state.blender.mode == BlenderMode.EDIT || state.blender.cad.workspace,
+            independentTaps = materialActive || state.blender.mode == BlenderMode.EDIT || state.blender.cad.workspace,
             // Los marcadores de transformación ya forman parte del fotograma.
             snapCandidate = if (state.blender.cad.workspace) null else toolSession.snapCandidate,
             cancelPickOnNavigation = toolSession.input == "FACE_PAIR",

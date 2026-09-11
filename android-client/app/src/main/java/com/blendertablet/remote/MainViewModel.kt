@@ -429,7 +429,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         client.materialCommand("material.stroke", mapOf("phase" to "cancel", "stroke_id" to id))
     }
     private fun materialStroke(phase: GesturePhase, points: List<com.blendertablet.remote.model.SculptPoint>) {
-        if (!client.state.value.material.paintReady) return
+        val material = client.state.value.material
+        if (!material.paintReady || material.paintBlocked || material.interaction != "PAINT") return
         if (phase == GesturePhase.BEGIN) { cancelMaterialStroke(); materialStrokeId = java.util.UUID.randomUUID().toString() }
         val id = materialStrokeId ?: return
         client.materialCommand("material.stroke", mapOf("phase" to phase.name.lowercase(), "stroke_id" to id, "points" to points.map { it.wire() }))
@@ -555,6 +556,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * confirmando el paso anterior.
      */
     fun pick(u: Float, v: Float, stylus: Boolean = false) {
+        if (client.state.value.material.active) {
+            if (client.state.value.material.interaction == "SELECT")
+                materialCommand("material.select", mapOf("u" to u, "v" to v))
+            return
+        }
         if (client.state.value.cad.workspace) {
             if (client.state.value.cad.surface.mode != "PROFILE") {
                 client.cadCommand("cad.surface.select", mapOf("u" to u, "v" to v)); return
