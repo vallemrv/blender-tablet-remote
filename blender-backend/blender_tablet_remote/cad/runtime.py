@@ -32,6 +32,7 @@ class CadRuntime:
         self.active_body_id = None
         self.show_scene = False
         self._solid_view = None
+        self.rollback_id = None
         from .surface import SurfaceSelection
         self.surface = SurfaceSelection()
 
@@ -45,7 +46,7 @@ class CadRuntime:
             # Undo replaces RNA addresses. Keep the workspace, but never hold an
             # old scene preview; explicit file loads call reset_session().
             workspace, active = self.workspace, self.active_sketch_id
-            settings={k:getattr(self,k) for k in ("active_body_id","step","increment","construction","show_scene","_solid_view")}
+            settings={k:getattr(self,k) for k in ("active_body_id","step","increment","construction","show_scene","_solid_view","rollback_id")}
             hidden, owner = self._hidden, self.workspace_owner
             self.reset()
             self.workspace, self.active_sketch_id = workspace, active
@@ -82,6 +83,7 @@ class CadRuntime:
         self.workspace = False
         self.workspace_owner = None
         self._save_suspended = False
+        self.rollback_id = None
 
     def suspend_save(self):
         if self._save_suspended:
@@ -117,15 +119,39 @@ class CadRuntime:
     def objects(self, doc):
         return [o for o in bpy.context.scene.objects if o.get(DOC_KEY) == doc['id'] and o.get(FEATURE_KEY)]
 
-    def rebuild(self, doc):
-        """Evaluate every feature first, then swap meshes; errors leave old data."""
+    def bar(self, doc=None):
+        """Validated rollback node: None means the whole stack is visible."""
+        if not self.rollback_id:
+            return None
+        doc = self.doc() if doc is None else doc
+        if any(n['id'] == self.rollback_id for n in model.history(doc)):
+            return self.rollback_id
+        self.rollback_id = None
+        return None
+
+    def rebuild(self, doc, *, limit=None):
+        """Evaluate every feature first, then swap meshes; errors leave old data.
+
+        `limit` is a history node id: features after it stay hidden, as if the
+        stack were rolled back to that point. None evaluates the whole stack.
+        """
         scale = max(float(bpy.context.scene.unit_settings.scale_length), 1e-12)
         model.resolve_supports(doc)
+        allowed = None
+        if limit:
+            sequence = [n['id'] for n in model.history(doc)]
+            if limit in sequence:
+                included = set(sequence[:sequence.index(limit)+1])
+                allowed = {f['id'] for f in doc['features'] if f['id'] in included}
+            else:
+                limit = None
+        def suppressed(identifier):
+            return allowed is not None and identifier not in allowed
         evaluated = []
         solids = {}
         consumed = set()
         for feature in doc['features']:
-            if feature['enabled']:
+            if feature['enabled'] and not suppressed(feature['id']):
                 sketch, entity = model.profile(doc, feature['profile_id'])
                 depth = model.number(feature['depth'], positive=True)
                 verts, faces = kernel.extrude(sketch, entity, -depth if feature['type']=='CUT' else depth)
@@ -144,8 +170,9 @@ class CadRuntime:
         keep = {f['id'] for f in doc['features']}
         for feature in doc['features']:
             if feature['id'] in objects:
-                objects[feature['id']].hide_viewport = not feature['enabled'] or feature['id'] in consumed
-                objects[feature['id']].hide_render = not feature['enabled'] or feature['id'] in consumed
+                hidden = not feature['enabled'] or feature['id'] in consumed or suppressed(feature['id'])
+                objects[feature['id']].hide_viewport = hidden
+                objects[feature['id']].hide_render = hidden
         for feature, verts, faces in evaluated:
             identifier = feature['id']
             keep.add(identifier)
@@ -189,7 +216,7 @@ class CadRuntime:
             original = session['baseline']
             self.session = None
             if restore and self._scene == bpy.context.scene.as_pointer():
-                if session['operation']!='DRAG' or session.get('preview'): self.rebuild(original)
+                if session['operation']!='DRAG' or session.get('preview'): self.rebuild(original, limit=self.bar(original))
             self.selection = copy.deepcopy(session.get('selection_before')) if session['operation']=='DRAG' and restore else None
 
     def begin(self, payload, operation):
@@ -205,7 +232,7 @@ class CadRuntime:
         return self.session
 
     def commit(self, doc, label):
-        self.rebuild(doc)
+        self.rebuild(doc, limit=self.bar(doc))
         self.persist(doc, advance=True)
         with self.saving():
             undo_push(label)
@@ -320,11 +347,16 @@ class CadRuntime:
         camera.sync_from_region(found[3])
         scale = max(float(bpy.context.scene.unit_settings.scale_length),1e-12)
         result = []
+        bar = self.bar(doc)
+        sequence = [n['id'] for n in model.history(doc)] if bar else None
         for sketch in doc['sketches']:
             if self.active_sketch_id and sketch['id'] != self.active_sketch_id:
                 continue
             selected_profile=(self.selection or {}).get('kind')=='PROFILE' and any(p['id']==self.selection['id'] for p in model.profiles(sketch))
             if not model.sketch_visible(doc,sketch) and sketch['id']!=self.active_sketch_id and not selected_profile: continue
+            # The bar hides future sketches; the active one (inserted at the bar) still draws.
+            if sequence and sketch['id']!=self.active_sketch_id and not selected_profile and \
+               sketch['id'] in sequence and sequence.index(sketch['id']) > sequence.index(bar): continue
             entries = sketch['entities'] if self.active_sketch_id else model.closed_entities(sketch)
             if self.active_sketch_id:
                 origin=camera.project(Vector(world(sketch,0,0))/scale,found[3])
@@ -405,15 +437,18 @@ class CadRuntime:
             numeric=dimensions.offers(sketch,[r for r in refs if r.get('kind')=='ENTITY']) if sketch else {}
             return dict(version=1,workspace=self.workspace,isolated=bool(self.workspace and not self.show_scene),document=model.public(doc),
                         dimension_options=numeric,surface=self.surface.status(),
+                        rollback_id=self.bar(doc),
                         active_sketch_id=self.active_sketch_id,selection=self.selection,step=self.step,increment=self.increment,construction=self.construction,active_body_id=self.active_body_id or doc['bodies'][0]['id'],show_scene=self.show_scene,
                         session=dict(active=bool(session),id=session['id'] if session else None,
                                      operation=session['operation'] if session else None,
                                      depth=session.get('depth') if session else None,
                                      transparent=bool(session and session['operation']=='CUT'),
-                                     can_confirm=bool(session and session.get('candidate'))),
+                                     can_confirm=bool(session and session.get('candidate')),
+                                     can_close=bool(session and session.get('can_close'))),
                         overlay=self.overlay(doc),error=None)
         except CommandError as exc:
             return dict(version=1,workspace=self.workspace,isolated=bool(self.workspace),document=None,active_sketch_id=None,
+                        rollback_id=None,
                         selection=None,session=dict(active=False,id=None,operation=None),overlay=[],error=exc.message)
 
 

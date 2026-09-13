@@ -13,6 +13,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -60,8 +63,6 @@ fun BoxScope.MaterialWorkspace(state: AppUiState, vm: MainViewModel) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var colorsOpen by rememberSaveable { mutableStateOf(false) }
-    var groupOpen by remember { mutableStateOf(false) }
-    var groupName by remember { mutableStateOf("Zona de pintura") }
     var saveOpen by remember { mutableStateOf(false) }
     var saveName by remember { mutableStateOf("") }
     var libraryOpen by rememberSaveable { mutableStateOf(true) }
@@ -78,25 +79,10 @@ fun BoxScope.MaterialWorkspace(state: AppUiState, vm: MainViewModel) {
             }.onFailure { Toast.makeText(context, it.message ?: "Receta inválida", Toast.LENGTH_LONG).show() }
         }
     }
-    // La biblioteca arranca bajo el rail de modos (igual que el inspector de
-    // modificadores) y la barra de contexto termina antes de él: los tres comparten
-    // la franja superior y ninguno puede taparse con otro.
-    val screen = LocalConfiguration.current
-    val railHeight = (screen.screenHeightDp - 260).coerceAtLeast(120).dp
-    val libraryHeight = (screen.screenHeightDp - 266).coerceAtLeast(180).dp
-    val contextWidth = (screen.screenWidthDp - 320).coerceAtLeast(240).dp
-
-    MaterialContextBar(
-        material = material,
-        vm = vm,
-        libraryOpen = libraryOpen,
-        onLibrary = { libraryOpen = !libraryOpen },
-        onSaveGroup = { groupOpen = true },
-        modifier = Modifier
-            .align(Alignment.TopStart)
-            .padding(start = Metrics.EdgeMargin, top = 76.dp)
-            .widthIn(max = contextWidth),
-    )
+    // La biblioteca ocupa el sitio del inspector de modificadores —bajo el rail de
+    // modos, con su mismo margen— y se abre y se cierra igual que él. El contexto
+    // (objetos, aislar, zona, luz) vive arriba, en la fila de Deshacer/Rehacer.
+    val railHeight = (LocalConfiguration.current.screenHeightDp - 260).coerceAtLeast(120).dp
 
     MaterialToolRail(
         material = material,
@@ -108,6 +94,12 @@ fun BoxScope.MaterialWorkspace(state: AppUiState, vm: MainViewModel) {
             .heightIn(max = railHeight),
     )
 
+    if (!libraryOpen) FloatingPanel(
+        Modifier.align(Alignment.TopEnd).padding(top = 142.dp, end = Metrics.EdgeMargin),
+    ) {
+        IconAction(AppIcons.materials, "Abrir biblioteca de materiales") { libraryOpen = true }
+    }
+
     if (libraryOpen) MaterialLibrary(
         material = material,
         vm = vm,
@@ -117,10 +109,10 @@ fun BoxScope.MaterialWorkspace(state: AppUiState, vm: MainViewModel) {
             saveName = material.presets.firstOrNull { it.id == material.preset }?.label.orEmpty()
             saveOpen = true
         },
+        onClose = { libraryOpen = false },
         modifier = Modifier
             .align(Alignment.TopEnd)
-            .padding(top = 142.dp, end = Metrics.EdgeMargin)
-            .heightIn(max = libraryHeight),
+            .padding(top = 142.dp, end = Metrics.EdgeMargin, bottom = 114.dp),
     )
 
     MaterialBrushTray(
@@ -142,6 +134,72 @@ fun BoxScope.MaterialWorkspace(state: AppUiState, vm: MainViewModel) {
         } }, confirmButton = { TextButton(enabled = saveName.isNotBlank(), onClick = {
             vm.materialCommand("material.save", mapOf("label" to saveName.trim())); saveOpen = false
         }) { Text("Guardar") } }, dismissButton = { TextButton(onClick = { saveOpen = false }) { Text("Cancelar") } })
+}
+
+/**
+ * Sobre qué se pinta —objetos, aislamiento, zona y luz— en la fila del ojo, junto a
+ * Deshacer/Rehacer.
+ *
+ * Ningún otro modo abre una segunda franja horizontal bajo el menú, así que
+ * Materiales tampoco: son cinco iconos en el panel que ya existe. Lo que no cabe en
+ * un símbolo —cuántos objetos hay, qué zona está elegida— se dice con la marca del
+ * icono y con el desplegable, no con una etiqueta permanente ocupando el viewport.
+ */
+@Composable
+fun MaterialTopActions(state: AppUiState, vm: MainViewModel) {
+    val material = state.blender.material
+    var objectsOpen by remember { mutableStateOf(false) }
+    var zoneOpen by remember { mutableStateOf(false) }
+    var lightOpen by remember { mutableStateOf(false) }
+    var groupOpen by remember { mutableStateOf(false) }
+    var groupName by remember { mutableStateOf("Zona de pintura") }
+    val targets = material.targets.size
+    val zone = material.regions.firstOrNull { it.id == material.scope }
+
+    Box {
+        IconAction(AppIcons.material("OBJECTS"),
+            if (targets == 0) "Sin objetos elegidos" else "Objetos: " + material.targets.joinToString(),
+            selected = targets > 0) { objectsOpen = true }
+        if (targets > 0) MaterialBadge(targets.toString())
+        DropdownMenu(objectsOpen, { objectsOpen = false }, Modifier.heightIn(max = 360.dp)) {
+            material.objects.forEach { obj ->
+                DropdownMenuItem(text = { Text(obj.label) }, leadingIcon = {
+                    Checkbox(obj.id in material.targets, onCheckedChange = null)
+                }, onClick = {
+                    val next = if (obj.id in material.targets) material.targets - obj.id else material.targets + obj.id
+                    vm.materialCommand("material.select", mapOf("objects" to next))
+                })
+            }
+        }
+    }
+    IconAction(AppIcons.material("ISOLATE"), "Aislar la selección para trabajar dentro",
+        selected = material.isolate, enabled = targets > 0) {
+        vm.materialSettings(mapOf("isolate" to !material.isolate))
+    }
+    Box {
+        IconAction(AppIcons.material(if (material.scope == "ALL") "ZONE_ALL" else "ZONE"),
+            "Zona: " + (zone?.label ?: "objeto completo"), selected = material.scope != "ALL") { zoneOpen = true }
+        DropdownMenu(zoneOpen, { zoneOpen = false }, Modifier.heightIn(max = 360.dp)) {
+            material.regions.forEach { region ->
+                DropdownMenuItem(text = { Text(region.label) }, trailingIcon = {
+                    if (region.id == material.scope) Icon(Icons.Default.Check, null, tint = Ink.Accent)
+                }, onClick = { zoneOpen = false; vm.materialSettings(mapOf("scope" to region.id)) })
+            }
+        }
+    }
+    IconAction(AppIcons.material("SAVE_ZONE"), "Guardar la selección de Edit como zona",
+        enabled = targets > 0) { groupOpen = true }
+    Box {
+        IconAction(AppIcons.material("LIGHT"),
+            "Luz: " + (material.environments.firstOrNull { it.id == material.environment }?.label ?: "estudio")) { lightOpen = true }
+        DropdownMenu(lightOpen, { lightOpen = false }, Modifier.heightIn(max = 360.dp)) {
+            material.environments.forEach { env ->
+                DropdownMenuItem(text = { Text(env.label) }, trailingIcon = {
+                    if (env.id == material.environment) Icon(Icons.Default.Check, null, tint = Ink.Accent)
+                }, onClick = { lightOpen = false; vm.materialSettings(mapOf("environment" to env.id)) })
+            }
+        }
+    }
     if (groupOpen) AlertDialog(onDismissRequest = { groupOpen = false }, title = { Text("Guardar zona de pintura") },
         text = { Column {
             Text("Guarda los vértices seleccionados en Edit. La zona incluye las caras cuyos vértices pertenecen al grupo.")
@@ -151,56 +209,15 @@ fun BoxScope.MaterialWorkspace(state: AppUiState, vm: MainViewModel) {
         }) { Text("Guardar") } }, dismissButton = { TextButton(onClick = { groupOpen = false }) { Text("Cancelar") } })
 }
 
-/** Sobre qué se pinta: objetos, aislamiento, zona y ambiente de comprobación. */
+/** Cuántos objetos hay debajo del icono, en la esquina, como los badges del rail. */
 @Composable
-private fun MaterialContextBar(
-    material: MaterialState,
-    vm: MainViewModel,
-    libraryOpen: Boolean,
-    onLibrary: () -> Unit,
-    onSaveGroup: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var objectsOpen by remember { mutableStateOf(false) }
-    val targets = material.targets.size
-    FloatingPanel(modifier) {
-        Row(
-            Modifier.horizontalScroll(rememberScrollState()),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Box {
-                PillButton(
-                    when (targets) {
-                        0 -> "Sin objetos"
-                        1 -> material.objects.firstOrNull { it.id == material.targets.first() }?.label ?: "1 objeto"
-                        else -> "$targets objetos"
-                    },
-                    selected = targets > 0,
-                ) { objectsOpen = true }
-                DropdownMenu(objectsOpen, { objectsOpen = false }, Modifier.heightIn(max = 360.dp)) {
-                    material.objects.forEach { obj ->
-                        DropdownMenuItem(text = { Text(obj.label) }, leadingIcon = {
-                            Checkbox(obj.id in material.targets, onCheckedChange = null)
-                        }, onClick = {
-                            val next = if (obj.id in material.targets) material.targets - obj.id else material.targets + obj.id
-                            vm.materialCommand("material.select", mapOf("objects" to next))
-                        })
-                    }
-                }
-            }
-            IconAction(AppIcons.material("ISOLATE"), "Aislar la selección para trabajar dentro",
-                selected = material.isolate, enabled = targets > 0) {
-                vm.materialSettings(mapOf("isolate" to !material.isolate))
-            }
-            RailSeparator()
-            MaterialPicker("Zona", material.regions, material.scope) { vm.materialSettings(mapOf("scope" to it)) }
-            IconAction(AppIcons.material("SAVE_ZONE"), "Guardar la selección de Edit como zona", enabled = targets > 0,
-                onClick = onSaveGroup)
-            RailSeparator()
-            MaterialPicker("Luz", material.environments, material.environment) { vm.materialSettings(mapOf("environment" to it)) }
-            IconAction(AppIcons.materials, "Biblioteca de materiales", selected = libraryOpen, onClick = onLibrary)
-        }
+private fun BoxScope.MaterialBadge(label: String) {
+    Box(
+        Modifier.align(Alignment.BottomEnd).padding(2.dp).size(14.dp)
+            .clip(RoundedCornerShape(4.dp)).background(Ink.PanelSolid),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, color = Ink.Accent, fontSize = 9.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -215,7 +232,7 @@ private fun MaterialToolRail(
     val painting = material.interaction == "PAINT"
     ToolRail(modifier) {
         RailLabel("MODO")
-        IconAction(AppIcons.material("SELECT"), "Tocar para elegir objetos", selected = !painting) {
+        IconAction(AppIcons.material("SELECT"), "Tocar para elegir objetos", selected = material.interaction == "SELECT") {
             vm.materialSettings(mapOf("interaction" to "SELECT"))
         }
         IconAction(AppIcons.material("PAINT"), "Pintar con el material elegido",
@@ -225,6 +242,9 @@ private fun MaterialToolRail(
         IconAction(AppIcons.material("ERASE"), "Retirar la capa pintada",
             selected = painting && material.erase, enabled = material.paintReady) {
             vm.materialSettings(mapOf("interaction" to "PAINT", "erase" to true))
+        }
+        IconAction(AppIcons.material("LIGHTS"), "Mover luces", selected = material.interaction == "LIGHTS") {
+            vm.materialSettings(mapOf("interaction" to "LIGHTS"))
         }
         RailDivider()
         RailLabel("TRAZO")
@@ -248,6 +268,10 @@ private fun MaterialToolRail(
  * elegido: el usuario no tiene que saber qué es el IOR para entender que va de
  * aire a diamante. Los ajustes finos son los mismos parámetros del shader, así que
  * quien sepa puede llegar hasta el final sin salir de aquí.
+ *
+ * Aplicar vive al pie del panel y no dentro de una pestaña: material, acabado y
+ * grano forman una sola receta y se asignan de una vez, así que el botón tiene que
+ * significar lo mismo se esté mirando donde se esté mirando.
  */
 @Composable
 private fun MaterialLibrary(
@@ -256,18 +280,24 @@ private fun MaterialLibrary(
     onColor: () -> Unit,
     onImport: () -> Unit,
     onSave: () -> Unit,
+    onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var tab by rememberSaveable { mutableStateOf("material") }
-    FloatingPanel(modifier) {
-        Column(Modifier.width(240.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    FloatingPanel(modifier.heightIn(max = 560.dp)) {
+        Column(Modifier.width(240.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                IconAction(Icons.AutoMirrored.Filled.ArrowBack, "Cerrar biblioteca", onClick = onClose)
+                Text("MATERIALES", color = Ink.Accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f).padding(start = 2.dp))
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 listOf("material" to "Material", "finish" to "Acabado", "grain" to "Grano").forEach { (id, label) ->
                     PillButton(label, Modifier.weight(1f), selected = tab == id) { tab = id }
                 }
             }
             Column(
-                Modifier.verticalScroll(rememberScrollState()),
+                Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 when (tab) {
@@ -276,6 +306,11 @@ private fun MaterialLibrary(
                     else -> BaseTab(material, vm, onColor, onImport, onSave)
                 }
             }
+            ApplyButton(
+                label = if (material.scope == "ALL") "Aplicar a la selección" else "Aplicar a la zona",
+                enabled = material.targets.isNotEmpty() &&
+                    (material.scope == "ALL" || (material.paintReady && !material.paintBlocked)),
+            ) { vm.materialCommand("material.apply") }
         }
     }
 }
@@ -288,8 +323,6 @@ private fun ColumnScope.BaseTab(
     onImport: () -> Unit,
     onSave: () -> Unit,
 ) {
-    val applyEnabled = material.targets.isNotEmpty() &&
-        (material.scope == "ALL" || (material.paintReady && !material.paintBlocked))
     SectionLabel("BASE")
     PresetGrid(material.presets.filter { it.category == "base" }, material.preset) {
         vm.materialSettings(mapOf("preset" to it))
@@ -302,10 +335,6 @@ private fun ColumnScope.BaseTab(
             selected = !material.tinted) { vm.materialSettings(mapOf("color" to JSONObject.NULL)) }
         SwatchChip("Tinte", parseColor(material.color), selected = material.tinted, onClick = onColor)
     }
-    ApplyButton(
-        label = if (material.scope == "ALL") "Aplicar a la selección" else "Aplicar a la zona",
-        enabled = applyEnabled,
-    ) { vm.materialCommand("material.apply") }
     SectionLabel("DETALLE")
     PresetGrid(material.presets.filter { it.category == "detail" }, material.preset) { id ->
         vm.materialSettings(mapOf("preset" to id, "color" to JSONObject.NULL, "finish" to "natural", "erase" to false))
@@ -395,6 +424,32 @@ private fun MaterialBrushTray(
     onColor: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (material.interaction == "LIGHTS") {
+        // «Original» y el botón apagado son la respuesta a no saber si el reseteo
+        // devolvió la luz a su sitio: en cuanto lo está, se dice y no hay nada que
+        // restaurar. El ambiente elegido tiene su propio giro, así que 0° significa
+        // el de ese ambiente, no mirar al eje X del mundo.
+        val moved = material.lightRotation.roundToInt() != 0 || (material.lightEnergy * 100).roundToInt() != 100
+        FloatingPanel(modifier) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Icon(AppIcons.material("LIGHTS"), contentDescription = null, tint = Ink.Accent)
+                    Text(
+                        if (moved) "Luz · ${material.lightRotation.roundToInt()}° · ${(material.lightEnergy * 100).roundToInt()} %"
+                        else "Luz · original del ambiente",
+                        color = if (moved) Ink.OnPanel else Ink.Ok, fontSize = 13.sp,
+                    )
+                    PillButton("Restaurar luces", enabled = moved) {
+                        vm.materialCommand("material.lighting", mapOf("phase" to "reset"))
+                    }
+                }
+                Text("Arrastra en horizontal para girar la luz y en vertical para subirla o bajarla de intensidad. " +
+                    "Blender no permite elevar el foco del ambiente. Dos dedos navegan.",
+                    color = Ink.Faint, fontSize = 11.sp)
+            }
+        }
+        return
+    }
     FloatingPanel(modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(
@@ -523,25 +578,6 @@ private fun ApplyButton(label: String, enabled: Boolean, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Text(label, color = if (enabled) Ink.Accent else Ink.Faint, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-/** Separador vertical entre grupos de una barra horizontal. */
-@Composable
-private fun RailSeparator() {
-    Box(Modifier.padding(horizontal = 2.dp).width(1.dp).height(22.dp).background(Ink.Divider))
-}
-
-@Composable
-private fun MaterialPicker(label: String, options: List<MaterialPreset>, selected: String, choose: (String) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    Box {
-        PillButton("$label · ${options.find { it.id == selected }?.label ?: "Elegir"}") { open = true }
-        DropdownMenu(open, { open = false }, Modifier.heightIn(max = 360.dp)) {
-            options.forEach { option ->
-                DropdownMenuItem(text = { Text(option.label) }, onClick = { open = false; choose(option.id) })
-            }
-        }
     }
 }
 

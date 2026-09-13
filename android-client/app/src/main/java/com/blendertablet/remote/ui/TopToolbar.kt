@@ -85,6 +85,10 @@ fun TopToolbar(
                     }
                     PillButton("Alt", selected = state.selectionOp == SelectionOp.REMOVE) { vm.toggleSelectionOp(SelectionOp.REMOVE) }
                     }
+                    // Materiales y CAD no abren una franja propia: su contexto son
+                    // iconos en esta misma fila, delante de Deshacer.
+                    if (blender.material.active) MaterialTopActions(state, vm)
+                    if (blender.cad.workspace) CadTopActions(state, vm)
                     IconAction(Icons.AutoMirrored.Filled.Undo, "Deshacer") { vm.undo() }
                     IconAction(Icons.AutoMirrored.Filled.Redo, "Rehacer") { vm.redo() }
                     if (!blender.cad.workspace && blender.mode != BlenderMode.SCULPT && !blender.material.active && blender.features.repeatLast) {
@@ -131,24 +135,34 @@ fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier
         }
         FloatingPanel {
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                IconAction(
-                    Icons.Default.ViewInAr, "Object Mode",
-                    selected = blender.mode == BlenderMode.OBJECT && !blender.cad.workspace && !blender.material.active,
-                ) { vm.setMode(BlenderMode.OBJECT) }
-                IconAction(
-                    Icons.Default.Straighten, "Edit Mode",
-                    selected = inEdit,
-                    enabled = editable,
-                ) { vm.setMode(BlenderMode.EDIT) }
-                if (blender.material.available) IconAction(AppIcons.materials, "Materiales",
-                    selected = blender.material.active, enabled = blender.activeObjectType == "MESH") { vm.enterMaterials() }
+                // En CAD los demás modos se ocultan: solo queda CAD y, al final,
+                // Object como salida.
+                if (!blender.cad.workspace) {
+                    IconAction(
+                        Icons.Default.ViewInAr, "Object Mode",
+                        selected = blender.mode == BlenderMode.OBJECT && !blender.cad.workspace && !blender.material.active,
+                    ) { vm.setMode(BlenderMode.OBJECT) }
+                    IconAction(
+                        Icons.Default.Straighten, "Edit Mode",
+                        selected = inEdit,
+                        enabled = editable,
+                    ) { vm.setMode(BlenderMode.EDIT) }
+                    if (blender.material.available) IconAction(AppIcons.materials, "Materiales",
+                        selected = blender.material.active, enabled = blender.activeObjectType == "MESH") { vm.enterMaterials() }
+                }
                 if (blender.features.cad.available) PillButton("CAD", selected = blender.cad.workspace) { vm.enterCad() }
-                IconAction(
-                    AppIcons.sculpt("DRAW"), "Escultura",
-                    selected = blender.mode == BlenderMode.SCULPT,
-                    enabled = blender.sculpt.available && editable && blender.activeObjectType == "MESH",
-                    onClick = { vm.setMode(BlenderMode.SCULPT) },
-                )
+                if (blender.cad.workspace) {
+                    IconAction(
+                        Icons.Default.ViewInAr, "Salir de CAD a Object Mode",
+                    ) { vm.setMode(BlenderMode.OBJECT) }
+                } else {
+                    IconAction(
+                        AppIcons.sculpt("DRAW"), "Escultura",
+                        selected = blender.mode == BlenderMode.SCULPT,
+                        enabled = blender.sculpt.available && editable && blender.activeObjectType == "MESH",
+                        onClick = { vm.setMode(BlenderMode.SCULPT) },
+                    )
+                }
             }
         }
     }

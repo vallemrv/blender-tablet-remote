@@ -1,5 +1,6 @@
 """Main-thread material workspace; temporary presentation never enters .blend."""
 from contextlib import contextmanager
+import math
 import bpy
 from bpy.app.handlers import persistent
 import numpy as np
@@ -19,6 +20,12 @@ class Runtime:
         self.owner = None
         self.targets = []
         self.environment = 'studio'
+        self.light_rotation = 0.
+        # Blender solo gira el studio light en acimut: no hay elevación en su API.
+        # El eje vertical del gesto cambia cuánta luz hay, que es lo que se persigue
+        # al intentar «subir» la luz para ver mejor un acabado.
+        self.light_energy = 1.
+        self.light_gesture = None
         self.preset = 'plastic'
         # Sin tinte, el material se ve con su propio color: elegir Oro da oro.
         # El tinte es una decisión explícita y reversible, no el estado de partida.
@@ -72,7 +79,7 @@ class Runtime:
             paint_limit=painting.MAX_BASE_FACES,
             paint_blocked=any(len(o.data.polygons)>painting.MAX_BASE_FACES for o in objects),
             preset=self.preset,color=self.effective_color(base),tinted=self.tint is not None,
-            radius=self.radius,strength=self.strength,environment=self.environment,
+            radius=self.radius,strength=self.strength,environment=self.environment,light_rotation=self.light_rotation,light_energy=self.light_energy,
             erase=self.erase,finish=self.finish,custom=bool(self.surface),
             surface=self.effective_surface(base),surface_controls=recipes.SURFACE_CONTROLS,
             grain=self.grain,grain_scale=self.grain_scale,grain_amount=self.grain_amount,grain_relief=self.grain_relief,
@@ -177,7 +184,8 @@ class Runtime:
                 eevee.use_raytracing=True
                 available = {s.name for s in bpy.context.preferences.studio_lights if s.type=='WORLD'}
                 if env['light'] in available: shading.studio_light=env['light']
-                shading.studiolight_intensity=env['intensity']; shading.studiolight_rotate_z=env['rotation']
+                shading.studiolight_intensity=min(10.,max(.05,env['intensity']*self.light_energy))
+                shading.studiolight_rotate_z=(env['rotation']+math.radians(self.light_rotation)+math.pi) % math.tau-math.pi
                 shading.studiolight_background_alpha=env['background']; shading.studiolight_background_blur=1.
                 bpy.context.evaluated_depsgraph_get()
             if self.active or clean:
@@ -284,7 +292,48 @@ class Runtime:
         self.stroke=None; self.last_point=None
         undo_push('Pintar material')
 
+    def cancel_lighting(self):
+        if self.light_gesture is not None:
+            self.light_rotation = self.light_gesture['baseline']
+            self.light_energy = self.light_gesture['energy']
+            self.light_gesture = None
+
+    def lighting(self, payload):
+        """Presentation-only lighting; each drag rebuilds from its committed values."""
+        self.require(payload.get('_client_id'), targets=False)
+        phase = payload.get('phase')
+        if phase == 'reset':
+            self.cancel_lighting()
+            self.light_rotation = 0.
+            self.light_energy = 1.
+            return
+        if phase not in {'begin', 'update', 'end', 'cancel'}:
+            raise BadPayload('Fase de luces desconocida')
+        gesture_id = payload.get('gesture_id')
+        if not isinstance(gesture_id, str) or not 1 <= len(gesture_id) <= 80:
+            raise BadPayload('gesture_id de luces inválido')
+        if phase == 'begin':
+            if self.interaction != 'LIGHTS':
+                raise CommandError('Activa el cursor de luces', code='wrong_mode')
+            if self.light_gesture and self.light_gesture['id'] == gesture_id:
+                return
+            self.cancel()
+            self.light_gesture = dict(id=gesture_id, baseline=self.light_rotation, energy=self.light_energy)
+        elif self.light_gesture and self.light_gesture['id'] == gesture_id:
+            if phase == 'update':
+                angle = recipes.number(payload.get('rotation'), -360000., 360000., 'rotation')
+                self.light_rotation = (self.light_gesture['baseline'] + angle + 180.) % 360. - 180.
+                # Proporcional, no aditiva: media pantalla arriba multiplica la luz
+                # por lo mismo que media pantalla abajo la divide.
+                travel = recipes.number(payload.get('energy', 0.), -8., 8., 'energy')
+                self.light_energy = min(3., max(.2, self.light_gesture['energy'] * math.exp(1.1 * travel)))
+            elif phase == 'end':
+                self.light_gesture = None
+            else:
+                self.cancel_lighting()
+
     def cancel(self):
+        self.cancel_lighting()
         stroke,self.stroke=self.stroke,None
         self.last_point=None
         if not stroke: return

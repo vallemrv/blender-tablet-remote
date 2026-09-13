@@ -7,9 +7,20 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AccountTree
+import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,10 +37,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
     val cad = state.blender.cad
     val capabilities = state.blender.features.cad
     val connected = state.connection == ConnectionStatus.CONNECTED
-    var modelVisible by rememberSaveable { mutableStateOf(true) }
+    var stackOpen by rememberSaveable { mutableStateOf(true) }
     var constraintsVisible by rememberSaveable { mutableStateOf(false) }
-    var planesOpen by remember { mutableStateOf(false) }
-    var historyExpanded by rememberSaveable { mutableStateOf(false) }
     val historyScroll = rememberScrollState()
     var unit by remember(state.blender.sceneScale.lengthUnit) { mutableStateOf(state.blender.sceneScale.lengthUnit) }
     var pendingDimension by remember(cad.activeSketchId, cad.selection) { mutableStateOf<String?>(null) }
@@ -37,54 +46,41 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
     LaunchedEffect(cad.revision) {
         editingConstraint?.let { selected -> editingConstraint = cad.sketches.flatMap { it.constraints }.firstOrNull { it.id == selected.id } }
     }
+    // Rollback bar position over the full stack; body filtering keeps the order.
+    val barPos = cad.rollbackId?.let { id -> cad.history.indexOfFirst { it.id == id } }?.takeIf { it >= 0 }
+    fun behindBar(nodeId: String) = barPos != null && cad.history.indexOfFirst { it.id == nodeId } > barPos
     var cutTarget by remember(cad.documentId) { mutableStateOf<String?>(null) }
     val consumed = cad.features.filter { it.enabled }.mapNotNull { it.targetId }.toSet()
-    val targets = cad.features.filter { it.enabled && it.id !in consumed }
+    val targets = cad.features.filter { it.enabled && it.id !in consumed && !behindBar(it.id) }
     LaunchedEffect(cad.selectedFeature?.id) { cad.selectedFeature?.let { cutTarget = it.id } }
     val target = targets.firstOrNull { it.id == cutTarget } ?: targets.singleOrNull()
     val editing = cad.activeSketchId != null
     val selectedSketch = cad.selectedSketch
     val bodyHistory = cad.history.filter { cad.activeBodyId == null || it.bodyId == cad.activeBodyId }
     val lastNode = bodyHistory.lastOrNull()
-    LaunchedEffect(lastNode?.id, cad.activeSketch?.entities?.lastOrNull()?.id, historyExpanded, editing) {
-        if ((!editing && historyExpanded) || (editing && !constraintsVisible)) {
+    val viewIndex = if (barPos == null) bodyHistory.size
+        else bodyHistory.count { node -> !behindBar(node.id) }
+    LaunchedEffect(lastNode?.id, cad.activeSketch?.entities?.lastOrNull()?.id, editing, constraintsVisible) {
+        if (!editing || !constraintsVisible) {
             withFrameNanos { }; withFrameNanos { }
             historyScroll.scrollTo(historyScroll.maxValue)
         }
     }
-    LaunchedEffect(cad.activeSketchId) { if (cad.activeSketchId != null) modelVisible = true }
     val depthPreview = cad.sessionActive && cad.operation in listOf("EXTRUDE", "CUT")
     val availableHeight = (LocalConfiguration.current.screenHeightDp - 320).coerceAtLeast(100).dp
+    // Al editar, la pila termina con un margen pequeño sobre el rail de restricciones.
+    val density = LocalDensity.current
+    var railTopPx by remember { mutableStateOf<Float?>(null) }
     fun command(name: String, vararg values: Pair<String, Any?>) { if (connected) vm.cadCommand(name, mapOf(*values)) }
     fun editSketch(sketchId: String) {
         vm.cadTool(null)
-        modelVisible = true; constraintsVisible = false
+        constraintsVisible = false
         command("cad.sketch.activate", "sketch_id" to sketchId)
     }
     fun beginFeature(operation: String) {
         vm.cadTool(null)
         command("cad.extrude.begin", "profile_id" to cad.selectionId, "depth" to cad.step * 10,
             "operation" to operation, "target_id" to target?.id)
-    }
-    FloatingPanel(Modifier.align(Alignment.TopStart).padding(start = Metrics.EdgeMargin, top = 76.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            PillButton(if (editing) "Boceto activo" else "Modelo · ${bodyHistory.size} pasos", selected = modelVisible && (!editing || !constraintsVisible)) {
-                modelVisible = if (editing && constraintsVisible) true else !modelVisible; constraintsVisible = false
-            }
-            Text(if (editing) "${cad.activeSketch?.name} · ${cad.activeSketch?.planeLabel}" else "Sólidos CAD", color = Ink.OnPanel, fontSize = 13.sp,
-                modifier = Modifier.padding(horizontal = 8.dp))
-            PillButton("Planos", enabled = connected && !cad.sessionActive) { planesOpen = true }
-            if (!editing) PillButton("Vista 3D", enabled = connected && !cad.sessionActive) { command("cad.view.solid") }
-            if (editing) CadAction("PLANE_${cad.activeSketch?.plane}", "Volver al plano del boceto", enabled = !cad.sessionActive) {
-                command("cad.sketch.activate", "sketch_id" to cad.activeSketchId)
-            }
-            if (editing) PillButton("Finalizar boceto", enabled = connected && !cad.sessionActive) {
-                vm.cadTool(null); command("cad.sketch.finish")
-            }
-            else if (selectedSketch != null) PillButton("Editar boceto", enabled = connected && !cad.sessionActive) {
-                editSketch(selectedSketch.id)
-            }
-        }
     }
     ToolRail(Modifier.align(Alignment.CenterStart).padding(start = Metrics.EdgeMargin, top = 120.dp, bottom = 160.dp).heightIn(max = availableHeight)) {
         CadAction("SELECT", "Cursor · tocar alterna selección · arrastrar mueve", selected = state.cadTool == null && cad.surface.mode == "PROFILE", enabled = !cad.sessionActive) { vm.cadTool(null) }
@@ -118,7 +114,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
         }
     }
     if (editing && capabilities.constraints.isNotEmpty()) ToolRail(
-        Modifier.align(Alignment.CenterEnd).padding(end = Metrics.EdgeMargin, top = 142.dp, bottom = 180.dp).heightIn(max = availableHeight)
+        Modifier.align(Alignment.CenterEnd).padding(end = Metrics.EdgeMargin, top = 142.dp, bottom = 180.dp)
+            .heightIn(max = availableHeight).onGloballyPositioned { railTopPx = it.boundsInRoot().top }
     ) {
         capabilities.constraints.forEach { type ->
             CadAction(type, cadLabel(type), enabled = connected && !cad.sessionActive && cadConstraintEnabled(cad, type),
@@ -138,35 +135,55 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
         }
     }
     val contextual = editing && cad.selection.isNotEmpty()
-    if (modelVisible) FloatingPanel(
-        Modifier.align(Alignment.CenterStart).padding(start = 80.dp, top = 132.dp, bottom = 170.dp).width(310.dp).heightIn(max = availableHeight)
+    // La pila ocupa el sitio del inspector de modificadores —icono cerrado bajo el
+    // selector de modos, panel derecho con flecha de vuelta— y se abre y se cierra
+    // igual que él. El contexto (planos, vista, finalizar boceto) vive arriba, en la
+    // fila de Deshacer/Rehacer, sin franja propia bajo el menú.
+    if (!stackOpen) FloatingPanel(
+        Modifier.align(Alignment.TopEnd).padding(top = 142.dp, end = Metrics.EdgeMargin),
     ) {
-        Column(Modifier.verticalScroll(historyScroll).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (editing) {
-                Text("Editando ${cad.activeSketch?.name.orEmpty()}", color = Ink.Accent, fontSize = 14.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    PillButton("Figuras", selected = !constraintsVisible) { constraintsVisible = false }
-                    PillButton("Cotas y reglas", selected = constraintsVisible) { constraintsVisible = true }
-                }
-                if (!constraintsVisible) cad.activeSketch?.entities?.forEachIndexed { index, drawing ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(AppIcons.cad(drawing.type), null, tint = Ink.Muted, modifier = Modifier.size(20.dp))
-                        PillButton("${if (drawing.reference) "Referencia" else if (drawing.isFillet) "Redondeo" else if (drawing.isSquare) "Cuadrado" else cadLabel(drawing.type)} ${index + 1}", selected = cad.selection.any { it.id == drawing.id }, enabled = connected && !cad.sessionActive) {
-                            vm.cadTool(null)
-                            command("cad.select", "kind" to "ENTITY", "id" to drawing.id, "part" to "BODY", "additive" to true)
-                        }
-                        CadAction("DELETE", if (drawing.isFillet) "Quitar redondeo" else "Borrar figura", enabled = connected && !cad.sessionActive) {
-                            command(if (drawing.isFillet) "cad.fillet.remove" else "cad.entity.delete", "entity_id" to drawing.id)
-                        }
+        IconAction(Icons.Default.AccountTree, "Abrir pila de operaciones") { stackOpen = true }
+    }
+    val stackMaxHeight = if (editing) {
+        railTopPx?.let { top ->
+            with(density) { (top - 142.dp.toPx() - 8.dp.toPx()).coerceAtLeast(140.dp.toPx()).toDp() }
+        } ?: 560.dp
+    } else 560.dp
+    if (stackOpen) FloatingPanel(
+        Modifier.align(Alignment.TopEnd).padding(top = 142.dp, end = Metrics.EdgeMargin, bottom = 114.dp).heightIn(max = stackMaxHeight)
+    ) {
+        Column(Modifier.width(300.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                IconAction(Icons.AutoMirrored.Filled.ArrowBack, "Cerrar pila de operaciones") { stackOpen = false }
+                Text(if (editing) "Editando ${cad.activeSketch?.name.orEmpty()}" else "Pila de operaciones",
+                    color = Ink.Accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f).padding(start = 2.dp))
+            }
+            HorizontalDivider()
+            Column(Modifier.weight(1f, fill = false).verticalScroll(historyScroll).padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (editing) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        PillButton("Figuras", selected = !constraintsVisible) { constraintsVisible = false }
+                        PillButton("Cotas y reglas", selected = constraintsVisible) { constraintsVisible = true }
                     }
-                } else (if (contextual) contextualConstraints else cad.activeSketch?.constraints.orEmpty()).forEach { c ->
-                    CadConstraintRow(c, cad.activeSketch!!, unit, !cad.sessionActive,
-                        { editingConstraint = c; pendingDimension = null },
-                        { command("cad.constraint.delete", "constraint_id" to c.id) })
-                }
-            } else {
-                var bodiesOpen by remember { mutableStateOf(false) }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (!constraintsVisible) cad.activeSketch?.entities?.forEachIndexed { index, drawing ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(AppIcons.cad(drawing.type), null, tint = Ink.Muted, modifier = Modifier.size(20.dp))
+                            PillButton("${if (drawing.reference) "Referencia" else if (drawing.isFillet) "Redondeo" else if (drawing.isSquare) "Cuadrado" else cadLabel(drawing.type)} ${index + 1}", selected = cad.selection.any { it.id == drawing.id }, enabled = connected && !cad.sessionActive) {
+                                vm.cadTool(null)
+                                command("cad.select", "kind" to "ENTITY", "id" to drawing.id, "part" to "BODY", "additive" to true)
+                            }
+                            CadAction("DELETE", if (drawing.isFillet) "Quitar redondeo" else "Borrar figura", enabled = connected && !cad.sessionActive) {
+                                command(if (drawing.isFillet) "cad.fillet.remove" else "cad.entity.delete", "entity_id" to drawing.id)
+                            }
+                        }
+                    } else (if (contextual) contextualConstraints else cad.activeSketch?.constraints.orEmpty()).forEach { c ->
+                        CadConstraintRow(c, cad.activeSketch!!, unit, !cad.sessionActive,
+                            { editingConstraint = c; pendingDimension = null },
+                            { command("cad.constraint.delete", "constraint_id" to c.id) })
+                    }
+                } else {
+                    var bodiesOpen by remember { mutableStateOf(false) }
                     Box {
                         PillButton(cad.bodies.firstOrNull { it.id == cad.activeBodyId }?.name ?: "Cuerpo") { bodiesOpen = true }
                         DropdownMenu(bodiesOpen, { bodiesOpen = false }) {
@@ -174,46 +191,72 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                             DropdownMenuItem(text = { Text("Nuevo cuerpo") }, onClick = { bodiesOpen = false; command("cad.body.create") })
                         }
                     }
-                    PillButton("Nuevo boceto", enabled = !cad.sessionActive) { planesOpen = true }
-                }
-                Text(if (historyExpanded) "Historial de operaciones" else "Último paso", color = Ink.OnPanel, fontSize = 14.sp)
-                (if (historyExpanded) bodyHistory else listOfNotNull(lastNode)).forEach { node ->
-                    if (node.kind == "SKETCH") {
-                        val sketch = cad.sketches.firstOrNull { it.id == node.id }
-                        if (sketch != null) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                PillButton("Editar ${sketch.name}", selected = selectedSketch?.id == sketch.id, enabled = connected && !cad.sessionActive) { editSketch(sketch.id) }
-                                CadAction("VISIBLE", "Mostrar/ocultar boceto", selected = sketch.visible, enabled = !cad.sessionActive) { command("cad.sketch.visibility", "sketch_id" to sketch.id, "visible" to !sketch.visible) }
-                                CadAction("DELETE", "Borrar boceto", enabled = !cad.sessionActive && cad.features.none { it.sketchId == sketch.id }) { command("cad.sketch.delete", "sketch_id" to sketch.id) }
-                            }
-                            if (!historyExpanded || selectedSketch?.id == sketch.id) sketch.profiles.forEach { profile ->
-                                PillButton(profile.label, selected = cad.selectionId == profile.id, enabled = !cad.sessionActive) {
-                                    vm.cadTool(null); command("cad.select", "kind" to "PROFILE", "id" to profile.id)
+                    bodyHistory.forEachIndexed { index, node ->
+                        if (barPos != null && index == viewIndex) CadRollbackBar()
+                        val dimmed = behindBar(node.id)
+                        val nodeEnabled = connected && !cad.sessionActive
+                        if (node.kind == "SKETCH") {
+                            val sketch = cad.sketches.firstOrNull { it.id == node.id }
+                            if (sketch != null) {
+                                CadStackNodeRow("SKETCH", sketch.name, selectedSketch?.id == sketch.id, dimmed, nodeEnabled,
+                                    tap = { command("cad.history.rollback", "node_id" to node.id) },
+                                    actions = listOf(
+                                        CadNodeAction("Editar boceto") { editSketch(sketch.id) },
+                                        CadNodeAction(if (sketch.visible) "Ocultar boceto" else "Mostrar boceto") {
+                                            command("cad.sketch.visibility", "sketch_id" to sketch.id, "visible" to !sketch.visible)
+                                        },
+                                        CadNodeAction("Borrar boceto", cad.features.none { it.sketchId == sketch.id }) {
+                                            command("cad.sketch.delete", "sketch_id" to sketch.id)
+                                        },
+                                    ))
+                                if (!dimmed) sketch.profiles.forEach { profile ->
+                                    PillButton(profile.label, selected = cad.selectionId == profile.id, enabled = !cad.sessionActive) {
+                                        vm.cadTool(null); command("cad.select", "kind" to "PROFILE", "id" to profile.id)
+                                    }
                                 }
                             }
-                        }
-                    } else {
-                        val feature = cad.features.firstOrNull { it.id == node.id }
-                        if (feature != null) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(AppIcons.cad(feature.type), null, tint = Ink.Muted, modifier = Modifier.size(20.dp))
-                                PillButton(feature.name + if (!feature.enabled) " · desactivada" else "", selected = cad.selectedFeature?.id == feature.id, enabled = !cad.sessionActive) {
-                                    vm.cadTool(null); command("cad.select", "kind" to "FEATURE", "id" to feature.id)
-                                }
-                            }
-                            if (!historyExpanded || cad.selectedFeature?.id == feature.id) {
-                                PillButton("Editar ${cad.sketches.firstOrNull { it.id == feature.sketchId }?.name ?: "boceto fuente"}", enabled = !cad.sessionActive) { editSketch(feature.sketchId) }
+                        } else {
+                            val feature = cad.features.firstOrNull { it.id == node.id }
+                            if (feature != null) {
+                                CadStackNodeRow(feature.type, feature.name + if (!feature.enabled) " · desactivada" else "",
+                                    cad.selectedFeature?.id == feature.id, dimmed, nodeEnabled,
+                                    tap = { command("cad.history.rollback", "node_id" to node.id) },
+                                    actions = listOf(
+                                        CadNodeAction("Seleccionar") {
+                                            vm.cadTool(null); command("cad.select", "kind" to "FEATURE", "id" to feature.id)
+                                        },
+                                        CadNodeAction("Editar ${cad.sketches.firstOrNull { it.id == feature.sketchId }?.name ?: "boceto fuente"}") { editSketch(feature.sketchId) },
+                                        CadNodeAction(if (feature.enabled) "Desactivar" else "Activar") {
+                                            command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled)
+                                        },
+                                        CadNodeAction("Borrar") {
+                                            vm.cadTool(null); command("cad.feature.delete", "feature_id" to feature.id)
+                                        },
+                                    ))
                             }
                         }
                     }
+                    if (barPos != null && viewIndex >= bodyHistory.size) CadRollbackBar()
                 }
-                PillButton(if (historyExpanded) "Solo último paso" else "Ver historial (${bodyHistory.size})") { historyExpanded = !historyExpanded }
+            }
+            if (!editing) {
+                HorizontalDivider(Modifier.padding(top = 6.dp))
+                Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    PillButton("Atrás", enabled = connected && !cad.sessionActive && viewIndex > 1) {
+                        command("cad.history.rollback", "node_id" to bodyHistory[viewIndex - 2].id)
+                    }
+                    PillButton("Adelante", enabled = connected && !cad.sessionActive && viewIndex < bodyHistory.size) {
+                        command("cad.history.rollback", "node_id" to bodyHistory[viewIndex].id)
+                    }
+                    PillButton("Final", enabled = connected && !cad.sessionActive && barPos != null) {
+                        command("cad.history.rollback")
+                    }
+                    Text(if (barPos == null) "Modelo completo" else "Hasta ${bodyHistory.getOrNull(viewIndex - 1)?.name.orEmpty()}",
+                        color = Ink.Faint, fontSize = 11.sp, maxLines = 1, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
+                }
             }
         }
     }
-    if (planesOpen) CadPlanesDialog(cad, unit, { planesOpen = false }, { name, values -> vm.cadCommand(name, values) }, {
-        planesOpen = false; vm.cadSurfaceMode("FACE")
-    })
     val focusManager = LocalFocusManager.current
     val editScope = listOf(cad.documentId, cad.activeSketchId, cad.selection, cad.selectionId,
         cad.sessionId, cad.revision, state.cadTool, pendingDimension, editingConstraint?.id)
@@ -266,6 +309,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                 !connected -> "Reconectando · recuperando el documento de Blender"
                 drafts.isNotEmpty() && !depthPreview -> "Medidas pendientes · ✓ aplica los cambios · × descarta"
                 depthPreview -> "${cadLabel(cad.operation)} · desliza arriba/abajo para profundidad · dos dedos navegan" + if (cad.transparent) " · transparencia automática" else ""
+                cad.sessionActive && cad.operation == "POLYGON" -> "Polígono: traza o toca cada vértice · cierra tocando el primer punto o con Cerrar · dos dedos descarta"
                 cad.surface.mode == "FACE" -> if (cad.surface.selection.size > 1) "Dos referencias para medir · quita una cara seleccionada para crear el boceto" else "Toca una cara: se resalta en el vídeo · Boceto en cara usa exactamente esa selección"
                 cad.surface.mode != "PROFILE" -> "Toca hasta dos referencias para medir · durante el boceto puedes proyectarlas para acotar desde ellas"
                 state.cadTool == "ARC" -> "Arrastra centro → inicio del arco · ajusta radio y ángulo en la bandeja"
@@ -275,8 +319,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                     else "Cuadrado: Igualdad une sus lados; Fijar medida añade una cota de tamaño"
                 entity?.isFillet == true -> "Redondeo: cambia su radio o Quitar redondeo para recuperar la esquina"
                 editing -> "Cursor: toca para seleccionar o quitar · arrastra para mover el grupo · Cotas y reglas permite editar o quitar medidas"
+                !editing && cad.rollbackId != null -> "Vista del pasado: ${cad.history.firstOrNull { it.id == cad.rollbackId }?.name.orEmpty()} · toca un nodo para ver el modelo en ese momento · Final restaura la pila completa"
                 selectedSketch != null -> "${selectedSketch.name} seleccionado · Editar boceto abre su geometría"
-                else -> "Abre Dibujos para editar un boceto · o crea uno en Planos y selecciona un perfil para extruir"
+                else -> "Abre la pila (derecha) para editar un boceto · o crea uno en Planos, arriba, y selecciona un perfil para extruir"
             }, color = Ink.Muted, fontSize = 12.sp)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 key(editScope, resetInputs) {
@@ -356,6 +401,10 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                                 }
                             }
                         }
+                        if (cad.sessionActive && cad.operation == "POLYGON") {
+                            PillButton("Cerrar polígono", enabled = connected && cad.canClose) { vm.cadCommand("cad.polygon.close") }
+                            RoundAction(AppIcons.cad("CANCEL"), "Descartar polígono", Ink.Bad, { vm.cadCommand("cad.session.cancel") })
+                        }
                         if (depthPreview) {
                             fun preview(value: Double) { drafts.remove("depth"); command("cad.extrude.update", "depth" to value) }
                             CadDimension("Profundidad", cad.depth, unit, cad.sessionId.orEmpty(), step = cad.step,
@@ -381,6 +430,39 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
         }
     }
 }
+
+/** Contexto CAD en la fila del ojo junto a Deshacer/Rehacer, como Materiales: sin franja propia. */
+@Composable
+fun CadTopActions(state: AppUiState, vm: MainViewModel) {
+    val cad = state.blender.cad
+    val connected = state.connection == ConnectionStatus.CONNECTED
+    var planesOpen by rememberSaveable { mutableStateOf(false) }
+    val editing = cad.activeSketchId != null
+    fun command(name: String, vararg values: Pair<String, Any?>) { if (connected) vm.cadCommand(name, mapOf(*values)) }
+    IconAction(Icons.Default.Layers, "Planos y bocetos", enabled = connected && !cad.sessionActive) { planesOpen = true }
+    if (editing) {
+        IconAction(AppIcons.cad("PLANE_" + (cad.activeSketch?.plane ?: "XY")), "Volver al plano del boceto",
+            enabled = connected && !cad.sessionActive) {
+            command("cad.sketch.activate", "sketch_id" to cad.activeSketchId)
+        }
+        IconAction(AppIcons.cad("FINISH"), "Finalizar boceto", enabled = connected && !cad.sessionActive) {
+            vm.cadTool(null); command("cad.sketch.finish")
+        }
+    } else {
+        IconAction(Icons.Default.CenterFocusStrong, "Encuadrar la vista 3D del sólido",
+            enabled = connected && !cad.sessionActive) {
+            command("cad.view.solid")
+        }
+        cad.selectedSketch?.let { sketch ->
+            IconAction(Icons.Default.Edit, "Editar ${sketch.name}", enabled = connected && !cad.sessionActive) {
+                vm.cadTool(null); command("cad.sketch.activate", "sketch_id" to sketch.id)
+            }
+        }
+    }
+    if (planesOpen) CadPlanesDialog(cad, state.blender.sceneScale.lengthUnit, { planesOpen = false },
+        { name, values -> vm.cadCommand(name, values) }, { planesOpen = false; vm.cadSurfaceMode("FACE") })
+}
+
 
 internal fun cadRefsTouch(a: CadSelection, b: CadSelection): Boolean {
     if (a.id != b.id) return false
@@ -417,7 +499,7 @@ internal fun cadConstraintEnabled(cad: CadState, type: String): Boolean {
 }
 
 internal fun cadLabel(type: String) = when (type) {
-    "RECTANGLE" -> "Rectángulo"; "SQUARE" -> "Cuadrado"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "ARC" -> "Arco"; "FILLET" -> "Redondeo"
+    "RECTANGLE" -> "Rectángulo"; "SQUARE" -> "Cuadrado"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
     "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad"; "DISTANCE" -> "Distancia / longitud"; "RADIUS" -> "Radio"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"
     "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; else -> type
@@ -429,6 +511,38 @@ private fun CadAction(intent: String, description: String, selected: Boolean = f
     TooltipBox(positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
         tooltip = { PlainTooltip { Text(description) } }, state = rememberTooltipState()) {
         IconAction(AppIcons.cad(intent), description, selected = selected, enabled = enabled, onClick = onClick)
+    }
+}
+
+private class CadNodeAction(val label: String, val enabled: Boolean = true, val action: () -> Unit)
+
+/** One node of the operation stack: tap shows the model as of that node; ⋮ opens its actions. */
+@Composable
+private fun CadStackNodeRow(icon: String, label: String, selected: Boolean, dimmed: Boolean, enabled: Boolean,
+                            tap: () -> Unit, actions: List<CadNodeAction>) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Box {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Icon(AppIcons.cad(icon), null, tint = if (dimmed) Ink.Faint else Ink.Muted, modifier = Modifier.size(20.dp))
+            PillButton(label, modifier = Modifier.weight(1f), selected = selected, enabled = enabled && !dimmed, onClick = tap)
+            IconAction(Icons.Default.MoreVert, "Acciones del nodo", enabled = enabled && !dimmed) { menuOpen = true }
+        }
+        DropdownMenu(menuOpen, { menuOpen = false }) {
+            actions.forEach { item ->
+                DropdownMenuItem(text = { Text(item.label) }, enabled = enabled && item.enabled,
+                    onClick = { menuOpen = false; item.action() })
+            }
+        }
+    }
+}
+
+/** The rollback bar: everything below it is future history, hidden until advanced. */
+@Composable
+private fun CadRollbackBar() {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        HorizontalDivider(Modifier.weight(1f), thickness = 1.dp, color = Ink.Accent.copy(alpha = .6f))
+        Text("la vista llega aquí", color = Ink.Accent, fontSize = 10.sp)
+        HorizontalDivider(Modifier.weight(1f), thickness = 1.dp, color = Ink.Accent.copy(alpha = .6f))
     }
 }
 

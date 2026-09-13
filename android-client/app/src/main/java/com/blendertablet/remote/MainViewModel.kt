@@ -386,13 +386,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val type = local.value.cadTool
                 if (cad.activeSketchId == null || cad.surface.mode != "PROFILE") return
                 cadStroke = true
-                cadGestureMode = if (type == null) "DRAG" else "DRAW"
-                client.cadCommand(if (type == null) "cad.drag.begin" else "cad.entity.begin", mapOf("type" to type, "u" to u, "v" to v))
+                cadGestureMode = when {
+                    type == null -> "DRAG"
+                    type == "POLYGON" -> "POLY"
+                    else -> "DRAW"
+                }
+                client.cadCommand(when (cadGestureMode) {
+                    "DRAG" -> "cad.drag.begin"
+                    "POLY" -> "cad.polygon.begin"
+                    else -> "cad.entity.begin"
+                }, if (type == null) mapOf("u" to u, "v" to v) else mapOf("type" to type, "u" to u, "v" to v))
             }
             GesturePhase.UPDATE -> if (cadStroke) {
                 when (cadGestureMode) {
                     "DEPTH" -> client.cadCommand("cad.extrude.update", mapOf("gesture" to (cadPointerStartV - v), "baseline_depth" to cadDepthStart))
                     "DRAG" -> client.cadCommand("cad.drag.update", mapOf("u" to u, "v" to v))
+                    "POLY" -> client.cadCommand("cad.polygon.update", mapOf("u" to u, "v" to v))
                     "DRAW" -> client.cadCommand("cad.entity.update", mapOf("u" to u, "v" to v))
                 }
             }
@@ -400,6 +409,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 cadStroke = false
                 when (cadGestureMode) {
                     "DRAG" -> client.cadCommand("cad.drag.end")
+                    "POLY" -> client.cadCommand("cad.polygon.segment", mapOf("u" to u, "v" to v))
                     "DRAW" -> client.cadCommand("cad.session.confirm")
                 }
                 cadGestureMode = null
@@ -412,6 +422,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearCapture() = client.clearCapture()
     fun captureScene() { client.captureScene() }
     private var materialStrokeId: String? = null
+    private var materialLightId: String? = null
+
+    fun materialLightGesture(phase: GesturePhase, rotation: Float, energy: Float = 0f) {
+        if (phase == GesturePhase.BEGIN) {
+            if (!client.state.value.material.active || client.state.value.material.interaction != "LIGHTS") return
+            cancelMaterialStroke()
+            materialLightId = java.util.UUID.randomUUID().toString()
+        }
+        val id = materialLightId ?: return
+        client.materialCommand("material.lighting", mapOf("phase" to phase.name.lowercase(), "gesture_id" to id,
+            "rotation" to rotation, "energy" to energy))
+        if (phase == GesturePhase.END || phase == GesturePhase.CANCEL) materialLightId = null
+    }
     fun enterMaterials() {
         cancelSculptStroke(); cancelCadStroke(); closeSessions(); cancelMaterialStroke()
         local.update { it.copy(activeTool = ActiveTool.SELECT, shapeTool = ShapeTool.NONE, cadTool = null) }
@@ -424,6 +447,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun materialSettings(values: Map<String, Any?>) = materialCommand("material.settings", values)
     fun toggleMaterialStylus() { cancelMaterialStroke(); local.update { it.copy(materialStylusOnly = !it.materialStylusOnly) } }
     private fun cancelMaterialStroke() {
+        materialLightGesture(GesturePhase.CANCEL, 0f, 0f)
         val id = materialStrokeId ?: return
         materialStrokeId = null
         client.materialCommand("material.stroke", mapOf("phase" to "cancel", "stroke_id" to id))

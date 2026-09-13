@@ -27,6 +27,13 @@ capture.max_width=800
 stage=0
 
 
+def pixels(name):
+    image=bpy.data.images.load(str(out/name),check_existing=False)
+    data=np.array(image.pixels[:]).reshape(image.size[1],image.size[0],4)[:,:,:3]
+    bpy.data.images.remove(image)
+    return data
+
+
 def step():
     global stage
     try:
@@ -65,6 +72,27 @@ def step():
                 assert runtime.needs_depth(matrix,*runtime.frame[2:]), 'Geometry edit must invalidate depth'
                 bpy.data.objects['PaintTest'].data.vertices[0].co=old
                 bpy.data.objects['PaintTest'].data.update(); bpy.context.view_layer.update()
+                space=next(a.spaces.active for a in bpy.context.screen.areas if a.type=='VIEW_3D')
+                original_rotation=space.shading.studiolight_rotate_z
+                original_view=camera.as_dict()
+                material.settings({'_client_id':'test','interaction':'LIGHTS'})
+                material.lighting({'_client_id':'test','phase':'begin','gesture_id':'gpu-light'})
+                material.lighting({'_client_id':'test','phase':'update','gesture_id':'gpu-light','rotation':90})
+                for _ in range(4):
+                    (out/'light-rotated.png').write_bytes(capture._grab_offscreen(clean=True)[0])
+                material.lighting({'_client_id':'test','phase':'end','gesture_id':'gpu-light'})
+                material.lighting({'_client_id':'test','phase':'reset'})
+                for _ in range(4):
+                    (out/'light-reset.png').write_bytes(capture._grab_offscreen(clean=True)[0])
+                baseline=pixels('before.png')
+                changed=float(np.abs(pixels('light-rotated.png')-baseline).mean())
+                restored=float(np.abs(pixels('light-reset.png')-baseline).mean())
+                assert changed>.005, ('Light did not visibly move',changed)
+                assert restored<changed*.25, ('Reset did not restore lighting',restored,changed)
+                assert camera.as_dict()==original_view, 'Light cursor moved the camera'
+                assert space.shading.studiolight_rotate_z==original_rotation, 'Light rotation leaked to PC'
+                print(f'MATERIAL LIGHTING GPU PASS changed={changed:.5f} reset={restored:.5f}',flush=True)
+                material.settings({'_client_id':'test','interaction':'PAINT'})
         elif stage==4:
             material.settings({'_client_id':'test','preset':'plastic','color':'#2080FF','radius':.14})
             material.stroke({'_client_id':'test','phase':'begin','stroke_id':'one','points':[{'u':.5,'v':.5,'pressure':1}]})

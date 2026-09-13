@@ -102,6 +102,42 @@ class FinishTests(unittest.TestCase):
                          ['hierro-pintado','hierro-pintado-2'])
         with self.assertRaises(BadPayload): material.save_recipe({'_client_id':'test','label':'  '})
 
+    def test_vertical_drag_dims_the_light_and_reset_restores_the_environment(self):
+        self.settings(interaction='LIGHTS',environment='warm')
+        def gesture(phase,**values):
+            material.lighting(dict(_client_id='test',phase=phase,gesture_id='light',**values))
+        gesture('begin')
+        gesture('update',rotation=45,energy=.5)
+        raised=runtime.light_energy
+        self.assertGreater(raised,1.)
+        # Bajar lo mismo que se subió divide por el mismo factor: es proporcional.
+        gesture('update',rotation=45,energy=-.5)
+        self.assertAlmostEqual(runtime.light_energy,1/raised,places=6)
+        gesture('end')
+        # El siguiente arrastre parte de lo confirmado, no del ambiente.
+        gesture('begin');gesture('update',rotation=0,energy=0.)
+        self.assertAlmostEqual(runtime.light_energy,1/raised,places=6)
+        gesture('cancel')
+        # Reset devuelve el giro y la intensidad propios del ambiente elegido.
+        material.lighting({'_client_id':'test','phase':'reset'})
+        self.assertEqual((runtime.light_rotation,runtime.light_energy),(0.,1.))
+        self.assertEqual(runtime.status()['light_energy'],1.)
+        # Recorrer la pantalla entera llega al tope, sin apagar ni cegar.
+        gesture('begin');gesture('update',rotation=0,energy=1.2)
+        self.assertEqual(runtime.light_energy,3.)
+        gesture('update',rotation=0,energy=-2.)
+        self.assertEqual(runtime.light_energy,.2)
+        gesture('end')
+        # Un desplazamiento imposible en pantalla es un payload inválido, no un tope.
+        with self.assertRaises(BadPayload):
+            gesture('begin'); gesture('update',rotation=0,energy=40.)
+        material.lighting({'_client_id':'test','phase':'reset'})
+        # Cambiar de ambiente también parte de su luz original.
+        self.settings(environment='studio')
+        self.assertEqual((runtime.light_rotation,runtime.light_energy),(0.,1.))
+        with self.assertRaises(BadPayload):
+            gesture('begin'); gesture('update',rotation=0,energy=float('inf'))
+
     def test_state_survives_a_preset_the_open_file_no_longer_has(self):
         self.settings(preset='plastic',finish='metal')
         runtime.preset='ghost'

@@ -61,7 +61,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   rotación del objeto destino, con preview reversible.
 - H.264 preferido con fallback MJPEG.
 - CAD v1: planos XY/XZ/YZ y cara superior asociativa, líneas, rectángulos, cuadrados,
-  círculos, arcos, redondeo de sketch, selección de puntos/aristas y restricciones.
+  círculos, arcos, polígonos irregulares, redondeo de sketch, selección de puntos/aristas
+  y restricciones.
   Extrusión de perfiles cerrados y vaciado por profundidad con incrementos. Documento JSON
   persistente en `.blend`, árbol, preview reversible y conversión explícita a malla.
 
@@ -166,7 +167,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   con dos dedos cancela el sondeo temporal, sin fijar otra cara.
 - Debajo del ojo hay un selector horizontal Object/Edit/CAD/Sculpt; CAD solo aparece
   si el backend lo anuncia. Sculpt se habilita según `sculpt.available` sobre mallas;
-  Layouts se ha retirado.
+  Layouts se ha retirado. En CAD los demás modos se ocultan: solo se ve CAD y,
+  al final de la lista, Object como salida.
 - Sculpt usa pinceles nativos y la cámara remota; nunca escribe en `rv3d`.
   Radio se expresa como fracción de altura del vídeo. La presión real e histórica
   del lápiz gobierna fuerza/radio por separado; cero conserva cero. Solo lápiz es
@@ -451,6 +453,12 @@ no quedan archivos o referencias temporales.
   proyectan en backend y muestran unidades. Los bocetos tienen visibilidad propia.
 - Redondeo admite dos líneas o una esquina de rectángulo; convierte el rectángulo
   a una cadena restringida y conserva las operaciones que usan el perfil.
+- El polígono irregular dibuja una cadena de segmentos unidos por coincidencias:
+  cada trazo o toque consolida un vértice; cerrar tocando el primer punto o con
+  «Cerrar polígono» registra un único undo y deja el perfil seleccionado. Con menos
+  de tres vértices el cierre se ignora o responde error sin perder la sesión.
+  Cancelar o dos dedos descarta la cadena completa; otra herramienta la abandona
+  sin persistir nada. En construcción no genera perfil y selecciona el último tramo.
 - Los cuerpos agrupan bocetos/operaciones independientes. Los planos guardados
   admiten desplazamiento métrico y giro local XYZ en grados, con referencias a
   boceto/cara superior. Una cara arbitraria guarda su marco capturado, sin índices
@@ -520,9 +528,18 @@ no quedan archivos o referencias temporales.
 - Finalizar boceto restaura una vista 3D orbital, con encuadre del resultado, sin
   escribir `rv3d`. Extruir/Vaciar muestran su preview en 3D. Un perfil nuevo queda
   seleccionado al finalizar para poder extruir/vaciar sin volver a buscarlo.
-- La lista CAD muestra solo figuras/reglas del boceto activo al editar. En 3D
-  muestra el último nodo del cuerpo; Ver historial despliega la secuencia y sigue
-  el último paso. `order` conserva el orden de creación de bocetos/operaciones.
+- La lista CAD muestra solo figuras/reglas del boceto activo al editar. En 3D la
+  pila de operaciones muestra la secuencia completa del cuerpo al estilo OnShape:
+  tocar un nodo fija la barra de retroceso en ese punto y muestra el modelo de
+  entonces; Atrás/Adelante/Final navegan y los nodos posteriores quedan atenuados
+  e inaccesibles (`cad_rollback`). Los nodos nuevos se insertan justo tras la
+  barra y al confirmar la barra avanza hasta ellos. Navegar no crea undo; salir o
+  reconectar devuelve la vista al modelo completo. `order` conserva el orden de
+  creación de bocetos/operaciones.
+  La pila ocupa el sitio del inspector de modificadores: icono cerrado bajo el
+  selector de modos y flecha de vuelta en su cabecera. El contexto CAD —Planos,
+  Vista 3D, Volver al plano, Finalizar/Editar boceto— son iconos en la fila de
+  Deshacer/Rehacer, sin franja propia bajo el menú.
   Los bocetos consumidos se ocultan por defecto; el ojo conserva una elección
   explícita de visibilidad. Las caras seleccionadas nunca aparecen en captura limpia.
 
@@ -540,10 +557,16 @@ no quedan archivos o referencias temporales.
   marca `custom`. El grano añade una capa teñida con el color efectivo sin tocar la
   receta. `material.save` guarda esa composición como preset propio de la escena.
 - Materiales reparte su interfaz en cuatro superficies con una pregunta cada una:
-  rail izquierdo (modo Seleccionar/Pintar/Borrar y trazo), barra superior (objetos,
-  aislar, zona, luz), panel derecho plegable (base, tinte, acabado, Aplicar, detalle)
-  y bandeja inferior (tamaño, intensidad y una sola línea de ayuda, la del obstáculo
-  actual). Lo que se usa durante el trazo vive en el rail, sin plegarse ni abrirse.
+  rail izquierdo (modo Seleccionar/Pintar/Borrar y trazo), fila del ojo (objetos,
+  aislar, zona, luz: iconos junto a Deshacer/Rehacer, sin franja propia bajo el menú,
+  con el número de objetos como marca del icono), panel derecho con pestañas
+  Material/Acabado/Grano y bandeja
+  inferior (tamaño, intensidad y una sola línea de ayuda, la del obstáculo actual).
+  Lo que se usa durante el trazo vive en el rail, sin plegarse ni abrirse. El panel
+  derecho ocupa el sitio, el margen y el gesto de apertura/cierre del inspector de
+  modificadores: icono bajo el rail de modos, flecha de vuelta en su cabecera.
+  Aplicar vive al pie de ese panel y no dentro de una pestaña: material, acabado y
+  grano son una sola receta y se asignan de una vez.
 - Materiales permite Seleccionar/Pintar y una lista de objetos para piezas interiores.
   Selección vacía permite navegar, volver a seleccionar y salir. La profundidad incluye
   los oclusores visibles; Aislar selección sirve para pintar dentro de una carcasa.
@@ -558,3 +581,14 @@ no quedan archivos o referencias temporales.
   para que Eevee no salte por detrás del objeto omitiendo su interior. Ray tracing se
   activa solo en captura y se restaura al terminar. No es óptica volumétrica ni cáusticas.
   Compilar un preset corregido nunca modifica los materiales ya usados por otros objetos.
+- Mover luces es un cursor de Materiales: dedo/lápiz gira horizontalmente el ambiente
+  HDR (360° por ancho de vídeo) y en vertical cambia su intensidad de forma
+  proporcional (0,2–3 en un alto de pantalla), con bombilla, ángulo y porcentaje.
+  No hay elevación porque `View3DShading` solo expone `studiolight_rotate_z`: el eje
+  vertical no puede quedarse muerto ni fingir un giro que Blender no hace. Restaurar
+  luces recupera giro e intensidad del ambiente actual sin salir del cursor y se
+  deshabilita cuando ya están en su sitio, que es la única forma de saberlo; cambiar
+  ambiente reinicia ambos. Dos dedos navegan y el círculo derecho orbita. Cada gesto tiene
+  propietario/ID y baseline; END conserva la última muestra estable y cancelar,
+  navegar, guardar o desconectar restaura el inicio. Reconectar conserva el giro
+  confirmado. Solo modifica GPUOffScreen; no crea undo ni toca luces de escena o `rv3d`.

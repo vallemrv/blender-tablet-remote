@@ -8,6 +8,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MaterialStateTest {
+    @Test fun lightingCursorAndAngleSurviveSnapshots() {
+        val state = StateParser.state(JSONObject("""{"mode":"MATERIAL","material":{
+            "active":true,"interaction":"LIGHTS","light_rotation":-90.5}}"""))
+        assertEquals("LIGHTS", state.material.interaction)
+        assertEquals(-90.5f, state.material.lightRotation)
+        assertEquals(0f, MaterialParser.state(JSONObject()).lightRotation)
+    }
     @Test fun objectSelectionRegionsAndBrushesSurviveParsing() {
         val state = MaterialParser.state(JSONObject("""{
             "objects":[{"id":"Interior","label":"Interior"}],"targets":[],"interaction":"SELECT","isolate":true,

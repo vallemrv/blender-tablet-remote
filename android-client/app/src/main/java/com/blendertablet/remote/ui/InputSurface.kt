@@ -6,7 +6,15 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.graphics.Canvas
 import android.graphics.Paint
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import com.blendertablet.remote.model.MaterialLightDrag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.blendertablet.remote.model.SculptPoint
@@ -58,6 +66,8 @@ fun InputSurface(
     sculptRadius: Float = .04f,
     sculptPressureSize: Boolean = false,
     sculptCursorStyle: SculptCursorStyle = SculptCursorStyle(),
+    lightCursorEnabled: Boolean = false,
+    onLightGesture: (GesturePhase, Float, Float) -> Unit = { _, _, _ -> },
     onSculptStroke: (GesturePhase, List<SculptPoint>, Boolean, Boolean) -> Unit = { _, _, _, _ -> },
     cadDrawingEnabled: Boolean = false,
     cadCursorEnabled: Boolean = false,
@@ -84,40 +94,52 @@ fun InputSurface(
     cancelPickOnNavigation: Boolean = false,
     proportionalCircle: ProportionalCircle? = null,
 ) {
-    AndroidView(
-        modifier = modifier,
-        factory = { context -> GestureView(context, onDebug, onToolGesture, onToolPointer, onViewGesture, onTap, onDoubleTap) },
-        update = { view ->
-            view.updateCallbacks(onDebug, onToolGesture, onToolPointer, onViewGesture, onTap, onDoubleTap)
-            view.onLongPress = onLongPress
-            view.repeatTap = repeatTap
-            view.independentTaps = independentTaps
-            view.shapeTool = shapeTool
-            view.fixedCircleRadius = fixedCircleRadius
-            view.onSculptStroke = onSculptStroke
-            view.sculptEnabled = sculptEnabled
-            view.sculptStylusOnly = sculptStylusOnly
-            view.sculptRadius = sculptRadius
-            view.sculptPressureSize = sculptPressureSize
-            view.sculptCursorStyle = sculptCursorStyle
-            view.cadCursorEnabled = cadCursorEnabled
-            view.cadDrawingEnabled = cadDrawingEnabled
-            view.onCadGesture = onCadGesture
-            view.cadOverlay = cadOverlay
-            view.knifeActive = knifeActive
-            view.onKnifeDrag = onKnifeDrag
-            view.tweakActive = tweakActive
-            view.onTweakDrag = onTweakDrag
-            view.longPressEnabled = longPressEnabled
-            view.navigationOrbitEnabled = navigationOrbitEnabled
-            view.onShape = onShape
-            view.knifePoints = knifePoints
-            view.snapCandidate = snapCandidate
-            view.cancelPickOnNavigation = cancelPickOnNavigation
-            view.proportionalCircle = proportionalCircle
-            view.invalidate()
-        },
-    )
+    var lightPointer by remember { mutableStateOf<Offset?>(null) }
+    Box(modifier) {
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { context -> GestureView(context, onDebug, onToolGesture, onToolPointer, onViewGesture, onTap, onDoubleTap) },
+            update = { view ->
+                view.updateCallbacks(onDebug, onToolGesture, onToolPointer, onViewGesture, onTap, onDoubleTap)
+                view.onLightPointer = { lightPointer = it }
+                view.lightDrag.onGesture = onLightGesture
+                view.lightCursorEnabled = lightCursorEnabled
+                view.onLongPress = onLongPress
+                view.repeatTap = repeatTap
+                view.independentTaps = independentTaps
+                view.shapeTool = shapeTool
+                view.fixedCircleRadius = fixedCircleRadius
+                view.onSculptStroke = onSculptStroke
+                view.sculptEnabled = sculptEnabled
+                view.sculptStylusOnly = sculptStylusOnly
+                view.sculptRadius = sculptRadius
+                view.sculptPressureSize = sculptPressureSize
+                view.sculptCursorStyle = sculptCursorStyle
+                view.cadCursorEnabled = cadCursorEnabled
+                view.cadDrawingEnabled = cadDrawingEnabled
+                view.onCadGesture = onCadGesture
+                view.cadOverlay = cadOverlay
+                view.knifeActive = knifeActive
+                view.onKnifeDrag = onKnifeDrag
+                view.tweakActive = tweakActive
+                view.onTweakDrag = onTweakDrag
+                view.longPressEnabled = longPressEnabled
+                view.navigationOrbitEnabled = navigationOrbitEnabled
+                view.onShape = onShape
+                view.knifePoints = knifePoints
+                view.snapCandidate = snapCandidate
+                view.cancelPickOnNavigation = cancelPickOnNavigation
+                view.proportionalCircle = proportionalCircle
+                view.invalidate()
+            },
+        )
+        if (lightCursorEnabled) lightPointer?.let { pointer ->
+            Icon(AppIcons.material("LIGHTS"), contentDescription = null, tint = Ink.Accent,
+                modifier = Modifier.offset { IntOffset(pointer.x.toInt(), pointer.y.toInt()) }
+                    .offset(x = (-14).dp, y = (-42).dp).size(28.dp)
+                    .background(Ink.Background.copy(alpha = .85f), CircleShape).padding(4.dp))
+        }
+    }
 }
 
 // 30 Hz acompasa la entrada al vídeo sin llenar la cola mientras Blender recalcula
@@ -261,6 +283,21 @@ private class GestureView(
     private var sculptStartedAt = 0L
     private val sculptSamples = SculptSamples()
 
+    val lightDrag = MaterialLightDrag()
+    var onLightPointer: (Offset?) -> Unit = {}
+    private var lightTouch = false
+    private var lightSuppressed = false
+    var lightCursorEnabled = false
+        set(value) {
+            if (field && !value) {
+                lightDrag.cancel()
+                lightTouch = false
+                onLightPointer(null)
+                suppressSingleAfterTweak = true
+            }
+            field = value
+        }
+
     /** Puntos del Knife (normalizados) para el overlay. */
     var cadDrawingEnabled = false
         set(value) {
@@ -341,6 +378,7 @@ private class GestureView(
             y = event.getY(index),
         ))
 
+        if (lightCursorEnabled && handleLightEvent(event)) return true
         if (sculptEnabled) return handleSculptEvent(event)
 
         when (event.actionMasked) {
@@ -549,6 +587,61 @@ private class GestureView(
         return true
     }
 
+    /** Light dragging shares only the existing two-finger and orbit navigation. */
+    private fun handleLightEvent(event: MotionEvent): Boolean {
+        if (navigationOrbitActive && event.actionMasked != MotionEvent.ACTION_DOWN) return false
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                lightSuppressed = false
+                onLightPointer(null)
+                if (navigationOrbitEnabled && NavigationOrbitLayout.contains(width, height, event.x, event.y)) return false
+                parent?.requestDisallowInterceptTouchEvent(true)
+                lightTouch = true
+                startX = event.x; startY = event.y
+                downToolType = event.getToolType(0)
+                moved = false
+                lastDispatchAt = event.eventTime
+                lightDrag.begin(nx(event.x), ny(event.y))
+                onLightPointer(Offset(event.x, event.y))
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                lightDrag.cancel()
+                lightTouch = false
+                lightSuppressed = true
+                onLightPointer(null)
+                return false
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (event.pointerCount >= 2) return false
+                if (lightTouch && !lightSuppressed) {
+                    val wasMoved = moved
+                    val slop = if (isStylus(downToolType)) stylusTouchSlop else systemTouchSlop
+                    moved = moved || hypot(event.x - startX, event.y - startY) > slop
+                    val dispatch = (!wasMoved && moved) || event.eventTime - lastDispatchAt >= DISPATCH_MS
+                    lightDrag.move(nx(event.x), ny(event.y), moved, dispatch)
+                    if (dispatch) lastDispatchAt = event.eventTime
+                    onLightPointer(Offset(event.x, event.y))
+                }
+            }
+            MotionEvent.ACTION_POINTER_UP -> return false
+            MotionEvent.ACTION_UP -> {
+                lightDrag.end()
+                lightTouch = false
+                onLightPointer(null)
+                endViewGesture()
+                parent?.requestDisallowInterceptTouchEvent(false)
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                lightDrag.cancel()
+                lightTouch = false
+                onLightPointer(null)
+                cancelGestures()
+                parent?.requestDisallowInterceptTouchEvent(false)
+            }
+        }
+        return true
+    }
+
     /** Sculpt owns only its mode: the existing Object/Edit gesture paths remain independent. */
     private fun handleSculptEvent(event: MotionEvent): Boolean {
         val action = event.actionMasked
@@ -689,6 +782,10 @@ private class GestureView(
     }
 
     override fun onHoverEvent(event: MotionEvent): Boolean {
+        if (lightCursorEnabled) {
+            onLightPointer(if (event.actionMasked == MotionEvent.ACTION_HOVER_EXIT) null else Offset(event.x, event.y))
+            return true
+        }
         if (sculptEnabled && event.pointerCount > 0 && isStylus(event.getToolType(0))) {
             sculptCursorVisible = event.actionMasked != MotionEvent.ACTION_HOVER_EXIT
             sculptCursorX = event.x; sculptCursorY = event.y; sculptCursorPressure = 1f
@@ -735,6 +832,8 @@ private class GestureView(
     }
 
     override fun onDetachedFromWindow() {
+        lightDrag.cancel()
+        onLightPointer(null)
         cancelSculpt()
         tapExtrusion.cancel()
         cancelTweak()

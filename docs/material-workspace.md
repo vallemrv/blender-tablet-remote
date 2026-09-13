@@ -6,22 +6,27 @@ permanece visible.
 
 ## Disposición
 
-El taller reparte sus controles en cuatro superficies fijas, cada una con una sola
-pregunta, en lugar de una bandeja única con todo apilado:
+El taller reparte sus controles en cuatro sitios fijos, cada uno con una sola
+pregunta, en lugar de una bandeja única con todo apilado. Solo uno es exclusivo de
+Materiales: los demás son superficies que la aplicación ya tenía:
 
-- **Rail izquierdo — qué hace el dedo.** `MODO` ofrece Seleccionar, Pintar y Borrar;
+- **Rail izquierdo — qué hace el dedo.** `MODO` ofrece Seleccionar, Pintar, Borrar y Mover luces;
   `TRAZO` ofrece Redondo, Aerógrafo y Salpicado; abajo, Solo lápiz. Es lo único que
   se toca durante un trazo y no cambia de sitio.
-- **Barra superior — sobre qué se trabaja.** El botón de objetos indica cuántos hay
-  elegidos y despliega la lista para varios o para una pieza interior que queda detrás
-  de otra. **Aislar** oculta temporalmente el resto para trabajar dentro de una carcasa;
-  desactívalo para ver el conjunto (no cambia la visibilidad guardada). Después,
-  **Zona**, guardar la selección de Edit como zona, y **Luz** (ambiente de comprobación).
-  El icono de paleta pliega y despliega la biblioteca.
-- **Panel derecho — la biblioteca.** Tres pestañas para tres preguntas distintas:
-  **Material** (base, color, Aplicar, detalle, guardar/importar), **Acabado** (cómo
-  responde a la luz) y **Grano** (qué textura tiene). Cada ficha lleva su color, así
-  que el catálogo se reconoce antes de leerlo. Se pliega cuando estorba a la vista.
+- **Fila del ojo — sobre qué se trabaja.** Cinco iconos junto a Deshacer/Rehacer, sin
+  abrir una segunda franja bajo el menú: **objetos** (con el número elegido en la
+  esquina; despliega la lista para varios o para una pieza interior que queda detrás
+  de otra), **aislar** (oculta temporalmente el resto para trabajar dentro de una
+  carcasa; no cambia la visibilidad guardada), **zona** (marcado cuando no es el objeto
+  completo), **guardar la selección de Edit como zona** y **luz** de comprobación.
+  Cada desplegable enseña el valor activo con una marca.
+- **Panel derecho — la biblioteca.** Ocupa el sitio del inspector de modificadores,
+  bajo el rail de modos: el icono de paleta lo abre y la flecha de su cabecera lo
+  cierra, igual que allí. Tres pestañas para tres preguntas distintas: **Material**
+  (base, color, detalle, guardar/importar), **Acabado** (cómo responde a la luz) y
+  **Grano** (qué textura tiene). Cada ficha lleva su color, así que el catálogo se
+  reconoce antes de leerlo. **Aplicar** está al pie del panel, fuera de las pestañas:
+  las tres describen una sola receta y se asignan de una vez.
 - **Bandeja inferior — el pincel.** Material y tinte activos, Tamaño, Intensidad y una
   sola línea de ayuda: la del obstáculo actual, no la de todo el flujo.
 
@@ -52,7 +57,8 @@ pregunta, en lugar de una bandeja única con todo apilado:
    como material propio de la escena, con su nombre, listo para volver a usarlo o
    para aplicarlo a otro objeto. Queda seleccionado y en limpio. Caben 64 por escena;
    **Importar…** sigue aceptando recetas JSON de otros proyectos.
-6. **Aplicar a la selección** asigna la base a esos objetos. Es una acción
+6. **Aplicar a la selección**, al pie del panel, asigna a esos objetos todo lo
+   elegido a la vez: material, color, acabado, ajustes finos y grano. Es una acción
    explícita que sustituye sus asignaciones de material anteriores; admite Deshacer.
    Los objetos enlazados que quedaron fuera del grupo conservan su malla y materiales.
 7. Después elige otro material/color y pinta con el lápiz. El pincel mezcla el
@@ -64,7 +70,19 @@ pregunta, en lugar de una bandeja única con todo apilado:
 8. Un dedo gira la vista y dos dedos navegan. Desactiva **Solo lápiz** para pintar
    también con el dedo. Deshacer/Rehacer recorre trazos completos. Cancelar o
    recibir una palma restaura el trazo. Soltar confirma lo ya dibujado.
-9. En **Luz**, elige **Estudio, Exterior, Atardecer o Luz suave** para comprobar el material.
+9. En el icono de **luz**, elige **Estudio, Exterior, Atardecer o Luz suave** para comprobar el material.
+   Activa **Mover luces** (bombilla del rail) y arrastra con dedo o lápiz: en
+   horizontal gira la iluminación alrededor de la pieza y en vertical la sube o la
+   baja de intensidad —la pantalla completa cubre de un quinto al triple, y subir y
+   bajar lo mismo se compensa—. Blender no permite elevar el foco del ambiente: su
+   viewport solo gira el HDR en horizontal, así que el eje vertical hace lo que se
+   busca al intentarlo, que es ver mejor el acabado. El cursor muestra una bombilla
+   y la bandeja indica ángulo e intensidad; cuando la luz está como venía dice
+   **original del ambiente** y **Restaurar luces** aparece apagado, porque no hay
+   nada que restaurar. Ese botón devuelve el giro y la intensidad propios del
+   ambiente elegido, no una orientación absoluta. Dos dedos navegan y el círculo
+   derecho permite orbitar. Cambiar de ambiente reinicia giro e intensidad; reconectar
+   conserva los últimos confirmados. Este cursor también funciona sin objetos seleccionados.
    Se usan los ambientes de Material Preview incluidos en Blender. La iluminación,
    visibilidad, rejilla y gizmos se cambian solo durante la captura GPU y se restauran
    siempre: ni el archivo ni la vista del PC guardan el aislamiento o ambiente remoto.
@@ -75,8 +93,8 @@ accidentalmente un trabajo pintado.
 
 ## Zonas y piezas interiores
 
-Selecciona caras en Edit y vuelve a Materiales. En **Zona**, elige **Caras seleccionadas
-en Edit** o pulsa el marcador de la barra superior para conservarla como grupo de
+Selecciona caras en Edit y vuelve a Materiales. En el icono de **zona**, elige **Caras
+seleccionadas en Edit**, o pulsa el marcador contiguo para conservarla como grupo de
 vértices con nombre. Los grupos existentes aparecen también en Zona; se incluyen
 solo caras cuyos vértices pertenecen al grupo. En selección múltiple se ofrecen los
 grupos comunes a todos los objetos. Separa los objetos para usar grupos diferentes.

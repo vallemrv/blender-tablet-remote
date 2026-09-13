@@ -23,6 +23,8 @@ object MaterialParser {
             targets = if (targets == null) emptyList() else (0 until targets.length()).map { targets.optString(it) },
             presets = catalog("presets"), environments = catalog("environments"), preset = json.optString("preset", "plastic"),
             color = json.optString("color", "#E85D38"), environment = json.optString("environment", "studio"),
+            lightRotation = json.optDouble("light_rotation", 0.0).toFloat(),
+            lightEnergy = json.optDouble("light_energy", 1.0).toFloat(),
             radius = json.optDouble("radius", .06).toFloat(), strength = json.optDouble("strength", 1.0).toFloat(),
             paintReady = json.optBoolean("paint_ready"),
             tinted = json.optBoolean("tinted"), custom = json.optBoolean("custom"),

@@ -61,6 +61,7 @@ import androidx.compose.material.icons.filled.ViewWeek
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Waves
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
@@ -102,12 +103,17 @@ object AppIcons {
         "SELECT" -> Icons.Default.TouchApp
         "PAINT" -> Icons.Default.Brush
         "ERASE" -> Icons.Default.FormatColorReset
+        "LIGHTS" -> Icons.Default.Lightbulb
         "ROUND" -> Icons.Default.Lens
         "AIRBRUSH" -> Icons.Default.BlurOn
         "SPRAY" -> Icons.Default.Grain
         "STYLUS" -> Icons.Default.Draw
         "ISOLATE" -> Icons.Default.CenterFocusStrong
         "SAVE_ZONE" -> Icons.Default.BookmarkAdd
+        "OBJECTS" -> Icons.Default.ViewInAr
+        "ZONE_ALL" -> Icons.Default.SelectAll
+        "ZONE" -> Icons.Default.CropFree
+        "LIGHT" -> Icons.Default.WbSunny
         else -> Fallback
     }
 
@@ -150,6 +156,7 @@ object AppIcons {
         "EXTRUDE" to "M3,11 L12,15 L21,11 L12,7 Z M3,11 L3,19 L12,23 L21,19 L21,11 M12,15 L12,23 M12,11 L12,1 M8,5 L12,1 L16,5",
         "CUT" to "M3,9 L3,20 L21,20 L21,9 M3,9 L8,9 L8,16 L16,16 L16,9 L21,9 M12,2 L12,12 M9,9 L12,12 L15,9",
         "SKETCH" to "M3,5 L14,5 M3,5 L3,21 L19,21 L19,12 M8,16 L9,12 L19,2 L22,5 L12,15 Z",
+        "POLYGON" to "M3,17 L8,4 L15,7 L21,12 L13,20 Z M8,4 L8.7,6 M15,7 L14,9 M20,12 L18,13.5",
         "PLANE_XY" to "M2,17 L9,8 L22,8 L15,17 Z M7,13 L17,13 M9,4 L9,7",
         "PLANE_XZ" to "M3,20 L3,5 L20,5 L20,20 Z M3,20 L9,14 M9,14 L17,14 M9,14 L9,8",
         "PLANE_YZ" to "M7,3 L19,8 L19,22 L7,17 Z M10,16 L16,18 M10,16 L10,8",

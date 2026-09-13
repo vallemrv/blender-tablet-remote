@@ -1391,7 +1391,7 @@ de banda y configuración de latencia interactiva.
 ## CAD paramétrico — versión 1 extendida: sketch y vaciado
 
 `features.cad` anuncia `version:1`, `planes:[XY,XZ,YZ]`,
-`entities:[LINE,RECTANGLE,SQUARE,CIRCLE,ARC]`, `features:[EXTRUDE,CUT]`,
+`entities:[LINE,RECTANGLE,SQUARE,CIRCLE,ARC,POLYGON]`, `features:[EXTRUDE,CUT]`,
 `sketch_editing:true`, `fillet:true`, `length_unit:METERS` y `constraints` con
 `COINCIDENT,HORIZONTAL,VERTICAL,PARALLEL,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,RADIUS,FIX,MIDPOINT,SYMMETRIC`.
 También anuncia `construction`, `datum_planes`, `bodies`, `origin`, `mesh_copy`,
@@ -1427,8 +1427,12 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.sketch.activate` | `{sketch_id}` | Edita sketch existente, encuadra su plano |
 | `cad.sketch.finish` | `{}` | Sale del dibujo conservando perfiles seleccionables |
 | `cad.select` | `{kind:"ENTITY\|PROFILE\|FEATURE",id,part?,additive?}` o `{u,v,additive?}` | Selección de puntos/aristas o perfiles; aditiva alterna pertenencia |
-| `cad.entity.begin` | `{type:"LINE\|RECTANGLE\|SQUARE\|CIRCLE\|ARC",u,v}` | Inicia dibujo reversible |
+| `cad.entity.begin` | `{type:"LINE\|RECTANGLE\|SQUARE\|CIRCLE\|ARC\|POLYGON",u,v}` | Inicia dibujo reversible |
 | `cad.entity.update` | `{u,v}` | Actualiza extremo desde baseline |
+| `cad.polygon.begin` | `{u,v}` | Inicia o continúa la cadena de un polígono irregular; el primer vértice admite snap de extremos |
+| `cad.polygon.update` | `{u,v}` | Tramo provisional desde el último vértice, con snap a extremos incluidos los de la propia cadena |
+| `cad.polygon.segment` | `{u,v}` | Consolida un vértice por trazo o toque; si el extremo es el punto inicial con tres o más vértices, cierra y confirma con un único undo |
+| `cad.polygon.close` | `{}` | Cierra la cadena con el segmento final y confirma; con menos de tres vértices responde error y conserva la sesión |
 | `cad.entity.set` | `{entity_id,values:{width?,height?,diameter?,radius?,start?,sweep?,length?,x?,y?,x2?,y2?}}` | Edita dimensiones y reconstruye dependientes |
 | `cad.entity.delete` | `{entity_id}` o `{}` | Borra una figura completa o la selección de puntos/aristas/figuras en un undo; protege perfiles usados |
 | `cad.extrude.begin` | `{profile_id,depth,operation:"EXTRUDE\|CUT",target_id?}` | Preview aditiva o sustractiva; CUT exige destino |
@@ -1697,6 +1701,7 @@ continúa siendo Object. El snapshot de escena incluye `material` y anuncia
 | `material.select` | `{objects:[nombres]}` o `{u,v,additive?:bool}` | Cambia la selección sin salir ni crear undo; lista vacía permitida; `{material}` |
 | `material.group` | `{name}` | Guarda los vértices seleccionados en Edit como grupo en cada objeto; no sobrescribe grupos; un undo; `{material}` |
 | `material.stroke` | `{phase,stroke_id,points}` | `{finished:bool}`; fases `begin/update/end/cancel` |
+| `material.lighting` | `{phase,gesture_id?,rotation?,energy?}` | `{material}`; giro e intensidad de la iluminación en `begin/update/end/cancel`, o `reset` sin ID; no crea undo |
 | `scene.capture` | `{}` | `{mime:"image/png",width,height,png_base64}` |
 
 Estado `material`: `available`, `active`, `targets` (nombres seleccionados),
@@ -1705,10 +1710,11 @@ material), `finish`, `custom` (hay ajustes sueltos encima del acabado),
 `surface:{roughness,metallic,transmission,ior,coat}` (valores efectivos),
 `surface_controls:[{id,label,low,high,min,max}]` (etiquetas de los extremos),
 `grain`, `grain_scale`, `grain_amount`, `grain_relief`, `grains:[{id,label,hint}]`,
-`erase`, `radius`, `strength`, `environment`,
+`erase`, `radius`, `strength`, `environment`, `light_rotation` (desplazamiento en grados respecto al ambiente, −180 a <180),
+`light_energy` (factor sobre la intensidad del ambiente, 0,2–3),
 `paint_ready`, `presets:[{id,label,color}]`, `finishes:[{id,label,hint}]`,
 `environments:[{id,label}]`, `objects:[{id,label}]` (mallas visibles de la escena),
-`interaction:SELECT|PAINT`, `isolate`, `brush:ROUND|AIRBRUSH|SPRAY`, `brushes:[{id,label}]`,
+`interaction:SELECT|PAINT|LIGHTS`, `isolate`, `brush:ROUND|AIRBRUSH|SPRAY`, `brushes:[{id,label}]`,
 `scope:ALL|SELECTED|GROUP:<nombre>`, `regions:[{id,label}]`, `paint_limit:20000`,
 `paint_blocked` (alguna selección supera el límite de caras base). Se recibe desde `scene.get_state` y los snapshots
 `scene.changed`; las respuestas de `material.stroke` no se interpretan como escenas.
@@ -1724,6 +1730,23 @@ preset conserva el tinte, el acabado y los ajustes si no se envían explícitame
 También admite `interaction`, `isolate`, `brush` y `scope` descritos arriba. Se validan
 todos los campos antes de cambiar el estado. Importar selecciona el nuevo preset con
 su propio color, sin tinte ni ajustes heredados.
+
+El cursor `LIGHTS` gira horizontalmente el ambiente HDR de Material Preview; un
+ancho de vídeo equivale a 360°. El eje vertical cambia la intensidad y no la
+elevación: `View3DShading` solo expone `studiolight_rotate_z`, así que el foco del
+ambiente no se puede subir ni bajar. `material.lighting` requiere el propietario del
+workspace, incluso sin objetos seleccionados. `begin` fija un baseline con un ID
+de 1–80 caracteres; `update.rotation` es el desplazamiento total en grados desde
+ese inicio (finito, ±360 000) y `update.energy` el desplazamiento vertical en
+fracciones de alto (±8), aplicado como `baseline · e^(1,1·energy)` y recortado a
+0,2–3: la pantalla completa cubre el rango y subir y bajar lo mismo se compensa.
+`end` confirma la última preview sin volver a aplicar
+el valor; `cancel` la restaura. IDs obsoletos no alteran otro gesto. `reset` devuelve
+el ambiente actual a su orientación e intensidad originales y conserva el cursor.
+Cambiar ambiente también reinicia giro e intensidad. Navegar, cambiar ajustes, guardar, deshacer o desconectar
+cancela el giro en curso; reconectar recupera el último confirmado. La iluminación
+solo se altera dentro de GPUOffScreen y no escribe en `rv3d`, objetos ni `.blend`.
+Las respuestas de este comando actualizan `material` sin pedir otra escena por muestra.
 
 La apariencia se compone en un orden fijo: receta del catálogo, después el acabado
 —que escribe solo los parámetros que define— y después los ajustes sueltos de
@@ -1828,13 +1851,22 @@ copia estática que permite cotas contra geometría existente, no asociación BR
 
 El documento público añade `history:[{id,kind,name,body_id,sketch_id?}]` en orden de
 creación. `kind` es SKETCH o FEATURE. Los nodos persistentes usan `order`; documentos
-anteriores se normalizan sin cambiar IDs. Android muestra solo el boceto activo
-al editar y el último nodo del cuerpo en 3D, con historial completo desplegable.
-La visibilidad automática oculta bocetos consumidos; `cad.sketch.visibility`
-guarda `visibility_explicit:true` para respetar la decisión del usuario.
-Finalizar boceto no crea undo ni modifica `rv3d`; restaura una vista 3D y selecciona
-el perfil nuevo pendiente o el último resultado. La preview de Extruir/Vaciar
-se presenta también en 3D, conservando los gestos de profundidad y navegación.
+anteriores se normalizan sin cambiar IDs. Android presenta esa secuencia como una pila
+de operaciones: tocar un nodo mueve la barra de retroceso a ese punto y muestra el
+modelo tal como estaba justo después de él; los nodos posteriores quedan atenuados.
+`cad.history.rollback {node_id|null}` fija la barra y `null` restituye el modelo
+completo; el estado la anuncia en `rollback_id`. La navegación por la pila no crea
+undo. El rebuild solo evalúa las operaciones hasta la barra: las demás conservan su
+objeto oculto, sus bocetos dejan de proyectarse y seleccionarlas, activarlas,
+editarlas o borrarlas responde `cad_rollback`. Crear un boceto u operación con la
+vista atrás lo inserta justo después del nodo de la barra renumerando la pila; al
+confirmar, la barra avanza para incluirlo y el usuario ve el resultado. Salir del
+workspace o reconectar devuelve la barra al modelo completo. La visibilidad automática
+oculta bocetos consumidos; `cad.sketch.visibility` guarda `visibility_explicit:true`
+para respetar la decisión del usuario. Finalizar boceto no crea undo ni modifica
+`rv3d`; restaura una vista 3D y selecciona el perfil nuevo pendiente o el último
+resultado visible. La preview de Extruir/Vaciar se presenta también en 3D, conservando
+los gestos de profundidad y navegación.
 
 
 En Materiales/Texturas, `view.shading {mode:WIREFRAME|TOGGLE}` se normaliza a

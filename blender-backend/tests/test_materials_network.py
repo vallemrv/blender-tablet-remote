@@ -73,7 +73,12 @@ def requests():
                 (out/(mode.lower()+'.png')).write_bytes(base64.b64decode(png['png_base64']))
             cmd('object.select',{'name':'Cube'})
             cmd('mode.set',{'mode':'MATERIAL'})
-            cmd('material.settings',{'brush':'SPRAY','isolate':True,'interaction':'SELECT'})
+            cmd('material.settings',{'brush':'SPRAY','isolate':True,'interaction':'LIGHTS'})
+            cmd('material.lighting',{'phase':'begin','gesture_id':'confirmed'})
+            cmd('material.lighting',{'phase':'update','gesture_id':'confirmed','rotation':42})
+            cmd('material.lighting',{'phase':'end','gesture_id':'confirmed','rotation':120})
+            cmd('material.lighting',{'phase':'begin','gesture_id':'interrupted'})
+            cmd('material.lighting',{'phase':'update','gesture_id':'interrupted','rotation':99})
         # Owner disconnect is enqueued ahead of the next client's commands.
         with WSClient(port=19865,timeout=45) as observer:
             reply=observer.command('scene.get_state')
@@ -82,7 +87,8 @@ def requests():
             reply=replacement.command('server.resume',{'session_key':'network-resume-key-1234567890'})
             assert reply['ok'] and reply['result']['restored'] and reply['result']['mode']=='MATERIAL',reply
             settings=reply['result']['material']
-            assert settings['brush']=='SPRAY' and settings['isolate'] and settings['interaction']=='SELECT',settings
+            assert settings['brush']=='SPRAY' and settings['isolate'] and settings['interaction']=='LIGHTS',settings
+            assert settings['light_rotation']==42,settings
             assert replacement.command('material.settings',{'preset':'iron','color':'#DD1122'})['ok']
             reply=replacement.command('mode.set',{'mode':'CAD'})
             assert reply['ok'],reply

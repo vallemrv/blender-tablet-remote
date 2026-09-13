@@ -919,7 +919,7 @@ class WebSocketRemoteBlenderClient(
                     command == "scene.capture" -> { _capturePng.value = result?.optString("png_base64") }
                     command != null && command.startsWith("material.") -> {
                         result?.optJSONObject("material")?.let { _state.value = _state.value.copy(material = MaterialParser.state(it)) }
-                        if (command != "material.stroke") requestState()
+                        if (command != "material.stroke" && command != "material.lighting") requestState()
                     }
                     command != null && command.startsWith("sculpt.") -> result?.optJSONObject("sculpt")?.let {
                         _state.value = _state.value.copy(sculpt = SculptParser.state(it))

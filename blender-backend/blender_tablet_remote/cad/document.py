@@ -304,6 +304,22 @@ def next_order(doc):
     return max([n.get('order',i) for i,n in enumerate(history(doc),1)]+[0])+1
 
 
+def insert_after(doc, item, after_id):
+    """Renumber every node so `item` follows `after_id`; None appends at the end.
+
+    The rollback bar inserts new nodes at the viewed position instead of the end.
+    """
+    sequence = [n['id'] for n in history(doc)]
+    if item['id'] in sequence:
+        sequence.remove(item['id'])
+    sequence.insert(sequence.index(after_id)+1 if after_id in sequence else len(sequence), item['id'])
+    placed = dict(zip(sequence, range(1, len(sequence)+1)))
+    for kind in ('sketches', 'features'):
+        for node in doc[kind]:
+            if node['id'] in placed:
+                node['order'] = placed[node['id']]
+
+
 def public(doc):
     result = copy.deepcopy(doc)
     result['history']=[{k:n[k] for k in ('id','kind','name','body_id','sketch_id') if k in n} for n in history(doc)]

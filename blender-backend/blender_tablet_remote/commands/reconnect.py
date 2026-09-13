@@ -27,9 +27,10 @@ def disconnected(owner):
                      construction=cad.construction, show_scene=cad.show_scene,
                      selection=copy.deepcopy(cad.selection) if not cad.session else None)
     elif material.active and material.owner == owner:
+        material.cancel_lighting()
         saved.update(mode='MATERIAL', settings={k:copy.deepcopy(getattr(material,k)) for k in
             ('targets','preset','tint','finish','surface','grain','grain_scale','grain_amount','grain_relief',
-             'erase','radius','strength','environment','interaction','isolate','brush','scope')})
+             'erase','radius','strength','environment','light_rotation','light_energy','interaction','isolate','brush','scope')})
     else:
         # Native Object/Edit/Sculpt modes already survive socket loss.
         saved['mode'] = 'NATIVE'

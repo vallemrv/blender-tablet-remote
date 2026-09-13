@@ -16,6 +16,23 @@ class CadParserTest {
         assertEquals(0.08, state.sketches.single().entities.single().values["width"]!!, 1e-12)
         assertFalse(state.sessionActive)
         assertTrue(state.isolated)
+        assertNull(state.rollbackId)
+        assertEquals("feature_fixture", state.history.last().id)
+    }
+    @Test fun operationStackKeepsRollbackBarAndHistoryOrder() {
+        val state = CadParser.state(JSONObject("""{"version":1,"workspace":true,"rollback_id":"f1",
+          "document":{"id":"d1","history":[
+            {"id":"s1","kind":"SKETCH","name":"Boceto 1","body_id":"b"},
+            {"id":"f1","kind":"FEATURE","name":"Extrusión 1","body_id":"b","sketch_id":"s1"}]}}"""))
+        assertEquals("f1", state.rollbackId)
+        assertEquals(2, state.history.size)
+        assertEquals("SKETCH", state.history.first().kind)
+        assertEquals("Extrusión 1", state.history.last().name)
+    }
+    @Test fun missingRollbackBarMeansFullModel() {
+        val state = CadParser.state(JSONObject("""{"version":1,"workspace":true,"document":{"id":"d1"}}"""))
+        assertNull(state.rollbackId)
+        assertTrue(state.history.isEmpty())
     }
     @Test fun isolationIsExplicitAndDoesNotChangeWorkspaceIdentity() {
         val state = CadParser.state(JSONObject("""{"version":1,"workspace":true,"isolated":true}"""))

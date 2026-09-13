@@ -13,7 +13,7 @@ object CadParser {
     fun capabilities(j: JSONObject?): CadCapabilities = if (j == null || j.optInt("version") != 1 ||
         j.optString("length_unit") != "METERS") CadCapabilities() else CadCapabilities(1,
         strings(j.optJSONArray("planes")).filter { it in listOf("XY", "XZ", "YZ") },
-        strings(j.optJSONArray("entities")).filter { it in listOf("LINE", "RECTANGLE", "SQUARE", "CIRCLE", "ARC") },
+        strings(j.optJSONArray("entities")).filter { it in listOf("LINE", "RECTANGLE", "SQUARE", "CIRCLE", "ARC", "POLYGON") },
         strings(j.optJSONArray("features")).filter { it in listOf("EXTRUDE", "CUT") },
         strings(j.optJSONArray("constraints")).filter { it in listOf("COINCIDENT", "HORIZONTAL", "VERTICAL", "PARALLEL", "PERPENDICULAR", "TANGENT", "EQUAL", "DISTANCE", "RADIUS", "FIX", "MIDPOINT", "SYMMETRIC") },
         j.optBoolean("sketch_editing"))
@@ -50,7 +50,8 @@ object CadParser {
             features = objects(document?.optJSONArray("features")).map { CadFeature(it.optString("id"), it.optString("name", "Extrusión"),
                 it.optString("sketch_id"), it.optString("profile_id"), it.optDouble("depth", 0.02), it.optBoolean("enabled", true), it.optString("type", "EXTRUDE"), it.id("target_id"), it.optString("body_id")) },
             activeSketchId = j.id("active_sketch_id"), selectionKind = selection?.id("kind"), selectionId = selection?.id("id"),
-            sessionActive = session?.optBoolean("active") == true, sessionId = session?.id("id"), canConfirm = session?.optBoolean("can_confirm", true) == true, operation = session?.optString("operation").orEmpty(),
+            sessionActive = session?.optBoolean("active") == true, sessionId = session?.id("id"), canConfirm = session?.optBoolean("can_confirm", true) == true,
+            canClose = session?.optBoolean("can_close") == true, operation = session?.optString("operation").orEmpty(),
             depth = session?.optDouble("depth", 0.02) ?: 0.02,
             overlay = objects(j.optJSONArray("overlay")).map { item ->
                 val points = item.optJSONArray("points")
@@ -78,6 +79,7 @@ object CadParser {
                 }
             }.toMap(),
             construction = j.optBoolean("construction"), showScene = j.optBoolean("show_scene"), activeBodyId = j.id("active_body_id"),
+            rollbackId = j.id("rollback_id"),
             bodies = objects(document?.optJSONArray("bodies")).map { CadBody(it.optString("id"),it.optString("name")) },
             planes = objects(document?.optJSONArray("planes")).map { p -> CadPlane(p.optString("id"),p.optString("name"),
                 (0..2).map { p.optJSONArray("translation")?.optDouble(it,0.0) ?: 0.0 },

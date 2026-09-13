@@ -21,9 +21,67 @@ class MaterialsTests(unittest.TestCase):
         bpy.ops.mesh.primitive_cube_add()
         self.obj=bpy.context.object
         runtime.enter('test')
+        runtime.environment='studio';runtime.light_rotation=0.
         runtime.preset='wood';runtime.tint='#B87D43';runtime.erase=False;runtime.finish='natural'
 
     def tearDown(self): runtime.leave()
+
+    def test_lighting_uses_baseline_and_release_ignores_new_values(self):
+        material.settings({'_client_id':'test','interaction':'LIGHTS'})
+        def gesture(phase, **values):
+            return material.lighting(dict(_client_id='test',phase=phase,gesture_id='light',**values))
+        with patch('blender_tablet_remote.materials.runtime.undo_push') as undo:
+            gesture('begin');gesture('update',rotation=40);gesture('update',rotation=90)
+            self.assertEqual(runtime.light_rotation,90.)
+            gesture('end',rotation=170)
+            self.assertEqual(runtime.light_rotation,90.)
+            gesture('begin');gesture('update',rotation=30)
+            self.assertEqual(runtime.light_rotation,120.)
+            gesture('cancel')
+            self.assertEqual(runtime.light_rotation,90.)
+            undo.assert_not_called()
+
+    def test_lighting_reset_empty_selection_stale_ids_and_owner(self):
+        material.settings({'_client_id':'test','interaction':'LIGHTS'})
+        runtime.select([])
+        def gesture(phase, **values):
+            return material.lighting(dict(_client_id='test',phase=phase,gesture_id='light',**values))
+        gesture('begin');gesture('update',rotation=45)
+        with self.assertRaises(CommandError):
+            material.lighting({'_client_id':'other','phase':'reset'})
+        with self.assertRaises(BadPayload): gesture('update',rotation=float('nan'))
+        self.assertEqual(runtime.light_rotation,45.)
+        gesture('reset');gesture('update',rotation=90);gesture('end')
+        self.assertEqual(runtime.light_rotation,0.)
+        self.assertEqual(runtime.interaction,'LIGHTS')
+        gesture('begin');gesture('update',rotation=70)
+        material.lighting({'_client_id':'test','phase':'cancel','gesture_id':'old'})
+        self.assertEqual(runtime.light_rotation,70.)
+        material.settings({'_client_id':'test','interaction':'SELECT'})
+        gesture('update',rotation=100);gesture('end')
+        self.assertEqual(runtime.light_rotation,0.)
+
+    def test_lighting_changes_only_capture_and_restores_after_error(self):
+        material.settings({'_client_id':'test','interaction':'LIGHTS','environment':'warm'})
+        material.lighting({'_client_id':'test','phase':'begin','gesture_id':'light'})
+        material.lighting({'_client_id':'test','phase':'update','gesture_id':'light','rotation':170})
+        shading=SimpleNamespace(type='SOLID',use_scene_lights=True,use_scene_world=True,
+            studio_light='studio.exr',studiolight_intensity=.7,studiolight_rotate_z=.3,
+            studiolight_background_alpha=.4,studiolight_background_blur=.2)
+        space=SimpleNamespace(shading=shading,overlay=SimpleNamespace(show_overlays=True),show_gizmo=True)
+        before=vars(shading).copy()
+        with self.assertRaises(RuntimeError):
+            with runtime.presentation(space):
+                self.assertAlmostEqual(shading.studiolight_rotate_z,(2.+math.radians(170)+math.pi)%math.tau-math.pi)
+                raise RuntimeError('interrupted capture')
+        self.assertEqual(vars(shading),before)
+        from blender_tablet_remote.materials.runtime import cancel_preview
+        cancel_preview()
+        self.assertEqual(runtime.light_rotation,0.)
+        self.assertIsNone(runtime.light_gesture)
+        runtime.light_rotation=85.
+        material.settings({'_client_id':'test','environment':'day'})
+        self.assertEqual(runtime.light_rotation,0.)
 
     def test_wireframe_requests_are_normalized_to_solid_only_in_materials(self):
         from blender_tablet_remote.commands import view

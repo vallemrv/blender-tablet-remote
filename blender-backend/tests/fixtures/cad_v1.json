@@ -11,7 +11,8 @@
       "RECTANGLE",
       "SQUARE",
       "CIRCLE",
-      "ARC"
+      "ARC",
+      "POLYGON"
     ],
     "features": [
       "EXTRUDE",
@@ -286,6 +287,34 @@
     {
       "command": "cad.view.solid",
       "payload": {}
+    },
+    {
+      "command": "cad.sketch.delete",
+      "payload": {
+        "sketch_id": "sketch_fixture"
+      }
+    },
+    {
+      "command": "cad.history.rollback",
+      "payload": {
+        "node_id": "feature_fixture"
+      }
+    },
+    {
+      "command": "cad.polygon.begin",
+      "payload": {}
+    },
+    {
+      "command": "cad.polygon.update",
+      "payload": {}
+    },
+    {
+      "command": "cad.polygon.segment",
+      "payload": {}
+    },
+    {
+      "command": "cad.polygon.close",
+      "payload": {}
     }
   ],
   "state": {
@@ -329,6 +358,21 @@
           "depth": 0.02,
           "enabled": true
         }
+      ],
+      "history": [
+        {
+          "id": "sketch_fixture",
+          "kind": "SKETCH",
+          "name": "Sketch 1",
+          "body_id": "body_fixture"
+        },
+        {
+          "id": "feature_fixture",
+          "kind": "FEATURE",
+          "name": "Extrusion 1",
+          "body_id": "body_fixture",
+          "sketch_id": "sketch_fixture"
+        }
       ]
     },
     "active_sketch_id": null,
@@ -369,6 +413,7 @@
       }
     ],
     "error": null,
-    "isolated": true
+    "isolated": true,
+    "rollback_id": null
   }
 }

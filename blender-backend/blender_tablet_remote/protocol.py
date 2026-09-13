@@ -402,7 +402,7 @@ FEATURES = {
     "materials": {"version": 1, "recipe_format": "tablet-material", "recipe_version": 1, "paint": "UV_MASK", "mask_size": 1024, "max_layers": 8, "max_objects": 16},
     "scene_capture": {"version": 1, "mime": "image/png", "camera": "TABLET", "overlays": False},
     "cad": {"version": 1, "planes": ["XY", "XZ", "YZ"],
-            "entities": ["LINE", "RECTANGLE", "SQUARE", "CIRCLE", "ARC"], "features": ["EXTRUDE", "CUT"],
+            "entities": ["LINE", "RECTANGLE", "SQUARE", "CIRCLE", "ARC", "POLYGON"], "features": ["EXTRUDE", "CUT"],
             "constraints": ["COINCIDENT", "HORIZONTAL", "VERTICAL", "PARALLEL", "PERPENDICULAR",
                             "TANGENT", "EQUAL", "DISTANCE", "RADIUS", "FIX", "MIDPOINT", "SYMMETRIC"],
             "sketch_editing": True, "solid_selection": True, "face_sketch": True, "project_reference": True, "history_order": True, "editable_dimensions": True, "fillet_remove": True, "smart_cursor": True, "selection_delete": True, "fillet": True, "construction": True, "datum_planes": True,

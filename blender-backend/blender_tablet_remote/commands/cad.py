@@ -21,6 +21,56 @@ def _activate_feature(doc, identifier):
         bpy.context.view_layer.objects.active = obj
 
 
+def _sequence(doc):
+    return [n['id'] for n in model.history(doc)]
+
+
+def _reachable_ids(doc):
+    """History node ids up to and including the rollback bar; all when at the end."""
+    sequence = _sequence(doc)
+    bar = runtime.bar(doc)
+    return set(sequence) if bar is None else set(sequence[:sequence.index(bar)+1])
+
+
+def _require_reachable(doc, node_id):
+    """Nodes beyond the rollback bar are future history: refuse to touch them."""
+    bar = runtime.bar(doc)
+    if bar is None:
+        return
+    sequence = _sequence(doc)
+    if node_id in sequence and bar in sequence and sequence.index(node_id) > sequence.index(bar):
+        raise CommandError('El nodo está después de la vista actual; avanza la pila para editarlo',
+                           code='cad_rollback')
+
+
+@command('cad.history.rollback')
+def history_rollback(payload):
+    runtime.require_workspace()
+    if runtime.session:
+        runtime.require(payload)
+        runtime.cancel()
+    identifier = payload.get('node_id')
+    if identifier is not None:
+        if identifier not in _sequence(runtime.doc()):
+            raise CommandError('El nodo ya no existe en el documento', code='cad_reference_missing')
+        runtime.rollback_id = identifier
+    else:
+        runtime.rollback_id = None
+    doc = runtime.doc()
+    bar = runtime.bar(doc)
+    sequence = _sequence(doc)
+    if bar and runtime.active_sketch_id in sequence and sequence.index(runtime.active_sketch_id) > sequence.index(bar):
+        # Editing a node that is now future history: leave the sketch view.
+        runtime.active_sketch_id = None
+        runtime.selection = None
+        runtime.surface.mode = 'PROFILE'
+        runtime.surface.clear()
+        runtime.solid_view()
+    else:
+        runtime.rebuild(doc, limit=bar)
+    return runtime.status()
+
+
 @command('cad.state')
 def state(payload):
     return runtime.status()
@@ -54,6 +104,8 @@ def _new_sketch(doc,payload):
         for key in ('plane','offset','plane_id','support_id'):
             if key in source: sketch[key]=source[key]
     doc['sketches'].append(sketch)
+    bar = runtime.bar(doc)
+    if bar: model.insert_after(doc,sketch,bar)
     model.resolve_supports(doc)
     runtime.enter_sketch(sketch)
     return sketch
@@ -65,7 +117,9 @@ def sketch_activate(payload):
     if runtime.session:
         runtime.require(payload)
         runtime.cancel()
-    sketch = model.find(runtime.doc(),'sketches',payload.get('sketch_id'))
+    doc = runtime.doc()
+    sketch = model.find(doc,'sketches',payload.get('sketch_id'))
+    _require_reachable(doc,sketch['id'])
     runtime.enter_sketch(sketch)
     return runtime.status()
 
@@ -79,7 +133,8 @@ def sketch_finish(payload):
     active=runtime.active_sketch_id
     runtime.solid_view()
     doc=runtime.doc()
-    features=[f for f in doc['features'] if f['enabled'] and f.get('body_id')==runtime.active_body_id]
+    reachable=_reachable_ids(doc)
+    features=[f for f in doc['features'] if f['enabled'] and f.get('body_id')==runtime.active_body_id and f['id'] in reachable]
     sketch=next((s for s in doc['sketches'] if s['id']==active),None)
     profiles=model.profiles(sketch) if sketch else []
     if profiles and not any(f['sketch_id']==active for f in doc['features']):
@@ -189,12 +244,143 @@ def entity_construction(payload):
     return runtime.transaction(payload,change,'CAD geometría de construcción')
 
 
+def _preview_endpoint(payload, preview, previous=None):
+    from .snap import query_sketch_endpoint
+    from ..bpy_utils import find_view3d
+    found=find_view3d()
+    if not found: return None
+    return query_sketch_endpoint(runtime.overlay(preview),model.number(payload.get('u')),
+                                 model.number(payload.get('v')),found[2].width/max(found[2].height,1),previous)
+
+
+def _polygon_join(previous_id, segment_id):
+    return dict(id='join_'+segment_id+'_START',type='COINCIDENT',
+                refs=[dict(id=previous_id,part='END'),dict(id=segment_id,part='START')])
+
+
+def _polygon_state(session, current=None):
+    """Baseline + committed segments (+ provisional tail) as a preview document."""
+    doc=copy.deepcopy(session['baseline'])
+    sketch=model.find(doc,'sketches',session['sketch_id'])
+    for segment,join in session['segments']:
+        sketch['entities'].append(copy.deepcopy(segment))
+        if join: sketch['constraints'].append(copy.deepcopy(join))
+    if current is not None and session['points']:
+        start=session['points'][-1]
+        if math.dist(start,current)>=1e-7:
+            sketch['entities'].append(dict(id=session['temp_id'],type='LINE',x=start[0],y=start[1],
+                x2=current[0],y2=current[1],construction=runtime.construction))
+    session['can_close']=len(session['points'])>=3
+    return doc,sketch
+
+
+@command('cad.polygon.begin')
+def polygon_begin(payload):
+    runtime.require_workspace()
+    if not runtime.active_sketch_id: raise BadPayload('Abre un boceto para dibujar')
+    session=runtime.session
+    if session and (session['operation']!='POLYGON' or session['owner']!=payload.get('_client_id')):
+        runtime.require(payload); runtime.cancel(); session=None
+    if session is None:
+        doc=runtime.doc()
+        sketch=model.find(doc,'sketches',runtime.active_sketch_id)
+        anchor=_endpoint(payload,sketch)
+        start=geometry.point(sketch,dict(id=anchor['entity_id'],part=anchor['part'])) if anchor else runtime.point(payload,sketch)
+        session=runtime.begin(payload,'POLYGON')
+        session.update(sketch_id=sketch['id'],points=[start],segments=[],temp_id=model.uid('entity'),
+                       can_close=False,provisional=None,anchor=None)
+    return runtime.status()
+
+
+@command('cad.polygon.update')
+def polygon_update(payload):
+    session=runtime.require(payload)
+    if session['operation']!='POLYGON': raise CommandError('La sesión no es un polígono',code='wrong_tool')
+    doc,sketch=_polygon_state(session,None)
+    anchor=_preview_endpoint(payload,doc,session.get('anchor'))
+    session['anchor']=anchor
+    current=geometry.point(sketch,dict(id=anchor['entity_id'],part=anchor['part'])) if anchor else runtime.point(payload,sketch)
+    doc,_=_polygon_state(session,current)
+    session['provisional']=current
+    session['preview']=doc
+    return runtime.status()
+
+
+@command('cad.polygon.segment')
+def polygon_segment(payload):
+    session=runtime.require(payload)
+    if session['operation']!='POLYGON': raise CommandError('La sesión no es un polígono',code='wrong_tool')
+    doc,sketch=_polygon_state(session,None)
+    current=session.get('provisional')
+    anchor=session.get('anchor')
+    if current is None:
+        anchor=_preview_endpoint(payload,doc,session.get('anchor'))
+        current=geometry.point(sketch,dict(id=anchor['entity_id'],part=anchor['part'])) if anchor else runtime.point(payload,sketch)
+    session['provisional']=None
+    if math.dist(current,session['points'][-1])<1e-7:
+        return runtime.status()  # a tap on the last vertex commits nothing
+    closes=math.dist(current,session['points'][0])<1e-9 or (
+        anchor is not None and session['segments']
+        and anchor['entity_id']==session['segments'][0][0]['id'] and anchor['part']=='START')
+    if closes and len(session['points'])<3:
+        return runtime.status()  # two vertices cannot enclose a profile
+    segment=dict(id=model.uid('entity'),type='LINE',x=session['points'][-1][0],y=session['points'][-1][1],
+                 x2=current[0],y2=current[1],construction=runtime.construction)
+    try:
+        model.validate_entity(segment)
+    except BadPayload:
+        return runtime.status()
+    join=_polygon_join(session['segments'][-1][0]['id'],segment['id']) if session['segments'] else None
+    session['segments'].append((segment,join))
+    if closes:
+        session['points'].append(tuple(session['points'][0]))
+        doc,_=_polygon_state(session,None)
+        _polygon_confirm(session,doc)
+        return runtime.status()
+    session['points'].append(current)
+    _set_selection([dict(kind='ENTITY',id=segment['id'],part='BODY')])
+    return runtime.status()
+
+
+@command('cad.polygon.close')
+def polygon_close(payload):
+    session=runtime.require(payload)
+    if session['operation']!='POLYGON': raise CommandError('La sesión no es un polígono',code='wrong_tool')
+    if len(session['points'])<3: raise BadPayload('El polígono necesita al menos tres vértices')
+    doc,sketch=_polygon_state(session,None)
+    first=tuple(session['points'][0])
+    if math.dist(session['points'][-1],first)>1e-9:
+        segment=dict(id=model.uid('entity'),type='LINE',x=session['points'][-1][0],y=session['points'][-1][1],
+                     x2=first[0],y2=first[1],construction=runtime.construction)
+        model.validate_entity(segment)
+        session['segments'].append((segment,_polygon_join(session['segments'][-1][0]['id'],segment['id'])))
+        session['points'].append(first)
+        doc,_=_polygon_state(session,None)
+    _polygon_confirm(session,doc)
+    return runtime.status()
+
+
+def _polygon_confirm(session, doc):
+    runtime.rebuild(doc,limit=runtime.bar(doc))
+    runtime.persist(doc,advance=True)
+    runtime.session=None
+    sketch=model.find(doc,'sketches',session['sketch_id'])
+    members={segment['id'] for segment,_ in session['segments']}
+    profile=next(('profile_'+p['id'] for p in model.closed_entities(sketch)
+                  if not any(e.get('construction') for e in sketch['entities'] if e['id'] in members)
+                  and set(p.get('members',[]))==members),None)
+    runtime.selection=dict(kind='PROFILE',id=profile) if profile else dict(kind='ENTITY',id=session['segments'][-1][0]['id'],part='BODY')
+    with runtime.saving():
+        undo_push('CAD polígono')
+
+
 @command('cad.sketch.visibility')
 def sketch_visibility(payload):
     value=payload.get('visible')
     if not isinstance(value,bool): raise BadPayload('visible debe ser booleano')
     def change(doc):
         sketch=model.find(doc,'sketches',payload.get('sketch_id'))
+        _require_reachable(doc,sketch['id'])
         sketch['visible']=value; sketch['visibility_explicit']=True
     return runtime.transaction(payload,change,'CAD visibilidad de boceto')
 
@@ -228,24 +414,27 @@ def extrude_begin(payload):
     depth = model.number(payload.get('depth',.02),positive=True)
     doc = runtime.doc()
     sketch,e = model.profile(doc,payload.get('profile_id'))
+    _require_reachable(doc,sketch['id'])
     operation=str(payload.get('operation','EXTRUDE')).upper()
     if operation not in ('EXTRUDE','CUT'): raise BadPayload('Operación CAD no compatible')
     target=None
     if operation=='CUT':
         target=model.find(doc,'features',payload.get('target_id'))
         if not target['enabled']: raise BadPayload('El sólido destino está desactivado')
+    bar = runtime.bar(doc)
     session = runtime.begin(payload,operation)
     feature = dict(id=model.uid('feature'),name=('Vaciado ' if operation=='CUT' else 'Extrusión ')+str(len(doc['features'])+1),
                    type=operation,order=model.next_order(doc),sketch_id=sketch['id'],profile_id='profile_'+e['id'],depth=depth,enabled=True,body_id=target['body_id'] if target else sketch['body_id'])
     if target: feature['target_id']=target['id']
     preview = copy.deepcopy(session['baseline'])
     preview['features'].append(feature)
+    if bar: model.insert_after(preview,feature,bar)
     try:
-        runtime.rebuild(preview)
+        runtime.rebuild(preview,limit=feature['id'] if bar else None)
     except Exception:
         runtime.session = None
         raise
-    session.update(feature_id=feature['id'],preview=preview,candidate=feature['id'],depth=depth)
+    session.update(feature_id=feature['id'],preview=preview,candidate=feature['id'],depth=depth,at_bar=bool(bar))
     runtime.selection = dict(kind='FEATURE',id=feature['id'])
     runtime.solid_view()
     return runtime.status()
@@ -265,7 +454,7 @@ def extrude_update(payload):
     else: depth = model.number(payload.get('depth'),positive=True)
     preview = copy.deepcopy(session['preview'])
     model.find(preview,'features',session['feature_id'])['depth'] = depth
-    runtime.rebuild(preview)
+    runtime.rebuild(preview,limit=session['feature_id'] if session.get('at_bar') else None)
     session.update(preview=preview,depth=depth)
     return runtime.status()
 
@@ -277,7 +466,10 @@ def confirm(payload):
         runtime.cancel()
         return runtime.status()
     doc = session['preview']
-    runtime.rebuild(doc)
+    if session.get('at_bar'):
+        # A node inserted at the bar becomes the viewed state immediately.
+        runtime.rollback_id = session['feature_id']
+    runtime.rebuild(doc, limit=runtime.bar(doc))
     runtime.persist(doc, advance=True)
     runtime.session = None
     if session['operation'] in ('EXTRUDE','CUT'):
@@ -299,6 +491,7 @@ def cancel(payload):
 def feature_set(payload):
     def change(doc):
         feature = model.find(doc,'features',payload.get('feature_id'))
+        _require_reachable(doc,feature['id'])
         if 'depth' in payload:
             feature['depth'] = model.number(payload['depth'],positive=True)
         if 'enabled' in payload:
@@ -312,6 +505,7 @@ def feature_set(payload):
 def feature_delete(payload):
     def change(doc):
         feature=model.find(doc,'features',payload.get('feature_id'))
+        _require_reachable(doc,feature['id'])
         _require_no_dependents(doc,feature['id'])
         doc['features'].remove(feature)
     runtime.transaction(payload,change,'CAD eliminar extrusión')
@@ -326,6 +520,7 @@ def convert(payload):
         raise CommandError('Confirma o cancela antes de convertir',code='session_active')
     doc = runtime.doc()
     feature = model.find(doc,'features',payload.get('feature_id'))
+    _require_reachable(doc,feature['id'])
     objs = [o for o in runtime.objects(doc) if o[FEATURE_KEY]==feature['id']]
     if not objs or not feature['enabled']:
         raise CommandError('Activa la operación antes de crear su malla',code='cad_reference_missing')
@@ -430,9 +625,13 @@ def select(payload):
         elif kind=='ENTITY':
             sketch,e=model.entity(doc,identifier)
             if sketch['id']!=runtime.active_sketch_id: raise BadPayload('Abre el boceto antes de seleccionar sus entidades')
-        elif kind=='PROFILE': model.profile(doc,identifier)
+        elif kind=='PROFILE':
+            sketch,_=model.profile(doc,identifier)
+            _require_reachable(doc,sketch['id'])
         elif kind=='FEATURE':
-            feature=model.find(doc,'features',identifier); _activate_feature(doc,identifier)
+            feature=model.find(doc,'features',identifier)
+            _require_reachable(doc,feature['id'])
+            _activate_feature(doc,identifier)
             runtime.active_body_id=feature.get('body_id')
         else: raise BadPayload('Selección CAD no compatible')
     else: ref=_pick(payload)
@@ -491,7 +690,7 @@ def drag_update(payload):
     if runtime.increment: dx,dy=[round(d/runtime.step)*runtime.step for d in (dx,dy)]
     try:
         geometry.solve(sketch,geometry.move_goals(sketch,session['refs'],dx,dy),drag=True)
-        runtime.rebuild(doc)
+        runtime.rebuild(doc,limit=runtime.bar(doc))
     except CommandError:
         # Keep the last visible valid preview. END never retries the pointer.
         raise
@@ -612,6 +811,7 @@ def constraint_set(payload):
 def sketch_delete(payload):
     identifier=payload.get('sketch_id')
     def change(doc):
+        _require_reachable(doc,identifier)
         if any(f['sketch_id']==identifier for f in doc['features']) or any(p.get('reference_sketch_id')==identifier for p in doc.get('planes',[])):
             raise CommandError('Elimina primero las operaciones del boceto',code='cad_dependency')
         removed=model.find(doc,'sketches',identifier)

@@ -273,6 +273,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             onTweakDrag = vm::tweakGesture,
             onCadGesture = vm::cadGesture,
             onSculptStroke = vm::sculptStroke,
+            onLightGesture = vm::materialLightGesture,
             onViewGestureLive = { g, phase, dx, dy, factor ->
                 vm.viewGesture(g, phase, dx, dy, factor)
                 if (phase != GesturePhase.BEGIN && phase != GesturePhase.UPDATE) vm.requestState()
@@ -293,6 +294,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             h264Size = h264Size,
             input = viewportInput,
             sculptEnabled = (sculptActive || (materialActive && state.blender.material.interaction == "PAINT")) && state.connection == ConnectionStatus.CONNECTED,
+            lightCursorEnabled = materialActive && state.blender.material.interaction == "LIGHTS" && state.connection == ConnectionStatus.CONNECTED,
             sculptStylusOnly = if (materialActive) state.materialStylusOnly else state.sculptStylusOnly,
             sculptRadius = if (materialActive) state.blender.material.radius else state.blender.sculpt.radius,
             sculptPressureSize = !materialActive && state.blender.sculpt.pressureSize,
@@ -727,6 +729,7 @@ class ViewportInput(
     val onTweakDrag: (GesturePhase, Float, Float, Float, Float) -> Unit,
     val onCadGesture: (GesturePhase, Float, Float) -> Unit,
     val onSculptStroke: (GesturePhase, List<com.blendertablet.remote.model.SculptPoint>, Boolean, Boolean) -> Unit,
+    val onLightGesture: (GesturePhase, Float, Float) -> Unit,
     /** Con vídeo activo: al soltar el gesto se refresca el estado. */
     val onViewGestureLive: (Gesture, GesturePhase, Float, Float, Float) -> Unit,
     /** Sin vídeo: solo navega, no hay nada que refrescar aún. */
@@ -753,6 +756,7 @@ private fun ViewportLayer(
     h264Size: Pair<Int, Int>?,
     input: ViewportInput,
     sculptEnabled: Boolean,
+    lightCursorEnabled: Boolean,
     sculptStylusOnly: Boolean,
     sculptRadius: Float,
     sculptPressureSize: Boolean,
@@ -798,6 +802,8 @@ private fun ViewportLayer(
                     repeatTap = repeatTap,
                     independentTaps = independentTaps,
                     sculptEnabled = sculptEnabled,
+                    lightCursorEnabled = lightCursorEnabled,
+                    onLightGesture = input.onLightGesture,
                     sculptStylusOnly = sculptStylusOnly,
                     sculptRadius = sculptRadius,
                     sculptPressureSize = sculptPressureSize,
@@ -838,6 +844,8 @@ private fun ViewportLayer(
                 repeatTap = repeatTap,
                 independentTaps = independentTaps,
                 sculptEnabled = sculptEnabled,
+                lightCursorEnabled = lightCursorEnabled,
+                onLightGesture = input.onLightGesture,
                 sculptStylusOnly = sculptStylusOnly,
                 sculptRadius = sculptRadius,
                 sculptPressureSize = sculptPressureSize,
@@ -893,6 +901,8 @@ private fun ViewportLayer(
                 repeatTap = repeatTap,
                 independentTaps = independentTaps,
                 sculptEnabled = sculptEnabled,
+                lightCursorEnabled = lightCursorEnabled,
+                onLightGesture = input.onLightGesture,
                 sculptStylusOnly = sculptStylusOnly,
                 sculptRadius = sculptRadius,
                 sculptPressureSize = sculptPressureSize,

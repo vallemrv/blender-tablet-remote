@@ -1,0 +1,99 @@
+"""CAD irregular polygon tool: stroke chain, auto-close, cancel and single undo."""
+import sys
+import unittest
+from pathlib import Path
+import bpy
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from test_cad import CadTests, OWNER, volume
+from unittest.mock import patch
+from blender_tablet_remote.cad import document as model
+from blender_tablet_remote.cad.runtime import runtime
+from blender_tablet_remote.commands import cad, history
+from blender_tablet_remote.errors import BadPayload, CommandError
+
+
+class PolygonTests(CadTests):
+    def stroke(self,a,b):
+        """One pointer stroke: begin, preview, release at b. Snapping patched out."""
+        with patch.object(runtime,'point',return_value=a),patch.object(cad,'_endpoint',return_value=None):
+            cad.polygon_begin(dict(u=.1,v=.1,**OWNER))
+        with patch.object(runtime,'point',return_value=b),patch.object(cad,'_preview_endpoint',return_value=None):
+            cad.polygon_update(dict(u=.5,v=.5,**OWNER))
+        return cad.polygon_segment(dict(u=.5,v=.5,**OWNER))
+
+    def test_close_builds_joined_profile_and_single_undo(self):
+        self.stroke((0,0),(.08,0))
+        self.stroke((.08,0),(.08,.045))
+        status=cad.polygon_close(OWNER)
+        sketch=runtime.doc()['sketches'][0]
+        self.assertEqual(len(sketch['entities']),3)
+        self.assertEqual(len(sketch['constraints']),2)  # two joins
+        self.assertEqual(status['selection']['kind'],'PROFILE')
+        self.assertTrue(runtime.active_sketch_id)  # the sketch view is kept
+        self.assertEqual(len(runtime.objects(runtime.doc())),0)  # nothing extruded yet
+        f=self.extrude(status['selection']['id'].removeprefix('profile_'),.02)
+        self.assertAlmostEqual(volume(self.obj()),.5*.08*.045*.02,places=9)
+
+    def test_tapping_the_first_vertex_closes_automatically(self):
+        self.stroke((0,0),(.08,0))
+        self.stroke((.08,0),(.04,.04))
+        status=self.stroke((.04,.04),(0,0))
+        self.assertEqual(status['selection']['kind'],'PROFILE')
+        self.assertEqual(len(runtime.doc()['sketches'][0]['entities']),3)
+        self.assertFalse(runtime.session)
+
+    def test_cancel_discards_the_whole_chain(self):
+        self.stroke((0,0),(.08,0))
+        self.stroke((.08,0),(.04,.04))
+        cad.cancel(dict(**OWNER))
+        self.assertFalse(runtime.doc()['sketches'][0]['entities'])
+        self.assertFalse(runtime.session)
+
+    def test_two_vertices_cannot_close_but_three_points_close_button_works(self):
+        self.stroke((0,0),(.08,0))
+        status=self.stroke((.08,0),(0,0))  # tapping the start with 2 points: ignored
+        self.assertEqual(len(runtime.session['segments']),1)
+        self.assertTrue(runtime.session)
+        with self.assertRaises(BadPayload): cad.polygon_close(OWNER)
+        self.stroke((.08,0),(.08,.045))
+        cad.polygon_close(OWNER)
+        self.assertEqual(len(runtime.doc()['sketches'][0]['entities']),3)
+
+    def test_tap_on_last_vertex_commits_nothing(self):
+        self.stroke((0,0),(.08,0))
+        status=self.stroke((.08,0),(.08,0))
+        self.assertEqual(len(runtime.session['segments']),1)
+        self.assertEqual(len(runtime.doc()['sketches'][0]['entities']),0)  # still only in session
+        self.assertTrue(runtime.session)
+
+    def test_construction_chain_makes_no_profile_and_selects_last_segment(self):
+        cad.settings(dict(construction=True,**OWNER))
+        self.stroke((0,0),(.08,0))
+        self.stroke((.08,0),(.08,.045))
+        cad.polygon_close(OWNER)
+        sketch=runtime.doc()['sketches'][0]
+        self.assertEqual(len(sketch['entities']),3)
+        self.assertEqual(model.profiles(sketch),[])
+        self.assertEqual(runtime.selection['kind'],'ENTITY')
+
+    @unittest.skipIf(bpy.app.background,'GUI undo stack required')
+    def test_polygon_close_is_a_single_undo_step(self):
+        self.stroke((0,0),(.08,0))
+        self.stroke((.08,0),(.08,.045))
+        cad.polygon_close(OWNER)
+        self.assertEqual(len(runtime.doc()['sketches'][0]['entities']),3)
+        history.undo({})
+        self.assertEqual(len(runtime.doc()['sketches'][0]['entities']),0)
+
+
+def run():
+    result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(PolygonTests))
+    if not result.wasSuccessful():
+        import os
+        os._exit(1)
+    if not bpy.app.background: bpy.ops.wm.quit_blender()
+
+if __name__=='__main__':
+    if bpy.app.background: run()
+    else: bpy.app.timers.register(run,first_interval=1.)

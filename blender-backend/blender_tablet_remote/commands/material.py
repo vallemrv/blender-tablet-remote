@@ -62,16 +62,23 @@ def settings(payload):
     brush=payload.get('brush',runtime.brush)
     scope=payload.get('scope',runtime.scope)
     isolate=payload.get('isolate',runtime.isolate)
-    if not isinstance(interaction,str) or interaction not in {'SELECT','PAINT'}: raise BadPayload('Elige Seleccionar o Pintar')
+    if not isinstance(interaction,str) or interaction not in {'SELECT','PAINT','LIGHTS'}: raise BadPayload('Elige Seleccionar, Pintar o Mover luces')
     if not isinstance(brush,str) or brush not in {'ROUND','AIRBRUSH','SPRAY'}: raise BadPayload('Pincel desconocido')
     if not isinstance(scope,str) or scope not in {r['id'] for r in runtime.status()['regions']}: raise BadPayload('Zona desconocida')
     if not isinstance(isolate,bool): raise BadPayload('isolate requiere true o false')
     runtime.cancel()
     if isolate!=runtime.isolate: runtime.frame=None
+    if env!=runtime.environment: runtime.light_rotation=0.; runtime.light_energy=1.
     runtime.interaction=interaction; runtime.brush=brush; runtime.scope=scope; runtime.isolate=isolate
     runtime.finish=finish; runtime.erase=erase; runtime.surface=overrides
     runtime.grain=grain; runtime.grain_scale=grain_scale; runtime.grain_amount=grain_amount; runtime.grain_relief=grain_relief
     runtime.preset=preset; runtime.tint=tint; runtime.radius=radius; runtime.strength=strength; runtime.environment=env
+    return {'material':runtime.status()}
+
+
+@command('material.lighting')
+def lighting(payload):
+    runtime.lighting(payload)
     return {'material':runtime.status()}
 
 

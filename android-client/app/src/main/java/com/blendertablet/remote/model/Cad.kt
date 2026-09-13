@@ -47,6 +47,7 @@ data class CadState(
     val sessionActive: Boolean = false,
     val sessionId: String? = null,
     val canConfirm: Boolean = false,
+    val canClose: Boolean = false,
     val operation: String = "",
     val depth: Double = 0.02,
     val overlay: List<CadOverlay> = emptyList(),
@@ -60,6 +61,7 @@ data class CadState(
     val planes: List<CadPlane> = emptyList(),
     val dimensionOptions: Map<String, CadDimensionOption> = emptyMap(),
     val surface: CadSurface = CadSurface(), val history: List<CadHistoryNode> = emptyList(),
+    val rollbackId: String? = null,
 ) {
     val activeSketch get() = sketches.firstOrNull { it.id == activeSketchId }
     val selectedEntity get() = sketches.flatMap { it.entities }.firstOrNull { selectionKind == "ENTITY" && it.id == selectionId }

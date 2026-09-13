@@ -17,6 +17,7 @@ data class MaterialState(
     val targets: List<String> = emptyList(), val presets: List<MaterialPreset> = emptyList(),
     val environments: List<MaterialPreset> = emptyList(), val preset: String = "plastic",
     val color: String = "#E85D38", val environment: String = "studio",
+    val lightRotation: Float = 0f, val lightEnergy: Float = 1f,
     val radius: Float = .06f, val strength: Float = 1f, val paintReady: Boolean = false,
     /** Sin tinte el material se ve con su propio color; el tinte es una decisión explícita. */
     val tinted: Boolean = false,
