@@ -5,6 +5,21 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadParserTest {
+    @Test fun circleRadiusAndArcAngleHandleKeepTheirSemanticRoles() {
+        val cad = CadParser.state(JSONObject("""{
+            "version":1,"workspace":true,"active_sketch_id":"s",
+            "document":{"sketches":[{"id":"s","entities":[{"id":"c","type":"CIRCLE","diameter":0.06,"radius":0.03,
+                "dimensions":[{"field":"radius","label":"Radio","constraint_type":"RADIUS","value_factor":1,
+                    "refs":[{"id":"c","part":"BODY"}],"constraint_ids":["r"]}]}]}]},
+            "overlay":[{"id":"a","points":[],"handles":[{"part":"END","point":[0.5,0.6],"intent":"ANGLE","selected":false}]}]
+        }"""))
+        val circle = cad.activeSketch!!.entities.single()
+        assertEquals(0.03, circle.values["radius"]!!, 1e-9)
+        assertEquals("radius", circle.dimensions.single().field)
+        assertEquals(listOf("r"), circle.dimensions.single().constraintIds)
+        assertEquals("END", cad.overlay.single().handles.single().part)
+        assertEquals("ANGLE", cad.overlay.single().handles.single().intent)
+    }
     private val capabilities = """{"version":1,"length_unit":"METERS","planes":["XY","FUTURE"],"entities":["RECTANGLE","CIRCLE","LINE","FUTURE"],"features":["EXTRUDE","FUTURE"]}"""
     @Test fun sharedBackendFixturePreservesFeatureAndDocumentRevision() {
         val fixture = javaClass.classLoader!!.getResourceAsStream("cad_v1.json")!!.bufferedReader().use { JSONObject(it.readText()) }

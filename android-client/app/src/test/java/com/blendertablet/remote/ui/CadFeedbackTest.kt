@@ -23,4 +23,10 @@ class CadFeedbackTest {
         assertFalse(cadRefsTouch(CadSelection("line","START"),CadSelection("rect","BODY")))
         assertTrue(cadRefsTouch(CadSelection("line","START"),CadSelection("line","BODY")))
     }
+    @Test fun weldRequiresDistinctEndpointsRatherThanWholeEntities() {
+        assertTrue(cadWeldEnabled(state(CadSelection("line","END"),CadSelection("rect","P0"))))
+        assertTrue(cadWeldEnabled(state(CadSelection("ORIGIN","POINT"),CadSelection("line","START"))))
+        assertFalse(cadWeldEnabled(state(CadSelection("line","BODY"),CadSelection("rect","BODY"))))
+        assertFalse(cadWeldEnabled(state(CadSelection("line","START"),CadSelection("line","START"))))
+    }
 }

@@ -379,6 +379,7 @@ class CadRuntime:
                         projected=project(p)
                         if projected is not None:
                             handle_points.append(dict(part=role,point=projected,
+                                intent='ANGLE' if selected and e['type']=='ARC' and role=='END' and sketch_geometry.fillet_sides(sketch,e) is None else 'POINT',
                                 selected=any(ref['id']==e['id'] and ref.get('part')==role for ref in refs)))
                 selected_parts=[r.get('part','BODY') for r in refs if r['id']==e['id']]
                 result.append(dict(id=e['id'],points=points,closed=e['type'] not in ('LINE','ARC'),

@@ -1110,9 +1110,11 @@ private class GestureView(
             }
             stroke.handles.forEach { handle ->
                 cadPaint.style = android.graphics.Paint.Style.FILL
-                cadPaint.color = if (handle.selected) 0xffffb347.toInt() else 0xffe0fafc.toInt()
-                canvas.drawCircle(handle.point.first * width, handle.point.second * height,
-                    (if (handle.selected) 5f else 3.5f) * resources.displayMetrics.density, cadPaint)
+                cadPaint.color = if (handle.selected || handle.intent == "ANGLE") 0xffffb347.toInt() else 0xffe0fafc.toInt()
+                val x = handle.point.first * width; val y = handle.point.second * height
+                val size = (if (handle.intent == "ANGLE") 7f else if (handle.selected) 5f else 3.5f) * resources.displayMetrics.density
+                val handlePath = AppIcons.cadHandlePath(handle.intent, x, y, size)
+                if (handlePath != null) canvas.drawPath(handlePath, cadPaint) else canvas.drawCircle(x, y, size, cadPaint)
             }
             cadPaint.style = android.graphics.Paint.Style.STROKE
         }

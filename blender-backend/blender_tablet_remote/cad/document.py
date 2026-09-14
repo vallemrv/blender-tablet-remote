@@ -329,6 +329,7 @@ def public(doc):
         from . import dimensions, sketch as geometry
         sketch['constraints']=dimensions.visible_constraints(sketch)
         for e in sketch['entities']:
+            if e['type']=='CIRCLE': e['radius']=e['diameter']/2
             e['dimensions']=dimensions.describe(sketch,e)
             e['is_square']=dimensions.is_square(sketch,e)
             e['is_fillet']=geometry.fillet_sides(sketch,e) is not None

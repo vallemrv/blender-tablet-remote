@@ -491,8 +491,9 @@ no quedan archivos o referencias temporales.
   el sondeo de BEGIN/última preview sin raycast nuevo. Un toque no modifica geometría
   ni crea undo; cancelar/dos dedos restaura también la selección anterior.
 - Dibujos abre siempre el árbol de bocetos/figuras, separado de la pestaña de
-  restricciones contextuales. Seleccionar todo/Deseleccionar todo y Borrar selección
-  están en la bandeja. Borrar un lado de rectángulo conserva los demás como líneas;
+  restricciones contextuales. Seleccionar todo/Deseleccionar todo, Construcción,
+  Soldar puntos y los candados de medida viven junto a Deshacer/Rehacer; Borrar
+  selección permanece en la bandeja. Borrar un lado de rectángulo conserva los demás como líneas;
   una esquina retira sus dos lados. Un extremo/centro de otra primitiva elimina
   esa primitiva, nunca guarda una figura incompleta. El origen no se borra y romper
   un perfil usado se rechaza sin eliminar operaciones ni cambiar el documento.
@@ -512,6 +513,18 @@ no quedan archivos o referencias temporales.
   tramos recortados, para conservar el tamaño y la igualdad de un cuadrado.
 - Cotas y reglas ofrece Editar y Quitar explícitos. El valor inicial de una nueva
   medida procede de la geometría; si ya existe se abre esa cota, no otra superpuesta.
+- Círculo muestra Radio durante el dibujo y tras confirmar. El estado público deriva
+  `radius` de `diameter`; ambos editan la misma cota, sin cambiar el almacenamiento.
+  Tras dibujar Arco se vuelve al cursor. Su extremo END anuncia `intent:ANGLE` y se
+  dibuja como rombo; arrastrarlo cambia solo el barrido, conservando centro, radio e
+  inicio y las restricciones. Redondeos no ofrecen tirador angular. Cada preview
+  parte del baseline, END no sondea otra posición y confirmar crea un undo si cambió.
+- Soldar puntos añade coincidencias persistentes entre extremos/esquinas seleccionados
+  sobre el último punto (el origen prevalece), con un undo. Respeta restricciones;
+  un conflicto es atómico y una soldadura ya existente no duplica reglas ni undo.
+- La pila CAD usa toda la altura disponible y se desplaza a la izquierda del rail de
+  restricciones. Figuras/Restricciones permanecen fijas sobre su lista; Solo selección
+  controla el filtro. Croquis en el rail de planos abre el panel común de caras/planos.
 
 - CAD diferencia la edición del boceto de la selección del sólido. Perfiles/Caras/
   Aristas/Puntos selecciona hasta dos referencias visibles para medir. El sondeo

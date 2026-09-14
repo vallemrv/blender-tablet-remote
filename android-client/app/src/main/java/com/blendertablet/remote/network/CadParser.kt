@@ -62,7 +62,7 @@ object CadParser {
                 }, item.optBoolean("closed"), item.optBoolean("selected"),
                     objects(item.optJSONArray("handles")).mapNotNull { h ->
                         val p = h.optJSONArray("point"); val x = p?.optDouble(0) ?: Double.NaN; val y = p?.optDouble(1) ?: Double.NaN
-                        if (x.isFinite() && y.isFinite()) CadHandle(h.optString("part"), x.toFloat() to y.toFloat(), h.optBoolean("selected")) else null
+                        if (x.isFinite() && y.isFinite()) CadHandle(h.optString("part"), x.toFloat() to y.toFloat(), h.optBoolean("selected"), h.optString("intent","POINT")) else null
                     }, strings(item.optJSONArray("selected_parts")), item.optBoolean("construction"), item.id("label"),
                     item.optJSONArray("label_point")?.let { p ->
                         val x=p.optDouble(0); val y=p.optDouble(1)

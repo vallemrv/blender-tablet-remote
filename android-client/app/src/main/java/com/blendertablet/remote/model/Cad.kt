@@ -23,7 +23,7 @@ data class CadSelection(val id: String, val part: String = "BODY")
 data class CadFeature(val id: String, val name: String, val sketchId: String,
     val profileId: String, val depth: Double, val enabled: Boolean,
     val type: String = "EXTRUDE", val targetId: String? = null, val bodyId: String = "")
-data class CadHandle(val part: String, val point: Pair<Float, Float>, val selected: Boolean)
+data class CadHandle(val part: String, val point: Pair<Float, Float>, val selected: Boolean, val intent: String = "POINT")
 data class CadOverlay(val id: String, val points: List<Pair<Float, Float>>, val closed: Boolean, val selected: Boolean,
     val handles: List<CadHandle> = emptyList(), val selectedParts: List<String> = emptyList(), val construction: Boolean = false,
     val label: String? = null, val labelPoint: Pair<Float, Float>? = null, val labelOffset: Float = 14f)

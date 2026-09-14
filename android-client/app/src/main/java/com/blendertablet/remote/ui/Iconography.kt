@@ -152,6 +152,7 @@ object AppIcons {
         "SYMMETRIC" to "M12,2 L12,6 M12,9 L12,15 M12,18 L12,22 M3,8 L8,12 L3,16 Z M21,8 L16,12 L21,16 Z",
         "ORIGIN" to "M12,2 L12,22 M2,12 L22,12 M16,12 A4,4 0,1 1,8,12 A4,4 0,1 1,16,12",
         "CONSTRUCTION" to "M2,18 L6,15 M9,12 L13,9 M16,6 L21,2 M2,2 L5,5 M8,8 L11,11 M14,14 L17,17 M20,20 L22,22",
+        "WELD" to "M2,5 L9,10 M22,5 L15,10 M2,19 L9,14 M22,19 L15,14 M12,8 L16,12 L12,16 L8,12 Z",
         "FIX" to "M5,10 L19,10 L19,21 L5,21 Z M8,10 L8,6 A4,4 0,0 1,16,6 L16,10 M12,14 L12,17",
         "EXTRUDE" to "M3,11 L12,15 L21,11 L12,7 Z M3,11 L3,19 L12,23 L21,19 L21,11 M12,15 L12,23 M12,11 L12,1 M8,5 L12,1 L16,5",
         "CUT" to "M3,9 L3,20 L21,20 L21,9 M3,9 L8,9 L8,16 L16,16 L16,9 L21,9 M12,2 L12,12 M9,9 L12,12 L15,9",
@@ -172,6 +173,8 @@ object AppIcons {
         }
     }
     fun cad(intent: String): ImageVector = when (intent) {
+        "SELECT_ALL" -> Icons.Default.SelectAll
+        "DESELECT_ALL" -> Icons.Default.Deselect
         "FINISH" -> Icons.Default.Check
         "CANCEL" -> Icons.Default.Close
         "MODEL" -> Icons.Default.AccountTree
@@ -180,6 +183,12 @@ object AppIcons {
         "VISIBLE" -> Icons.Default.Visibility
         else -> cadVectors[intent] ?: Fallback
     }
+
+    /** Angular sketch handles use a diamond; ordinary point handles remain round. */
+    fun cadHandlePath(intent: String, x: Float, y: Float, size: Float): android.graphics.Path? =
+        if (intent == "ANGLE") android.graphics.Path().apply {
+            moveTo(x, y - size); lineTo(x + size, y); lineTo(x, y + size); lineTo(x - size, y); close()
+        } else null
 
     fun action(id: ActionId): ImageVector = when (id) {
         ActionId.PLACE_OBJECT -> Icons.AutoMirrored.Filled.CompareArrows

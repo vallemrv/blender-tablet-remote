@@ -224,9 +224,15 @@ def entity_set(payload):
     def change(doc):
         sketch, e = model.entity(doc,payload.get('entity_id'))
         allowed = set(model.FIELDS[e['type']]) | ({'length'} if e['type']=='LINE' else set())
+        if e['type']=='CIRCLE': allowed.add('radius')
         if not set(changes)<=allowed:
             raise BadPayload('Dimensión no compatible con la entidad')
         values={k:model.number(v) for k,v in changes.items()}
+        if e['type']=='CIRCLE' and 'radius' in values:
+            diameter=2*model.number(values.pop('radius'),positive=True)
+            if 'diameter' in values and not math.isclose(values['diameter'],diameter,rel_tol=1e-9,abs_tol=1e-12):
+                raise BadPayload('Radio y diámetro deben describir el mismo círculo')
+            values['diameter']=diameter
         goals=dimensions.set_values(sketch,e,values)
         geometry.solve(sketch,goals)
     return runtime.transaction(payload,change,'CAD editar dimensiones')
@@ -564,7 +570,9 @@ def _pick(payload):
             for handle in item.get('handles',[]):
                 p=handle['point']; distance=math.hypot((u-p[0])*aspect,v-p[1])
                 if distance<.024:
-                    candidates.append((0,distance+(1e-8 if item['id']=='ORIGIN' else 0),dict(kind='ENTITY',id=item['id'],part=handle['part'])))
+                    ref=dict(kind='ENTITY',id=item['id'],part=handle['part'])
+                    if handle.get('intent')=='ANGLE': ref['intent']='ANGLE'
+                    candidates.append((0,distance+(1e-8 if item['id']=='ORIGIN' else 0),ref))
         elif item['closed'] and model.contains(ring,(u,v)):
             area=abs(sum(a[0]*b[1]-b[0]*a[1] for a,b in zip(ring,ring[1:]+ring[:1])))
             candidates.append((0,area,dict(kind='PROFILE',id='profile_'+item['id'])))
@@ -668,7 +676,7 @@ def drag_begin(payload):
     selection_before=copy.deepcopy(runtime.selection)
     refs=copy.deepcopy(_refs())
     sketch=model.find(runtime.doc(),'sketches',runtime.active_sketch_id)
-    if hit and not any(_covers(r,hit) for r in refs): refs=[hit]
+    if hit and (hit.get('intent')=='ANGLE' or not any(_covers(r,hit) for r in refs)): refs=[hit]
     start=runtime.point(payload,sketch) if hit else None
     session=runtime.begin(payload,'DRAG')
     session.update(sketch_id=sketch['id'],refs=refs,start=start,hit=hit,
@@ -689,7 +697,12 @@ def drag_update(payload):
     p=runtime.point(payload,sketch); dx,dy=[p[i]-session['start'][i] for i in (0,1)]
     if runtime.increment: dx,dy=[round(d/runtime.step)*runtime.step for d in (dx,dy)]
     try:
-        geometry.solve(sketch,geometry.move_goals(sketch,session['refs'],dx,dy),drag=True)
+        if session['hit'].get('intent')=='ANGLE':
+            arc=geometry.get_entity(sketch,session['hit'])
+            goals=geometry.arc_angle_goals(arc,p,session.get('last_sweep',arc['sweep']))
+        else:
+            goals=geometry.move_goals(sketch,session['refs'],dx,dy)
+        geometry.solve(sketch,goals,drag=True)
         runtime.rebuild(doc,limit=runtime.bar(doc))
     except CommandError:
         # Keep the last visible valid preview. END never retries the pointer.
@@ -698,6 +711,8 @@ def drag_update(payload):
     changed=any(abs(e[k]-original[k])>(1e-7 if k in ('start','sweep') else 1e-9)
                 for e,original in zip(sketch['entities'],baseline['entities']) for k in model.FIELDS[e['type']])
     session.update(preview=doc,candidate=sketch['id'] if changed else None)
+    if session['hit'].get('intent')=='ANGLE':
+        session['last_sweep']=geometry.get_entity(sketch,session['hit'])['sweep']
     return runtime.status()
 
 
@@ -712,6 +727,17 @@ def drag_end(payload):
         refs=previous.get('items',[previous] if previous else [])
         _set_selection(_toggle_refs(refs,session.get('hit')))
     runtime.session=None
+    return runtime.status()
+
+
+@command('cad.points.weld')
+def points_weld(payload):
+    runtime.require_workspace()
+    if runtime.session: raise CommandError('Termina la preview antes de soldar',code='session_active')
+    doc=runtime.doc()
+    sketch=model.find(doc,'sketches',runtime.active_sketch_id)
+    refs=[dict(id=r['id'],part=r.get('part','BODY')) for r in _refs() if r.get('kind')=='ENTITY']
+    if geometry.weld_points(sketch,refs): runtime.commit(doc,'CAD soldar puntos')
     return runtime.status()
 
 

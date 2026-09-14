@@ -224,6 +224,52 @@ def solve(sketch, goals=(), *, drag=False):
     return sketch
 
 
+def arc_angle_goals(arc, target, previous_sweep):
+    """The angular handle moves the end around a fixed center, radius and start."""
+    dx,dy=target[0]-arc['x'],target[1]-arc['y']
+    if math.hypot(dx,dy)<1e-9:
+        sweep=previous_sweep
+    else:
+        angle=math.degrees(math.atan2(dy,dx))
+        sweep=previous_sweep+(angle-arc['start']-previous_sweep+180.)%360.-180.
+    sweep=max(.01,min(359.99,sweep)) if arc['sweep']>0 else min(-.01,max(-359.99,sweep))
+    return [dict(id=arc['id'],field=k,value=arc[k],hard=True) for k in ('x','y','radius','start')]+[
+        dict(id=arc['id'],field='sweep',value=sweep)]
+
+
+def weld_points(sketch, refs):
+    """Join endpoints with persistent coincidences, keeping the last point in place."""
+    keys=list(dict.fromkeys((r['id'],r.get('part','BODY')) for r in refs))
+    if len(keys)<2: raise BadPayload('Selecciona al menos dos extremos para soldar')
+    refs=[dict(id=i,part=p) for i,p in keys]
+    for ref in refs:
+        e=get_entity(sketch,ref)
+        allowed={'LINE':('START','END'),'ARC':('START','END'),'RECTANGLE':('P0','P1','P2','P3'),'ORIGIN':('POINT',)}
+        if ref['part'] not in allowed.get(e['type'],()):
+            raise BadPayload('Soldar requiere extremos de líneas/arcos o esquinas, no figuras completas')
+    anchor=next((r for r in refs if r['id']=='ORIGIN'),refs[-1])
+    position=point(sketch,anchor)
+    parent={}
+    def root(key):
+        parent.setdefault(key,key)
+        if parent[key]!=key: parent[key]=root(parent[key])
+        return parent[key]
+    def join(a,b):
+        a,b=root((a['id'],a['part'])),root((b['id'],b['part']))
+        if a==b: return False
+        parent[a]=b
+        return True
+    for c in sketch.get('constraints',[]):
+        if c['type']=='COINCIDENT': join(*c['refs'])
+    added=False
+    for ref in refs:
+        if join(ref,anchor):
+            sketch.setdefault('constraints',[]).append(dict(id=model.uid('constraint'),type='COINCIDENT',refs=[ref,dict(anchor)]))
+            added=True
+    if added: solve(sketch,[dict(anchor,point=position,hard=True)])
+    return added
+
+
 def move_goals(sketch, refs, dx, dy):
     goals=[]; seen=set()
     for ref in refs:

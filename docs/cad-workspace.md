@@ -73,6 +73,29 @@ pueda evaluar. Los rectángulos siguen alineados a los ejes de su plano.
 
 ## Bandeja de cotas
 
+El círculo muestra **Radio** mientras se dibuja y después de soltar. Editarlo modifica
+la misma cota de radio, si existe. Tras dibujar un arco se activa el cursor: arrastra
+el **rombo de su extremo** para cambiar el ángulo conservando centro, radio e inicio.
+Cancelar restaura el arco; las restricciones siguen mandando. Los redondeos conservan
+sus tangencias y no ofrecen ese tirador.
+
+Junto a **Deshacer/Rehacer** hay un grupo con **Seleccionar todo**, **Deseleccionar
+todo**, **Construcción**, **Soldar puntos** y los candados de **Fijar medida/Quitar
+cota** de la figura seleccionada. Los candados se deshabilitan mientras haya medidas
+en borrador. Construcción afecta a la selección, o al dibujo siguiente si no hay
+figuras seleccionadas.
+
+Para cerrar un contorno, selecciona sus extremos y pulsa **Soldar puntos**. Se unen
+en el último punto seleccionado (o en el origen si está incluido) con coincidencias
+persistentes y un solo paso de deshacer. Un conflicto conserva el documento anterior.
+
+La pila aprovecha la altura entre el selector de modos y la bandeja, a la izquierda
+del rail de restricciones para dejarlo accesible. **Figuras/Restricciones** permanecen
+visibles sobre la lista. En Restricciones puedes editar cotas y borrar cualquier regla;
+**Solo selección** permite alternar el filtro cuando hay elementos seleccionados.
+El icono de **Croquis** del rail de planos abre el mismo panel para escoger una cara
+o crear un plano desplazado/inclinado.
+
 Paso y dimensiones usan los campos compactos y botones −/+ de las otras bandejas.
 Mantener un botón inicia la repetición a los 400 ms y acelera de 180 a 80 ms entre
 pasos; soltar no añade otro incremento. La unidad elegida junto a Paso gobierna
@@ -94,7 +117,7 @@ cota** retira esa medida fija conservando el dibujo y sus otras reglas. Fijar
 geometría u otras restricciones todavía pueden limitar el cambio. Quitar Igualdad
 convierte el cuadrado en un rectángulo con Ancho y Alto independientes.
 
-**Cotas y reglas → Editar** abre la medida existente; su papelera y **Quitar cota**
+**Restricciones → Editar** abre la medida existente; su papelera y **Quitar cota**
 la retiran. El panel se actualiza al borrar o deshacer. Añadir la misma medida en
 otro lado equivalente reutiliza la cota: no apila duplicados. El valor inicial
 procede del tamaño real del dibujo, no del paso de la herramienta. Dos puntos

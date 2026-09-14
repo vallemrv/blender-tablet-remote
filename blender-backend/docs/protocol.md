@@ -1446,6 +1446,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.drag.begin` | `{u,v}` | Sondea y conserva selección previa; prepara arrastre del grupo si cubre el elemento, sin cambiar selección todavía |
 | `cad.drag.update` | `{u,v}` | Reconstruye y resuelve restricciones desde baseline |
 | `cad.drag.end` | `{}` | Sin UPDATE alterna el elemento sondeado en BEGIN; con arrastre confirma el último candidato. Nunca vuelve a sondear |
+| `cad.points.weld` | `{}` | Une los puntos seleccionados mediante coincidencias persistentes; conserva el último punto (el origen manda si está incluido), resuelve restricciones y crea un único undo |
 | `cad.select_all` | `{action:"SELECT\|DESELECT"}` | Selecciona todas las figuras del boceto (también construcción, nunca origen) o limpia la selección, sin undo |
 | `cad.constraint.add` | `{type,value?,refs?}` | Restringe selección o referencias explícitas del boceto activo; una cota equivalente se actualiza conservando ID |
 | `cad.constraint.set` | `{constraint_id,value,sketch_id?}` | Cambia la cota canónica y resuelve dependientes; Radio de redondeo ajusta su contacto |
@@ -1497,10 +1498,27 @@ Las entidades públicas anuncian `dimensions:[{field,label,constraint_type,
 value_factor,refs:[{id,part}],constraint_ids:[]}]`, `is_square` e `is_fillet`.
 `constraint_ids` vacío significa medida libre; si tiene IDs, editar el campo
 mediante `cad.entity.set` actualiza esa cota en lugar de imponer un valor paralelo.
-Diámetro usa `value_factor:0.5` para su restricción RADIUS; los demás usan 1.
+CIRCLE publica `radius=diameter/2` y describe Radio con `value_factor:1` para RADIUS.
+`cad.entity.set` admite radio o diámetro y actualiza la misma cota; si se envían ambos,
+deben coincidir. El documento conserva `diameter` como parámetro canónico. La bandeja
+muestra Radio también durante la preview de dibujo, sin convertirla en otra sesión.
 LINE publica `length` derivada y admite editarla. El cuadrado solo anuncia Lado.
 Coordenadas y ángulos siguen siendo parámetros geométricos; FIX continúa imponiendo
 su bloqueo, no se desactiva implícitamente al editar una cota.
+
+Los handles del overlay admiten `intent:POINT|ANGLE`. En un arco ordinario seleccionado,
+END anuncia ANGLE y se dibuja como rombo. `cad.drag.begin` lo adquiere para editar solo
+el arco aunque su BODY pertenezca a un grupo. El arrastre conserva centro, radio e
+inicio y varía `sweep` dentro de su signo y rango válido, respetando restricciones.
+Cada UPDATE reconstruye desde baseline; END no sondea otra posición y crea un undo
+solo si cambió el arco. Cancelar recupera también la selección anterior. Los redondeos
+no anuncian este tirador. Al terminar de dibujar un arco Android vuelve al cursor.
+
+Soldar admite dos o más puntos distintos: START/END de líneas o arcos, P0–P3 de
+rectángulos y ORIGIN/POINT. No acepta figuras completas ni centro/borde de círculo.
+La coincidencia permanece al editar después y permite cerrar perfiles; un conflicto
+no cambia documento ni selección. Coincidencias directas o transitivas existentes
+no se duplican y repetir una soldadura ya hecha no crea undo.
 
 `dimension_options:{DISTANCE?:{value,constraint_id?},RADIUS?:{value,constraint_id?}}`
 describe las cotas disponibles para la selección con su medida actual. Android

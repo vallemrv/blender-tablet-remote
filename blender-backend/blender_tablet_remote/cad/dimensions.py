@@ -129,12 +129,12 @@ def solve_dimension(sketch, constraint):
 def describe(sketch, entity):
     bound=bindings(sketch,entity); typ=entity['type']
     fields={'RECTANGLE':[('width','Lado' if is_square(sketch,entity) else 'Ancho','DISTANCE','EDGE0',1.),('height','Alto','DISTANCE','EDGE1',1.)],
-            'CIRCLE':[('diameter','Diámetro','RADIUS','BODY',.5)],
+            'CIRCLE':[('radius','Radio','RADIUS','BODY',1.)],
             'ARC':[('radius','Radio del redondeo' if geometry.fillet_sides(sketch,entity) else 'Radio','RADIUS','BODY',1.)],
             'LINE':[('length','Lado completo' if any((entity['id'],role) in geometry.rounding_links(sketch) for role in ('START','END')) else 'Longitud','DISTANCE','BODY',1.)]}[typ]
     if typ=='RECTANGLE' and is_square(sketch,entity): fields=fields[:1]
     return [dict(field=field,label=label,constraint_type=kind,value_factor=factor,
-                 refs=[dict(id=entity['id'],part=part)],constraint_ids=bound[field])
+                 refs=[dict(id=entity['id'],part=part)],constraint_ids=bound['diameter' if typ=='CIRCLE' else field])
             for field,label,kind,part,factor in fields]
 
 

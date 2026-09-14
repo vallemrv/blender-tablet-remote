@@ -352,6 +352,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         cancelCadStroke()
         client.cadCommand(name, payload)
     }
+    fun cadMeasurementsPending(value: Boolean) { local.update { it.copy(cadMeasurementsPending = value) } }
     fun cadTool(type: String?) {
         cancelCadStroke()
         if (client.state.value.cad.surface.mode != "PROFILE") client.cadCommand("cad.surface.mode", mapOf("mode" to "PROFILE"))
@@ -410,7 +411,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 when (cadGestureMode) {
                     "DRAG" -> client.cadCommand("cad.drag.end")
                     "POLY" -> client.cadCommand("cad.polygon.segment", mapOf("u" to u, "v" to v))
-                    "DRAW" -> client.cadCommand("cad.session.confirm")
+                    "DRAW" -> {
+                        client.cadCommand("cad.session.confirm")
+                        if (local.value.cadTool == "ARC") local.update { it.copy(cadTool = null) }
+                    }
                 }
                 cadGestureMode = null
             }

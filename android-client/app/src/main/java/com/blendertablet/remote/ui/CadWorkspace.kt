@@ -15,10 +15,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -39,6 +36,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
     val connected = state.connection == ConnectionStatus.CONNECTED
     var stackOpen by rememberSaveable { mutableStateOf(true) }
     var constraintsVisible by rememberSaveable { mutableStateOf(false) }
+    var constraintsSelectionOnly by rememberSaveable { mutableStateOf(true) }
+    var planesOpen by rememberSaveable { mutableStateOf(false) }
     val historyScroll = rememberScrollState()
     var unit by remember(state.blender.sceneScale.lengthUnit) { mutableStateOf(state.blender.sceneScale.lengthUnit) }
     var pendingDimension by remember(cad.activeSketchId, cad.selection) { mutableStateOf<String?>(null) }
@@ -68,9 +67,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
     }
     val depthPreview = cad.sessionActive && cad.operation in listOf("EXTRUDE", "CUT")
     val availableHeight = (LocalConfiguration.current.screenHeightDp - 320).coerceAtLeast(100).dp
-    // Al editar, la pila termina con un margen pequeño sobre el rail de restricciones.
-    val density = LocalDensity.current
-    var railTopPx by remember { mutableStateOf<Float?>(null) }
     fun command(name: String, vararg values: Pair<String, Any?>) { if (connected) vm.cadCommand(name, mapOf(*values)) }
     fun editSketch(sketchId: String) {
         vm.cadTool(null)
@@ -89,9 +85,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                 CadAction("ORIGIN", "Seleccionar origen fijo (0,0)", enabled = !cad.sessionActive) {
                     command("cad.select", "kind" to "ENTITY", "id" to "ORIGIN", "part" to "POINT", "additive" to true)
                 }
-                CadAction("CONSTRUCTION", "Dibujar geometría auxiliar · no forma parte del perfil", selected = cad.construction, enabled = !cad.sessionActive) {
-                    command("cad.settings", "construction" to !cad.construction)
-                }
             }
             RailDivider()
             capabilities.entities.forEach { type ->
@@ -104,8 +97,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
             capabilities.planes.forEach { plane ->
                 CadAction("PLANE_$plane", "Nuevo boceto $plane", enabled = connected && !cad.sessionActive) { command("cad.sketch.create", "plane" to plane) }
             }
-            if (capabilities.sketchEditing) CadAction("SKETCH", "Elegir una cara para crear un boceto",
-                selected = cad.surface.mode == "FACE", enabled = !cad.sessionActive) { vm.cadSurfaceMode("FACE") }
+            if (capabilities.sketchEditing) CadAction("SKETCH", "Croquis en cara o nuevo plano",
+                selected = planesOpen, enabled = connected && !cad.sessionActive) { planesOpen = true }
             RailDivider()
             capabilities.features.forEach { operation ->
                 CadAction(operation, cadLabel(operation), selected = depthPreview && cad.operation == operation,
@@ -115,7 +108,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
     }
     if (editing && capabilities.constraints.isNotEmpty()) ToolRail(
         Modifier.align(Alignment.CenterEnd).padding(end = Metrics.EdgeMargin, top = 142.dp, bottom = 180.dp)
-            .heightIn(max = availableHeight).onGloballyPositioned { railTopPx = it.boundsInRoot().top }
+            .heightIn(max = availableHeight)
     ) {
         capabilities.constraints.forEach { type ->
             CadAction(type, cadLabel(type), enabled = connected && !cad.sessionActive && cadConstraintEnabled(cad, type),
@@ -139,20 +132,16 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
     // selector de modos, panel derecho con flecha de vuelta— y se abre y se cierra
     // igual que él. El contexto (planos, vista, finalizar boceto) vive arriba, en la
     // fila de Deshacer/Rehacer, sin franja propia bajo el menú.
+    val stackEnd = Metrics.EdgeMargin + if (editing && capabilities.constraints.isNotEmpty()) 80.dp else 0.dp
     if (!stackOpen) FloatingPanel(
-        Modifier.align(Alignment.TopEnd).padding(top = 142.dp, end = Metrics.EdgeMargin),
+        Modifier.align(Alignment.TopEnd).padding(top = 142.dp, end = stackEnd),
     ) {
         IconAction(Icons.Default.AccountTree, "Abrir pila de operaciones") { stackOpen = true }
     }
-    val stackMaxHeight = if (editing) {
-        railTopPx?.let { top ->
-            with(density) { (top - 142.dp.toPx() - 8.dp.toPx()).coerceAtLeast(140.dp.toPx()).toDp() }
-        } ?: 560.dp
-    } else 560.dp
     if (stackOpen) FloatingPanel(
-        Modifier.align(Alignment.TopEnd).padding(top = 142.dp, end = Metrics.EdgeMargin, bottom = 114.dp).heightIn(max = stackMaxHeight)
+        Modifier.align(Alignment.TopEnd).fillMaxHeight().padding(top = 142.dp, end = stackEnd, bottom = 156.dp)
     ) {
-        Column(Modifier.width(300.dp)) {
+        Column(Modifier.width(300.dp).fillMaxHeight()) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 IconAction(Icons.AutoMirrored.Filled.ArrowBack, "Cerrar pila de operaciones") { stackOpen = false }
                 Text(if (editing) "Editando ${cad.activeSketch?.name.orEmpty()}" else "Pila de operaciones",
@@ -160,12 +149,17 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                     modifier = Modifier.weight(1f).padding(start = 2.dp))
             }
             HorizontalDivider()
-            Column(Modifier.weight(1f, fill = false).verticalScroll(historyScroll).padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (editing) {
+                Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    PillButton("Figuras", selected = !constraintsVisible) { constraintsVisible = false }
+                    PillButton("Restricciones", selected = constraintsVisible) { constraintsVisible = true }
+                }
+                if (constraintsVisible && contextual) PillButton("Solo selección", selected = constraintsSelectionOnly) {
+                    constraintsSelectionOnly = !constraintsSelectionOnly
+                }
+            }
+            Column(Modifier.weight(1f).verticalScroll(historyScroll).padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (editing) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        PillButton("Figuras", selected = !constraintsVisible) { constraintsVisible = false }
-                        PillButton("Cotas y reglas", selected = constraintsVisible) { constraintsVisible = true }
-                    }
                     if (!constraintsVisible) cad.activeSketch?.entities?.forEachIndexed { index, drawing ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(AppIcons.cad(drawing.type), null, tint = Ink.Muted, modifier = Modifier.size(20.dp))
@@ -177,7 +171,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                                 command(if (drawing.isFillet) "cad.fillet.remove" else "cad.entity.delete", "entity_id" to drawing.id)
                             }
                         }
-                    } else (if (contextual) contextualConstraints else cad.activeSketch?.constraints.orEmpty()).forEach { c ->
+                    } else (if (contextual && constraintsSelectionOnly) contextualConstraints else cad.activeSketch?.constraints.orEmpty()).forEach { c ->
                         CadConstraintRow(c, cad.activeSketch!!, unit, !cad.sessionActive,
                             { editingConstraint = c; pendingDimension = null },
                             { command("cad.constraint.delete", "constraint_id" to c.id) })
@@ -262,6 +256,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
         cad.sessionId, cad.revision, state.cadTool, pendingDimension, editingConstraint?.id)
     var resetInputs by remember(editScope) { mutableIntStateOf(0) }
     val drafts = remember(editScope, resetInputs) { mutableStateMapOf<String, Double?>() }
+    LaunchedEffect(drafts.isNotEmpty()) { vm.cadMeasurementsPending(drafts.isNotEmpty()) }
+    DisposableEffect(Unit) { onDispose { vm.cadMeasurementsPending(false) } }
     val validDrafts = drafts.values.all { it != null }
     val entity = cad.selectedEntity?.takeUnless { cad.sessionActive || pendingDimension != null || editingConstraint != null || cad.surface.mode != "PROFILE" }
     val feature = cad.selectedFeature?.takeUnless { cad.sessionActive || editing || cad.surface.mode != "PROFILE" }
@@ -312,7 +308,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                 cad.sessionActive && cad.operation == "POLYGON" -> "Polígono: traza o toca cada vértice · cierra tocando el primer punto o con Cerrar · dos dedos descarta"
                 cad.surface.mode == "FACE" -> if (cad.surface.selection.size > 1) "Dos referencias para medir · quita una cara seleccionada para crear el boceto" else "Toca una cara: se resalta en el vídeo · Boceto en cara usa exactamente esa selección"
                 cad.surface.mode != "PROFILE" -> "Toca hasta dos referencias para medir · durante el boceto puedes proyectarlas para acotar desde ellas"
-                state.cadTool == "ARC" -> "Arrastra centro → inicio del arco · ajusta radio y ángulo en la bandeja"
+                state.cadTool == "ARC" -> "Arrastra centro → inicio del arco · al soltar, arrastra el rombo del extremo para variar el ángulo"
+                entity?.type == "ARC" && !entity.isFillet -> "Arrastra el rombo del extremo para variar el ángulo; centro, radio e inicio permanecen fijos"
                 state.cadTool != null -> "${cadLabel(state.cadTool!!)} · arrastra para dibujar · dos dedos navegan"
                 entity?.isSquare == true -> if (entity.dimensions.any { it.constraintIds.isNotEmpty() })
                     "Cuadrado: una cota controla ambos lados; editar Lado actualiza esa misma cota"
@@ -331,23 +328,18 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                         } else if (!cad.sessionActive) PillButton("Medir desde sólido", enabled = connected) { vm.cadSurfaceMode("EDGE") }
                         if (editing && !cad.sessionActive && cad.surface.mode == "PROFILE") {
                             Text("${cad.selection.size} seleccionados", color = Ink.Muted, fontSize = 11.sp)
-                            PillButton("Seleccionar todo", enabled = connected && cad.activeSketch?.entities?.isNotEmpty() == true) {
-                                vm.selectAll()
-                            }
-                            PillButton("Deseleccionar todo", enabled = connected && cad.selection.isNotEmpty()) {
-                                vm.deselectAll()
-                            }
                             PillButton("Borrar selección", enabled = connected && cad.selection.any { it.id != "ORIGIN" }) { vm.delete() }
                             PillButton("Redondear esquina", enabled = connected && (cad.selection.size == 2 || cad.selectedEntity?.type == "RECTANGLE")) { pendingDimension = "FILLET" }
-                            cad.selectedEntity?.let { selected -> PillButton("Construcción", selected = selected.construction, enabled = connected) {
-                                command("cad.entity.construction", "construction" to !selected.construction)
-                            } }
                         }
                         if (capabilities.sketchEditing && ((editing && state.cadTool == null) || depthPreview)) {
                             SnapControl(listOf(SnapType.NONE, SnapType.INCREMENT), if (cad.increment) SnapType.INCREMENT else SnapType.NONE,
                                 { command("cad.settings", "increment" to (it == SnapType.INCREMENT)) })
                         }
                         CadSnapStepInput(cad.step, unit, { unit = it }) { command("cad.settings", "step" to it) }
+                        if (cad.sessionActive && cad.operation == "CIRCLE") {
+                            CadDimension("Radio", if (cad.canConfirm) cad.selectedEntity?.values?.get("radius") ?: 0.0 else 0.0,
+                                unit, cad.sessionId.orEmpty(), step = cad.step, enabled = false, onDone = {}) {}
+                        }
                         editingConstraint?.let { constraint ->
                             PillButton("Quitar cota", enabled = connected) {
                                 command("cad.constraint.delete", "constraint_id" to constraint.id,
@@ -379,14 +371,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                                     minimum = if (measure != null) .0000001 else -10000.0,
                                     maximum = if (field == "sweep") 359.99 else 10000.0,
                                     onDone = ::acceptValues) { drafts[field] = it?.takeIf { value -> field != "sweep" || kotlin.math.abs(value) in .01..359.99 } }
-                                measure?.let { spec ->
-                                    PillButton(if (bound) "Quitar cota" else "Fijar medida", enabled = connected && drafts.isEmpty()) {
-                                        if (bound) command("cad.constraint.delete", "constraint_id" to spec.constraintIds.first())
-                                        else command("cad.constraint.add", "type" to spec.constraintType,
-                                            "value" to ((selected.values[field] ?: 0.0) * spec.valueFactor),
-                                            "refs" to spec.refs.map { mapOf("id" to it.id, "part" to it.part) })
-                                    }
-                                }
                             }
                             if (selected.isFillet) PillButton("Quitar redondeo", enabled = connected && drafts.isEmpty()) {
                                 command("cad.fillet.remove", "entity_id" to selected.id)
@@ -428,6 +412,49 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                 }
             }
         }
+    }
+    if (planesOpen) CadPlanesDialog(cad, unit, { planesOpen = false },
+        { name, values -> vm.cadCommand(name, values) }, { planesOpen = false; vm.cadSurfaceMode("FACE") })
+}
+
+/** Frequent sketch actions form their own group next to undo/redo. */
+@Composable
+fun CadSelectionActions(state: AppUiState, vm: MainViewModel) {
+    val cad = state.blender.cad
+    val enabled = state.connection == ConnectionStatus.CONNECTED && !cad.sessionActive && cad.surface.mode == "PROFILE"
+    val entities = cad.activeSketch?.entities.orEmpty().filter { e -> cad.selection.any { it.id == e.id } }
+    IconAction(AppIcons.cad("SELECT_ALL"), "Seleccionar todo", enabled = enabled && cad.activeSketch?.entities?.isNotEmpty() == true) { vm.selectAll() }
+    IconAction(AppIcons.cad("DESELECT_ALL"), "Deseleccionar todo", enabled = enabled && cad.selection.isNotEmpty()) { vm.deselectAll() }
+    val construction = if (entities.isEmpty()) cad.construction else entities.all { it.construction }
+    IconAction(AppIcons.cad("CONSTRUCTION"), if (entities.isEmpty()) "Dibujar construcción" else "Construcción de la selección",
+        selected = construction, enabled = enabled) {
+        vm.cadCommand(if (entities.isEmpty()) "cad.settings" else "cad.entity.construction", mapOf("construction" to !construction))
+    }
+    IconAction(AppIcons.cad("WELD"), "Soldar extremos en el último punto seleccionado", enabled = enabled && cadWeldEnabled(cad)) {
+        vm.cadCommand("cad.points.weld")
+    }
+    cad.selectedEntity?.dimensions?.forEach { measure ->
+        val selected = cad.selectedEntity!!
+        val bound = measure.constraintIds.isNotEmpty()
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconAction(AppIcons.cad("FIX"), (if (bound) "Quitar cota: " else "Fijar medida: ") + measure.label,
+                selected = bound, enabled = enabled && !state.cadMeasurementsPending) {
+                if (bound) vm.cadCommand("cad.constraint.delete", mapOf("constraint_id" to measure.constraintIds.first()))
+                else vm.cadCommand("cad.constraint.add", mapOf("type" to measure.constraintType,
+                    "value" to ((selected.values[measure.field] ?: 0.0) * measure.valueFactor),
+                    "refs" to measure.refs.map { mapOf("id" to it.id, "part" to it.part) }))
+            }
+            Text(measure.label, color = Ink.Faint, fontSize = 9.sp)
+        }
+    }
+}
+
+internal fun cadWeldEnabled(cad: CadState): Boolean = cad.selection.distinct().size >= 2 && cad.selection.all { ref ->
+    val entity = cad.activeSketch?.entities?.firstOrNull { it.id == ref.id }
+    when (entity?.type) {
+        "LINE", "ARC" -> ref.part in listOf("START", "END")
+        "RECTANGLE" -> ref.part in listOf("P0", "P1", "P2", "P3")
+        else -> ref.id == "ORIGIN" && ref.part == "POINT"
     }
 }
 

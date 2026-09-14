@@ -98,6 +98,12 @@ fun TopToolbar(
             }
         }
 
+        if (chromeVisible && blender.cad.workspace && blender.cad.activeSketchId != null) FloatingPanel {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                CadSelectionActions(state, vm)
+            }
+        }
+
         FloatingPanel {
             IconAction(
                 icon = if (chromeVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,

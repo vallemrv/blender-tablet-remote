@@ -525,6 +525,7 @@ data class AppUiState(
     val blender: BlenderState = BlenderState(),
     val activeTool: ActiveTool = ActiveTool.SELECT,
     val cadTool: String? = null,
+    val cadMeasurementsPending: Boolean = false,
     val sculptSmooth: Boolean = false,
     val sculptInvert: Boolean = false,
     val sculptStylusOnly: Boolean = true,
