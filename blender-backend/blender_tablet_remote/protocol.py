@@ -404,7 +404,7 @@ FEATURES = {
     "cad": {"version": 1, "planes": ["XY", "XZ", "YZ"],
             "entities": ["LINE", "RECTANGLE", "SQUARE", "CIRCLE", "ARC", "POLYGON"], "features": ["EXTRUDE", "CUT"],
             "constraints": ["COINCIDENT", "HORIZONTAL", "VERTICAL", "PARALLEL", "PERPENDICULAR",
-                            "TANGENT", "EQUAL", "DISTANCE", "RADIUS", "FIX", "MIDPOINT", "SYMMETRIC"],
+                            "TANGENT", "EQUAL", "DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "FIX", "MIDPOINT", "SYMMETRIC"],
             "sketch_editing": True, "solid_selection": True, "face_sketch": True, "project_reference": True, "history_order": True, "editable_dimensions": True, "fillet_remove": True, "smart_cursor": True, "selection_delete": True, "fillet": True, "construction": True, "datum_planes": True,
             "bodies": True, "origin": True, "mesh_copy": True,
             "length_unit": "METERS", "kernel": "BLENDER_NATIVE_MESH",

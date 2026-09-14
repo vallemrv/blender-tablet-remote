@@ -5,6 +5,17 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadFeedbackTest {
+    @Test fun equalityAcceptsSeveralDifferentCirclesAndDistanceAxesUsePoints() {
+        val circles = (1..3).map { CadEntity("c$it", "CIRCLE", emptyMap()) }
+        val cad = CadState(activeSketchId = "s", sketches = listOf(CadSketch("s", "Boceto", "XY", circles, emptyList())),
+            selection = circles.map { CadSelection(it.id, "CENTER") })
+        assertTrue(cadConstraintEnabled(cad, "EQUAL"))
+        assertFalse(cadConstraintEnabled(cad.copy(selection = listOf(CadSelection("c1", "CENTER"), CadSelection("c1", "RIM"))), "EQUAL"))
+        val points = cad.copy(selection = listOf(CadSelection("ORIGIN", "POINT"), CadSelection("c1", "CENTER")))
+        assertTrue(cadConstraintEnabled(points, "DISTANCE_X"))
+        assertTrue(cadConstraintEnabled(points, "DISTANCE_Y"))
+        assertFalse(cadConstraintEnabled(cad, "DISTANCE_X"))
+    }
     private val sketch = CadSketch("s","Boceto","XY",listOf(CadEntity("line","LINE",emptyMap()),CadEntity("rect","RECTANGLE",emptyMap())),emptyList())
     private fun state(vararg refs: CadSelection) = CadState(activeSketchId="s",sketches=listOf(sketch),selection=refs.toList())
     @Test fun midpointWorksWithOriginAndLineInEitherOrder() {

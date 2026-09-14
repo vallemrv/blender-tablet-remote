@@ -4,7 +4,7 @@ import math
 from . import document as model, sketch as geometry
 from ..errors import BadPayload, CommandError
 
-NUMERIC = ('DISTANCE', 'RADIUS')
+NUMERIC = ('DISTANCE', 'DISTANCE_X', 'DISTANCE_Y', 'RADIUS')
 
 
 def quantity(sketch, ref):
@@ -33,6 +33,8 @@ def key(sketch, constraint, root=None):
     if constraint['type'] not in NUMERIC: return None
     root=root or groups(sketch)
     refs=constraint['refs']
+    if constraint['type'] in ('DISTANCE_X','DISTANCE_Y'):
+        return (constraint['type'],tuple(sorted((r['id'],r.get('part','BODY')) for r in refs)))
     if len(refs)==1: return root(quantity(sketch,refs[0]))
     if refs[0]['id']==refs[1]['id']:
         e=geometry.get_entity(sketch,refs[0]); parts={r.get('part') for r in refs}
@@ -150,7 +152,9 @@ def offers(sketch, refs):
             elif len(refs)==2:
                 a,b=[geometry.point(sketch,r) for r in refs]; value=math.dist(a,b)
             else: continue
-            if value<1e-7: continue
+            if typ in ('DISTANCE_X','DISTANCE_Y'):
+                value=abs(float(b[0 if typ=='DISTANCE_X' else 1]-a[0 if typ=='DISTANCE_X' else 1]))
+            elif value<1e-7: continue
             c=dict(id='offer',type=typ,refs=refs,value=value)
             geometry.validate_constraints(dict(sketch,constraints=[c]))
             existing=matching(sketch,c)

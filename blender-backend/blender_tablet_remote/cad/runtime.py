@@ -412,7 +412,7 @@ class CadRuntime:
                     if projected is None: continue
                     label=labels.get(c['type'],c['type'])
                     if c.get('value') is not None:
-                        label=('R ' if c['type']=='RADIUS' else '')+format(c['value']*factor,'.6g')+' '+suffix
+                        label={'RADIUS':'R ', 'DISTANCE_X':'H ', 'DISTANCE_Y':'V '}.get(c['type'],'')+format(c['value']*factor,'.6g')+' '+suffix
                     result.append(dict(id=c['id'],kind='DIMENSION',points=[],closed=False,selected=False,
                         label=label,label_point=projected,label_offset=14+(index%4)*15))
         return result

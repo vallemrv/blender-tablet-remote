@@ -10,7 +10,7 @@ from . import document as model
 from ..errors import BadPayload, CommandError
 
 CONSTRAINTS = ('COINCIDENT', 'HORIZONTAL', 'VERTICAL', 'PARALLEL', 'PERPENDICULAR',
-               'TANGENT', 'EQUAL', 'DISTANCE', 'RADIUS', 'FIX', 'MIDPOINT', 'SYMMETRIC')
+               'TANGENT', 'EQUAL', 'DISTANCE', 'DISTANCE_X', 'DISTANCE_Y', 'RADIUS', 'FIX', 'MIDPOINT', 'SYMMETRIC')
 
 
 def handles(e):
@@ -97,12 +97,13 @@ def residual(sketch, c, scale):
         return (point(sketch,refs[0])-(a+b)*.5)/scale
     if typ == 'COINCIDENT':
         return (point(sketch,refs[0])-point(sketch,refs[1]))/scale
-    if typ == 'DISTANCE':
+    if typ in ('DISTANCE', 'DISTANCE_X', 'DISTANCE_Y'):
         if len(refs) == 1:
             a,b = measure_line(sketch,refs[0])
         else:
             a,b = [point(sketch,r) for r in refs]
-        return [(np.linalg.norm(b-a)-c['value'])/scale]
+        measured = np.linalg.norm(b-a) if typ=='DISTANCE' else abs((b-a)[0 if typ=='DISTANCE_X' else 1])
+        return [(measured-c['value'])/scale]
     if typ == 'RADIUS':
         return [(radius(sketch,refs[0])-c['value'])/scale]
     if typ == 'EQUAL':
@@ -139,13 +140,15 @@ def validate_constraints(sketch):
         ids.add(c['id'])
         refs = c.get('refs')
         typ = c['type']
-        count = (3,) if typ=='SYMMETRIC' else (1,2) if typ=='DISTANCE' else (1,) if typ in ('FIX','HORIZONTAL','VERTICAL','RADIUS') else (2,)
+        count = (3,) if typ=='SYMMETRIC' else (1,2) if typ in ('DISTANCE','DISTANCE_X','DISTANCE_Y') else (1,) if typ in ('FIX','HORIZONTAL','VERTICAL','RADIUS') else (2,)
         if not isinstance(refs,list) or len(refs) not in count or (len(refs)==2 and refs[0]==refs[1]):
             raise BadPayload('Número de elementos incorrecto para la restricción')
         for ref in refs:
             get_entity(sketch,ref)
         if typ in ('DISTANCE','RADIUS'):
             model.number(c.get('value'),positive=True)
+        if typ in ('DISTANCE_X','DISTANCE_Y') and model.number(c.get('value')) < 0:
+            raise BadPayload('La distancia horizontal o vertical no puede ser negativa')
         if typ == 'FIX':
             e = get_entity(sketch,refs[0])
             if 'points' in c:

@@ -5,6 +5,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadParserTest {
+    @Test fun directionalDistancesAreAdvertisedAndZeroRemainsEditable() {
+        val capabilities = CadParser.capabilities(JSONObject("""{"version":1,"length_unit":"METERS","planes":["XY"],
+            "constraints":["DISTANCE","DISTANCE_X","DISTANCE_Y"]}"""))
+        assertEquals(listOf("DISTANCE","DISTANCE_X","DISTANCE_Y"), capabilities.constraints)
+        val state = CadParser.state(JSONObject("""{"version":1,"dimension_options":{"DISTANCE_X":{"value":0,"constraint_id":"dx"}}}"""))
+        assertEquals(0.0, state.dimensionOptions["DISTANCE_X"]!!.value, 0.0)
+        assertEquals("dx", state.dimensionOptions["DISTANCE_X"]!!.constraintId)
+    }
     @Test fun wholeSketchSelectionKeepsItsScopeWithoutSelectingAnIndividualFigure() {
         val cad = CadParser.state(JSONObject("""{"version":1,"workspace":true,
             "selection":{"kind":"SKETCH","id":"s"},

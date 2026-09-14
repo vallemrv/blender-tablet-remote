@@ -15,7 +15,7 @@ object CadParser {
         strings(j.optJSONArray("planes")).filter { it in listOf("XY", "XZ", "YZ") },
         strings(j.optJSONArray("entities")).filter { it in listOf("LINE", "RECTANGLE", "SQUARE", "CIRCLE", "ARC", "POLYGON") },
         strings(j.optJSONArray("features")).filter { it in listOf("EXTRUDE", "CUT") },
-        strings(j.optJSONArray("constraints")).filter { it in listOf("COINCIDENT", "HORIZONTAL", "VERTICAL", "PARALLEL", "PERPENDICULAR", "TANGENT", "EQUAL", "DISTANCE", "RADIUS", "FIX", "MIDPOINT", "SYMMETRIC") },
+        strings(j.optJSONArray("constraints")).filter { it in listOf("COINCIDENT", "HORIZONTAL", "VERTICAL", "PARALLEL", "PERPENDICULAR", "TANGENT", "EQUAL", "DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "FIX", "MIDPOINT", "SYMMETRIC") },
         j.optBoolean("sketch_editing"))
     fun state(j: JSONObject?): CadState {
         if (j == null || j.optInt("version") != 1) return CadState()
@@ -73,9 +73,11 @@ object CadParser {
             selection = objects(selection?.optJSONArray("items")).map { CadSelection(it.optString("id"), it.optString("part", "BODY")) },
             step = j.optDouble("step", .001).takeIf { it.isFinite() && it > 0 } ?: .001,
             increment = j.optBoolean("increment", true), transparent = session?.optBoolean("transparent") == true,
-            dimensionOptions = listOf("DISTANCE", "RADIUS").mapNotNull { type ->
+            dimensionOptions = listOf("DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS").mapNotNull { type ->
                 j.optJSONObject("dimension_options")?.optJSONObject(type)?.let { option ->
-                    option.optDouble("value").takeIf { it.isFinite() && it > 0 }?.let { type to CadDimensionOption(it,option.id("constraint_id")) }
+                    option.optDouble("value").takeIf {
+                        it.isFinite() && (it > 0 || (it == 0.0 && type in listOf("DISTANCE_X", "DISTANCE_Y")))
+                    }?.let { type to CadDimensionOption(it,option.id("constraint_id")) }
                 }
             }.toMap(),
             construction = j.optBoolean("construction"), showScene = j.optBoolean("show_scene"), activeBodyId = j.id("active_body_id"),

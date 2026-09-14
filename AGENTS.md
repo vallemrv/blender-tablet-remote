@@ -394,6 +394,17 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   toque sin cambios no crea undo. El redondeo recorta dos líneas conectadas y
   añade un arco con coincidencias, tangencias y radio. Las uniones de línea usan
   la política pegajosa común de `commands/snap.py`.
+- Las cotas CAD distinguen distancia diagonal, horizontal y vertical (`DISTANCE`,
+  `DISTANCE_X`, `DISTANCE_Y`). Las dos últimas miden la separación absoluta en los
+  ejes del croquis, admiten cero y conservan cantidades independientes. Pueden usar
+  dos puntos (incluido origen/centros) o una línea/lado; se editan desde la misma bandeja.
+- Igualdad admite varias medidas compatibles del mismo croquis y toma inicialmente
+  el tamaño de la primera seleccionada, sin fijarlo permanentemente. Persiste parejas
+  de igualdad sin duplicarlas; las cotas previas incompatibles rechazan el cambio.
+  En círculos, Radio/Diámetro elige la representación del mismo parámetro y cota.
+  Simetría usa tres puntos, con el último como centro; el origen ya está fijo.
+- Crear copia de malla está en el menú de cada Extrusión/Vaciado de la pila. Exporta
+  el resultado elegido a Object, con una malla editable, conservando el documento CAD.
 - Extruir/Vaciar CAD recorren un paso por 4 % de altura con lápiz; Incremento
   redondea el gesto, las cotas escritas son exactas. Vaciar consume su sólido
   destino en el árbol y reconstruye desde los parámetros. La transparencia se

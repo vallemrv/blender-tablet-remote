@@ -47,9 +47,27 @@ actualiza las operaciones dependientes y registra un paso de undo.
 
 Restricciones disponibles: coincidencia entre puntos, horizontal, vertical,
 paralela, perpendicular, tangencia entre línea y círculo/arco, igualdad de
-longitudes o radios, distancia/longitud, radio, punto medio, simetría respecto al
+longitudes o radios, distancia diagonal/horizontal/vertical, radio, punto medio, simetría respecto al
 último de tres puntos y fijación estricta de la selección. El origen (0,0) se puede
 seleccionar desde la vista o el rail y usar como referencia fija.
+
+Para una cota, selecciona dos puntos (también centros de círculos u origen) o una
+línea/lado y elige **Distancia diagonal**, **Distancia horizontal** o **Distancia
+vertical** en el rail de restricciones. Horizontal y vertical miden la separación
+absoluta sobre los ejes del croquis y admiten cero; cada cota se conserva y edita
+independientemente. El valor inicial es la medida actual.
+
+**Simetría** usa tres puntos, en este orden: primer punto, segundo punto y centro.
+Para dos círculos, puedes seleccionar sus centros y después el origen. Si eliges
+otro centro y quieres que permanezca inmóvil, fíjalo antes. Es simetría respecto
+a un punto; no se elige una línea como eje.
+
+**Igualdad** admite dos o más círculos/arcos o líneas/lados del mismo croquis.
+Selecciona primero la figura cuyo tamaño quieres conservar, luego las demás y
+pulsa Igualdad. Más tarde, editar el tamaño de una actualiza el grupo. Si otras
+cotas fijan tamaños incompatibles, se rechaza el cambio conservando la geometría.
+En un círculo, **Radio/Diámetro** permite editar la misma medida con cualquiera de
+las dos representaciones; no crea dos cotas independientes.
 Al editar, **Boceto activo → Figuras** contiene solo las figuras de ese boceto.
 Sus filas seleccionan figuras completas y ofrecen papelera;
 **Cotas y reglas** es una pestaña separada. **Seleccionar todo**, **Deseleccionar
@@ -252,7 +270,7 @@ primero se eliminan los dependientes. El árbol permite borrar bocetos sin opera
 - **Construcción** dibuja geometría auxiliar discontinua. También puede convertir
   las figuras seleccionadas; sus restricciones siguen activas y sus contornos
   nunca extruyen ni abren huecos. Si rompería un perfil usado, se rechaza el cambio.
-- **Crear copia de malla** sale a Object con una copia seleccionada para Edit o
+- **Pila → ⋮ de la Extrusión/Vaciado → Crear copia de malla** sale a Object con una copia seleccionada para Edit o
   Materiales. El original y todo el árbol CAD permanecen editables al regresar.
 - Las extrusiones de rectángulos y contornos convexos pares usan tapas y paredes
   en quads ordenados. Los perfiles con huecos y vaciados convierten sus parches a

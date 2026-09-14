@@ -39,6 +39,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
     var stackOpen by rememberSaveable { mutableStateOf(true) }
     var constraintsVisible by rememberSaveable { mutableStateOf(false) }
     var constraintsSelectionOnly by rememberSaveable { mutableStateOf(true) }
+    var showDiameter by rememberSaveable { mutableStateOf(false) }
     val historyScroll = rememberScrollState()
     var unit by remember(state.blender.sceneScale.lengthUnit) { mutableStateOf(state.blender.sceneScale.lengthUnit) }
     var pendingDimension by remember(cad.activeSketchId, cad.selection) { mutableStateOf<String?>(null) }
@@ -115,7 +116,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
         capabilities.constraints.forEach { type ->
             CadAction(type, cadLabel(type), enabled = connected && !cad.sessionActive && cadConstraintEnabled(cad, type),
                 selected = pendingDimension == type) {
-                if (type in listOf("DISTANCE", "RADIUS")) {
+                if (type in listOf("DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS")) {
                     val existing = cad.dimensionOptions[type]?.constraintId?.let { id -> cad.activeSketch?.constraints?.firstOrNull { it.id == id } }
                     if (existing != null) { editingConstraint = existing; pendingDimension = null }
                     else { pendingDimension = type; editingConstraint = null }
@@ -224,6 +225,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
                                     actions = listOf(
                                         CadNodeAction("Seleccionar") {
                                             vm.cadTool(null); command("cad.select", "kind" to "FEATURE", "id" to feature.id)
+                                        },
+                                        CadNodeAction("Crear copia de malla", feature.enabled) {
+                                            command("cad.convert", "feature_id" to feature.id)
                                         },
                                         CadNodeAction("Editar ${cad.sketches.firstOrNull { it.id == feature.sketchId }?.name ?: "boceto fuente"}") { editSketch(feature.sketchId) },
                                         CadNodeAction(if (feature.enabled) "Desactivar" else "Activar") {
@@ -347,22 +351,31 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
                                 editingConstraint = null
                             }
                             CadDimension(cadLabel(constraint.type), drafts["constraint"] ?: constraint.value ?: 0.0, unit, constraint.id,
-                                step = cad.step, enabled = connected, minimum = .0000001, onDone = ::acceptValues) { drafts["constraint"] = it }
+                                step = cad.step, enabled = connected, minimum = if (constraint.type in listOf("DISTANCE_X", "DISTANCE_Y")) 0.0 else .0000001,
+                                onDone = ::acceptValues) { drafts["constraint"] = it }
                         }
                         pendingDimension?.let { type ->
-                            CadDimension(if (type == "DISTANCE") "Distancia" else "Radio", drafts["constraint"] ?: cad.dimensionOptions[type]?.value ?: cad.step * 5, unit, type,
-                                step = cad.step, enabled = connected, minimum = .0000001, onDone = ::acceptValues) { drafts["constraint"] = it }
+                            CadDimension(if (type == "FILLET") "Radio" else cadLabel(type), drafts["constraint"] ?: cad.dimensionOptions[type]?.value ?: cad.step * 5, unit, type,
+                                step = cad.step, enabled = connected, minimum = if (type in listOf("DISTANCE_X", "DISTANCE_Y")) 0.0 else .0000001,
+                                onDone = ::acceptValues) { drafts["constraint"] = it }
                         }
                         entity?.let { selected ->
+                            if (selected.type == "CIRCLE") {
+                                PillButton("Radio", selected = !showDiameter, enabled = drafts.isEmpty()) { showDiameter = false }
+                                PillButton("Diámetro", selected = showDiameter, enabled = drafts.isEmpty()) { showDiameter = true }
+                            }
                             val coordinates = when (selected.type) {
                                 "RECTANGLE" -> emptyList()
                                 "CIRCLE" -> listOf("x" to "Centro X", "y" to "Centro Y")
                                 "ARC" -> if (selected.isFillet) emptyList() else listOf("start" to "Inicio", "sweep" to "Ángulo")
                                 else -> listOf("x" to "X inicio", "y" to "Y inicio", "x2" to "X final", "y2" to "Y final")
                             }
-                            val fields = selected.dimensions.map { it.field to it.label } + coordinates
+                            val measures = selected.dimensions.map {
+                                if (selected.type == "CIRCLE" && showDiameter && it.field == "radius") it.copy(field = "diameter", label = "Diámetro", valueFactor = .5) else it
+                            }
+                            val fields = measures.map { it.field to it.label } + coordinates
                             fields.forEach { (field, label) ->
-                                val measure = selected.dimensions.firstOrNull { it.field == field }
+                                val measure = measures.firstOrNull { it.field == field }
                                 val degrees = field in listOf("start", "sweep")
                                 val bound = measure?.constraintIds?.isNotEmpty() == true
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -404,7 +417,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
                             CadDimension("Profundidad", drafts["depth"] ?: selected.depth, unit, selected.id,
                                 step = cad.step, minimum = .0000001, enabled = connected, onDone = ::acceptValues) { drafts["depth"] = it }
                             CadAction("VISIBLE", if (selected.enabled) "Ocultar" else "Mostrar", selected = selected.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to selected.id, "enabled" to !selected.enabled) }
-                            CadAction("CONVERT", "Crear copia de malla (conserva el modelo CAD)", enabled = selected.enabled && connected) { command("cad.convert", "feature_id" to selected.id) }
                             CadAction("DELETE", "Borrar operación", enabled = connected) { command("cad.feature.delete", "feature_id" to selected.id) }
                         }
                     }
@@ -510,8 +522,8 @@ internal fun cadConstraintEnabled(cad: CadState, type: String): Boolean {
         "SYMMETRIC" -> refs.size == 3 && points
         "HORIZONTAL", "VERTICAL" -> refs.size == 1 && lines
         "PARALLEL", "PERPENDICULAR" -> refs.size == 2 && lines
-        "EQUAL" -> refs.size == 2 && (lines || curves)
-        "DISTANCE" -> (refs.size == 1 && lines) || (refs.size == 2 && points)
+        "EQUAL" -> if (curves) refs.map { it.id }.distinct().size >= 2 else refs.size >= 2 && lines
+        "DISTANCE", "DISTANCE_X", "DISTANCE_Y" -> (refs.size == 1 && lines) || (refs.size == 2 && points)
         "RADIUS" -> refs.size == 1 && curves
         "TANGENT" -> refs.size == 2 && entities.any { it.type == "LINE" } && entities.any { it.type in listOf("CIRCLE", "ARC") }
         else -> false
@@ -521,7 +533,7 @@ internal fun cadConstraintEnabled(cad: CadState, type: String): Boolean {
 internal fun cadLabel(type: String) = when (type) {
     "RECTANGLE" -> "Rectángulo"; "SQUARE" -> "Cuadrado"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
-    "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad"; "DISTANCE" -> "Distancia / longitud"; "RADIUS" -> "Radio"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"
+    "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad (tamaño del primero)"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"
     "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; else -> type
 }
 

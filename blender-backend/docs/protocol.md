@@ -1393,7 +1393,7 @@ de banda y configuración de latencia interactiva.
 `features.cad` anuncia `version:1`, `planes:[XY,XZ,YZ]`,
 `entities:[LINE,RECTANGLE,SQUARE,CIRCLE,ARC,POLYGON]`, `features:[EXTRUDE,CUT]`,
 `sketch_editing:true`, `fillet:true`, `length_unit:METERS` y `constraints` con
-`COINCIDENT,HORIZONTAL,VERTICAL,PARALLEL,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,RADIUS,FIX,MIDPOINT,SYMMETRIC`.
+`COINCIDENT,HORIZONTAL,VERTICAL,PARALLEL,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,DISTANCE_X,DISTANCE_Y,RADIUS,FIX,MIDPOINT,SYMMETRIC`.
 También anuncia `construction`, `datum_planes`, `bodies`, `origin`, `mesh_copy`,
 `smart_cursor`, `selection_delete`, `editable_dimensions`, `fillet_remove`,
 `solid_selection`, `face_sketch`, `project_reference` y `history_order`.
@@ -1520,12 +1520,20 @@ La coincidencia permanece al editar después y permite cerrar perfiles; un confl
 no cambia documento ni selección. Coincidencias directas o transitivas existentes
 no se duplican y repetir una soldadura ya hecha no crea undo.
 
-`dimension_options:{DISTANCE?:{value,constraint_id?},RADIUS?:{value,constraint_id?}}`
+`dimension_options:{DISTANCE?:{value,constraint_id?},DISTANCE_X?:{value,constraint_id?},DISTANCE_Y?:{value,constraint_id?},RADIUS?:{value,constraint_id?}}`
 describe las cotas disponibles para la selección con su medida actual. Android
 abre la existente si tiene ID. Se normalizan lados opuestos de rectángulos,
 mediciones equivalentes por extremos y cantidades enlazadas por EQUAL. Los
 duplicados antiguos tienen un solo control público y se fusionan en almacenamiento
 al editar/eliminar. No se anuncia detección general de redundancia algebraica.
+
+DISTANCE_X/Y usan la separación absoluta sobre los ejes locales del boceto entre
+dos puntos, o entre extremos de una línea/lado. Aceptan cero y no se fusionan con
+DISTANCE ni entre sí. Su overlay añade H/V a la medida en la unidad activa.
+EQUAL acepta dos o más medidas compatibles en `cad.constraint.add`; conserva
+inicialmente la primera, persiste parejas de igualdad y mantiene las cotas existentes.
+El tamaño sigue libre si ninguna cota lo fija. SYMMETRIC conserva sus tres referencias:
+los primeros dos puntos deben quedar equidistantes del tercero, que es su centro.
 
 Los redondeos se reconocen por sus coincidencias y tangencias con dos líneas, sin
 requerir metadatos nuevos en archivos anteriores. Radio y el campo numérico usan

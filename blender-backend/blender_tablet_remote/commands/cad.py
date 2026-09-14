@@ -770,7 +770,25 @@ def constraint_add(payload):
             raise BadPayload('Referencias de cota inválidas')
         refs=[dict(id=r['id'],part=r.get('part','BODY')) for r in source]
         c=dict(id=model.uid('constraint'),type=typ,refs=refs)
-        if typ in ('DISTANCE','RADIUS'): c['value']=model.number(payload.get('value'),positive=True)
+        if typ in dimensions.NUMERIC: c['value']=model.number(payload.get('value'),positive=typ in ('DISTANCE','RADIUS'))
+        if typ=='EQUAL':
+            unique=[]; quantities=set()
+            for ref in refs:
+                quantity=dimensions.quantity(sketch,ref)
+                if quantity is None: raise BadPayload('Igualdad requiere círculos/arcos o líneas/lados del mismo croquis')
+                if quantity not in quantities: unique.append(ref); quantities.add(quantity)
+            if len(unique)<2: raise BadPayload('Selecciona al menos dos medidas distintas del mismo croquis')
+            curves=all(geometry.get_entity(sketch,r)['type'] in ('CIRCLE','ARC') for r in unique)
+            first=unique[0]
+            value=geometry.radius(sketch,first) if curves else math.dist(*geometry.measure_line(sketch,first))
+            for ref in unique[1:]:
+                rule=dict(id=model.uid('constraint'),type='EQUAL',refs=[first,ref])
+                geometry.validate_constraints(dict(sketch,constraints=[rule]))
+                root=dimensions.groups(sketch)
+                if root(dimensions.quantity(sketch,first)) != root(dimensions.quantity(sketch,ref)):
+                    sketch.setdefault('constraints',[]).append(rule)
+            geometry.solve(sketch,[dict(constraint=dict(type='RADIUS' if curves else 'DISTANCE',refs=[first],value=value))])
+            return
         if typ=='MIDPOINT' and len(refs)==2:
             refs.sort(key=lambda r: 0 if r.get('part') in geometry.handles(geometry.get_entity(sketch,r)) else 1)
         if typ=='FIX':
@@ -845,8 +863,8 @@ def constraint_set(payload):
     def change(doc):
         sketch=model.find(doc,'sketches',payload.get('sketch_id') or runtime.active_sketch_id)
         c=model.find(sketch,'constraints',payload.get('constraint_id'))
-        if c['type'] not in ('RADIUS','DISTANCE'): raise BadPayload('Esta restricción no tiene una cota editable')
-        updated=dict(c,value=model.number(payload.get('value'),positive=True))
+        if c['type'] not in dimensions.NUMERIC: raise BadPayload('Esta restricción no tiene una cota editable')
+        updated=dict(c,value=model.number(payload.get('value'),positive=c['type'] in ('RADIUS','DISTANCE')))
         c=dimensions.put(sketch,updated)
         dimensions.solve_dimension(sketch,c)
     return runtime.transaction(payload,change,'CAD editar restricción')
