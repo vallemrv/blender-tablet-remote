@@ -256,8 +256,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
         cad.sessionId, cad.revision, state.cadTool, pendingDimension, editingConstraint?.id)
     var resetInputs by remember(editScope) { mutableIntStateOf(0) }
     val drafts = remember(editScope, resetInputs) { mutableStateMapOf<String, Double?>() }
-    LaunchedEffect(drafts.isNotEmpty()) { vm.cadMeasurementsPending(drafts.isNotEmpty()) }
-    DisposableEffect(Unit) { onDispose { vm.cadMeasurementsPending(false) } }
     val validDrafts = drafts.values.all { it != null }
     val entity = cad.selectedEntity?.takeUnless { cad.sessionActive || pendingDimension != null || editingConstraint != null || cad.surface.mode != "PROFILE" }
     val feature = cad.selectedFeature?.takeUnless { cad.sessionActive || editing || cad.surface.mode != "PROFILE" }
@@ -314,7 +312,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                 entity?.isSquare == true -> if (entity.dimensions.any { it.constraintIds.isNotEmpty() })
                     "Cuadrado: una cota controla ambos lados; editar Lado actualiza esa misma cota"
                     else "Cuadrado: Igualdad une sus lados; Fijar medida añade una cota de tamaño"
-                entity?.isFillet == true -> "Redondeo: cambia su radio o Quitar redondeo para recuperar la esquina"
+                entity?.isFillet == true -> "Redondeo: cambia su radio · su papelera en Figuras recupera la esquina"
                 editing -> "Cursor: toca para seleccionar o quitar · arrastra para mover el grupo · Cotas y reglas permite editar o quitar medidas"
                 !editing && cad.rollbackId != null -> "Vista del pasado: ${cad.history.firstOrNull { it.id == cad.rollbackId }?.name.orEmpty()} · toca un nodo para ver el modelo en ese momento · Final restaura la pila completa"
                 selectedSketch != null -> "${selectedSketch.name} seleccionado · Editar boceto abre su geometría"
@@ -325,11 +323,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                     Row(Modifier.weight(1f).horizontalScroll(parameterScroll), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (cad.surface.mode != "PROFILE" || !editing) {
                             CadSurfaceControls(cad, unit, connected && !cad.sessionActive, vm)
-                        } else if (!cad.sessionActive) PillButton("Medir desde sólido", enabled = connected) { vm.cadSurfaceMode("EDGE") }
-                        if (editing && !cad.sessionActive && cad.surface.mode == "PROFILE") {
-                            Text("${cad.selection.size} seleccionados", color = Ink.Muted, fontSize = 11.sp)
-                            PillButton("Borrar selección", enabled = connected && cad.selection.any { it.id != "ORIGIN" }) { vm.delete() }
-                            PillButton("Redondear esquina", enabled = connected && (cad.selection.size == 2 || cad.selectedEntity?.type == "RECTANGLE")) { pendingDimension = "FILLET" }
                         }
                         if (capabilities.sketchEditing && ((editing && state.cadTool == null) || depthPreview)) {
                             SnapControl(listOf(SnapType.NONE, SnapType.INCREMENT), if (cad.increment) SnapType.INCREMENT else SnapType.NONE,
@@ -365,15 +358,21 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                                 val measure = selected.dimensions.firstOrNull { it.field == field }
                                 val degrees = field in listOf("start", "sweep")
                                 val bound = measure?.constraintIds?.isNotEmpty() == true
-                                CadDimension(label + if (measure != null) if (bound) " · cota" else " · sin cota" else "",
-                                    drafts[field] ?: selected.values[field] ?: 0.0, unit, selected.id + field,
-                                    degrees = degrees, step = if (degrees) 1.0 else cad.step, enabled = connected,
-                                    minimum = if (measure != null) .0000001 else -10000.0,
-                                    maximum = if (field == "sweep") 359.99 else 10000.0,
-                                    onDone = ::acceptValues) { drafts[field] = it?.takeIf { value -> field != "sweep" || kotlin.math.abs(value) in .01..359.99 } }
-                            }
-                            if (selected.isFillet) PillButton("Quitar redondeo", enabled = connected && drafts.isEmpty()) {
-                                command("cad.fillet.remove", "entity_id" to selected.id)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CadDimension(label + if (measure != null) if (bound) " · cota" else " · sin cota" else "",
+                                        drafts[field] ?: selected.values[field] ?: 0.0, unit, selected.id + field,
+                                        degrees = degrees, step = if (degrees) 1.0 else cad.step, enabled = connected,
+                                        minimum = if (measure != null) .0000001 else -10000.0,
+                                        maximum = if (field == "sweep") 359.99 else 10000.0,
+                                        onDone = ::acceptValues) { drafts[field] = it?.takeIf { value -> field != "sweep" || kotlin.math.abs(value) in .01..359.99 } }
+                                    if (measure != null) CadAction("FIX", (if (bound) "Quitar cota: " else "Fijar medida: ") + label,
+                                        selected = bound, enabled = connected && drafts.isEmpty()) {
+                                        if (bound) command("cad.constraint.delete", "constraint_id" to measure.constraintIds.first())
+                                        else command("cad.constraint.add", "type" to measure.constraintType,
+                                            "value" to ((selected.values[field] ?: 0.0) * measure.valueFactor),
+                                            "refs" to measure.refs.map { mapOf("id" to it.id, "part" to it.part) })
+                                    }
+                                }
                             }
                         }
                         if (!editing && !cad.sessionActive && "CUT" in capabilities.features) {
@@ -414,7 +413,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
         }
     }
     if (planesOpen) CadPlanesDialog(cad, unit, { planesOpen = false },
-        { name, values -> vm.cadCommand(name, values) }, { planesOpen = false; vm.cadSurfaceMode("FACE") })
+        { name, values -> vm.cadCommand(name, values) }, { planesOpen = false; vm.cadSurfaceMode("FACE") },
+        { planesOpen = false; vm.cadSurfaceMode("EDGE") })
 }
 
 /** Frequent sketch actions form their own group next to undo/redo. */
@@ -425,6 +425,7 @@ fun CadSelectionActions(state: AppUiState, vm: MainViewModel) {
     val entities = cad.activeSketch?.entities.orEmpty().filter { e -> cad.selection.any { it.id == e.id } }
     IconAction(AppIcons.cad("SELECT_ALL"), "Seleccionar todo", enabled = enabled && cad.activeSketch?.entities?.isNotEmpty() == true) { vm.selectAll() }
     IconAction(AppIcons.cad("DESELECT_ALL"), "Deseleccionar todo", enabled = enabled && cad.selection.isNotEmpty()) { vm.deselectAll() }
+    IconAction(AppIcons.cad("DELETE"), "Borrar selección", enabled = enabled && cad.selection.any { it.id != "ORIGIN" }) { vm.delete() }
     val construction = if (entities.isEmpty()) cad.construction else entities.all { it.construction }
     IconAction(AppIcons.cad("CONSTRUCTION"), if (entities.isEmpty()) "Dibujar construcción" else "Construcción de la selección",
         selected = construction, enabled = enabled) {
@@ -432,20 +433,6 @@ fun CadSelectionActions(state: AppUiState, vm: MainViewModel) {
     }
     IconAction(AppIcons.cad("WELD"), "Soldar extremos en el último punto seleccionado", enabled = enabled && cadWeldEnabled(cad)) {
         vm.cadCommand("cad.points.weld")
-    }
-    cad.selectedEntity?.dimensions?.forEach { measure ->
-        val selected = cad.selectedEntity!!
-        val bound = measure.constraintIds.isNotEmpty()
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconAction(AppIcons.cad("FIX"), (if (bound) "Quitar cota: " else "Fijar medida: ") + measure.label,
-                selected = bound, enabled = enabled && !state.cadMeasurementsPending) {
-                if (bound) vm.cadCommand("cad.constraint.delete", mapOf("constraint_id" to measure.constraintIds.first()))
-                else vm.cadCommand("cad.constraint.add", mapOf("type" to measure.constraintType,
-                    "value" to ((selected.values[measure.field] ?: 0.0) * measure.valueFactor),
-                    "refs" to measure.refs.map { mapOf("id" to it.id, "part" to it.part) }))
-            }
-            Text(measure.label, color = Ink.Faint, fontSize = 9.sp)
-        }
     }
 }
 
@@ -487,7 +474,8 @@ fun CadTopActions(state: AppUiState, vm: MainViewModel) {
         }
     }
     if (planesOpen) CadPlanesDialog(cad, state.blender.sceneScale.lengthUnit, { planesOpen = false },
-        { name, values -> vm.cadCommand(name, values) }, { planesOpen = false; vm.cadSurfaceMode("FACE") })
+        { name, values -> vm.cadCommand(name, values) }, { planesOpen = false; vm.cadSurfaceMode("FACE") },
+        { planesOpen = false; vm.cadSurfaceMode("EDGE") })
 }
 
 
@@ -629,7 +617,7 @@ private fun cadPartLabel(part: String) = when (part) {
 
 @Composable
 private fun CadPlanesDialog(cad: CadState, unit: LengthUnit, dismiss: () -> Unit,
-    command: (String, Map<String, Any?>) -> Unit, pickFace: () -> Unit) {
+    command: (String, Map<String, Any?>) -> Unit, pickFace: () -> Unit, pickReference: () -> Unit) {
     var base by remember { mutableStateOf("XY") }
     var source by remember { mutableStateOf<String?>(null) }
     var planeToEdit by remember { mutableStateOf<CadPlane?>(null) }
@@ -642,6 +630,12 @@ private fun CadPlanesDialog(cad: CadState, unit: LengthUnit, dismiss: () -> Unit
     val valid = position.all { it != null } && angles.all { it != null }
     AlertDialog(onDismissRequest = dismiss, title = { Text("Planos y bocetos") }, text = {
         Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (cad.activeSketchId != null) {
+                Text("Referencias para ${cad.activeSketch?.name.orEmpty()}")
+                PillButton("Medir desde sólido", onClick = pickReference)
+                Text("Mide caras o aristas de una pieza 3D y proyéctalas como referencias fijas en este boceto.", fontSize = 12.sp)
+                HorizontalDivider()
+            }
             Text("Nuevo boceto en un plano base")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("XY","XZ","YZ").forEach { p ->
                 PillButton(p) { command("cad.sketch.create", mapOf("plane" to p)); dismiss() }

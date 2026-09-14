@@ -52,8 +52,10 @@ longitudes o radios, distancia/longitud, radio, punto medio, simetría respecto 
 seleccionar desde la vista o el rail y usar como referencia fija.
 Al editar, **Boceto activo → Figuras** contiene solo las figuras de ese boceto.
 Sus filas seleccionan figuras completas y ofrecen papelera;
-**Cotas y reglas** es una pestaña separada. La bandeja añade **Seleccionar todo**,
-**Deseleccionar todo** y **Borrar selección**. El origen queda fuera de Seleccionar
+**Cotas y reglas** es una pestaña separada. **Seleccionar todo**, **Deseleccionar
+todo** y **Borrar selección** están junto a Deshacer/Rehacer; el borrado permanece en las acciones del
+croquis y sus papeleras. Redondear se activa desde su rail. Estas acciones no se
+duplican en la bandeja de propiedades. El origen queda fuera de Seleccionar
 todo y no se borra. Borrar una arista de rectángulo conserva sus otros lados como
 líneas; borrar una esquina retira los dos lados incidentes. Un extremo de línea/
 arco o el centro/radio de un círculo pertenece a la figura: borrarlo retira esa
@@ -80,8 +82,9 @@ Cancelar restaura el arco; las restricciones siguen mandando. Los redondeos cons
 sus tangencias y no ofrecen ese tirador.
 
 Junto a **Deshacer/Rehacer** hay un grupo con **Seleccionar todo**, **Deseleccionar
-todo**, **Construcción**, **Soldar puntos** y los candados de **Fijar medida/Quitar
-cota** de la figura seleccionada. Los candados se deshabilitan mientras haya medidas
+todo**, **Borrar selección**, **Construcción** y **Soldar puntos**. Cada candado de **Fijar medida/Quitar
+cota** está junto a su campo (Ancho, Alto, Lado, Radio o Longitud) en la bandeja
+inferior de la figura seleccionada. Los candados se deshabilitan mientras haya medidas
 en borrador. Construcción afecta a la selección, o al dibujo siguiente si no hay
 figuras seleccionadas.
 
@@ -124,8 +127,8 @@ procede del tamaño real del dibujo, no del paso de la herramienta. Dos puntos
 siguen permitiendo una distancia independiente cuando representan otra medida.
 
 En **Figuras**, un arco de redondeo aparece como **Redondeo**. Selecciónalo para
-editar su Radio; no se ofrecen ángulos que contradigan sus tangencias. **Quitar
-redondeo** —o su papelera— restituye la esquina y conserva el perfil y las
+editar su Radio; no se ofrecen ángulos que contradigan sus tangencias. Su papelera
+(**Quitar redondeo**) restituye la esquina y conserva el perfil y las
 extrusiones que lo utilizan. Los lados recortados muestran **Lado completo**:
 la longitud y sus igualdades se miden hasta las esquinas virtuales. Así, variar
 el radio no obliga a cambiar la cota de un cuadrado para compensar el recorte.
@@ -148,8 +151,9 @@ y orienta la vista al plano. Una cara superior CAD sigue a su operación soporte
 una cara arbitraria conserva el marco capturado. Si el sólido cambia antes de
 confirmar, la selección se invalida y hay que volver a elegirla.
 
-Durante un boceto, **Medir desde sólido** permite elegir las referencias 3D sin
-mover su geometría. **Proyectar referencia fija** las copia como construcción fija
+Durante un boceto, **Planos y bocetos → Medir desde sólido** permite elegir las
+referencias 3D sin mover su geometría. No aparece permanentemente en la bandeja de
+propiedades. **Proyectar referencia fija** las copia como construcción fija
 en el plano del boceto; vuelve al cursor y usa esos puntos/aristas para acotar.
 La referencia no entra en la extrusión ni cambia las piezas originales. Es una
 copia fija, no un enlace topológico dinámico a cualquier arista del sólido.

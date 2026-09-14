@@ -491,9 +491,11 @@ no quedan archivos o referencias temporales.
   el sondeo de BEGIN/última preview sin raycast nuevo. Un toque no modifica geometría
   ni crea undo; cancelar/dos dedos restaura también la selección anterior.
 - Dibujos abre siempre el árbol de bocetos/figuras, separado de la pestaña de
-  restricciones contextuales. Seleccionar todo/Deseleccionar todo, Construcción,
-  Soldar puntos y los candados de medida viven junto a Deshacer/Rehacer; Borrar
-  selección permanece en la bandeja. Borrar un lado de rectángulo conserva los demás como líneas;
+  restricciones contextuales. Seleccionar todo/Deseleccionar todo, Borrar selección, Construcción y
+  Soldar puntos viven junto a Deshacer/Rehacer. Cada candado de medida está junto a
+  su campo en la bandeja inferior. Redondear permanece en el rail del croquis y borrar
+  en sus acciones/papeleras, sin duplicados en la bandeja de propiedades.
+  Borrar un lado de rectángulo conserva los demás como líneas;
   una esquina retira sus dos lados. Un extremo/centro de otra primitiva elimina
   esa primitiva, nunca guarda una figura incompleta. El origen no se borra y romper
   un perfil usado se rechaza sin eliminar operaciones ni cambiar el documento.
@@ -538,6 +540,8 @@ no quedan archivos o referencias temporales.
 - En un boceto, Proyectar referencia fija copia los contornos seleccionados a
   construcción en su plano, con FIX y un undo. Permite acotar desde esos elementos;
   es una copia fija, no promete asociación topológica con cualquier cara/arista.
+  Medir desde sólido se abre desde Planos y bocetos durante la edición; no ocupa
+  permanentemente la bandeja de cotas del croquis.
 - Finalizar boceto restaura una vista 3D orbital, con encuadre del resultado, sin
   escribir `rv3d`. Extruir/Vaciar muestran su preview en 3D. Un perfil nuevo queda
   seleccionado al finalizar para poder extruir/vaciar sin volver a buscarlo.

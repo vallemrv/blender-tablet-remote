@@ -352,7 +352,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         cancelCadStroke()
         client.cadCommand(name, payload)
     }
-    fun cadMeasurementsPending(value: Boolean) { local.update { it.copy(cadMeasurementsPending = value) } }
     fun cadTool(type: String?) {
         cancelCadStroke()
         if (client.state.value.cad.surface.mode != "PROFILE") client.cadCommand("cad.surface.mode", mapOf("mode" to "PROFILE"))
