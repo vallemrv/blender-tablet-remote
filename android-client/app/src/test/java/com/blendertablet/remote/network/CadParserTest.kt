@@ -5,6 +5,19 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadParserTest {
+    @Test fun wholeSketchSelectionKeepsItsScopeWithoutSelectingAnIndividualFigure() {
+        val cad = CadParser.state(JSONObject("""{"version":1,"workspace":true,
+            "selection":{"kind":"SKETCH","id":"s"},
+            "document":{"sketches":[{"id":"s","name":"Placa","entities":[],
+                "profiles":[{"id":"profile_rect","entity_id":"rect","label":"Rectángulo"},
+                            {"id":"profile_hole","entity_id":"hole","label":"Círculo"}]}]}}
+        """))
+        assertEquals("SKETCH", cad.selectionKind)
+        assertEquals("s", cad.selectedSketch?.id)
+        assertEquals("s", cad.selectionSketch?.id)
+        assertNull(cad.selectedEntity)
+        assertEquals("s", cad.copy(selectionId = null, selectionKind = null).selectionSketch?.id)
+    }
     @Test fun circleRadiusAndArcAngleHandleKeepTheirSemanticRoles() {
         val cad = CadParser.state(JSONObject("""{
             "version":1,"workspace":true,"active_sketch_id":"s",

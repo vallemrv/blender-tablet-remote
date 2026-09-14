@@ -1426,7 +1426,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.sketch.create` | `{plane:"XY",offset?,body_id?}` o `{support_id}`, `{plane_id}`, `{reference_sketch_id}` | Crea y activa boceto; reutiliza planos sin duplicar geometría |
 | `cad.sketch.activate` | `{sketch_id}` | Edita sketch existente, encuadra su plano |
 | `cad.sketch.finish` | `{}` | Sale del dibujo conservando perfiles seleccionables |
-| `cad.select` | `{kind:"ENTITY\|PROFILE\|FEATURE",id,part?,additive?}` o `{u,v,additive?}` | Selección de puntos/aristas o perfiles; aditiva alterna pertenencia |
+| `cad.select` | `{kind:"ENTITY\\|PROFILE\\|SKETCH\\|FEATURE",id,part?,additive?}` o `{u,v,additive?}` | Geometría de boceto, perfil individual, croquis completo o feature; aditiva alterna pertenencia |
 | `cad.entity.begin` | `{type:"LINE\|RECTANGLE\|SQUARE\|CIRCLE\|ARC\|POLYGON",u,v}` | Inicia dibujo reversible |
 | `cad.entity.update` | `{u,v}` | Actualiza extremo desde baseline |
 | `cad.polygon.begin` | `{u,v}` | Inicia o continúa la cadena de un polígono irregular; el primer vértice admite snap de extremos |
@@ -1435,7 +1435,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.polygon.close` | `{}` | Cierra la cadena con el segmento final y confirma; con menos de tres vértices responde error y conserva la sesión |
 | `cad.entity.set` | `{entity_id,values:{width?,height?,diameter?,radius?,start?,sweep?,length?,x?,y?,x2?,y2?}}` | Edita dimensiones y reconstruye dependientes |
 | `cad.entity.delete` | `{entity_id}` o `{}` | Borra una figura completa o la selección de puntos/aristas/figuras en un undo; protege perfiles usados |
-| `cad.extrude.begin` | `{profile_id,depth,operation:"EXTRUDE\|CUT",target_id?}` | Preview aditiva o sustractiva; CUT exige destino |
+| `cad.extrude.begin` | `{profile_id?,sketch_id?,depth,operation:"EXTRUDE\\|CUT",target_id?}` | Un perfil o el croquis completo; contornos exteriores como volumen e interiores como huecos. CUT exige destino |
 | `cad.extrude.update` | `{depth}` o `{gesture,baseline_depth}` | Cota exacta o delta vertical desde inicio del gesto, positivo hacia arriba |
 | `cad.session.confirm` | `{}` | Confirma candidato estable, un undo |
 | `cad.session.cancel` | `{}` | Restaura documento y geometría originales |
@@ -1447,7 +1447,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.drag.update` | `{u,v}` | Reconstruye y resuelve restricciones desde baseline |
 | `cad.drag.end` | `{}` | Sin UPDATE alterna el elemento sondeado en BEGIN; con arrastre confirma el último candidato. Nunca vuelve a sondear |
 | `cad.points.weld` | `{}` | Une los puntos seleccionados mediante coincidencias persistentes; conserva el último punto (el origen manda si está incluido), resuelve restricciones y crea un único undo |
-| `cad.select_all` | `{action:"SELECT\|DESELECT"}` | Selecciona todas las figuras del boceto (también construcción, nunca origen) o limpia la selección, sin undo |
+| `cad.select_all` | `{action:"SELECT\\|DESELECT",sketch_id?}` | En boceto selecciona figuras (también construcción, nunca origen). En 3D selecciona el croquis indicado como SKETCH. DESELECT limpia; sin undo |
 | `cad.constraint.add` | `{type,value?,refs?}` | Restringe selección o referencias explícitas del boceto activo; una cota equivalente se actualiza conservando ID |
 | `cad.constraint.set` | `{constraint_id,value,sketch_id?}` | Cambia la cota canónica y resuelve dependientes; Radio de redondeo ajusta su contacto |
 | `cad.constraint.delete` | `{constraint_id,sketch_id?}` | Elimina una restricción del sketch activo |

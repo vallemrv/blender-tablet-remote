@@ -793,14 +793,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Acciones contextuales de selección (Edit y Object). */
     fun selectAll() {
         if (client.state.value.cad.workspace) {
-            if (client.state.value.cad.activeSketchId != null) {
-                cadTool(null); cadCommand("cad.select_all", mapOf("action" to "SELECT"))
-            }
+            val sketch = client.state.value.cad.selectionSketch ?: return
+            cadTool(null); cadCommand("cad.select_all", mapOf("action" to "SELECT", "sketch_id" to sketch.id))
         } else client.selectAll(true)
     }
     fun deselectAll() {
         if (client.state.value.cad.workspace) {
-            if (client.state.value.cad.activeSketchId != null) cadCommand("cad.select_all", mapOf("action" to "DESELECT"))
+            cadCommand("cad.select_all", mapOf("action" to "DESELECT"))
         } else client.selectAll(false)
     }
     fun invertSelection() = client.invertSelection()

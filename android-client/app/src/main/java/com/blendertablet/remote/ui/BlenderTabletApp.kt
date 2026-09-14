@@ -81,6 +81,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -241,12 +243,18 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     // toque. Mientras exista, el teclado de vistas se eleva para no solaparse.
     val materialActive = state.blender.material.active
     val sculptActive = state.blender.mode == BlenderMode.SCULPT
+    var cadTrayHeightPx by remember { mutableStateOf(0) }
+    var cadFooterHeightPx by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
+    val cadTrayHeight = with(density) { cadTrayHeightPx.toDp() }
+    val cadFooterHeight = with(density) { cadFooterHeightPx.toDp() }
+    val cadFooterVisible = state.blender.cad.activeSketchId == null
     val trayPresent = materialActive || sculptActive || state.blender.cad.workspace || bottomTrayVisible(
         session.active, toolSession.active, state.activeTool, state.loopCutAwaitingTap,
         toolSessionArmed = toolSession.armed,
     )
     val trayInset by animateDpAsState(
-        targetValue = if (materialActive) 104.dp else if (sculptActive) 132.dp else if (state.blender.cad.workspace) 132.dp else if (trayPresent) Metrics.TrayInset else 0.dp,
+        targetValue = if (materialActive) 104.dp else if (sculptActive) 132.dp else if (trayPresent) Metrics.TrayInset else 0.dp,
         animationSpec = tween(160),
         label = "tray-inset",
     )
@@ -520,7 +528,9 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 )
 
                 }
-                if (state.blender.cad.workspace) CadWorkspace(state, vm)
+                if (state.blender.cad.workspace) CadWorkspace(state, vm,
+                    stackBottom = cadTrayHeight + if (cadFooterVisible) cadFooterHeight + Metrics.EdgeMargin * 2 else Metrics.EdgeMargin,
+                    onTrayHeight = { cadTrayHeightPx = it })
                 if (sculptActive) SculptWorkspace(state, vm)
                 if (materialActive) MaterialWorkspace(state, vm)
                 if (referencesOpen) ReferencePanel(Modifier.align(Alignment.TopCenter).padding(top = 76.dp),
@@ -547,7 +557,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(Metrics.EdgeMargin)
-                        .padding(bottom = trayInset),
+                        .padding(bottom = if (state.blender.cad.workspace) cadTrayHeight else trayInset)
+                        .onSizeChanged { if (state.blender.cad.workspace) cadFooterHeightPx = it.height },
                 )
 
                 if (state.debugVisible) {

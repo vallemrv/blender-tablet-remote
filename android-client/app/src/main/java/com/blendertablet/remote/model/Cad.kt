@@ -69,10 +69,14 @@ data class CadState(
     /** Resolve the source document sketch, including profiles made from several entities. */
     val selectedSketch get() = sketches.firstOrNull { sketch ->
         when (selectionKind) {
+            "SKETCH" -> sketch.id == selectionId
             "PROFILE" -> sketch.profiles.any { it.id == selectionId }
             "ENTITY" -> sketch.entities.any { it.id == selectionId }
             "FEATURE" -> sketch.id == selectedFeature?.sketchId
             else -> false
         }
+    }
+    val selectionSketch get() = activeSketch ?: selectedSketch ?: sketches.singleOrNull {
+        (activeBodyId == null || it.bodyId == activeBodyId) && it.profiles.isNotEmpty()
     }
 }

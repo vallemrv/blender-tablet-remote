@@ -96,8 +96,11 @@ La pila aprovecha la altura entre el selector de modos y la bandeja, a la izquie
 del rail de restricciones para dejarlo accesible. **Figuras/Restricciones** permanecen
 visibles sobre la lista. En Restricciones puedes editar cotas y borrar cualquier regla;
 **Solo selección** permite alternar el filtro cuando hay elementos seleccionados.
-El icono de **Croquis** del rail de planos abre el mismo panel para escoger una cara
-o crear un plano desplazado/inclinado.
+El icono **Crear croquis en la cara seleccionada** del rail usa directamente la
+cara resaltada y se habilita cuando esa cara permite crear un boceto. Los planos
+desplazados/inclinados siguen en **Planos y bocetos**.
+El botón de vistas/atajos queda justo encima de la bandeja. La pila reserva su
+altura real, también al desplegar el teclado, para que no se tapen.
 
 Paso y dimensiones usan los campos compactos y botones −/+ de las otras bandejas.
 Mantener un botón inicia la repetición a los 400 ms y acelera de 180 a 80 ms entre
@@ -137,15 +140,21 @@ alterar el documento. Estas transacciones conservan un único undo.
 
 ## Elegir caras, medir y usar referencias
 
-En 3D, **Caras**, **Aristas** y **Puntos** permiten seleccionar directamente el
-sólido. La primera referencia se resalta en azul y la segunda en naranja dentro
+En 3D, **Puntos**, **Aristas** y **Caras** son iconos junto al selector CAD/Object,
+como en Edit, y permiten seleccionar directamente el sólido. **Cursor**, en el
+rail, vuelve a seleccionar perfiles o geometría del boceto. La primera referencia
+se resalta en azul y la segunda en naranja dentro
 del vídeo. Tocar una seleccionada la retira; **Limpiar** deja la vista sin
 referencias. Las caras coplanares forman una sola selección, sin confundir su
 cuadrícula interna con aristas reales. Se muestran longitud, área/perímetro y,
 con dos elementos compatibles, distancia o ángulo. Las caras paralelas muestran
 separación entre planos; una arista/punto y una cara, distancia al plano.
 
-Para dibujar en una cara: **Caras → tocar la cara resaltada → Boceto en cara**.
+Estos selectores se ocultan al editar el croquis: su cursor ya selecciona puntos
+y aristas directamente. Solo reaparecen si abres **Medir desde sólido** para
+elegir referencias 3D explícitamente.
+
+Para dibujar en una cara: **Caras → tocar la cara → icono Crear croquis en la cara seleccionada**, en el rail.
 El botón usa exactamente la selección visible, crea plano+boceto en un solo undo
 y orienta la vista al plano. Una cara superior CAD sigue a su operación soporte;
 una cara arbitraria conserva el marco capturado. Si el sólido cambia antes de
@@ -164,7 +173,10 @@ copia fija, no un enlace topológico dinámico a cualquier arista del sólido.
 vista era frontal, se ofrece una vista oblicua. Un dedo orbita en 3D; durante una
 preview de profundidad, el manejador de órbita y dos dedos permiten navegar.
 El botón **Vista 3D** vuelve a encuadrar. Nada de esto modifica la cámara del PC.
-Un perfil nuevo queda seleccionado al finalizar para iniciar Extruir o Vaciar.
+Un croquis nuevo con varios perfiles queda seleccionado completo al finalizar;
+si solo tiene uno, se selecciona ese perfil. **Seleccionar todo/Deseleccionar todo**
+permanecen junto a Deshacer/Rehacer: en edición actúan sobre las figuras; en 3D,
+sobre el croquis elegido. La pila ofrece **Croquis completo** además de cada perfil.
 
 Mientras editas, el panel muestra únicamente el boceto activo: **Figuras** y
 **Cotas y reglas**. Al salir, muestra el **Último paso** del cuerpo; **Ver historial**
@@ -179,7 +191,12 @@ Referencia de organización: [lista de operaciones plegable de Onshape](https://
 
 1. Crear un boceto XY/XZ/YZ y dibujar un perfil cerrado. También se reconocen
    cadenas cerradas no ramificadas de líneas y arcos unidos en sus extremos.
-2. Finalizar el boceto, seleccionar el perfil y pulsar **Extruir** en el rail.
+2. Finalizar el boceto y pulsar **Extruir**. **Croquis completo** extruye todos sus
+   contornos exteriores y conserva los interiores como huecos: un rectángulo con
+   cuatro círculos produce una placa con cuatro taladros. Varios contornos exteriores
+   separados forman una sola operación con la misma profundidad. También puedes
+   elegir un perfil individual en la pila. Las líneas abiertas deben cerrarse o
+   marcarse como construcción; no se extruyen silenciosamente como si fueran sólidos.
 3. Deslizar arriba/abajo para cambiar profundidad: cada 4 % de altura recorre un
    paso. Con Incremento avanza en saltos; sin snap conserva las fracciones.
    La bandeja permite editar el paso, la profundidad exacta y los botones −/+.

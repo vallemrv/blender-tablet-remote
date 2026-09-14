@@ -99,6 +99,20 @@ class BlenderNativeKernel(CadKernel):
         return cut_mesh(base, cutter)
 
     def extrude(self, sketch, source, depth):
+        if source['type'] == 'SKETCH':
+            profiles = closed_entities(sketch)
+            outlines = [(item, outline(item)) for item in profiles]
+            roots = [item for item, ring in outlines if not any(
+                other['id'] != item['id'] and contains(other_ring, ring[0]) for other, other_ring in outlines)]
+            if not roots:
+                raise CommandError('El croquis no contiene regiones exteriores válidas', code='cad_profile_invalid')
+            vertices, faces = [], []
+            for item in roots:
+                region_vertices, region_faces = self.extrude(sketch, item, depth)
+                offset = len(vertices)
+                vertices.extend(region_vertices)
+                faces.extend(tuple(i + offset for i in face) for face in region_faces)
+            return vertices, faces
         rings = region(sketch, source)
         if len(rings)==1:
             ring=rings[0]; n=len(ring)

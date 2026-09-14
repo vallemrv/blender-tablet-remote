@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.blendertablet.remote.MainViewModel
 import com.blendertablet.remote.model.AppUiState
 import com.blendertablet.remote.model.BlenderMode
+import com.blendertablet.remote.model.ConnectionStatus
 import com.blendertablet.remote.model.SelectionMode
 import com.blendertablet.remote.model.SelectionOp
 import com.blendertablet.remote.model.Shading
@@ -91,16 +92,11 @@ fun TopToolbar(
                     if (blender.cad.workspace) CadTopActions(state, vm)
                     IconAction(Icons.AutoMirrored.Filled.Undo, "Deshacer") { vm.undo() }
                     IconAction(Icons.AutoMirrored.Filled.Redo, "Rehacer") { vm.redo() }
+                    if (blender.cad.workspace) CadSelectionActions(state, vm)
                     if (!blender.cad.workspace && blender.mode != BlenderMode.SCULPT && !blender.material.active && blender.features.repeatLast) {
                         PillButton("⇧R") { vm.repeatLast() }
                     }
                 }
-            }
-        }
-
-        if (chromeVisible && blender.cad.workspace && blender.cad.activeSketchId != null) FloatingPanel {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                CadSelectionActions(state, vm)
             }
         }
 
@@ -121,6 +117,16 @@ fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier
     val editable = blender.activeObject != null
     val inEdit = !blender.cad.workspace && blender.mode == BlenderMode.EDIT
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (blender.cad.workspace && (blender.cad.activeSketchId == null || blender.cad.surface.mode != "PROFILE")) FloatingPanel {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                listOf("VERTEX" to "Puntos", "EDGE" to "Aristas", "FACE" to "Caras").forEach { (mode, label) ->
+                    IconAction(AppIcons.cad(mode), label,
+                        selected = blender.cad.surface.mode == mode,
+                        enabled = state.connection == ConnectionStatus.CONNECTED && !blender.cad.sessionActive,
+                    ) { vm.cadSurfaceMode(mode) }
+                }
+            }
+        }
         if (inEdit) {
             FloatingPanel {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {

@@ -138,7 +138,7 @@ def sketch_finish(payload):
     sketch=next((s for s in doc['sketches'] if s['id']==active),None)
     profiles=model.profiles(sketch) if sketch else []
     if profiles and not any(f['sketch_id']==active for f in doc['features']):
-        runtime.selection=dict(kind='PROFILE',id=profiles[-1]['id'])
+        runtime.selection=(dict(kind='SKETCH',id=active) if len(profiles)>1 else dict(kind='PROFILE',id=profiles[0]['id']))
     elif features:
         runtime.selection=dict(kind='FEATURE',id=features[-1]['id']); _activate_feature(doc,features[-1]['id'])
     else: runtime.selection=None
@@ -419,7 +419,8 @@ def entity_delete(payload):
 def extrude_begin(payload):
     depth = model.number(payload.get('depth',.02),positive=True)
     doc = runtime.doc()
-    sketch,e = model.profile(doc,payload.get('profile_id'))
+    profile_id = 'profile_' + str(payload['sketch_id']) if payload.get('sketch_id') else payload.get('profile_id')
+    sketch,e = model.profile(doc,profile_id)
     _require_reachable(doc,sketch['id'])
     operation=str(payload.get('operation','EXTRUDE')).upper()
     if operation not in ('EXTRUDE','CUT'): raise BadPayload('Operación CAD no compatible')
@@ -620,8 +621,16 @@ def select_all(payload):
         runtime.require(payload); runtime.cancel()
     action=payload.get('action','SELECT')
     if action not in ('SELECT','DESELECT'): raise BadPayload('action: SELECT o DESELECT')
-    sketch=model.find(runtime.doc(),'sketches',runtime.active_sketch_id)
-    _set_selection([dict(kind='ENTITY',id=e['id'],part='BODY') for e in sketch['entities']] if action=='SELECT' else [])
+    doc = runtime.doc()
+    if action == 'DESELECT':
+        _set_selection([])
+    else:
+        sketch=model.find(doc,'sketches',runtime.active_sketch_id or payload.get('sketch_id'))
+        if runtime.active_sketch_id:
+            _set_selection([dict(kind='ENTITY',id=e['id'],part='BODY') for e in sketch['entities']])
+        else:
+            _require_reachable(doc, sketch['id'])
+            _set_selection([dict(kind='SKETCH',id=sketch['id'])])
     return runtime.status()
 
 
@@ -638,6 +647,11 @@ def select(payload):
         elif kind=='ENTITY':
             sketch,e=model.entity(doc,identifier)
             if sketch['id']!=runtime.active_sketch_id: raise BadPayload('Abre el boceto antes de seleccionar sus entidades')
+        elif kind=='SKETCH':
+            sketch=model.find(doc,'sketches',identifier)
+            _require_reachable(doc,sketch['id'])
+            if runtime.active_sketch_id: raise BadPayload('Finaliza el boceto antes de seleccionar el croquis completo para extruir')
+            runtime.active_body_id=sketch.get('body_id')
         elif kind=='PROFILE':
             sketch,_=model.profile(doc,identifier)
             _require_reachable(doc,sketch['id'])

@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Grain
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.CropFree
+import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Deselect
@@ -50,6 +51,7 @@ import androidx.compose.material.icons.filled.RoundedCorner
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Rowing
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.ScatterPlot
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Timeline
@@ -157,6 +159,7 @@ object AppIcons {
         "EXTRUDE" to "M3,11 L12,15 L21,11 L12,7 Z M3,11 L3,19 L12,23 L21,19 L21,11 M12,15 L12,23 M12,11 L12,1 M8,5 L12,1 L16,5",
         "CUT" to "M3,9 L3,20 L21,20 L21,9 M3,9 L8,9 L8,16 L16,16 L16,9 L21,9 M12,2 L12,12 M9,9 L12,12 L15,9",
         "SKETCH" to "M3,5 L14,5 M3,5 L3,21 L19,21 L19,12 M8,16 L9,12 L19,2 L22,5 L12,15 Z",
+        "SKETCH_FACE" to "M2,10 L11,5 L21,10 L12,16 Z M2,10 L2,18 L12,23 L21,18 L21,10 M12,16 L12,23 M10,12 L11,8 L18,1 L21,4 L14,11 Z",
         "POLYGON" to "M3,17 L8,4 L15,7 L21,12 L13,20 Z M8,4 L8.7,6 M15,7 L14,9 M20,12 L18,13.5",
         "PLANE_XY" to "M2,17 L9,8 L22,8 L15,17 Z M7,13 L17,13 M9,4 L9,7",
         "PLANE_XZ" to "M3,20 L3,5 L20,5 L20,20 Z M3,20 L9,14 M9,14 L17,14 M9,14 L9,8",
@@ -173,6 +176,9 @@ object AppIcons {
         }
     }
     fun cad(intent: String): ImageVector = when (intent) {
+        "VERTEX" -> Icons.Default.ScatterPlot
+        "EDGE" -> Icons.Default.LinearScale
+        "FACE" -> Icons.Default.CropSquare
         "SELECT_ALL" -> Icons.Default.SelectAll
         "DESELECT_ALL" -> Icons.Default.Deselect
         "FINISH" -> Icons.Default.Check

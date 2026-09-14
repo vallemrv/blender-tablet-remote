@@ -21,6 +21,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -30,14 +32,13 @@ import java.util.Locale
 
 /** Sketch geometry and constraints own their rails; all input still uses InputSurface. */
 @Composable
-fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
+fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp, onTrayHeight: (Int) -> Unit) {
     val cad = state.blender.cad
     val capabilities = state.blender.features.cad
     val connected = state.connection == ConnectionStatus.CONNECTED
     var stackOpen by rememberSaveable { mutableStateOf(true) }
     var constraintsVisible by rememberSaveable { mutableStateOf(false) }
     var constraintsSelectionOnly by rememberSaveable { mutableStateOf(true) }
-    var planesOpen by rememberSaveable { mutableStateOf(false) }
     val historyScroll = rememberScrollState()
     var unit by remember(state.blender.sceneScale.lengthUnit) { mutableStateOf(state.blender.sceneScale.lengthUnit) }
     var pendingDimension by remember(cad.activeSketchId, cad.selection) { mutableStateOf<String?>(null) }
@@ -75,7 +76,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
     }
     fun beginFeature(operation: String) {
         vm.cadTool(null)
-        command("cad.extrude.begin", "profile_id" to cad.selectionId, "depth" to cad.step * 10,
+        command("cad.extrude.begin", "profile_id" to cad.selectionId.takeIf { cad.selectionKind == "PROFILE" },
+            "sketch_id" to cad.selectionId.takeIf { cad.selectionKind == "SKETCH" }, "depth" to cad.step * 10,
             "operation" to operation, "target_id" to target?.id)
     }
     ToolRail(Modifier.align(Alignment.CenterStart).padding(start = Metrics.EdgeMargin, top = 120.dp, bottom = 160.dp).heightIn(max = availableHeight)) {
@@ -97,12 +99,12 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
             capabilities.planes.forEach { plane ->
                 CadAction("PLANE_$plane", "Nuevo boceto $plane", enabled = connected && !cad.sessionActive) { command("cad.sketch.create", "plane" to plane) }
             }
-            if (capabilities.sketchEditing) CadAction("SKETCH", "Croquis en cara o nuevo plano",
-                selected = planesOpen, enabled = connected && !cad.sessionActive) { planesOpen = true }
+            if (capabilities.sketchEditing) CadAction("SKETCH_FACE", "Crear croquis en la cara seleccionada",
+                enabled = connected && !cad.sessionActive && cad.surface.canSketch) { command("cad.sketch.on_face") }
             RailDivider()
             capabilities.features.forEach { operation ->
                 CadAction(operation, cadLabel(operation), selected = depthPreview && cad.operation == operation,
-                    enabled = connected && !cad.sessionActive && cad.selectionKind == "PROFILE" && (operation != "CUT" || target != null)) { beginFeature(operation) }
+                    enabled = connected && !cad.sessionActive && cad.selectionKind in listOf("PROFILE", "SKETCH") && (operation != "CUT" || target != null)) { beginFeature(operation) }
             }
         }
     }
@@ -139,7 +141,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
         IconAction(Icons.Default.AccountTree, "Abrir pila de operaciones") { stackOpen = true }
     }
     if (stackOpen) FloatingPanel(
-        Modifier.align(Alignment.TopEnd).fillMaxHeight().padding(top = 142.dp, end = stackEnd, bottom = 156.dp)
+        Modifier.align(Alignment.TopEnd).fillMaxHeight().padding(top = 142.dp, end = stackEnd, bottom = stackBottom)
     ) {
         Column(Modifier.width(300.dp).fillMaxHeight()) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -203,6 +205,10 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                                             command("cad.sketch.delete", "sketch_id" to sketch.id)
                                         },
                                     ))
+                                if (!dimmed && sketch.profiles.isNotEmpty()) PillButton("Croquis completo",
+                                    selected = cad.selectionKind == "SKETCH" && cad.selectionId == sketch.id, enabled = nodeEnabled) {
+                                    vm.cadTool(null); command("cad.select", "kind" to "SKETCH", "id" to sketch.id)
+                                }
                                 if (!dimmed) sketch.profiles.forEach { profile ->
                                     PillButton(profile.label, selected = cad.selectionId == profile.id, enabled = !cad.sessionActive) {
                                         vm.cadTool(null); command("cad.select", "kind" to "PROFILE", "id" to profile.id)
@@ -297,7 +303,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
     }
     val parameterScroll = rememberScrollState()
     val hasValues = depthPreview || pendingDimension != null || editingConstraint != null || entity != null || feature != null
-    FloatingPanel(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(Metrics.EdgeMargin)) {
+    FloatingPanel(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { onTrayHeight(it.height) }.padding(Metrics.EdgeMargin)) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(cad.error ?: when {
                 !connected -> "Reconectando · recuperando el documento de Blender"
@@ -315,7 +321,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
                 entity?.isFillet == true -> "Redondeo: cambia su radio · su papelera en Figuras recupera la esquina"
                 editing -> "Cursor: toca para seleccionar o quitar · arrastra para mover el grupo · Cotas y reglas permite editar o quitar medidas"
                 !editing && cad.rollbackId != null -> "Vista del pasado: ${cad.history.firstOrNull { it.id == cad.rollbackId }?.name.orEmpty()} · toca un nodo para ver el modelo en ese momento · Final restaura la pila completa"
-                selectedSketch != null -> "${selectedSketch.name} seleccionado · Editar boceto abre su geometría"
+                cad.selectionKind == "SKETCH" -> "${selectedSketch?.name.orEmpty()} completo · Extruir crea volumen y conserva los contornos interiores como huecos"
+                selectedSketch != null -> "${selectedSketch.name} · perfil seleccionado · Seleccionar todo elige el croquis completo para extruir"
                 else -> "Abre la pila (derecha) para editar un boceto · o crea uno en Planos, arriba, y selecciona un perfil para extruir"
             }, color = Ink.Muted, fontSize = 12.sp)
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -412,9 +419,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel) {
             }
         }
     }
-    if (planesOpen) CadPlanesDialog(cad, unit, { planesOpen = false },
-        { name, values -> vm.cadCommand(name, values) }, { planesOpen = false; vm.cadSurfaceMode("FACE") },
-        { planesOpen = false; vm.cadSurfaceMode("EDGE") })
 }
 
 /** Frequent sketch actions form their own group next to undo/redo. */
@@ -423,8 +427,9 @@ fun CadSelectionActions(state: AppUiState, vm: MainViewModel) {
     val cad = state.blender.cad
     val enabled = state.connection == ConnectionStatus.CONNECTED && !cad.sessionActive && cad.surface.mode == "PROFILE"
     val entities = cad.activeSketch?.entities.orEmpty().filter { e -> cad.selection.any { it.id == e.id } }
-    IconAction(AppIcons.cad("SELECT_ALL"), "Seleccionar todo", enabled = enabled && cad.activeSketch?.entities?.isNotEmpty() == true) { vm.selectAll() }
-    IconAction(AppIcons.cad("DESELECT_ALL"), "Deseleccionar todo", enabled = enabled && cad.selection.isNotEmpty()) { vm.deselectAll() }
+    IconAction(AppIcons.cad("SELECT_ALL"), "Seleccionar todo el croquis", enabled = enabled && cad.selectionSketch?.entities?.isNotEmpty() == true) { vm.selectAll() }
+    IconAction(AppIcons.cad("DESELECT_ALL"), "Deseleccionar todo", enabled = enabled && cad.selectionId != null) { vm.deselectAll() }
+    if (cad.activeSketchId == null) return
     IconAction(AppIcons.cad("DELETE"), "Borrar selección", enabled = enabled && cad.selection.any { it.id != "ORIGIN" }) { vm.delete() }
     val construction = if (entities.isEmpty()) cad.construction else entities.all { it.construction }
     IconAction(AppIcons.cad("CONSTRUCTION"), if (entities.isEmpty()) "Dibujar construcción" else "Construcción de la selección",
@@ -686,9 +691,6 @@ private fun CadVectorFields(label: String, values: List<String>, unit: String, c
 
 @Composable
 private fun CadSurfaceControls(cad: CadState, unit: LengthUnit, enabled: Boolean, vm: MainViewModel) {
-    listOf("PROFILE" to if (cad.activeSketchId != null) "Boceto" else "Perfiles", "FACE" to "Caras", "EDGE" to "Aristas", "VERTEX" to "Puntos").forEach { (mode,label) ->
-        PillButton(label, selected = cad.surface.mode == mode, enabled = enabled) { vm.cadSurfaceMode(mode) }
-    }
     if (cad.surface.mode != "PROFILE") PillButton("Ver escena", selected = cad.showScene, enabled = enabled) { vm.cadCommand("cad.settings", mapOf("show_scene" to !cad.showScene)) }
     if (cad.surface.selection.isNotEmpty()) {
         cad.surface.selection.forEachIndexed { index,item ->
@@ -696,7 +698,6 @@ private fun CadSurfaceControls(cad: CadState, unit: LengthUnit, enabled: Boolean
         }
         PillButton("Limpiar", enabled = enabled) { vm.cadCommand("cad.surface.clear") }
     }
-    if ((cad.surface.mode == "FACE" || cad.surface.canSketch) && cad.activeSketchId == null) PillButton("Boceto en cara", enabled = enabled && cad.surface.canSketch) { vm.cadCommand("cad.sketch.on_face") }
     if (cad.activeSketchId != null && cad.surface.selection.isNotEmpty() && cad.surface.selection.none { it.kind == "VERTEX" }) {
         PillButton("Proyectar referencia fija", enabled = enabled) { vm.cadCommand("cad.reference.project") }
     }

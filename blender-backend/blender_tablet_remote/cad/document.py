@@ -152,6 +152,12 @@ def closed_entities(sketch):
 
 def profile(doc, identifier):
     for sketch in doc['sketches']:
+        if identifier == 'profile_' + sketch['id']:
+            closed = closed_entities(sketch)
+            covered = {member for item in closed for member in item.get('members', [item['id']])}
+            if not closed or any(e['id'] not in covered for e in sketch['entities'] if not e.get('construction', False)):
+                raise CommandError('El croquis contiene geometría abierta: ciérrala o márcala como construcción antes de extruirlo completo', code='cad_profile_invalid')
+            return sketch, dict(id=sketch['id'], type='SKETCH')
         for item in closed_entities(sketch):
             if 'profile_' + item['id'] == identifier:
                 return sketch, item

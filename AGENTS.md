@@ -531,7 +531,15 @@ no quedan archivos o referencias temporales.
   un conflicto es atómico y una soldadura ya existente no duplica reglas ni undo.
 - La pila CAD usa toda la altura disponible y se desplaza a la izquierda del rail de
   restricciones. Figuras/Restricciones permanecen fijas sobre su lista; Solo selección
-  controla el filtro. Croquis en el rail de planos abre el panel común de caras/planos.
+  controla el filtro. El rail incluye un icono propio para crear croquis directamente
+  en la cara seleccionada; se habilita con `surface.can_sketch`. Los demás planos
+  siguen disponibles desde Planos y bocetos.
+  Puntos/Aristas/Caras son iconos junto al selector CAD/Object, como en Edit;
+  solo aparecen en 3D o al medir referencias del sólido explícitamente. Se ocultan
+  al editar el croquis con su cursor, que ya selecciona puntos/aristas directamente.
+  No se duplican como texto en la bandeja. Cursor vuelve a Perfiles/Boceto.
+  El botón de vistas/atajos se sitúa sobre la altura medida de la bandeja CAD;
+  la pila reserva también la altura real del teclado, plegado o desplegado.
 
 - CAD diferencia la edición del boceto de la selección del sólido. Perfiles/Caras/
   Aristas/Puntos selecciona hasta dos referencias visibles para medir. El sondeo
@@ -548,8 +556,15 @@ no quedan archivos o referencias temporales.
   Medir desde sólido se abre desde Planos y bocetos durante la edición; no ocupa
   permanentemente la bandeja de cotas del croquis.
 - Finalizar boceto restaura una vista 3D orbital, con encuadre del resultado, sin
-  escribir `rv3d`. Extruir/Vaciar muestran su preview en 3D. Un perfil nuevo queda
-  seleccionado al finalizar para poder extruir/vaciar sin volver a buscarlo.
+  escribir `rv3d`. Extruir/Vaciar muestran su preview en 3D. Si el croquis nuevo tiene
+  varios perfiles se selecciona completo (`SKETCH`), no su última figura; un perfil
+  único conserva `PROFILE`. La pila ofrece Croquis completo y perfiles individuales.
+- Seleccionar todo/Deseleccionar todo comparten el rail de Deshacer/Rehacer, también
+  en CAD 3D. En edición seleccionan figuras del croquis; en 3D el croquis elegido.
+  Extruir/Vaciar aceptan `sketch_id` para todos sus contornos: exteriores como volumen,
+  interiores como huecos y regiones separadas en una sola operación y undo. Construcción
+  se excluye; geometría abierta o regiones cruzadas se rechazan sin modificar el modelo.
+  La operación persiste `profile_<sketch_id>` y se reconstruye desde el croquis original.
 - La lista CAD muestra solo figuras/reglas del boceto activo al editar. En 3D la
   pila de operaciones muestra la secuencia completa del cuerpo al estilo OnShape:
   tocar un nodo fija la barra de retroceso en ese punto y muestra el modelo de

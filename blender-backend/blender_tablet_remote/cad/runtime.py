@@ -359,7 +359,8 @@ class CadRuntime:
         for sketch in doc['sketches']:
             if self.active_sketch_id and sketch['id'] != self.active_sketch_id:
                 continue
-            selected_profile=(self.selection or {}).get('kind')=='PROFILE' and any(p['id']==self.selection['id'] for p in model.profiles(sketch))
+            whole_sketch=(self.selection or {}).get('kind')=='SKETCH' and self.selection['id']==sketch['id']
+            selected_profile=whole_sketch or ((self.selection or {}).get('kind')=='PROFILE' and any(p['id']==self.selection['id'] for p in model.profiles(sketch)))
             if not model.sketch_visible(doc,sketch) and sketch['id']!=self.active_sketch_id and not selected_profile: continue
             # The bar hides future sketches; the active one (inserted at the bar) still draws.
             if sequence and sketch['id']!=self.active_sketch_id and not selected_profile and \
@@ -379,7 +380,7 @@ class CadRuntime:
                 if any(p is None for p in points):
                     continue
                 refs = (self.selection or {}).get('items', [self.selection] if self.selection else [])
-                selected = any(ref['id'] in (e['id'],'profile_'+e['id']) for ref in refs)
+                selected = whole_sketch or any(ref['id'] in (e['id'],'profile_'+e['id']) for ref in refs)
                 handle_points = []
                 if self.active_sketch_id:
                     for role,p in sketch_geometry.handles(e).items():
