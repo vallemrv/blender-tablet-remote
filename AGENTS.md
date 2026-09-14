@@ -398,6 +398,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   redondea el gesto, las cotas escritas son exactas. Vaciar consume su sólido
   destino en el árbol y reconstruye desde los parámetros. La transparencia se
   limita a GPUOffScreen mediante un contexto que restaura el sombreado siempre.
+  La sesión reutiliza la teselación local del perfil y sus huecos al variar profundidad;
+  conserva operandos compactos para Vaciar y descarta la caché al cerrar. Android
+  mantiene una actualización de profundidad en vuelo y solo el último candidato
+  pendiente entre comandos; confirmar y navegar respetan ese orden. Un fallo de
+  profundidad impide confirmar una medida anterior. Repetir el mismo paso no reconstruye.
 - Un boceto sobre la cara superior sigue el plano/altura de su operación soporte.
   Los soportes con dependientes no se borran; crear una copia de malla conserva sus referencias.
 - La iconografía se resuelve por intención desde `ui/Iconography.kt`; las pantallas no

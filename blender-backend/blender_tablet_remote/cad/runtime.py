@@ -129,7 +129,7 @@ class CadRuntime:
         self.rollback_id = None
         return None
 
-    def rebuild(self, doc, *, limit=None):
+    def rebuild(self, doc, *, limit=None, extrusion_cache=None):
         """Evaluate every feature first, then swap meshes; errors leave old data.
 
         `limit` is a history node id: features after it stay hidden, as if the
@@ -154,7 +154,11 @@ class CadRuntime:
             if feature['enabled'] and not suppressed(feature['id']):
                 sketch, entity = model.profile(doc, feature['profile_id'])
                 depth = model.number(feature['depth'], positive=True)
-                verts, faces = kernel.extrude(sketch, entity, -depth if feature['type']=='CUT' else depth)
+                cut = feature['type']=='CUT'
+                if extrusion_cache is None:
+                    verts, faces = kernel.extrude(sketch, entity, -depth if cut else depth)
+                else:
+                    verts, faces = extrusion_cache.extrude(sketch, entity, -depth if cut else depth, display=False)
                 if feature['type']=='CUT':
                     target=feature.get('target_id')
                     if target not in solids:
@@ -164,7 +168,10 @@ class CadRuntime:
                 solids[feature['id']] = (verts,faces)
                 # Display/export topology is independent of the compact operands;
                 # feeding subdivided quads into later cuts would grow exponentially.
-                verts,faces=tidy_mesh(verts,faces)
+                if extrusion_cache is not None and not cut:
+                    verts, faces = extrusion_cache.extrude(sketch, entity, depth, display=True)
+                else:
+                    verts,faces=tidy_mesh(verts,faces)
                 evaluated.append((feature, [tuple(c/scale for c in v) for v in verts], faces))
         objects = {o[FEATURE_KEY]:o for o in self.objects(doc)}
         keep = {f['id'] for f in doc['features']}

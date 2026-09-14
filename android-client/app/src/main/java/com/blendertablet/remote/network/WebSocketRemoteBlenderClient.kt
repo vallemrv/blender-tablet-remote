@@ -268,6 +268,7 @@ class WebSocketRemoteBlenderClient(
     }
 
     private val sculptTransportLock = Any()
+    private val cadDepthQueue = CadDepthCommandQueue()
     private val sculptQueue = SculptCommandQueue()
     private var sculptInFlight = false
     private var sculptInFlightId: String? = null
@@ -276,6 +277,7 @@ class WebSocketRemoteBlenderClient(
     private var sculptStoppedId: String? = null
 
     private fun clearSculptTransport() = synchronized(sculptTransportLock) {
+        cadDepthQueue.clear()
         sculptQueue.clear()
         sculptInFlight = false
         sculptInFlightId = null
@@ -345,7 +347,27 @@ class WebSocketRemoteBlenderClient(
         command(command, JSONObject(payload))
     }
 
+    private fun flushCadDepth() {
+        while (true) {
+            val next = cadDepthQueue.poll() ?: break
+            val sent = if (next.raw != null) {
+                sendGestureAfterCad(next.raw)
+                true
+            } else sendCommandAfterCad(next.name, next.payload)
+            if (!sent) { cadDepthQueue.clear(); break }
+        }
+    }
+
     private fun sendCommand(name: String, payload: JSONObject = JSONObject()): Boolean = synchronized(sculptTransportLock) {
+        if (name == "cad.extrude.update" || cadDepthQueue.busy) {
+            if (_connection.value != ConnectionStatus.CONNECTED) { reportOffline(); return@synchronized false }
+            cadDepthQueue.add(CadQueuedMessage(name, payload))
+            flushCadDepth()
+            true
+        } else sendCommandAfterCad(name, payload)
+    }
+
+    private fun sendCommandAfterCad(name: String, payload: JSONObject): Boolean = synchronized(sculptTransportLock) {
         if (isPaintStroke(name)) {
             val phase = payload.optString("phase")
             if (phase == "begin") sculptStoppedId = null
@@ -421,9 +443,14 @@ class WebSocketRemoteBlenderClient(
             append('}')
         }
         synchronized(sculptTransportLock) {
-            if (sculptInFlight || !sculptQueue.isEmpty) sculptQueue.add(SculptQueuedMessage("gesture", JSONObject(), message))
-            else if (socket?.send(message) != true) reportOffline()
+            if (cadDepthQueue.busy) cadDepthQueue.add(CadQueuedMessage("gesture", JSONObject(), message))
+            else sendGestureAfterCad(message)
         }
+    }
+
+    private fun sendGestureAfterCad(message: String) {
+        if (sculptInFlight || !sculptQueue.isEmpty) sculptQueue.add(SculptQueuedMessage("gesture", JSONObject(), message))
+        else if (socket?.send(message) != true) reportOffline()
     }
 
     override fun requestState() {
@@ -1071,6 +1098,10 @@ class WebSocketRemoteBlenderClient(
                         lastStateRefreshAt = System.currentTimeMillis()
                         requestState()
                     }
+                }
+                if (command == "cad.extrude.update") synchronized(sculptTransportLock) {
+                    cadDepthQueue.acknowledge(message.optBoolean("ok", false))
+                    flushCadDepth()
                 }
             }
             "event" -> {

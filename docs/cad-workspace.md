@@ -195,7 +195,11 @@ Referencia de organización: [lista de operaciones plegable de Onshape](https://
    Confirmar/cancelar termina la transparencia automáticamente.
 
 Un vaciado es una diferencia booleana exacta de Blender sobre mallas evaluadas.
-Consume visualmente su operación destino conservando su dependencia en el árbol.
+Durante la preview, cambiar profundidad reutiliza los contornos y huecos ya
+teselados. Android envía una actualización de profundidad cada vez y conserva el
+último valor pendiente; confirmar espera a ese valor. Una profundidad rechazada
+muestra el error e impide que una confirmación pendiente acepte el sólido anterior.
+El vaciado consume visualmente su operación destino conservando su dependencia en el árbol.
 Cambiar el perfil, la profundidad o la altura del soporte reconstruye el resultado.
 Un perfil que no intersecta el destino o elimina todo el sólido se rechaza.
 No se pueden borrar soportes con operaciones o bocetos dependientes:

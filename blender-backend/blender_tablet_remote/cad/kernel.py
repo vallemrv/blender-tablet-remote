@@ -10,6 +10,37 @@ from .document import outline, contains, closed_entities, frame
 from ..errors import CommandError
 
 
+class ExtrusionPreviewCache:
+    """Session-local tessellation: depth changes only stretch the same solid.
+
+    Build in the sketch's local frame at unit depth, including display quads.
+    Coordinates are then mapped to the current frame in metres. A changed sketch
+    invalidates its entry, including holes and associative support planes.
+    """
+    def __init__(self):
+        self.entries = {}
+
+    def extrude(self, sketch, source, depth, *, display):
+        from .document import dumps
+        key = source['id']
+        signature = dumps(sketch)
+        cached = self.entries.get(key)
+        if cached is None or cached['signature'] != signature:
+            local = dict(sketch, plane='XY', offset=0)
+            local.pop('plane_id', None)
+            local.pop('support_id', None)
+            vertices, faces = kernel.extrude(local, source, 1.0)
+            cached = dict(signature=signature, solid=(vertices, faces))
+            self.entries[key] = cached
+        if display and 'display' not in cached:
+            cached['display'] = tidy_mesh(*cached['solid'])
+        vertices, faces = cached['display' if display else 'solid']
+        vertices = [world(sketch, x, y, z * depth) for x,y,z in vertices]
+        if depth < 0:
+            faces = [tuple(reversed(face)) for face in faces]
+        return vertices, faces
+
+
 def world(plane, x, y, z=0):
     if isinstance(plane,dict):
         basis=frame(plane)

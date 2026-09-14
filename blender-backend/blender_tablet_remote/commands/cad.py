@@ -429,6 +429,8 @@ def extrude_begin(payload):
         if not target['enabled']: raise BadPayload('El sólido destino está desactivado')
     bar = runtime.bar(doc)
     session = runtime.begin(payload,operation)
+    from ..cad.kernel import ExtrusionPreviewCache
+    session['extrusion_cache'] = ExtrusionPreviewCache()
     feature = dict(id=model.uid('feature'),name=('Vaciado ' if operation=='CUT' else 'Extrusión ')+str(len(doc['features'])+1),
                    type=operation,order=model.next_order(doc),sketch_id=sketch['id'],profile_id='profile_'+e['id'],depth=depth,enabled=True,body_id=target['body_id'] if target else sketch['body_id'])
     if target: feature['target_id']=target['id']
@@ -436,7 +438,7 @@ def extrude_begin(payload):
     preview['features'].append(feature)
     if bar: model.insert_after(preview,feature,bar)
     try:
-        runtime.rebuild(preview,limit=feature['id'] if bar else None)
+        runtime.rebuild(preview,limit=feature['id'] if bar else None,extrusion_cache=session['extrusion_cache'])
     except Exception:
         runtime.session = None
         raise
@@ -458,9 +460,12 @@ def extrude_update(payload):
         if runtime.increment: distance=round(distance/runtime.step)*runtime.step
         depth=max(1e-7,base+distance)
     else: depth = model.number(payload.get('depth'),positive=True)
+    if depth == session['depth']:
+        return runtime.status()
     preview = copy.deepcopy(session['preview'])
     model.find(preview,'features',session['feature_id'])['depth'] = depth
-    runtime.rebuild(preview,limit=session['feature_id'] if session.get('at_bar') else None)
+    runtime.rebuild(preview,limit=session['feature_id'] if session.get('at_bar') else None,
+                    extrusion_cache=session['extrusion_cache'])
     session.update(preview=preview,depth=depth)
     return runtime.status()
 
@@ -475,7 +480,7 @@ def confirm(payload):
     if session.get('at_bar'):
         # A node inserted at the bar becomes the viewed state immediately.
         runtime.rollback_id = session['feature_id']
-    runtime.rebuild(doc, limit=runtime.bar(doc))
+    runtime.rebuild(doc, limit=runtime.bar(doc), extrusion_cache=session.get('extrusion_cache'))
     runtime.persist(doc, advance=True)
     runtime.session = None
     if session['operation'] in ('EXTRUDE','CUT'):
