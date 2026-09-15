@@ -124,6 +124,9 @@ Paso y dimensiones usan los campos compactos y botones −/+ de las otras bandej
 Mantener un botón inicia la repetición a los 400 ms y acelera de 180 a 80 ms entre
 pasos; soltar no añade otro incremento. La unidad elegida junto a Paso gobierna
 las cotas métricas. Los campos angulares permanecen en grados.
+Al arrastrar un punto o una arista, las dimensiones siguen visibles y muestran
+el tamaño actual, también con snap de Incremento. Durante el gesto son de lectura;
+al soltar puedes editarlas o fijarlas con el candado de cada medida.
 
 Al editar un boceto o una operación confirmada, las medidas quedan en borrador:
 **✓** las aplica juntas y **×** las descarta. Ambos botones permanecen fijos a la

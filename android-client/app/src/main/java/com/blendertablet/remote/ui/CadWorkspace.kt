@@ -70,6 +70,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
         }
     }
     val depthPreview = cad.sessionActive && cad.operation in listOf("EXTRUDE", "CUT")
+    val dragPreview = cad.sessionActive && cad.operation == "DRAG"
     val availableHeight = (LocalConfiguration.current.screenHeightDp - 320).coerceAtLeast(100).dp
     fun command(name: String, vararg values: Pair<String, Any?>) { if (connected) vm.cadCommand(name, mapOf(*values)) }
     fun editSketch(sketchId: String) {
@@ -264,10 +265,10 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
     var resetInputs by remember(editScope) { mutableIntStateOf(0) }
     val drafts = remember(editScope, resetInputs) { mutableStateMapOf<String, Double?>() }
     val validDrafts = drafts.values.all { it != null }
-    val entity = cad.selectedEntity?.takeUnless { cad.sessionActive || pendingDimension != null || editingConstraint != null || cad.surface.mode != "PROFILE" }
+    val entity = cad.selectedEntity?.takeUnless { (cad.sessionActive && !dragPreview) || pendingDimension != null || editingConstraint != null || cad.surface.mode != "PROFILE" }
     val feature = cad.selectedFeature?.takeUnless { cad.sessionActive || editing || cad.surface.mode != "PROFILE" }
     fun acceptValues() {
-        if (!connected || !validDrafts) return
+        if (!connected || !validDrafts || dragPreview) return
         focusManager.clearFocus()
         when {
             depthPreview -> {
@@ -310,6 +311,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
                 !connected -> "Reconectando · recuperando el documento de Blender"
                 drafts.isNotEmpty() && !depthPreview -> "Medidas pendientes · ✓ aplica los cambios · × descarta"
                 depthPreview -> "${cadLabel(cad.operation)} · desliza arriba/abajo para profundidad · dos dedos navegan" + if (cad.transparent) " · transparencia automática" else ""
+                dragPreview -> "Medidas en vivo · suelta para fijar una medida con su candado"
                 cad.sessionActive && cad.operation == "POLYGON" -> "Polígono: traza o toca cada vértice · cierra tocando el primer punto o con Cerrar · dos dedos descarta"
                 cad.surface.mode == "FACE" -> if (cad.surface.selection.size > 1) "Dos referencias para medir · quita una cara seleccionada para crear el boceto" else "Toca una cara: se resalta en el vídeo · Boceto en cara usa exactamente esa selección"
                 cad.surface.mode != "PROFILE" -> "Toca hasta dos referencias para medir · durante el boceto puedes proyectarlas para acotar desde ellas"
@@ -378,12 +380,12 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     CadDimension(label + if (measure != null) if (bound) " · cota" else " · sin cota" else "",
                                         drafts[field] ?: selected.values[field] ?: 0.0, unit, selected.id + field,
-                                        degrees = degrees, step = if (degrees) 1.0 else cad.step, enabled = connected,
+                                        degrees = degrees, step = if (degrees) 1.0 else cad.step, enabled = connected, readOnly = dragPreview,
                                         minimum = if (measure != null) .0000001 else -10000.0,
                                         maximum = if (field == "sweep") 359.99 else 10000.0,
                                         onDone = ::acceptValues) { drafts[field] = it?.takeIf { value -> field != "sweep" || kotlin.math.abs(value) in .01..359.99 } }
                                     if (measure != null) CadAction("FIX", (if (bound) "Quitar cota: " else "Fijar medida: ") + label,
-                                        selected = bound, enabled = connected && drafts.isEmpty()) {
+                                        selected = bound, enabled = connected && !dragPreview && drafts.isEmpty()) {
                                         if (bound) command("cad.constraint.delete", "constraint_id" to measure.constraintIds.first())
                                         else command("cad.constraint.add", "type" to measure.constraintType,
                                             "value" to ((selected.values[field] ?: 0.0) * measure.valueFactor),
@@ -418,7 +420,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
                         }
                     }
                 }
-                if (hasValues) {
+                if (hasValues && !dragPreview) {
                     Spacer(Modifier.width(10.dp))
                     RoundAction(AppIcons.cad("CANCEL"), if (depthPreview) "Descartar preview" else "Descartar medidas", Ink.Bad, ::discardValues)
                     Spacer(Modifier.width(4.dp))
@@ -588,7 +590,7 @@ private fun CadRollbackBar() {
 @Composable
 private fun CadDimension(
     label: String, meters: Double, unit: LengthUnit, identity: String,
-    step: Double, enabled: Boolean, degrees: Boolean = false,
+    step: Double, enabled: Boolean, degrees: Boolean = false, readOnly: Boolean = false,
     minimum: Double = -10000.0, maximum: Double = 10000.0,
     onNudge: ((Double) -> Unit)? = null,
     onDone: () -> Unit,
@@ -604,15 +606,19 @@ private fun CadDimension(
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label, color = Ink.Faint, fontSize = 11.sp)
-        StepperButton("−", enabled && value != null && value > minimum) { nudge(-1) }
+        StepperButton("−", enabled && !readOnly && value != null && value > minimum) { nudge(-1) }
         val displayed = (input.pending ?: meters) * factor
-        CompactNumericField(value = input.text ?: formatToolDistance(displayed, detailDecimalPlaces(displayed, if (degrees || unit == LengthUnit.MILLIMETERS) 2 else 4)),
+        if (readOnly) Box(Modifier.width(84.dp).height(34.dp).padding(horizontal = 6.dp), contentAlignment = Alignment.CenterEnd) {
+            val live = meters * factor
+            Text(formatToolDistance(live, detailDecimalPlaces(live, if (degrees || unit == LengthUnit.MILLIMETERS) 2 else 4)),
+                color = Ink.OnPanel, fontSize = 13.sp, maxLines = 1)
+        } else CompactNumericField(value = input.text ?: formatToolDistance(displayed, detailDecimalPlaces(displayed, if (degrees || unit == LengthUnit.MILLIMETERS) 2 else 4)),
             onValueChange = { if (enabled) { input.text = it; onDraft(input.read(meters, factor, minimum, maximum)) } },
             modifier = Modifier.width(84.dp), textAlign = TextAlign.End, placeholder = if (degrees) "°" else unit.short,
             textColor = if (value == null) Ink.Bad else if (enabled) Ink.OnPanel else Ink.Faint,
             onDone = { if (enabled && value != null) { input.pending = value; input.text = null; onDone() } })
         Text(if (degrees) "°" else unit.short, color = Ink.Muted, fontSize = 12.sp)
-        StepperButton("+", enabled && value != null && value < maximum) { nudge(1) }
+        StepperButton("+", enabled && !readOnly && value != null && value < maximum) { nudge(1) }
     }
 }
 

@@ -398,6 +398,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   `DISTANCE_X`, `DISTANCE_Y`). Las dos últimas miden la separación absoluta en los
   ejes del croquis, admiten cero y conservan cantidades independientes. Pueden usar
   dos puntos (incluido origen/centros) o una línea/lado; se editan desde la misma bandeja.
+- Durante el arrastre CAD, las dimensiones de la figura seleccionada permanecen
+  visibles y se actualizan desde la preview, también con Incremento. Se leen sin
+  editar durante el gesto; al soltar se habilitan sus campos y candados para fijarlas.
 - Igualdad admite varias medidas compatibles del mismo croquis y toma inicialmente
   el tamaño de la primera seleccionada, sin fijarlo permanentemente. Persiste parejas
   de igualdad sin duplicarlas; las cotas previas incompatibles rechazan el cambio.
