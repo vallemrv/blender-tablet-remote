@@ -98,6 +98,15 @@ class BlenderNativeKernel(CadKernel):
     def cut(self, base, cutter):
         return cut_mesh(base, cutter)
 
+    def union(self, base, addition):
+        extent=max(max(v[axis] for v in base[0]+addition[0])-min(v[axis] for v in base[0]+addition[0]) for axis in range(3))
+        tolerance=max(extent*1e-7,1e-10)
+        if any(max(v[axis] for v in base[0]) < min(v[axis] for v in addition[0])-tolerance or
+               max(v[axis] for v in addition[0]) < min(v[axis] for v in base[0])-tolerance for axis in range(3)):
+            count=len(base[0])
+            return list(base[0])+list(addition[0]), list(base[1])+[tuple(i+count for i in face) for face in addition[1]]
+        return cut_mesh(base, addition, operation='UNION')
+
     def extrude(self, sketch, source, depth):
         if source['type'] == 'SKETCH':
             profiles = closed_entities(sketch)
@@ -214,7 +223,7 @@ def tidy_mesh(vertices, faces):
 kernel = BlenderNativeKernel()
 
 
-def cut_mesh(base, cutter):
+def cut_mesh(base, cutter, *, operation='DIFFERENCE'):
     """Exact Blender boolean on temporary objects; no operators or scene residue."""
     import bpy
     import bmesh
@@ -226,7 +235,7 @@ def cut_mesh(base, cutter):
             obj=bpy.data.objects.new(label,mesh); objects.append(obj)
             bpy.context.scene.collection.objects.link(obj)
         modifier=objects[0].modifiers.new('CAD difference','BOOLEAN')
-        modifier.operation='DIFFERENCE'; modifier.solver='EXACT'; modifier.object=objects[1]
+        modifier.operation=operation; modifier.solver='EXACT'; modifier.object=objects[1]
         bpy.context.view_layer.update()
         evaluated=objects[0].evaluated_get(bpy.context.evaluated_depsgraph_get())
         mesh=evaluated.to_mesh()
@@ -238,7 +247,7 @@ def cut_mesh(base, cutter):
                 valid=bool(bm.faces) and all(e.is_manifold for e in bm.edges) and bm.calc_volume()>1e-18
             finally: bm.free()
             if not valid:
-                raise CommandError('El vaciado elimina todo el sólido o produce geometría inválida',code='cad_cut_invalid')
+                raise CommandError('La operación produce un sólido vacío o geometría inválida',code='cad_cut_invalid' if operation=='DIFFERENCE' else 'cad_union_invalid')
             def volume(data):
                 bm=bmesh.new()
                 m=bpy.data.meshes.new('CAD volume')
@@ -247,9 +256,10 @@ def cut_mesh(base, cutter):
                     return abs(bm.calc_volume())
                 finally:
                     bm.free(); bpy.data.meshes.remove(m)
-            base_volume=volume(base)
-            if base_volume-volume(result) <= max(base_volume*1e-7,1e-18):
-                raise CommandError('El perfil no quita material del sólido destino',code='cad_cut_miss')
+            if operation=='DIFFERENCE':
+                base_volume=volume(base)
+                if base_volume-volume(result) <= max(base_volume*1e-7,1e-18):
+                    raise CommandError('El perfil no quita material del sólido destino',code='cad_cut_miss')
             return result
         finally: evaluated.to_mesh_clear()
     finally:

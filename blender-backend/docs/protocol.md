@@ -1403,6 +1403,14 @@ OBJECT/EDIT salen de CAD y cancelan cualquier preview. Los objetos evaluados CAD
 requieren `cad.convert` antes de Edit. El documento JSON versionado vive en la
 escena del `.blend`; sus identificadores no dependen de índices de malla.
 
+Cada cuerpo materializa un objeto único con `btr_cad_body_id` y la operación final
+visible en `btr_cad_feature_id`. Sus operaciones se evalúan por orden de historial:
+EXTRUDE une al resultado anterior y CUT resta de él, con un destino válido del
+mismo cuerpo. La barra de historial modifica el resultado del objeto, sin publicar
+objetos independientes por paso. Nuevo cuerpo inicia otra pieza. La caché de evaluación
+incluye fuente/plano/profundidad/predecesor; los datos GPU y de selección se invalidan
+ante cambios reales de malla, transformación o unidades.
+
 Todos los comandos `cad.*` devuelven el estado completo; `cad.state` también es
 un evento emitido al cambiar documento, sesión o proyección de la cámara:
 
@@ -1425,6 +1433,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.state` | `{}` | Consulta documento y preview |
 | `cad.sketch.create` | `{plane:"XY",offset?,body_id?}` o `{support_id}`, `{plane_id}`, `{reference_sketch_id}` | Crea y activa boceto; reutiliza planos sin duplicar geometría |
 | `cad.sketch.activate` | `{sketch_id}` | Edita sketch existente, encuadra su plano |
+| `cad.sketch.rename` | `{sketch_id,name}` | Nombre de 1–80 caracteres; conserva IDs y geometría, un undo |
 | `cad.sketch.finish` | `{}` | Sale del dibujo conservando perfiles seleccionables |
 | `cad.select` | `{kind:"ENTITY\\|PROFILE\\|SKETCH\\|FEATURE",id,part?,additive?}` o `{u,v,additive?}` | Geometría de boceto, perfil individual, croquis completo o feature; aditiva alterna pertenencia |
 | `cad.entity.begin` | `{type:"LINE\|RECTANGLE\|SQUARE\|CIRCLE\|ARC\|POLYGON",u,v}` | Inicia dibujo reversible |
@@ -1441,7 +1450,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.session.cancel` | `{}` | Restaura documento y geometría originales |
 | `cad.feature.set` | `{feature_id,depth?,enabled?}` | Edita o suprime feature |
 | `cad.feature.delete` | `{feature_id}` | Borra feature y resultado |
-| `cad.convert` | `{feature_id}` | Crea una copia de malla seleccionada y sale a Object; conserva documento y operaciones, incluidos dependientes |
+| `cad.convert` | `{body_id}` o `{feature_id}` | Copia el cuerpo completo en el estado visible (feature_id resuelve su cuerpo), sale a Object y conserva el documento |
 | `cad.settings` | `{step?,increment?,construction?,show_scene?}` | Paso métrico positivo y snap, sin undo ni cambio geométrico |
 | `cad.drag.begin` | `{u,v}` | Sondea y conserva selección previa; prepara arrastre del grupo si cubre el elemento, sin cambiar selección todavía |
 | `cad.drag.update` | `{u,v}` | Reconstruye y resuelve restricciones desde baseline |
@@ -1458,7 +1467,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.entity.construction` | `{construction}` | Cambia las figuras seleccionadas a auxiliares o perfiles; rechaza romper una operación dependiente |
 | `cad.body.create` | `{}` | Crea y activa otro cuerpo independiente |
 | `cad.body.activate` | `{body_id}` | Elige el cuerpo de los nuevos bocetos, sin undo |
-| `cad.plane.create` | `{base?,translation?,rotation?,reference_sketch_id?,support_id?}` | Plano persistente; posición en metros y ángulos locales XYZ en grados |
+| `cad.plane.create` | `{base?,translation?,rotation?,reference_sketch_id?,support_id?,start_sketch?}` | Plano persistente en metros y grados locales XYZ. start_sketch crea y activa también su croquis en el mismo undo |
 | `cad.plane.set` | `{plane_id,translation?,rotation?}` | Ajusta el plano y reconstruye bocetos/sólidos dependientes |
 | `cad.surface.mode` | `{mode:"PROFILE\|FACE\|EDGE\|VERTEX"}` | Elige selección del boceto/perfiles o referencias del sólido, sin undo |
 | `cad.surface.select` | `{u,v}` | Alterna una referencia visible; conserva hasta dos para medir |

@@ -40,6 +40,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
     var constraintsVisible by rememberSaveable { mutableStateOf(false) }
     var constraintsSelectionOnly by rememberSaveable { mutableStateOf(true) }
     var showDiameter by rememberSaveable { mutableStateOf(false) }
+    var renamingSketch by remember(cad.documentId) { mutableStateOf<CadSketch?>(null) }
     val historyScroll = rememberScrollState()
     var unit by remember(state.blender.sceneScale.lengthUnit) { mutableStateOf(state.blender.sceneScale.lengthUnit) }
     var pendingDimension by remember(cad.activeSketchId, cad.selection) { mutableStateOf<String?>(null) }
@@ -51,8 +52,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
     val barPos = cad.rollbackId?.let { id -> cad.history.indexOfFirst { it.id == id } }?.takeIf { it >= 0 }
     fun behindBar(nodeId: String) = barPos != null && cad.history.indexOfFirst { it.id == nodeId } > barPos
     var cutTarget by remember(cad.documentId) { mutableStateOf<String?>(null) }
-    val consumed = cad.features.filter { it.enabled }.mapNotNull { it.targetId }.toSet()
-    val targets = cad.features.filter { it.enabled && it.id !in consumed && !behindBar(it.id) }
+    val targets = cad.features.filter { it.enabled && !behindBar(it.id) }.groupBy { it.bodyId }.values.map { body ->
+        body.maxBy { feature -> cad.history.indexOfFirst { it.id == feature.id } }
+    }
     LaunchedEffect(cad.selectedFeature?.id) { cad.selectedFeature?.let { cutTarget = it.id } }
     val target = targets.firstOrNull { it.id == cutTarget } ?: targets.singleOrNull()
     val editing = cad.activeSketchId != null
@@ -185,6 +187,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
                         PillButton(cad.bodies.firstOrNull { it.id == cad.activeBodyId }?.name ?: "Cuerpo") { bodiesOpen = true }
                         DropdownMenu(bodiesOpen, { bodiesOpen = false }) {
                             cad.bodies.forEach { body -> DropdownMenuItem(text = { Text(body.name) }, onClick = { bodiesOpen = false; command("cad.body.activate", "body_id" to body.id) }) }
+                            DropdownMenuItem(text = { Text("Crear copia de malla del cuerpo") },
+                                enabled = connected && !cad.sessionActive && targets.any { it.bodyId == cad.activeBodyId },
+                                onClick = { bodiesOpen = false; command("cad.convert", "body_id" to cad.activeBodyId) })
                             DropdownMenuItem(text = { Text("Nuevo cuerpo") }, onClick = { bodiesOpen = false; command("cad.body.create") })
                         }
                     }
@@ -198,7 +203,11 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
                                 CadStackNodeRow("SKETCH", sketch.name, selectedSketch?.id == sketch.id, dimmed, nodeEnabled,
                                     tap = { command("cad.history.rollback", "node_id" to node.id) },
                                     actions = listOf(
+                                        CadNodeAction("Renombrar croquis") { renamingSketch = sketch },
                                         CadNodeAction("Editar boceto") { editSketch(sketch.id) },
+                                        CadNodeAction("Seleccionar croquis completo", sketch.profiles.isNotEmpty()) {
+                                            vm.cadTool(null); command("cad.select", "kind" to "SKETCH", "id" to sketch.id)
+                                        },
                                         CadNodeAction(if (sketch.visible) "Ocultar boceto" else "Mostrar boceto") {
                                             command("cad.sketch.visibility", "sketch_id" to sketch.id, "visible" to !sketch.visible)
                                         },
@@ -206,15 +215,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
                                             command("cad.sketch.delete", "sketch_id" to sketch.id)
                                         },
                                     ))
-                                if (!dimmed && sketch.profiles.isNotEmpty()) PillButton("Croquis completo",
-                                    selected = cad.selectionKind == "SKETCH" && cad.selectionId == sketch.id, enabled = nodeEnabled) {
-                                    vm.cadTool(null); command("cad.select", "kind" to "SKETCH", "id" to sketch.id)
-                                }
-                                if (!dimmed) sketch.profiles.forEach { profile ->
-                                    PillButton(profile.label, selected = cad.selectionId == profile.id, enabled = !cad.sessionActive) {
-                                        vm.cadTool(null); command("cad.select", "kind" to "PROFILE", "id" to profile.id)
-                                    }
-                                }
                             }
                         } else {
                             val feature = cad.features.firstOrNull { it.id == node.id }
@@ -225,9 +225,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
                                     actions = listOf(
                                         CadNodeAction("Seleccionar") {
                                             vm.cadTool(null); command("cad.select", "kind" to "FEATURE", "id" to feature.id)
-                                        },
-                                        CadNodeAction("Crear copia de malla", feature.enabled) {
-                                            command("cad.convert", "feature_id" to feature.id)
                                         },
                                         CadNodeAction("Editar ${cad.sketches.firstOrNull { it.id == feature.sketchId }?.name ?: "boceto fuente"}") { editSketch(feature.sketchId) },
                                         CadNodeAction(if (feature.enabled) "Desactivar" else "Activar") {
@@ -398,9 +395,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
                         if (!editing && !cad.sessionActive && "CUT" in capabilities.features) {
                             var expanded by remember { mutableStateOf(false) }
                             Box {
-                                PillButton("Destino: ${target?.name ?: "elegir sólido"}", enabled = connected && targets.isNotEmpty()) { expanded = true }
+                                PillButton("Destino: ${cad.bodies.firstOrNull { it.id == target?.bodyId }?.name ?: "elegir cuerpo"}", enabled = connected && targets.isNotEmpty()) { expanded = true }
                                 DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
-                                    targets.forEach { item -> DropdownMenuItem(text = { Text(item.name) }, onClick = { cutTarget = item.id; expanded = false }) }
+                                    targets.forEach { item -> DropdownMenuItem(text = { Text(cad.bodies.firstOrNull { it.id == item.bodyId }?.name ?: item.name) }, onClick = { cutTarget = item.id; expanded = false }) }
                                 }
                             }
                         }
@@ -430,6 +427,15 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
                 }
             }
         }
+    }
+    renamingSketch?.let { sketch ->
+        var name by remember(sketch.id) { mutableStateOf(sketch.name) }
+        AlertDialog(onDismissRequest = { renamingSketch = null }, title = { Text("Renombrar croquis") },
+            text = { OutlinedTextField(name, { name = it.take(80) }, singleLine = true, label = { Text("Nombre") }) },
+            confirmButton = { TextButton(enabled = connected && name.isNotBlank(), onClick = {
+                command("cad.sketch.rename", "sketch_id" to sketch.id, "name" to name.trim()); renamingSketch = null
+            }) { Text("Guardar") } },
+            dismissButton = { TextButton(onClick = { renamingSketch = null }) { Text("Cancelar") } })
     }
 }
 
@@ -645,43 +651,60 @@ private fun CadPlanesDialog(cad: CadState, unit: LengthUnit, dismiss: () -> Unit
     val position = parse(translation)
     val angles = parse(rotation)
     val valid = position.all { it != null } && angles.all { it != null }
-    AlertDialog(onDismissRequest = dismiss, title = { Text("Planos y bocetos") }, text = {
+    var advanced by remember { mutableStateOf(false) }
+    var savedPlanes by remember { mutableStateOf(false) }
+    AlertDialog(onDismissRequest = dismiss, title = { Text(planeToEdit?.let { "Colocar ${it.name}" } ?: "Nuevo croquis") }, text = {
         Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (cad.activeSketchId != null) {
-                Text("Referencias para ${cad.activeSketch?.name.orEmpty()}")
-                PillButton("Medir desde sólido", onClick = pickReference)
-                Text("Mide caras o aristas de una pieza 3D y proyéctalas como referencias fijas en este boceto.", fontSize = 12.sp)
-                HorizontalDivider()
-            }
-            Text("Nuevo boceto en un plano base")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("XY","XZ","YZ").forEach { p ->
-                PillButton(p) { command("cad.sketch.create", mapOf("plane" to p)); dismiss() }
-            } }
-            cad.sketches.forEach { sketch -> PillButton("Usar plano de ${sketch.name}") {
-                command("cad.sketch.create", mapOf("reference_sketch_id" to sketch.id)); dismiss()
-            } }
-            cad.planes.forEach { p ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    PillButton("Boceto en ${p.name}") { command("cad.sketch.create", mapOf("plane_id" to p.id)); dismiss() }
-                    PillButton("Ajustar") { planeToEdit = p; translation = p.translation.map { String.format(Locale.US,"%.8g",it * factor) }; rotation = p.rotation.map { it.toString() } }
+            if (planeToEdit == null) {
+                Text("¿Dónde quieres dibujar?")
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("XY" to "Superior", "XZ" to "Frontal", "YZ" to "Lateral").forEach { (plane, label) ->
+                        PillButton(label, selected = base == plane && source == null) { base = plane; source = null }
+                    }
+                }
+                PillButton(if (cad.surface.canSketch) "En la cara seleccionada" else "Elegir una cara del cuerpo") {
+                    if (cad.surface.canSketch) { command("cad.sketch.on_face", emptyMap()); dismiss() } else pickFace()
                 }
             }
-            PillButton("Seleccionar cara → Boceto en cara", onClick = pickFace)
-            PillButton("Ver objetos de la escena", selected = cad.showScene) { command("cad.settings", mapOf("show_scene" to !cad.showScene)) }
-            HorizontalDivider()
-            Text(planeToEdit?.let { "Ajustar ${it.name}" } ?: "Crear plano desplazado / inclinado")
-            if (planeToEdit == null) {
-                Row { listOf("XY","XZ","YZ").forEach { p -> PillButton(p, selected = base == p && source == null) { base = p; source = null } } }
-                cad.sketches.forEach { sketch -> PillButton("Relativo a ${sketch.name}", selected = source == sketch.id) { source = sketch.id } }
+            if (!advanced) {
+                OutlinedTextField(translation[2], { value -> translation = translation.toMutableList().also { it[2] = value } },
+                    label = { Text("Separación · ${unit.short}") }, singleLine = true,
+                    supportingText = { Text("0 dibuja sobre el plano. Un valor positivo lo aleja; negativo, al otro lado.") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
             }
-            CadVectorFields("Desplazamiento", translation, unit.short) { translation = it }
-            CadVectorFields("Giro local", rotation, "°") { rotation = it }
-            Text("Los desplazamientos y giros son relativos al plano elegido. Guardar aplica todas las cotas juntas.", fontSize = 12.sp)
-            PillButton(if (planeToEdit == null) "Guardar nuevo plano" else "Guardar posición", enabled = valid) {
+            PillButton(if (advanced) "Ocultar ajustes avanzados" else "Inclinación y ajustes avanzados", selected = advanced) { advanced = !advanced }
+            if (advanced) {
+                if (planeToEdit == null) cad.sketches.forEach { sketch ->
+                    PillButton("Usar plano de ${sketch.name}", selected = source == sketch.id) { source = sketch.id }
+                }
+                CadVectorFields("Desplazamiento", translation, unit.short) { translation = it }
+                CadVectorFields("Inclinación", rotation, "°") { rotation = it }
+            }
+            PillButton(if (planeToEdit == null) "Crear croquis" else "Aplicar posición", enabled = valid) {
                 command(if (planeToEdit == null) "cad.plane.create" else "cad.plane.set", mapOf(
-                    "plane_id" to planeToEdit?.id,"base" to base,"reference_sketch_id" to source,"translation" to position.map { it!! / factor },"rotation" to angles.map { it!! }))
-                planeToEdit = null
+                    "plane_id" to planeToEdit?.id, "base" to base, "reference_sketch_id" to source,
+                    "translation" to position.map { it!! / factor }, "rotation" to angles.map { it!! },
+                    "start_sketch" to (planeToEdit == null)))
+                dismiss()
             }
+            if (cad.planes.isNotEmpty() && planeToEdit == null) {
+                PillButton("Planos existentes", selected = savedPlanes) { savedPlanes = !savedPlanes }
+                if (savedPlanes) cad.planes.forEach { plane ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        PillButton(plane.name) { command("cad.sketch.create", mapOf("plane_id" to plane.id)); dismiss() }
+                        PillButton("Colocar") {
+                            planeToEdit = plane
+                            translation = plane.translation.map { String.format(Locale.US, "%.8g", it * factor) }
+                            rotation = plane.rotation.map { it.toString() }
+                        }
+                    }
+                }
+            }
+            if (cad.activeSketchId != null && planeToEdit == null) {
+                HorizontalDivider()
+                PillButton("Medir desde sólido", onClick = pickReference)
+            }
+            PillButton("Ver objetos de la escena", selected = cad.showScene) { command("cad.settings", mapOf("show_scene" to !cad.showScene)) }
         }
     }, confirmButton = { TextButton(onClick = dismiss) { Text("Cerrar") } })
 }

@@ -5,7 +5,7 @@ import math
 import bpy
 from mathutils import Vector
 from . import document as model
-from .kernel import kernel, world, tidy_mesh
+from .kernel import kernel, world, tidy_mesh, ExtrusionPreviewCache
 from . import sketch as sketch_geometry
 from ..errors import BadPayload, CommandError
 from ..bpy_utils import find_view3d, undo_push
@@ -13,6 +13,7 @@ from ..camera import camera
 
 FEATURE_KEY = 'btr_cad_feature_id'
 DOC_KEY = 'btr_cad_document_id'
+BODY_KEY = 'btr_cad_body_id'
 
 
 class CadRuntime:
@@ -33,6 +34,10 @@ class CadRuntime:
         self.show_scene = False
         self._solid_view = None
         self.rollback_id = None
+        self._extrusion_cache = ExtrusionPreviewCache()
+        self._solids = {}
+        self._body_meshes = {}
+        self._materialized = {}
         from .surface import SurfaceSelection
         self.surface = SurfaceSelection()
 
@@ -130,80 +135,95 @@ class CadRuntime:
         return None
 
     def rebuild(self, doc, *, limit=None, extrusion_cache=None):
-        """Evaluate every feature first, then swap meshes; errors leave old data.
+        """Evaluate a body's chronological operations, then publish one mesh per body.
 
-        `limit` is a history node id: features after it stay hidden, as if the
-        stack were rolled back to that point. None evaluates the whole stack.
+        Cached operands are plain geometry, never RNA. Unchanged predecessors and
+        unchanged display meshes survive transactions, including sketch editing.
+        Failed evaluation leaves every published body at its previous valid state.
         """
+        import hashlib
+        from .surface import stamp
         scale = max(float(bpy.context.scene.unit_settings.scale_length), 1e-12)
         model.resolve_supports(doc)
-        allowed = None
+        sequence = model.history(doc)
         if limit:
-            sequence = [n['id'] for n in model.history(doc)]
-            if limit in sequence:
-                included = set(sequence[:sequence.index(limit)+1])
-                allowed = {f['id'] for f in doc['features'] if f['id'] in included}
-            else:
-                limit = None
-        def suppressed(identifier):
-            return allowed is not None and identifier not in allowed
-        evaluated = []
-        solids = {}
-        consumed = set()
-        for feature in doc['features']:
-            if feature['enabled'] and not suppressed(feature['id']):
-                sketch, entity = model.profile(doc, feature['profile_id'])
-                depth = model.number(feature['depth'], positive=True)
-                cut = feature['type']=='CUT'
-                if extrusion_cache is None:
-                    verts, faces = kernel.extrude(sketch, entity, -depth if cut else depth)
+            end=next((i for i,node in enumerate(sequence) if node['id']==limit),None)
+            if end is not None: sequence=sequence[:end+1]
+        extrusion_cache=extrusion_cache or self._extrusion_cache
+        tips={}; solids={}; keys={}; direct={}
+        for feature in sequence:
+            if feature['kind']!='FEATURE' or not feature['enabled']: continue
+            identifier=feature['id']; body=feature['body_id']
+            previous=tips.get(body)
+            sketch,entity=model.profile(doc,feature['profile_id'])
+            depth=model.number(feature['depth'],positive=True)
+            cut=feature['type']=='CUT'
+            if cut and feature.get('target_id') not in solids:
+                raise CommandError('Activa el sólido destino antes del vaciado',code='cad_dependency')
+            signature=(doc['id'],feature['profile_id'],feature['type'],depth,
+                       model.dumps(dict(frame=model.frame(sketch),entities=sketch['entities'])),
+                       keys.get(previous))
+            cached=self._solids.get(identifier)
+            if cached is None or cached[0]!=signature:
+                operand=extrusion_cache.extrude(sketch,entity,-depth if cut else depth,display=False)
+                if previous:
+                    operand=kernel.cut(solids[previous],operand) if cut else kernel.union(solids[previous],operand)
+                elif cut:
+                    raise CommandError('El cuerpo no tiene un sólido para vaciar',code='cad_dependency')
+                cached=(signature,operand)
+                self._solids[identifier]=cached
+            solids[identifier]=cached[1]
+            keys[identifier]=hashlib.blake2b(repr(signature).encode(),digest_size=16).digest()
+            tips[body]=identifier
+            direct[body]=(sketch,entity,depth) if previous is None and not cut else None
+        # Form every display mesh before touching existing Blender objects.
+        display={}
+        for body,identifier in tips.items():
+            signature=(keys[identifier],scale)
+            cached=self._body_meshes.get(body)
+            if cached is None or cached[0]!=signature:
+                vertices,faces=(extrusion_cache.extrude(*direct[body],display=True) if direct[body] else tidy_mesh(*solids[identifier]))
+                cached=(signature,([tuple(c/scale for c in v) for v in vertices],faces))
+                self._body_meshes[body]=cached
+            display[body]=cached
+        existing=self.objects(doc)
+        feature_bodies={f['id']:f['body_id'] for f in doc['features']}
+        retained=set()
+        for body in doc['bodies']:
+            identifier=body['id']
+            candidates=[o for o in existing if o.get(BODY_KEY,feature_bodies.get(o.get(FEATURE_KEY)))==identifier]
+            obj=next((o for o in candidates if o.get(BODY_KEY)==identifier),None) or next(iter(candidates),None)
+            if identifier not in display:
+                if obj is not None and any(f['body_id']==identifier for f in doc['features']):
+                    obj.hide_viewport=True; obj.hide_render=True; retained.add(obj.as_pointer())
+                continue
+            signature,(vertices,faces)=display[identifier]
+            record=(obj.as_pointer(),obj.data.as_pointer(),signature,stamp(obj)) if obj else None
+            if record is None or self._materialized.get(identifier)!=record:
+                mesh=bpy.data.meshes.new(body['name'])
+                mesh.from_pydata(vertices,[],faces);mesh.update()
+                if obj is None:
+                    obj=bpy.data.objects.new(body['name'],mesh)
+                    bpy.context.scene.collection.objects.link(obj)
                 else:
-                    verts, faces = extrusion_cache.extrude(sketch, entity, -depth if cut else depth, display=False)
-                if feature['type']=='CUT':
-                    target=feature.get('target_id')
-                    if target not in solids:
-                        raise CommandError('Activa el sólido destino antes del vaciado',code='cad_dependency')
-                    verts,faces=kernel.cut(solids[target],(verts,faces))
-                    consumed.add(target)
-                solids[feature['id']] = (verts,faces)
-                # Display/export topology is independent of the compact operands;
-                # feeding subdivided quads into later cuts would grow exponentially.
-                if extrusion_cache is not None and not cut:
-                    verts, faces = extrusion_cache.extrude(sketch, entity, depth, display=True)
-                else:
-                    verts,faces=tidy_mesh(verts,faces)
-                evaluated.append((feature, [tuple(c/scale for c in v) for v in verts], faces))
-        objects = {o[FEATURE_KEY]:o for o in self.objects(doc)}
-        keep = {f['id'] for f in doc['features']}
-        for feature in doc['features']:
-            if feature['id'] in objects:
-                hidden = not feature['enabled'] or feature['id'] in consumed or suppressed(feature['id'])
-                objects[feature['id']].hide_viewport = hidden
-                objects[feature['id']].hide_render = hidden
-        for feature, verts, faces in evaluated:
-            identifier = feature['id']
-            keep.add(identifier)
-            mesh = bpy.data.meshes.new(feature['name'])
-            mesh.from_pydata(verts, [], faces)
-            mesh.update()
-            obj = objects.get(identifier)
-            if obj is None:
-                obj = bpy.data.objects.new(feature['name'], mesh)
-                bpy.context.scene.collection.objects.link(obj)
-                obj[FEATURE_KEY], obj[DOC_KEY] = identifier, doc['id']
-            else:
-                old = obj.data
-                obj.data = mesh
-                if old.users == 0:
-                    bpy.data.meshes.remove(old)
-            obj.hide_viewport = identifier in consumed
-            obj.hide_render = identifier in consumed
-        for identifier,obj in objects.items():
-            if identifier not in keep:
-                old = obj.data
-                bpy.data.objects.remove(obj, do_unlink=True)
-                if old.users == 0:
-                    bpy.data.meshes.remove(old)
+                    old=obj.data;obj.data=mesh
+                    if old.users==0:bpy.data.meshes.remove(old)
+                self._materialized[identifier]=(obj.as_pointer(),obj.data.as_pointer(),signature,stamp(obj))
+            obj.name=body['name']
+            obj[FEATURE_KEY]=tips[identifier];obj[DOC_KEY]=doc['id'];obj[BODY_KEY]=identifier
+            obj.hide_viewport=False;obj.hide_render=False
+            retained.add(obj.as_pointer())
+        for obj in existing:
+            if obj.as_pointer() not in retained:
+                old=obj.data;bpy.data.objects.remove(obj,do_unlink=True)
+                if old.users==0:bpy.data.meshes.remove(old)
+        feature_ids={f['id'] for f in doc['features']}
+        self._solids={k:v for k,v in self._solids.items() if k in feature_ids}
+        body_ids={b['id'] for b in doc['bodies']}
+        self._body_meshes={k:v for k,v in self._body_meshes.items() if k in body_ids}
+        self._materialized={k:v for k,v in self._materialized.items() if k in body_ids}
+        profile_ids={f['profile_id'].removeprefix('profile_') for f in doc['features']}
+        self._extrusion_cache.entries={k:v for k,v in self._extrusion_cache.entries.items() if k in profile_ids}
         bpy.context.view_layer.update()
 
     def require_workspace(self):
@@ -238,19 +258,19 @@ class CadRuntime:
                             operation=operation, baseline=self.doc(), candidate=None)
         return self.session
 
-    def commit(self, doc, label):
-        self.rebuild(doc, limit=self.bar(doc))
+    def commit(self, doc, label, *, geometry=True):
+        if geometry: self.rebuild(doc, limit=self.bar(doc))
         self.persist(doc, advance=True)
         with self.saving():
             undo_push(label)
 
-    def transaction(self, payload, change, label):
+    def transaction(self, payload, change, label, *, geometry=True):
         self.require_workspace()
         if self.session:
             raise CommandError('Confirma o cancela la preview primero', code='session_active')
         doc = self.doc()
         change(doc)
-        self.commit(doc,label)
+        self.commit(doc,label,geometry=geometry)
         return self.status()
 
     def point(self, payload, plane, offset=None):

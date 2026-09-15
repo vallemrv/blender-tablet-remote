@@ -18,7 +18,7 @@ VALID_MODES = {
 
 
 def _set_mode(target: str, owner=None) -> dict:
-    from ..cad.runtime import runtime, FEATURE_KEY
+    from ..cad.runtime import runtime, FEATURE_KEY, BODY_KEY
     from .sessions import cancel_all, cancel_cad
     from .sculpt import cancel as cancel_sculpt
     cancel_sculpt()
@@ -44,6 +44,9 @@ def _set_mode(target: str, owner=None) -> dict:
                 bpy.ops.object.mode_set(mode="OBJECT")
         runtime.workspace = True
         runtime.workspace_owner = owner
+        objects=runtime.objects(doc)
+        if doc['features'] and (not objects or any(not obj.get(BODY_KEY) for obj in objects)):
+            runtime.rebuild(doc,limit=runtime.bar(doc))
         runtime.isolate()
         if entering and doc['sketches']:
             sketch = next((s for s in doc['sketches'] if s['id'] == runtime.active_sketch_id), None)

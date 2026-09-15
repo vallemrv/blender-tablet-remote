@@ -567,6 +567,15 @@ def query_sketch_endpoint(overlay, u, v, aspect, previous=None):
 
 def _cad_mesh(obj):
     """Evaluated surface plus adjacency; coplanar tessellation is not a CAD edge."""
+    from ..cad.runtime import runtime
+    from ..cad.surface import stamp
+    signature=stamp(obj)
+    cache=runtime.surface.graphs
+    key=obj.as_pointer()
+    cached=cache.get(key)
+    if cached and cached[0]==signature:
+        cache.move_to_end(key)
+        return cached[1]
     mesh=obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data
     matrix=obj.matrix_world
     points=[matrix@v.co for v in mesh.vertices]
@@ -582,7 +591,13 @@ def _cad_mesh(obj):
     def coplanar(a,b):
         return normals[a].dot(normals[b])>1-1e-7
     edges=[edge for edge,linked in adjacency.items() if len(linked)!=2 or not coplanar(*linked)]
-    return mesh,points,faces,normals,centers,adjacency,edges
+    mesh.calc_loop_triangles()
+    triangles=[(tri.polygon_index,tuple(tri.vertices)) for tri in mesh.loop_triangles]
+    result=triangles,points,faces,normals,centers,adjacency,edges
+    cache[key]=(signature,result,{})
+    cache.move_to_end(key)
+    while len(cache)>8: cache.popitem(last=False)
+    return result
 
 
 def query_cad_surface(payload, kind):
@@ -636,7 +651,13 @@ def query_cad_surface(payload, kind):
         chosen=choose_sticky_candidate(candidates,None,.028)
         if chosen is None: return None
         selected=(bpy.data.objects[chosen['object']],chosen['source'])
-    obj,source=selected; mesh,points,faces,normals,centers,adjacency,edges=graphs[obj.name]
+    obj,source=selected; triangles,points,faces,normals,centers,adjacency,edges=graphs[obj.name]
+    from ..cad.runtime import runtime
+    if kind=='FACE':
+        face_cache=runtime.surface.graphs[obj.as_pointer()][2]
+        cached=face_cache.get(source)
+        if cached and cached['object']==obj.name and cached['feature_id']==obj.get('btr_cad_feature_id'):
+            return cached
     data=dict(kind=kind,object=obj.name,feature_id=obj.get('btr_cad_feature_id'),
               mesh_pointer=obj.data.as_pointer(),matrix=[list(row) for row in obj.matrix_world],
               segments=[],triangles=[],points=[],planar=False)
@@ -652,8 +673,7 @@ def query_cad_surface(payload, kind):
                     if normals[neighbor].dot(normal)>1-1e-7 and all(abs((points[i]-origin).dot(normal))<=tolerance for i in faces[neighbor]):
                         chosen.add(neighbor); pending.append(neighbor)
         boundary=[edge for edge,linked in adjacency.items() if sum(i in chosen for i in linked)==1]
-        mesh.calc_loop_triangles()
-        data['triangles']=[[list(points[i]) for i in tri.vertices] for tri in mesh.loop_triangles if tri.polygon_index in chosen]
+        data['triangles']=[[list(points[i]) for i in vertices] for polygon,vertices in triangles if polygon in chosen]
         data['segments']=[[list(points[i]) for i in edge] for edge in boundary]
         data['points']=[list(points[i]) for i in sorted({i for f in chosen for i in faces[f]})]
         weights=[(Vector(b)-Vector(a)).cross(Vector(c)-Vector(a)).length*.5 for a,b,c in data['triangles']]
@@ -662,6 +682,7 @@ def query_cad_surface(payload, kind):
         data['normal']=list(normal); data['center']=list(center)
         data['planar']=all(abs((Vector(p)-origin).dot(normal))<=tolerance for p in data['points'])
         data['id']=obj.name+':FACE:'+str(min(chosen))
+        for index in chosen: face_cache[index]=data
     elif kind=='EDGE':
         # Join collinear pieces introduced by quad materialization into one edge.
         a,b=(points[i] for i in source); direction=(b-a).normalized()

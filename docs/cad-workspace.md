@@ -194,11 +194,13 @@ El botón **Vista 3D** vuelve a encuadrar. Nada de esto modifica la cámara del 
 Un croquis nuevo con varios perfiles queda seleccionado completo al finalizar;
 si solo tiene uno, se selecciona ese perfil. **Seleccionar todo/Deseleccionar todo**
 permanecen junto a Deshacer/Rehacer: en edición actúan sobre las figuras; en 3D,
-sobre el croquis elegido. La pila ofrece **Croquis completo** además de cada perfil.
+sobre el croquis elegido. La pila contiene solo croquis y operaciones: las figuras
+pertenecen al croquis. Su menú ⋮ permite **Renombrar croquis**, **Editar boceto** y
+**Seleccionar croquis completo**. Renombrar conserva sus referencias y no reconstruye mallas.
 
 Mientras editas, el panel muestra únicamente el boceto activo: **Figuras** y
-**Cotas y reglas**. Al salir, muestra el **Último paso** del cuerpo; **Ver historial**
-despliega la secuencia de bocetos y operaciones y desplaza la lista al final cuando
+**Cotas y reglas**. Al salir, muestra la secuencia de croquis y operaciones del
+cuerpo y desplaza la lista al final cuando
 se añade un nodo. Los cuerpos se eligen mediante el desplegable del panel.
 Los bocetos usados por una operación se ocultan automáticamente. El ojo permite
 mostrarlos explícitamente y conserva esa elección al guardar.
@@ -213,7 +215,7 @@ Referencia de organización: [lista de operaciones plegable de Onshape](https://
    contornos exteriores y conserva los interiores como huecos: un rectángulo con
    cuatro círculos produce una placa con cuatro taladros. Varios contornos exteriores
    separados forman una sola operación con la misma profundidad. También puedes
-   elegir un perfil individual en la pila. Las líneas abiertas deben cerrarse o
+   elegir un perfil individual tocándolo en la vista. Las líneas abiertas deben cerrarse o
    marcarse como construcción; no se extruyen silenciosamente como si fueran sólidos.
 3. Deslizar arriba/abajo para cambiar profundidad: cada 4 % de altura recorre un
    paso. Con Incremento avanza en saltos; sin snap conserva las fracciones.
@@ -230,6 +232,11 @@ Referencia de organización: [lista de operaciones plegable de Onshape](https://
    Confirmar/cancelar termina la transparencia automáticamente.
 
 Un vaciado es una diferencia booleana exacta de Blender sobre mallas evaluadas.
+Cada cuerpo publica un único objeto. Sus extrusiones se unen al resultado anterior
+y los vaciados restan de ese resultado; **Nuevo cuerpo** inicia otra pieza independiente.
+La pila conserva los pasos paramétricos y permite ver el cuerpo en cada momento.
+La evaluación y el resaltado reutilizan resultados y geometría GPU mientras no cambien;
+dibujar en otro croquis no obliga a reconstruir las operaciones anteriores.
 Durante la preview, cambiar profundidad reutiliza los contornos y huecos ya
 teselados. Android envía una actualización de profundidad cada vez y conserva el
 último valor pendiente; confirmar espera a ese valor. Una profundidad rechazada
@@ -258,7 +265,11 @@ primero se eliminan los dependientes. El árbol permite borrar bocetos sin opera
 - El redondeo es de sketch entre líneas conectadas o en esquinas de rectángulos. No es fillet de aristas
   del sólido. Vaciar quita un perfil por profundidad; no es una operación Shell
   de espesor automático sobre caras arbitrarias.
-- **Planos** permite usar XY/XZ/YZ, el plano de otro boceto, una cara superior
+- **Planos y bocetos** empieza por Superior/Frontal/Lateral o una cara y una medida
+  de **Separación**. **Crear croquis** crea su plano y lo abre en un solo paso.
+  **Inclinación y ajustes avanzados** despliega XYZ y el plano de otro croquis.
+  **Planos existentes → Colocar** ajusta la separación de un plano guardado.
+  Permite usar XY/XZ/YZ, el plano de otro boceto, una cara superior
   asociativa o un plano guardado. Un plano nuevo admite desplazamiento XYZ en la
   unidad elegida y rotación XYZ en grados, relativos al plano de referencia.
   **Boceto en cara** consume la cara resaltada; **Ver objetos
@@ -270,7 +281,7 @@ primero se eliminan los dependientes. El árbol permite borrar bocetos sin opera
 - **Construcción** dibuja geometría auxiliar discontinua. También puede convertir
   las figuras seleccionadas; sus restricciones siguen activas y sus contornos
   nunca extruyen ni abren huecos. Si rompería un perfil usado, se rechaza el cambio.
-- **Pila → ⋮ de la Extrusión/Vaciado → Crear copia de malla** sale a Object con una copia seleccionada para Edit o
+- **Pila → menú del cuerpo → Crear copia de malla del cuerpo** sale a Object con una copia de la pieza completa seleccionada para Edit o
   Materiales. El original y todo el árbol CAD permanecen editables al regresar.
 - Las extrusiones de rectángulos y contornos convexos pares usan tapas y paredes
   en quads ordenados. Los perfiles con huecos y vaciados convierten sus parches a

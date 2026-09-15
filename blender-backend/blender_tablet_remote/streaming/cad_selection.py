@@ -1,4 +1,4 @@
-"""Solid selection is drawn in the video, with the exact capture camera."""
+"""Solid selection reuses world-space GPU batches with the capture camera."""
 import gpu
 from gpu_extras.batch import batch_for_shader
 from mathutils import Matrix, Vector
@@ -8,42 +8,50 @@ from ..camera import camera
 def draw_cad_selection(rv3d, width, height):
     from ..cad.runtime import runtime
     if not runtime.workspace: return
-    runtime.surface.validate()
-    if not runtime.surface.items: return
-    matrix=camera.perspective_matrix(rv3d)
-    def clip(p):
-        p=matrix@Vector((*p,1.))
-        return (p.x/p.w,p.y/p.w,p.z/p.w-1e-5) if p.w>1e-9 else None
-    fill=gpu.shader.from_builtin('UNIFORM_COLOR')
-    line=gpu.shader.from_builtin('POLYLINE_UNIFORM_COLOR')
+    surface=runtime.surface
+    surface.validate()
+    if not surface.items:
+        surface.draw_cache=None
+        return
+    # Items are immutable snapshots. Validation removes them if geometry changes.
+    # Keep references in the cache so Python cannot recycle an old item's id.
+    items=tuple(surface.items)
+    cache=surface.draw_cache
+    if cache is None or len(cache['items'])!=len(items) or any(a is not b for a,b in zip(cache['items'],items)):
+        fill=gpu.shader.from_builtin('UNIFORM_COLOR')
+        line=gpu.shader.from_builtin('POLYLINE_UNIFORM_COLOR')
+        batches=[]
+        for item in items:
+            triangles=[p for tri in item['triangles'] for p in tri]
+            segments=[p for edge in item['segments'] for p in edge]
+            batches.append((batch_for_shader(fill,'TRIS',{'pos':triangles}) if triangles else None,
+                            batch_for_shader(line,'LINES',{'pos':segments}) if segments else None))
+        cache=dict(items=items,fill=fill,line=line,batches=batches)
+        surface.draw_cache=cache
+    fill,line=cache['fill'],cache['line']
+    projection=camera.perspective_matrix(rv3d).copy()
+    # Same depth bias as the old NDC overlay, applied once to the GPU matrix.
+    for i in range(4): projection[2][i]-=1e-5*projection[3][i]
     saved=(gpu.state.blend_get(),gpu.state.depth_test_get(),gpu.state.depth_mask_get(),gpu.state.viewport_get())
     try:
         gpu.state.viewport_set(0,0,width,height)
         gpu.state.blend_set('ALPHA'); gpu.state.depth_mask_set(False); gpu.state.depth_test_set('LESS_EQUAL')
         with gpu.matrix.push_pop(),gpu.matrix.push_pop_projection():
-            gpu.matrix.load_identity(); gpu.matrix.load_projection_matrix(Matrix.Identity(4))
-            for index,item in enumerate(runtime.surface.items):
+            gpu.matrix.load_identity(); gpu.matrix.load_projection_matrix(projection)
+            for index,(item,(triangles,segments)) in enumerate(zip(items,cache['batches'])):
                 color=(.2,.85,1.) if index==0 else (1.,.65,.15)
-                triangles=[]
-                for tri in item['triangles']:
-                    points=[clip(p) for p in tri]
-                    if all(p is not None for p in points): triangles.extend(points)
                 if triangles:
-                    fill.bind(); fill.uniform_float('color',(*color,.25))
-                    batch_for_shader(fill,'TRIS',{'pos':triangles}).draw(fill)
-                lines=[]
-                for segment in item['segments']:
-                    points=[clip(p) for p in segment]
-                    if all(p is not None for p in points): lines.extend(points)
+                    fill.bind(); fill.uniform_float('color',(*color,.25)); triangles.draw(fill)
                 if item['kind']=='VERTEX':
-                    p=clip(item['points'][0])
-                    if p:
-                        x,y,z=p; dx=8/width; dy=8/height
-                        lines=[(x-dx,y,z),(x+dx,y,z),(x,y-dy,z),(x,y+dy,z)]
-                if lines:
+                    p=projection@Vector((*item['points'][0],1.))
+                    if p.w<=1e-9: continue
+                    x,y,z=p.x/p.w,p.y/p.w,p.z/p.w; dx=8/width; dy=8/height
+                    segments=batch_for_shader(line,'LINES',{'pos':[(x-dx,y,z),(x+dx,y,z),(x,y-dy,z),(x,y+dy,z)]})
+                    gpu.matrix.load_projection_matrix(Matrix.Identity(4))
+                if segments:
                     line.bind(); line.uniform_float('viewportSize',(width,height))
                     for size,c in ((5.,(.01,.02,.03,1.)),(2.5,(*color,1.))):
-                        line.uniform_float('lineWidth',size); line.uniform_float('color',c)
-                        batch_for_shader(line,'LINES',{'pos':lines}).draw(line)
+                        line.uniform_float('lineWidth',size); line.uniform_float('color',c); segments.draw(line)
+                gpu.matrix.load_projection_matrix(projection)
     finally:
         gpu.state.blend_set(saved[0]); gpu.state.depth_test_set(saved[1]); gpu.state.depth_mask_set(saved[2]); gpu.state.viewport_set(*saved[3])

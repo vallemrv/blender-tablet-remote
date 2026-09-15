@@ -403,8 +403,17 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   de igualdad sin duplicarlas; las cotas previas incompatibles rechazan el cambio.
   En círculos, Radio/Diámetro elige la representación del mismo parámetro y cota.
   Simetría usa tres puntos, con el último como centro; el origen ya está fijo.
-- Crear copia de malla está en el menú de cada Extrusión/Vaciado de la pila. Exporta
-  el resultado elegido a Object, con una malla editable, conservando el documento CAD.
+- Cada cuerpo CAD publica un único objeto con el resultado acumulado de su historial:
+  Extruir añade por unión y Vaciar resta del resultado anterior. Nuevo cuerpo crea una
+  pieza independiente. El objeto conserva su identidad al editar y recorrer la pila;
+  `btr_cad_body_id` identifica el cuerpo y `btr_cad_feature_id` su operación visible final.
+  Crear copia de malla vive en el menú del cuerpo y exporta la pieza completa a Object.
+- La evaluación reutiliza operandos y resultados de operaciones que no cambian,
+  y conserva su malla Blender. Las claves incluyen geometría, plano, profundidad y
+  predecesor; el estado se descarta al cargar/deshacer. Renombrar no evalúa geometría.
+- El resaltado CAD conserva lotes de GPU en coordenadas 3D; la cámara solo cambia
+  su matriz de proyección. Las medidas y la adyacencia se reutilizan mientras la firma
+  de geometría/topología/transformación/unidades siga igual. No se retienen referencias RNA.
 - Extruir/Vaciar CAD recorren un paso por 4 % de altura con lápiz; Incremento
   redondea el gesto, las cotas escritas son exactas. Vaciar consume su sólido
   destino en el árbol y reconstruye desde los parámetros. La transparencia se
@@ -475,7 +484,7 @@ no quedan archivos o referencias temporales.
   de tres vértices el cierre se ignora o responde error sin perder la sesión.
   Cancelar o dos dedos descarta la cadena completa; otra herramienta la abandona
   sin persistir nada. En construcción no genera perfil y selecciona el último tramo.
-- Los cuerpos agrupan bocetos/operaciones independientes. Los planos guardados
+- Los cuerpos son piezas independientes con un historial de croquis/operaciones. Los planos guardados
   admiten desplazamiento métrico y giro local XYZ en grados, con referencias a
   boceto/cara superior. Una cara arbitraria guarda su marco capturado, sin índices
   evaluados persistentes; su adquisición pasa por `commands/snap.py`.
@@ -569,7 +578,12 @@ no quedan archivos o referencias temporales.
 - Finalizar boceto restaura una vista 3D orbital, con encuadre del resultado, sin
   escribir `rv3d`. Extruir/Vaciar muestran su preview en 3D. Si el croquis nuevo tiene
   varios perfiles se selecciona completo (`SKETCH`), no su última figura; un perfil
-  único conserva `PROFILE`. La pila ofrece Croquis completo y perfiles individuales.
+  único conserva `PROFILE`. La pila muestra solo croquis y operaciones, sin filas
+  para figuras o perfiles. El menú del croquis ofrece Renombrar y Seleccionar croquis
+  completo; las figuras permanecen dentro de la edición. Tocar un nodo selecciona ese paso.
+- Planos ofrece Superior/Frontal/Lateral, una cara y Separación como controles básicos.
+  Crear croquis crea plano y boceto en un undo. Inclinación/XYZ son ajustes opcionales;
+  Planos existentes permite reutilizar y colocar los guardados con la misma interfaz.
 - Seleccionar todo/Deseleccionar todo comparten el rail de Deshacer/Rehacer, también
   en CAD 3D. En edición seleccionan figuras del croquis; en 3D el croquis elegido.
   Extruir/Vaciar aceptan `sketch_id` para todos sus contornos: exteriores como volumen,

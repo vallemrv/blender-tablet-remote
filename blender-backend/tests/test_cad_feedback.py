@@ -141,6 +141,7 @@ class FeedbackTests(CadTests):
         self.extrude(self.rect())
         self.assertEqual(len(self.obj().data.polygons),6)
         self.assertTrue(all(len(p.vertices)==4 for p in self.obj().data.polygons))
+        cad.body_create(OWNER)  # The next independent solid belongs to another body.
         cad.sketch_create(dict(plane='XY',**OWNER))
         e=self.draw('CIRCLE',(.2,0),(.22,0)); f=self.extrude(e)
         obj=next(o for o in runtime.objects(runtime.doc()) if o[FEATURE_KEY]==f)

@@ -35,7 +35,8 @@ class HistoryTests(CadTests):
         status=cad.history_rollback(OWNER)
         self.assertIsNone(status['rollback_id'])
         shown={o[FEATURE_KEY] for o in runtime.objects(runtime.doc()) if o.visible_get()}
-        self.assertEqual(shown,{f1,f2})
+        self.assertEqual(shown,{f2})  # One body, showing its latest operation.
+        self.assertEqual(len(runtime.objects(runtime.doc())),1)
 
     def test_tap_node_shows_object_at_that_moment(self):
         first=self.rect(); self.extrude(first,.02)
@@ -68,7 +69,8 @@ class HistoryTests(CadTests):
         self.assertEqual(runtime.status()['rollback_id'],new)
         cad.history_rollback(OWNER)
         shown={o[FEATURE_KEY] for o in runtime.objects(runtime.doc()) if o.visible_get()}
-        self.assertEqual(shown,{f1,f2,new})
+        self.assertEqual(shown,{f2})  # Inserting a step preserves the body's later history.
+        self.assertEqual(len(runtime.objects(runtime.doc())),1)
 
     def test_transactions_while_rolled_back_keep_the_view(self):
         s1=runtime.active_sketch_id

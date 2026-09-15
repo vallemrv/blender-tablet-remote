@@ -6,13 +6,14 @@ from . import command
 from ..cad import document as model
 from ..cad import sketch as geometry
 from ..cad import dimensions
-from ..cad.runtime import runtime, FEATURE_KEY, DOC_KEY
+from ..cad.runtime import runtime, FEATURE_KEY, DOC_KEY, BODY_KEY
 from ..errors import BadPayload, CommandError
 from ..bpy_utils import undo_push
 
 
 def _activate_feature(doc, identifier):
-    obj = next((o for o in runtime.objects(doc) if o[FEATURE_KEY] == identifier), None)
+    body=model.find(doc,'features',identifier)['body_id']
+    obj = next((o for o in runtime.objects(doc) if o.get(BODY_KEY)==body or o[FEATURE_KEY] == identifier), None)
     if obj is not None and not obj.hide_viewport:
         for other in bpy.context.view_layer.objects:
             if other.select_get():
@@ -68,6 +69,14 @@ def history_rollback(payload):
         runtime.solid_view()
     else:
         runtime.rebuild(doc, limit=bar)
+    if not runtime.active_sketch_id and identifier:
+        node=next(node for node in model.history(doc) if node['id']==identifier)
+        runtime.active_body_id=node['body_id']
+        if node['kind']=='SKETCH':
+            runtime.selection=dict(kind='SKETCH',id=identifier) if model.profiles(node) else None
+        else:
+            runtime.selection=dict(kind='FEATURE',id=identifier)
+            _activate_feature(doc,identifier)
     return runtime.status()
 
 
@@ -122,6 +131,17 @@ def sketch_activate(payload):
     _require_reachable(doc,sketch['id'])
     runtime.enter_sketch(sketch)
     return runtime.status()
+
+
+@command('cad.sketch.rename')
+def sketch_rename(payload):
+    name=payload.get('name')
+    if not isinstance(name,str) or not name.strip() or len(name.strip())>80:
+        raise BadPayload('Escribe un nombre de croquis entre 1 y 80 caracteres')
+    def change(doc):
+        sketch=model.find(doc,'sketches',payload.get('sketch_id'))
+        sketch['name']=name.strip()
+    return runtime.transaction(payload,change,'CAD renombrar croquis',geometry=False)
 
 
 @command('cad.sketch.finish')
@@ -531,15 +551,21 @@ def convert(payload):
     if runtime.session:
         raise CommandError('Confirma o cancela antes de convertir',code='session_active')
     doc = runtime.doc()
-    feature = model.find(doc,'features',payload.get('feature_id'))
-    _require_reachable(doc,feature['id'])
-    objs = [o for o in runtime.objects(doc) if o[FEATURE_KEY]==feature['id']]
-    if not objs or not feature['enabled']:
+    if any(not obj.get(BODY_KEY) for obj in runtime.objects(doc)):
+        runtime.rebuild(doc,limit=runtime.bar(doc))
+    if payload.get('body_id'):
+        body=model.find(doc,'bodies',payload['body_id'])['id']
+    else:
+        feature=model.find(doc,'features',payload.get('feature_id'))
+        _require_reachable(doc,feature['id']);body=feature['body_id']
+    objs = [o for o in runtime.objects(doc) if o.get(BODY_KEY)==body and not o.hide_viewport]
+    if not objs:
         raise CommandError('Activa la operación antes de crear su malla',code='cad_reference_missing')
     copies=[]
     for obj in objs:
         mesh=obj.copy(); mesh.data=obj.data.copy(); mesh.name=obj.name+' · malla'
         del mesh[FEATURE_KEY]; del mesh[DOC_KEY]
+        if BODY_KEY in mesh: del mesh[BODY_KEY]
         mesh.hide_viewport=False; mesh.hide_render=False
         bpy.context.scene.collection.objects.link(mesh)
         copies.append(mesh)
@@ -917,6 +943,7 @@ def plane_create(payload):
             if payload.get(key): plane[key]=payload[key]
         if 'u' in payload or 'v' in payload: raise BadPayload('Selecciona una cara y pulsa Boceto en cara')
         model.validate_plane(plane); doc['planes'].append(plane); model.resolve_supports(doc)
+        if payload.get('start_sketch'): _new_sketch(doc,dict(plane_id=plane['id']))
     return runtime.transaction(payload,change,'CAD crear plano')
 
 
@@ -970,14 +997,18 @@ def sketch_on_face(payload):
         plane=dict(id=model.uid('plane'),name='Cara de '+source['object'],base='XY',implicit=True,
                    translation=[0,0,0],rotation=[0,0,0],face_frame=frame)
         feature=next((f for f in doc['features'] if f['id']==source['feature_id']),None)
-        if feature:
-            source_sketch=model.find(doc,'sketches',feature['sketch_id']); base=model.frame(source_sketch)
-            normal=Vector(base['normal']); top=Vector(base['origin'])+normal*(feature['depth'] if feature['type']=='EXTRUDE' else 0)
+        candidates=[node for node in reversed(model.history(doc)) if node['kind']=='FEATURE' and node['enabled'] and
+                    feature and node['body_id']==feature['body_id'] and node['id'] in _reachable_ids(doc)]
+        for support in candidates:
+            source_sketch=model.find(doc,'sketches',support['sketch_id']); base=model.frame(source_sketch)
+            normal=Vector(base['normal'])
+            top=Vector(base['origin'])+normal*(support['depth'] if support['type']=='EXTRUDE' else 0)
             delta=Vector(frame['origin'])-top
             if Vector(frame['normal']).dot(normal)>1-1e-6 and abs(delta.dot(normal))<1e-7:
-                plane.pop('face_frame'); plane['support_id']=feature['id']
+                plane.pop('face_frame'); plane['support_id']=support['id']
                 plane['translation']=[delta.dot(Vector(base['x'])),delta.dot(Vector(base['y'])),0.]
                 plane['rotation']=[0.,0.,math.degrees(math.atan2(Vector(frame['x']).dot(Vector(base['y'])),Vector(frame['x']).dot(Vector(base['x']))))]
+                break
         model.validate_plane(plane); doc['planes'].append(plane)
         _new_sketch(doc,dict(plane_id=plane['id'],body_id=feature.get('body_id') if feature else None))
         from ..bpy_utils import find_view3d

@@ -1,5 +1,6 @@
 """Transient solid selection and SI measurements; evaluated IDs never enter the CAD document."""
 import hashlib
+from collections import OrderedDict
 import math
 import bpy
 import numpy as np
@@ -11,8 +12,11 @@ def stamp(obj):
     mesh=obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data
     coords=np.empty(len(mesh.vertices)*3,dtype=np.float32); mesh.vertices.foreach_get('co',coords)
     loops=np.empty(len(mesh.loops),dtype=np.int32); mesh.loops.foreach_get('vertex_index',loops)
+    polygons=np.empty(len(mesh.polygons),dtype=np.int32); mesh.polygons.foreach_get('loop_total',polygons)
+    edges=np.empty(len(mesh.edges)*2,dtype=np.int32); mesh.edges.foreach_get('vertices',edges)
     digest=hashlib.blake2b(digest_size=16)
     digest.update(coords.tobytes()); digest.update(loops.tobytes())
+    digest.update(polygons.tobytes()); digest.update(edges.tobytes())
     digest.update(np.asarray(obj.matrix_world,dtype=np.float32).tobytes())
     digest.update(str(bpy.context.scene.unit_settings.scale_length).encode())
     return obj.as_pointer(),obj.data.as_pointer(),digest.digest()
@@ -79,16 +83,26 @@ class SurfaceSelection:
         self.mode='PROFILE'
         self.items=[]
         self._stamps={}
+        self.graphs=OrderedDict()
+        self.draw_cache=None
+        self._measure_key=None
+        self._measurements=[]
+        self._measure_items=()
 
     def clear(self):
         self.items=[]; self._stamps={}
+        self.draw_cache=None
+        self._measure_key=None
+        self._measure_items=()
 
     def validate(self):
-        valid=[]
+        valid=[]; current={}
         for item in self.items:
             obj=bpy.data.objects.get(item['object'])
             try:
-                if obj and obj.type=='MESH' and obj.visible_get() and stamp(obj)==self._stamps.get(item['object']): valid.append(item)
+                if obj and obj.type=='MESH' and obj.visible_get():
+                    if obj.name not in current: current[obj.name]=stamp(obj)
+                    if current[obj.name]==self._stamps.get(item['object']): valid.append(item)
             except (ReferenceError,RuntimeError): pass
         self.items=valid
         names={item['object'] for item in valid}
@@ -119,6 +133,12 @@ class SurfaceSelection:
 
     def status(self):
         self.validate()
+        scale=bpy.context.scene.unit_settings.scale_length
+        key=(tuple(id(item) for item in self.items),scale)
+        if key!=self._measure_key:
+            self._measurements=measurements(self.items,scale)
+            self._measure_key=key
+            self._measure_items=tuple(self.items)
         return dict(mode=self.mode,selection=[{k:item[k] for k in ('id','kind','object','feature_id','planar')} for item in self.items],
-                    measurements=measurements(self.items,bpy.context.scene.unit_settings.scale_length),
+                    measurements=self._measurements,
                     can_sketch=len(self.items)==1 and self.items[0]['kind']=='FACE' and self.items[0]['planar'])
