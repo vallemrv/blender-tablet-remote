@@ -48,15 +48,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.blendertablet.remote.model.BlenderState
+import com.blendertablet.remote.model.LengthUnit
 import com.blendertablet.remote.model.ModifierDefault
 import com.blendertablet.remote.model.ModifierParameterDescriptor
 import com.blendertablet.remote.model.ModifierState
 import com.blendertablet.remote.model.ObjectChoiceFilter
 import java.math.BigDecimal
+import java.math.MathContext
 import java.math.RoundingMode
 import kotlin.math.roundToInt
 
@@ -337,6 +340,10 @@ private fun ModifierParameter(
         else -> {
             val isInt = spec.type == "int"
             val current = (value as? Number)?.toDouble() ?: 0.0
+            if (spec.editable) {
+                EditableModifierScalar(item, spec, state, current) { set(item.name, spec.name, it) }
+                return
+            }
             fun apply(delta: Double) {
                 set(item.name, spec.name, stepModifierScalar(current, isInt, delta, spec))
             }
@@ -351,6 +358,69 @@ private fun ModifierParameter(
         }
     }
 }
+
+/** Exact typed values use the descriptor's wire units; drafts survive scene snapshots. */
+@Composable
+private fun EditableModifierScalar(
+    item: ModifierState,
+    spec: ModifierParameterDescriptor,
+    state: BlenderState,
+    current: Double,
+    set: (Number) -> Unit,
+) {
+    val factor = modifierScalarFactor(spec, state)
+    val suffix = when (spec.unit) { "LENGTH" -> state.sceneScale.lengthUnit.short; "ANGLE" -> "°"; else -> "" }
+    var draft by remember(state.activeObject, item.name, spec.name, factor) { mutableStateOf<String?>(null) }
+    val focus = LocalFocusManager.current
+    val typed = draft?.let { parseModifierScalar(it, spec, factor) }
+    fun commit() {
+        val number = typed ?: return
+        set(number)
+        focus.clearFocus()
+        draft = null
+    }
+    fun nudge(direction: Int) {
+        val start = if (draft == null) current else typed?.toDouble() ?: return
+        val number = stepModifierScalar(start, spec.type == "int", direction * step(spec), spec)
+        draft = null
+        set(number)
+    }
+    val valid = draft == null || typed != null
+    val value = typed?.toDouble() ?: current
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(spec.label + if (suffix.isEmpty()) "" else " · $suffix", color = Ink.Faint, fontSize = 11.sp,
+            modifier = Modifier.weight(1f).padding(end = 4.dp))
+        StepperButton("−", valid && (spec.min == null || value > spec.min)) { nudge(-1) }
+        CompactNumericField(
+            value = draft ?: formatEditableModifierValue(current * factor),
+            onValueChange = { draft = it },
+            modifier = Modifier.width(80.dp),
+            textColor = if (valid) Ink.OnPanel else Ink.Bad,
+            onDone = ::commit,
+        )
+        StepperButton("+", valid && (spec.max == null || value < spec.max)) { nudge(1) }
+        if (draft != null) ModifierHeaderButton(Icons.Default.Check, "Confirmar ${spec.label}", enabled = typed != null) { commit() }
+    }
+}
+
+internal fun modifierScalarFactor(spec: ModifierParameterDescriptor, state: BlenderState): Double =
+    if (spec.unit == "LENGTH") state.unitScaleLength * when (state.sceneScale.lengthUnit) {
+        LengthUnit.MILLIMETERS -> 1000.0
+        LengthUnit.CENTIMETERS -> 100.0
+        LengthUnit.METERS -> 1.0
+    } else 1.0
+
+internal fun parseModifierScalar(text: String, spec: ModifierParameterDescriptor, factor: Double): Number? {
+    if (!factor.isFinite() || factor <= 0.0) return null
+    val value = text.trim().replace(',', '.').toDoubleOrNull()?.div(factor) ?: return null
+    if (!value.isFinite() || value < (spec.min ?: -Double.MAX_VALUE) || value > (spec.max ?: Double.MAX_VALUE)) return null
+    return if (spec.type == "int") {
+        if (value % 1.0 != 0.0 || value < Int.MIN_VALUE || value > Int.MAX_VALUE) null else value.toInt()
+    } else value
+}
+
+internal fun formatEditableModifierValue(value: Double): String =
+    BigDecimal.valueOf(value).round(MathContext(7)).stripTrailingZeros().toPlainString()
 
 /** Fila con una opción elegible: etiqueta a la izquierda, valor pulsable a la derecha. */
 @Composable

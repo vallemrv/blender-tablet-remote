@@ -301,7 +301,13 @@ def add_options(payload: dict) -> dict:
         }},
         "SUBSURF": {"parameters": {"levels": _number("int", 1, 0, 6, 1), "render_levels": _number("int", 2, 0, 6, 1), "subdivision_type": _enum("CATMULL_CLARK", ["CATMULL_CLARK", "SIMPLE"])}},
         "ARRAY": {"parameters": {"count": _number("int", 2, 1, 1000, 1), "relative_offset": _number("float3", [1.0, 0.0, 0.0], -1000.0, 1000.0, 0.1), "use_merge": {"type": "bool", "default": False}, "merge_threshold": _number("float", 0.01, 0.0, 1000.0, 0.001)}},
-        "BEVEL": {"parameters": {"width": _number("float", 0.1, 0.0, 1000.0, 0.01), "segments": _number("int", 1, 1, 1000, 1), "affect": _enum("EDGES", ["EDGES", "VERTICES"]), "limit_method": _enum("ANGLE", ["NONE", "ANGLE"]), "angle_limit": _number("float", 30.0, 0.0, 180.0, 1.0), "profile": _number("float", 0.5, 0.0, 1.0, 0.05)}},
+        "BEVEL": {"parameters": {
+            "width": dict(_number("float", 0.1, 0.0, 1000.0, 0.01), label="Ancho", editable=True, unit="LENGTH"),
+            "segments": dict(_number("int", 1, 1, 1000, 1), label="Segmentos", editable=True),
+            "affect": _enum("EDGES", ["EDGES", "VERTICES"]), "limit_method": _enum("ANGLE", ["NONE", "ANGLE"]),
+            "angle_limit": dict(_number("float", 30.0, 0.0, 180.0, 1.0), label="Ángulo", editable=True, unit="ANGLE"),
+            "profile": dict(_number("float", 0.5, 0.0, 1.0, 0.05), label="Perfil", editable=True),
+        }},
         "SOLIDIFY": {"parameters": {"thickness": _number("float", 0.1, -1000.0, 1000.0, 0.01), "offset": _number("float", -1.0, -1.0, 1.0, 0.1), "use_even_offset": {"type": "bool", "default": True}, "use_rim": {"type": "bool", "default": True}}},
         "BOOLEAN": {"parameters": {"operation": _enum("DIFFERENCE", ["DIFFERENCE", "UNION", "INTERSECT"]), "object": {"type": "object", "default": None, "object_filter": {"type": "MESH", "exclude_self": True}}, "solver": _enum("EXACT", ["EXACT", "FAST"])}},
         "MIRROR": {"parameters": {

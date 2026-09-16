@@ -219,6 +219,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   Object y Sculpt comparten la implementación nativa y conservan el resto de la pila.
   El esquema de modificadores describe etiquetas, campos de solo lectura, acciones
   y límites referenciados al estado; la UI no simula niveles inexistentes.
+- El modificador Bisel anuncia campos numéricos editables por esquema: Ancho,
+  Segmentos, Ángulo y Perfil. Ancho usa mm/cm/m del preset y convierte por
+  `scale_length`; Ángulo usa grados. Escribir y confirmar envía el valor exacto,
+  sin redondearlo al paso. Los snapshots no borran un borrador, tampoco vacío.
 - Multires/Dyntopo respaldan la malla nativa durante el trazo para restaurar
   desplazamientos y topología; sus archivos privados se retiran al cerrar.
   Guardar desde el PC restaura el baseline en `save_pre` y difiere el cierre del

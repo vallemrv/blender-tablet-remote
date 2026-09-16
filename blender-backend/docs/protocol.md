@@ -1077,6 +1077,14 @@ y Escultura. Se admiten hasta seis niveles; sus cambios usan un undo por operaci
 El panel Object y `sculpt.multires` comparten la operación nativa. Dyntopo y
 Multires siguen siendo excluyentes y los demás modificadores se conservan.
 
+Los descriptores numéricos admiten `editable:true` (por defecto false) y `unit`.
+Bisel lo anuncia para `width`, `segments`, `angle_limit` y `profile`. `width`
+usa `unit:"LENGTH"`: en la red conserva unidades Blender; Android muestra la unidad
+del preset y convierte mediante `scale_length`. `angle_limit` usa `unit:"ANGLE"`
+y conserva grados tanto en la red como en pantalla. Confirmar un borrador válido
+envía un único `modifier.set`, sin cuantizar al `step`; vacío, valores no finitos
+o fuera del rango no se envían. Los demás controles conservan su presentación.
+
 El estado completo contiene `hidden_objects:[{name,type}]`, enumerado desde el view
 layer, y `active.modifiers[]`. `visibility.changed` lleva exactamente
 `{hidden_objects}`. Hide/reveal responden además con `hidden_objects`,
