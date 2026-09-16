@@ -636,7 +636,13 @@ def _cad_mesh(obj):
         cache.move_to_end(key)
         return cached[1]
     mesh=obj.data
-    if any(mod.show_viewport for mod in obj.modifiers):
+    active_modifiers=[mod for mod in obj.modifiers if mod.show_viewport]
+    # These modifiers finish the displayed CAD body. Its design planes and
+    # dimensions still belong to the parametric result before that finish.
+    # Stacks that move/copy geometry (e.g. Array) must use their evaluated frame.
+    reference=bool(obj.get('btr_cad_feature_id')) and all(mod.type in {'BEVEL','SUBSURF'} for mod in active_modifiers)
+    mapping=dict(reference=reference)
+    if active_modifiers:
         base=_cad_topology(mesh,obj.matrix_world)
         names=[]
         try:
@@ -660,6 +666,9 @@ def _cad_mesh(obj):
             face_labels=[item.value for item in attrs[0].data]
             edge_labels={tuple(sorted(edge.vertices)):item.value for edge,item in zip(evaluated.edges,attrs[1].data)}
             result=_cad_topology(evaluated,obj.matrix_world,face_labels,edge_labels)
+            source_edges={value:key for key,value in edge_ids.items()}
+            mapping.update(base=base,faces=[label-1 for label in face_labels],
+                           edges={edge:source_edges[label] for edge,label in edge_labels.items() if label in source_edges})
         finally:
             for name in names:
                 attr=mesh.attributes.get(name)
@@ -667,6 +676,9 @@ def _cad_mesh(obj):
             mesh.update()
     else:
         result=_cad_topology(obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data,obj.matrix_world)
+    if not active_modifiers:
+        mapping.update(base=result,faces=list(range(len(result[2]))),edges={edge:edge for edge in result[6]})
+    result=(*result,mapping)
     cache[key]=(signature,result,{})
     cache.move_to_end(key)
     while len(cache)>8: cache.popitem(last=False)
@@ -698,10 +710,12 @@ def query_cad_surface(payload, kind):
         for obj in bpy.context.view_layer.objects:
             if obj.type!='MESH' or not obj.visible_get(viewport=viewport): continue
             graph=_cad_mesh(obj); graphs[obj.name]=graph
-            points,edges=graph[1],graph[6]
+            pick_graph=graph[9]['base'] if kind=='VERTEX' and graph[9]['reference'] else graph
+            points,edges=pick_graph[1],pick_graph[6]
+            design_tree=BVHTree.FromPolygons(points,pick_graph[2]) if pick_graph is not graph else None
             vertices={i for edge in edges for i in edge}
             if kind=='VERTEX':
-                linked={i for edge in graph[5] for i in edge}
+                linked={i for edge in pick_graph[5] for i in edge}
                 vertices.update(i for i in range(len(points)) if i not in linked)
             sources=edges if kind=='EDGE' else [(i,) for i in sorted(vertices)]
             for source in sources:
@@ -719,22 +733,44 @@ def query_cad_surface(payload, kind):
                     world_t=t*wa/max((1-t)*wb+t*wa,1e-12)
                     position=a.lerp(b,world_t)
                 distance=(((u-screen[0])*aspect)**2+(v-screen[1])**2)**.5
-                if distance>.028 or not _visible(position,screen,depsgraph,rv3d,set(),viewport): continue
+                if distance>.028: continue
+                if design_tree is not None:
+                    origin,direction=camera.ray(*screen,rv3d)
+                    depth=(position-origin).dot(direction)
+                    if depth<=0 or design_tree.ray_cast(origin,direction,max(0.,depth-max(1e-6,depth*1e-5)))[0] is not None: continue
+                if not _visible(position,screen,depsgraph,rv3d,{obj.name} if design_tree is not None else set(),viewport): continue
                 candidates.append(dict(id=obj.name+':'+str(source),distance=distance,object=obj.name,source=source))
         chosen=choose_sticky_candidate(candidates,None,.028)
         if chosen is None: return None
         selected=(bpy.data.objects[chosen['object']],chosen['source'])
     obj,source=selected; graph=graphs[obj.name]
-    triangles,points,faces,normals,centers,adjacency,edges=graph[:7]
     from ..cad.runtime import runtime
     if kind=='FACE':
         face_cache=runtime.surface.graphs[obj.as_pointer()][2]
         cached=face_cache.get(source)
         if cached and cached['object']==obj.name and cached['feature_id']==obj.get('btr_cad_feature_id'):
             return cached
-    data=dict(kind=kind,object=obj.name,feature_id=obj.get('btr_cad_feature_id'),
-              mesh_pointer=obj.data.as_pointer(),matrix=[list(row) for row in obj.matrix_world],
-              segments=[],triangles=[],points=[],planar=False)
+    display_graph=graph[9]['base'] if kind=='VERTEX' and graph[9]['reference'] else graph
+    display=_cad_reference_geometry(display_graph,kind,source)
+    mapping=graph[9]
+    reference=display
+    if mapping['reference']:
+        base=mapping['base']
+        original=(mapping['faces'][source] if kind=='FACE' else mapping['edges'].get(tuple(source)) if kind=='EDGE' else source)
+        if original is not None and (kind!='FACE' or 0<=original<len(base[2])):
+            reference=_cad_reference_geometry(base,kind,original)
+    data=dict(reference,object=obj.name,feature_id=obj.get('btr_cad_feature_id'),
+              mesh_pointer=obj.data.as_pointer(),matrix=[list(row) for row in obj.matrix_world],display=display)
+    data['id']=obj.name+':'+reference['id']
+    if kind=='FACE':
+        for index in graph[7][source]: face_cache[index]=data
+    return data
+
+
+def _cad_reference_geometry(graph, kind, source):
+    """Design measurements/planes and evaluated highlights share geometry extraction."""
+    triangles,points,faces,normals,centers,adjacency,edges=graph[:7]
+    data=dict(kind=kind,segments=[],triangles=[],points=[],planar=False)
     if kind=='FACE':
         chosen=graph[7][source]
         origin=centers[source]; normal=normals[source]
@@ -748,14 +784,13 @@ def query_cad_surface(payload, kind):
         center=sum(((Vector(a)+Vector(b)+Vector(c))/3*w for (a,b,c),w in zip(data['triangles'],weights)),Vector())/area if area>1e-20 else origin
         data['normal']=list(normal); data['center']=list(center)
         data['planar']=all(abs((Vector(p)-origin).dot(normal))<=tolerance for p in data['points'])
-        data['id']=obj.name+':FACE:'+str(min(chosen))
-        for index in chosen: face_cache[index]=data
+        data['id']='FACE:'+str(min(chosen))
     elif kind=='EDGE':
         chosen=graph[8][tuple(source)]
         vertices={i for edge in chosen for i in edge}
         data['segments']=[[list(points[i]) for i in edge] for edge in sorted(chosen)]
         data['points']=[list(points[i]) for i in sorted(vertices)]
-        data['id']=obj.name+':EDGE:'+str(min(chosen))
+        data['id']='EDGE:'+str(min(chosen))
     else:
-        data['points']=[list(points[source[0]])]; data['id']=obj.name+':VERTEX:'+str(source[0])
+        data['points']=[list(points[source[0]])]; data['id']='VERTEX:'+str(source[0])
     return data

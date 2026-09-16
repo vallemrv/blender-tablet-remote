@@ -174,8 +174,14 @@ separación entre planos; una arista/punto y una cara, distancia al plano.
 Los modificadores siguen mostrando toda su geometría, pero la selección conserva
 las caras y aristas de origen. Un cubo con Subdivisión ofrece seis caras y doce
 aristas completas: tocar dos subdivisiones de la misma cara alterna esa misma
-selección. El resaltado y las medidas siguen la forma modificada. Si la cara se
-curva, no permite crear un boceto plano sobre ella.
+selección. En cuerpos CAD con Bisel/Subdivisión, el resaltado sigue la forma
+modificada y las medidas y planos conservan la referencia de diseño anterior al
+acabado. Puedes crear otro croquis sobre esa cara y seleccionar sus vértices
+originales aunque el bisel haya redondeado las esquinas visibles.
+
+Para conservar paredes rectas y cotas de una caja vaciada, ajusta el redondeo con
+Ancho y Segmentos de Bisel. Subdivisión Catmull-Clark modifica también la forma
+de las paredes y del hueco; puede cerrar sus esquinas, incluso detrás de un bisel.
 
 Estos selectores se ocultan al editar el croquis: su cursor ya selecciona puntos
 y aristas directamente. Solo reaparecen si abres **Medir desde sólido** para

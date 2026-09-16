@@ -84,7 +84,7 @@ class ModifierSelectionTests(CadTests):
         self.assertEqual(stamp(obj),before)
 
     @unittest.skipIf(bpy.app.background,'Real viewport projection required')
-    def test_real_picks_toggle_whole_face_and_edge_and_reject_curved_sketch_plane(self):
+    def test_real_picks_use_design_planes_and_keep_evaluated_highlights(self):
         obj,mod=self.subdivided()
         camera.apply(location=(.04,.0225,.01),rotation=Quaternion(),distance=.09,perspective='ORTHO')
         graph=snap._cad_mesh(obj)
@@ -99,10 +99,12 @@ class ModifierSelectionTests(CadTests):
             state=pick('FACE',graph[4][min(region)])
             self.assertEqual(len(runtime.surface.items),1)
             item=runtime.surface.items[0]
-            self.assertEqual(len(item['triangles']),32)
-            self.assertEqual(len(item['segments']),16)
-            self.assertFalse(state['surface']['can_sketch'])
-            self.assertFalse(item['planar'])
+            self.assertEqual(len(item['display']['triangles']),32)
+            self.assertEqual(len(item['triangles']),2)
+            self.assertEqual(len(item['display']['segments']),16)
+            self.assertTrue(state['surface']['can_sketch'])
+            self.assertTrue(item['planar'])
+            self.assertFalse(item['display']['planar'])
             state=pick('FACE',graph[4][max(region)])
             self.assertFalse(runtime.surface.items)  # Another small quad toggles the same CAD face.
             edge=max(graph[6],key=lambda e:sum(graph[1][i].z for i in e))
@@ -110,11 +112,68 @@ class ModifierSelectionTests(CadTests):
             first,last=min(selected),max(selected)
             pick('EDGE',sum((graph[1][i] for i in first),Vector())*.5)
             self.assertEqual(len(runtime.surface.items),1)
-            self.assertEqual(len(runtime.surface.items[0]['segments']),4)
+            self.assertEqual(len(runtime.surface.items[0]['display']['segments']),4)
+            self.assertEqual(len(runtime.surface.items[0]['segments']),1)
             pick('EDGE',sum((graph[1][i] for i in last),Vector())*.5)
             self.assertFalse(runtime.surface.items)
             undo.assert_not_called()
         self.assertEqual(model.dumps(runtime.doc()),before)
+
+    def pocket(self):
+        bpy.context.scene.unit_settings.scale_length=.001
+        base=self.draw('RECTANGLE',(-.0915,-.051),(.0915,.051))
+        first=self.extrude(base,.03)
+        cad.sketch_create(dict(support_id=first,**OWNER))
+        hole=self.draw('RECTANGLE',(-.0865,-.0455),(.0865,.0455))
+        cad.extrude_begin(dict(profile_id='profile_'+hole,operation='CUT',target_id=first,depth=.026,**OWNER))
+        cad.confirm(OWNER)
+        obj=self.obj()
+        bevel=obj.modifiers.new('Bevel','BEVEL');bevel.width=1.;bevel.segments=3
+        sub=obj.modifiers.new('Subdivision','SUBSURF');sub.levels=2
+        bpy.context.view_layer.update()
+        return obj,sub
+
+    @unittest.skipIf(bpy.app.background,'Real viewport projection required')
+    def test_pocket_bevel_points_edges_and_face_to_sketch_in_millimeter_scene(self):
+        obj,sub=self.pocket()
+        camera.apply(location=(0,0,15),rotation=Quaternion(),distance=250,perspective='ORTHO')
+        def pick(kind,position):
+            runtime.surface.clear()
+            screen=camera.project(Vector(position),find_view3d()[3])
+            cad.surface_mode(dict(mode=kind,**OWNER))
+            return cad.surface_select(dict(u=screen[0],v=screen[1],**OWNER))
+        before=model.dumps(runtime.doc()); pointer=obj.data.as_pointer()
+        for enabled in (False,True):
+            sub.show_viewport=enabled;bpy.context.view_layer.update()
+            with patch('blender_tablet_remote.cad.runtime.undo_push') as undo:
+                self.assertEqual(len(pick('VERTEX',(-91.5,-51,30))['surface']['selection']),1)
+                self.assertEqual(runtime.surface.items[0]['kind'],'VERTEX')
+                self.assertLess((Vector(runtime.surface.items[0]['points'][0])-Vector((-91.5,-51,30))).length,1e-4)
+                state=pick('EDGE',(0,-51,30))
+                self.assertEqual(len(state['surface']['selection']),1)
+                length=next(m['value'] for m in state['surface']['measurements'] if m['label']=='Longitud')
+                self.assertAlmostEqual(length,.183,places=6)
+                state=pick('FACE',(0,-49,30))
+                self.assertTrue(state['surface']['can_sketch'])
+                self.assertAlmostEqual(runtime.surface.face_frame()['origin'][2],.03,places=6)
+                self.assertEqual(obj.data.as_pointer(),pointer)
+                self.assertEqual(model.dumps(runtime.doc()),before)
+                undo.assert_not_called()
+        with patch.object(snap,'query_cad_surface',side_effect=AssertionError('second raycast')),patch('blender_tablet_remote.cad.runtime.undo_push') as undo:
+            cad.sketch_on_face(OWNER);undo.assert_called_once()
+        self.assertAlmostEqual(model.frame(runtime.doc()['sketches'][-1])['origin'][2],.03,places=6)
+        self.assertEqual([m.type for m in obj.modifiers],['BEVEL','SUBSURF'])
+
+    @unittest.skipIf(bpy.app.background,'Real viewport projection required')
+    def test_design_corner_does_not_select_through_another_object(self):
+        obj,sub=self.pocket()
+        camera.apply(location=(0,0,15),rotation=Quaternion(),distance=250,perspective='ORTHO')
+        bpy.ops.mesh.primitive_cube_add(size=20,location=(-91.5,-51,60))
+        blocker=bpy.context.object
+        bpy.context.view_layer.update()
+        screen=camera.project(Vector((-91.5,-51,30)),find_view3d()[3])
+        selected=snap.query_cad_surface(dict(u=screen[0],v=screen[1]),'VERTEX')
+        self.assertTrue(selected is None or selected['object']==blocker.name)
 
 
 def run():

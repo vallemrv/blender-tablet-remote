@@ -1883,8 +1883,12 @@ de origen agrupan parches coplanares conectados y fragmentos collineales de aris
 omitiendo aristas internas coplanares. Con modificadores, etiquetas transitorias
 FACE/EDGE propagan esas referencias a la geometría evaluada: Subdivisión conserva
 seis caras y doce aristas seleccionables en un cubo, sin seleccionar sus divisiones
-internas. El resaltado y las medidas siguen la forma evaluada; una cara curvada
-publica `planar:false` y no habilita `can_sketch`. Las etiquetas se retiran siempre.
+internas. El resaltado sigue la forma evaluada. En cuerpos CAD cuya pila visible
+solo tiene Bisel/Subdivisión, las medidas, vértices y planos se toman de la geometría
+de diseño previa al acabado; una cara de diseño plana conserva `can_sketch` aunque
+el acabado la redondee. Los puntos se comprueban contra el cuerpo de diseño y los
+otros oclusores visibles. En otras pilas se conserva la referencia evaluada. Las
+etiquetas se retiran siempre.
 Los datos evaluados solo se retienen en memoria, validados contra geometría base,
 geometría evaluada y matriz del objeto. No se guardan sus índices en CAD.
 Si la geometría cambia, las referencias se invalidan antes de crear un boceto.

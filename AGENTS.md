@@ -577,7 +577,10 @@ no quedan archivos o referencias temporales.
   la referencia CAD de origen: un cubo subdividido mantiene seis caras y doce
   aristas seleccionables. Las etiquetas FACE/EDGE se propagan con Blender solo
   al reconstruir la caché y se retiran siempre; el resaltado sigue la forma evaluada.
-  Una región curvada no se anuncia como plano para crear un boceto.
+  En cuerpos CAD con Bisel/Subdivisión, medidas y planos de croquis pertenecen a
+  la cara de diseño anterior al acabado; el resaltado sigue la superficie evaluada.
+  Los puntos son los vértices de diseño: el bisel no los elimina como referencias.
+  Su visibilidad respeta el cuerpo de diseño y los demás objetos oclusores.
   El resaltado se dibuja dentro de GPUOffScreen, nunca duplicado en Android.
 - Boceto en cara consume la cara resaltada sin repetir raycast y crea plano+boceto
   en un solo undo. Las caras superiores CAD conservan soporte asociativo; otras

@@ -21,7 +21,8 @@ def draw_cad_selection(rv3d, width, height):
         fill=gpu.shader.from_builtin('UNIFORM_COLOR')
         line=gpu.shader.from_builtin('POLYLINE_UNIFORM_COLOR')
         batches=[]
-        for item in items:
+        for selected in items:
+            item=selected.get('display',selected)
             triangles=[p for tri in item['triangles'] for p in tri]
             segments=[p for edge in item['segments'] for p in edge]
             batches.append((batch_for_shader(fill,'TRIS',{'pos':triangles}) if triangles else None,
@@ -43,7 +44,7 @@ def draw_cad_selection(rv3d, width, height):
                 if triangles:
                     fill.bind(); fill.uniform_float('color',(*color,.25)); triangles.draw(fill)
                 if item['kind']=='VERTEX':
-                    p=projection@Vector((*item['points'][0],1.))
+                    p=projection@Vector((*item.get('display',item)['points'][0],1.))
                     if p.w<=1e-9: continue
                     x,y,z=p.x/p.w,p.y/p.w,p.z/p.w; dx=8/width; dy=8/height
                     segments=batch_for_shader(line,'LINES',{'pos':[(x-dx,y,z),(x+dx,y,z),(x,y-dy,z),(x,y+dy,z)]})
