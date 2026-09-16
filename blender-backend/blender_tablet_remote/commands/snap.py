@@ -565,19 +565,8 @@ def query_sketch_endpoint(overlay, u, v, aspect, previous=None):
     return choose_sticky_candidate(candidates,previous,.018)
 
 
-def _cad_mesh(obj):
-    """Evaluated surface plus adjacency; coplanar tessellation is not a CAD edge."""
-    from ..cad.runtime import runtime
-    from ..cad.surface import stamp
-    signature=stamp(obj)
-    cache=runtime.surface.graphs
-    key=obj.as_pointer()
-    cached=cache.get(key)
-    if cached and cached[0]==signature:
-        cache.move_to_end(key)
-        return cached[1]
-    mesh=obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data
-    matrix=obj.matrix_world
+def _cad_topology(mesh, matrix, face_labels=None, edge_labels=None):
+    """Snapshot geometry and logical regions; no evaluated RNA survives this call."""
     points=[matrix@v.co for v in mesh.vertices]
     faces=[tuple(p.vertices) for p in mesh.polygons]
     normals=[]; centers=[]; adjacency={}
@@ -588,12 +577,96 @@ def _cad_mesh(obj):
         for a,b in zip(faces[index],faces[index][1:]+faces[index][:1]):
             adjacency.setdefault(tuple(sorted((a,b))),[]).append(index)
     for edge in mesh.edges: adjacency.setdefault(tuple(sorted(edge.vertices)),[])
-    def coplanar(a,b):
-        return normals[a].dot(normals[b])>1-1e-7
-    edges=[edge for edge,linked in adjacency.items() if len(linked)!=2 or not coplanar(*linked)]
+    extent=Vector(tuple(max((p[i] for p in points),default=0.)-min((p[i] for p in points),default=0.) for i in range(3))).length
+    tolerance=extent*1e-6+1e-9
+    neighbors=[set() for _ in faces]
+    for linked in adjacency.values():
+        for face in linked: neighbors[face].update(i for i in linked if i!=face)
+    face_regions=[None]*len(faces)
+    for source in range(len(faces)):
+        if face_regions[source] is not None: continue
+        origin=centers[source]; normal=normals[source]
+        chosen={source}; pending=[source]
+        while pending:
+            for neighbor in neighbors[pending.pop()]:
+                if neighbor in chosen or face_regions[neighbor] is not None: continue
+                same=(face_labels[neighbor]==face_labels[source] and face_labels[source]>0) if face_labels is not None else (
+                    normals[neighbor].dot(normal)>1-1e-7 and
+                    all(abs((points[i]-origin).dot(normal))<=tolerance for i in faces[neighbor]))
+                if same: chosen.add(neighbor); pending.append(neighbor)
+        region=frozenset(chosen)
+        for face in chosen: face_regions[face]=region
+    if edge_labels is None:
+        edges=[edge for edge,linked in adjacency.items()
+               if len(linked)!=2 or face_regions[linked[0]] is not face_regions[linked[1]]]
+    else:
+        edges=[edge for edge in adjacency if edge_labels.get(edge,0)>0]
+    incident={}
+    for edge in edges:
+        for vertex in edge: incident.setdefault(vertex,[]).append(edge)
+    edge_regions={}
+    for source in edges:
+        if source in edge_regions: continue
+        a,b=(points[i] for i in source); direction=(b-a).normalized()
+        chosen={source}; pending=list(source); checked={source}
+        while pending:
+            for edge in incident[pending.pop()]:
+                if edge in checked or edge in edge_regions: continue
+                checked.add(edge)
+                p,q=(points[i] for i in edge)
+                same=(edge_labels[edge]==edge_labels[source]) if edge_labels is not None else (
+                    (q-p).length>1e-12 and abs((q-p).normalized().dot(direction))>1-1e-7)
+                if same: chosen.add(edge); pending.extend(edge)
+        region=frozenset(chosen)
+        for edge in chosen: edge_regions[edge]=region
     mesh.calc_loop_triangles()
     triangles=[(tri.polygon_index,tuple(tri.vertices)) for tri in mesh.loop_triangles]
-    result=triangles,points,faces,normals,centers,adjacency,edges
+    return triangles,points,faces,normals,centers,adjacency,edges,face_regions,edge_regions
+
+
+def _cad_mesh(obj):
+    """Modifiers display their full mesh while selection follows source CAD regions."""
+    from ..cad.runtime import runtime
+    from ..cad.surface import stamp
+    signature=stamp(obj)
+    cache=runtime.surface.graphs
+    key=obj.as_pointer()
+    cached=cache.get(key)
+    if cached and cached[0]==signature:
+        cache.move_to_end(key)
+        return cached[1]
+    mesh=obj.data
+    if any(mod.show_viewport for mod in obj.modifiers):
+        base=_cad_topology(mesh,obj.matrix_world)
+        names=[]
+        try:
+            # Native FACE/EDGE integer attributes follow subdivision without
+            # interpolation. Zero marks new internal edges, not a source edge.
+            attr=mesh.attributes.new('.btr_cad_source_face','INT','FACE')
+            names.append(attr.name)
+            face_ids={id(region):min(region)+1 for region in {id(r):r for r in base[7]}.values()}
+            attr.data.foreach_set('value',[face_ids[id(region)] for region in base[7]])
+            edge_ids={edge:index+1 for index,edge in enumerate(sorted(base[8]))}
+            region_ids={id(region):edge_ids[min(region)] for region in {id(r):r for r in base[8].values()}.values()}
+            values=[region_ids[id(base[8][tuple(sorted(edge.vertices))])] if tuple(sorted(edge.vertices)) in base[8] else 0
+                    for edge in mesh.edges]
+            attr=mesh.attributes.new('.btr_cad_source_edge','INT','EDGE')
+            names.append(attr.name); attr.data.foreach_set('value',values)
+            mesh.update()
+            evaluated=obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data
+            attrs=[evaluated.attributes.get(name) for name in names]
+            if any(attr is None for attr in attrs):
+                raise CommandError('El modificador no conserva las referencias CAD de origen',code='cad_reference_missing')
+            face_labels=[item.value for item in attrs[0].data]
+            edge_labels={tuple(sorted(edge.vertices)):item.value for edge,item in zip(evaluated.edges,attrs[1].data)}
+            result=_cad_topology(evaluated,obj.matrix_world,face_labels,edge_labels)
+        finally:
+            for name in names:
+                attr=mesh.attributes.get(name)
+                if attr is not None: mesh.attributes.remove(attr)
+            mesh.update()
+    else:
+        result=_cad_topology(obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data,obj.matrix_world)
     cache[key]=(signature,result,{})
     cache.move_to_end(key)
     while len(cache)>8: cache.popitem(last=False)
@@ -651,7 +724,8 @@ def query_cad_surface(payload, kind):
         chosen=choose_sticky_candidate(candidates,None,.028)
         if chosen is None: return None
         selected=(bpy.data.objects[chosen['object']],chosen['source'])
-    obj,source=selected; triangles,points,faces,normals,centers,adjacency,edges=graphs[obj.name]
+    obj,source=selected; graph=graphs[obj.name]
+    triangles,points,faces,normals,centers,adjacency,edges=graph[:7]
     from ..cad.runtime import runtime
     if kind=='FACE':
         face_cache=runtime.surface.graphs[obj.as_pointer()][2]
@@ -662,16 +736,9 @@ def query_cad_surface(payload, kind):
               mesh_pointer=obj.data.as_pointer(),matrix=[list(row) for row in obj.matrix_world],
               segments=[],triangles=[],points=[],planar=False)
     if kind=='FACE':
-        chosen={source}; pending=[source]
+        chosen=graph[7][source]
         origin=centers[source]; normal=normals[source]
         tolerance=max((p-origin).length for p in points)*1e-6+1e-9
-        while pending:
-            face=pending.pop()
-            for edge in zip(faces[face],faces[face][1:]+faces[face][:1]):
-                for neighbor in adjacency.get(tuple(sorted(edge)),[]):
-                    if neighbor in chosen: continue
-                    if normals[neighbor].dot(normal)>1-1e-7 and all(abs((points[i]-origin).dot(normal))<=tolerance for i in faces[neighbor]):
-                        chosen.add(neighbor); pending.append(neighbor)
         boundary=[edge for edge,linked in adjacency.items() if sum(i in chosen for i in linked)==1]
         data['triangles']=[[list(points[i]) for i in vertices] for polygon,vertices in triangles if polygon in chosen]
         data['segments']=[[list(points[i]) for i in edge] for edge in boundary]
@@ -684,21 +751,8 @@ def query_cad_surface(payload, kind):
         data['id']=obj.name+':FACE:'+str(min(chosen))
         for index in chosen: face_cache[index]=data
     elif kind=='EDGE':
-        # Join collinear pieces introduced by quad materialization into one edge.
-        a,b=(points[i] for i in source); direction=(b-a).normalized()
-        incident={}
-        for edge in edges:
-            for vertex in edge: incident.setdefault(vertex,[]).append(edge)
-        chosen={tuple(source)}; vertices=set(source); pending=list(source); checked={tuple(source)}
-        while pending:
-            for edge in incident[pending.pop()]:
-                if edge in checked: continue
-                checked.add(edge)
-                p,q=(points[i] for i in edge)
-                if (q-p).length<1e-12: continue
-                if abs((q-p).normalized().dot(direction))>1-1e-7:
-                    chosen.add(edge)
-                    pending.extend(i for i in edge if i not in vertices); vertices.update(edge)
+        chosen=graph[8][tuple(source)]
+        vertices={i for edge in chosen for i in edge}
         data['segments']=[[list(points[i]) for i in edge] for edge in sorted(chosen)]
         data['points']=[list(points[i]) for i in sorted(vertices)]
         data['id']=obj.name+':EDGE:'+str(min(chosen))

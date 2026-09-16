@@ -568,6 +568,11 @@ no quedan archivos o referencias temporales.
   Aristas/Puntos selecciona hasta dos referencias visibles para medir. El sondeo
   permanece en `commands/snap.py`: agrupa caras coplanares conectadas y omite sus
   aristas internas; las divisiones collineales se seleccionan como una arista.
+  Los modificadores conservan su detalle visible, pero Caras/Aristas agrupa por
+  la referencia CAD de origen: un cubo subdividido mantiene seis caras y doce
+  aristas seleccionables. Las etiquetas FACE/EDGE se propagan con Blender solo
+  al reconstruir la caché y se retiran siempre; el resaltado sigue la forma evaluada.
+  Una región curvada no se anuncia como plano para crear un boceto.
   El resaltado se dibuja dentro de GPUOffScreen, nunca duplicado en Android.
 - Boceto en cara consume la cara resaltada sin repetir raycast y crea plano+boceto
   en un solo undo. Las caras superiores CAD conservan soporte asociativo; otras

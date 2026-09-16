@@ -171,6 +171,12 @@ cuadrícula interna con aristas reales. Se muestran longitud, área/perímetro y
 con dos elementos compatibles, distancia o ángulo. Las caras paralelas muestran
 separación entre planos; una arista/punto y una cara, distancia al plano.
 
+Los modificadores siguen mostrando toda su geometría, pero la selección conserva
+las caras y aristas de origen. Un cubo con Subdivisión ofrece seis caras y doce
+aristas completas: tocar dos subdivisiones de la misma cara alterna esa misma
+selección. El resaltado y las medidas siguen la forma modificada. Si la cara se
+curva, no permite crear un boceto plano sobre ella.
+
 Estos selectores se ocultan al editar el croquis: su cursor ya selecciona puntos
 y aristas directamente. Solo reaparecen si abres **Medir desde sólido** para
 elegir referencias 3D explícitamente.

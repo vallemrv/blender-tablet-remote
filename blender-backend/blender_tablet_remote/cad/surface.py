@@ -9,14 +9,17 @@ from ..errors import BadPayload, CommandError
 
 
 def stamp(obj):
-    mesh=obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data
-    coords=np.empty(len(mesh.vertices)*3,dtype=np.float32); mesh.vertices.foreach_get('co',coords)
-    loops=np.empty(len(mesh.loops),dtype=np.int32); mesh.loops.foreach_get('vertex_index',loops)
-    polygons=np.empty(len(mesh.polygons),dtype=np.int32); mesh.polygons.foreach_get('loop_total',polygons)
-    edges=np.empty(len(mesh.edges)*2,dtype=np.int32); mesh.edges.foreach_get('vertices',edges)
     digest=hashlib.blake2b(digest_size=16)
-    digest.update(coords.tobytes()); digest.update(loops.tobytes())
-    digest.update(polygons.tobytes()); digest.update(edges.tobytes())
+    # Source topology also owns CAD region identity, even if a modifier produces
+    # the same visible surface after an edit to that source.
+    for mesh in (obj.data,obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data):
+        coords=np.empty(len(mesh.vertices)*3,dtype=np.float32); mesh.vertices.foreach_get('co',coords)
+        loops=np.empty(len(mesh.loops),dtype=np.int32); mesh.loops.foreach_get('vertex_index',loops)
+        polygons=np.empty(len(mesh.polygons),dtype=np.int32); mesh.polygons.foreach_get('loop_total',polygons)
+        edges=np.empty(len(mesh.edges)*2,dtype=np.int32); mesh.edges.foreach_get('vertices',edges)
+        digest.update(str((len(coords),len(loops),len(polygons),len(edges))).encode())
+        digest.update(coords.tobytes()); digest.update(loops.tobytes())
+        digest.update(polygons.tobytes()); digest.update(edges.tobytes())
     digest.update(np.asarray(obj.matrix_world,dtype=np.float32).tobytes())
     digest.update(str(bpy.context.scene.unit_settings.scale_length).encode())
     return obj.as_pointer(),obj.data.as_pointer(),digest.digest()

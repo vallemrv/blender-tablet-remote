@@ -1870,10 +1870,15 @@ la malla; miden la geometría seleccionada. Una tercera referencia inicia otra p
 La primera se resalta en azul y la segunda en naranja dentro de GPUOffScreen.
 La captura limpia excluye estos marcadores.
 
-El sondeo de `commands/snap.py` usa malla evaluada y oclusión común. Una cara es un
-parche coplanar conectado; se omiten aristas internas coplanares y se unen fragmentos
-collineales de una misma arista. Los datos evaluados solo se retienen en memoria,
-validados contra geometría y matriz del objeto. No se guardan sus índices en CAD.
+El sondeo de `commands/snap.py` usa malla evaluada y oclusión común. Las referencias
+de origen agrupan parches coplanares conectados y fragmentos collineales de aristas,
+omitiendo aristas internas coplanares. Con modificadores, etiquetas transitorias
+FACE/EDGE propagan esas referencias a la geometría evaluada: Subdivisión conserva
+seis caras y doce aristas seleccionables en un cubo, sin seleccionar sus divisiones
+internas. El resaltado y las medidas siguen la forma evaluada; una cara curvada
+publica `planar:false` y no habilita `can_sketch`. Las etiquetas se retiran siempre.
+Los datos evaluados solo se retienen en memoria, validados contra geometría base,
+geometría evaluada y matriz del objeto. No se guardan sus índices en CAD.
 Si la geometría cambia, las referencias se invalidan antes de crear un boceto.
 `cad.sketch.on_face` consume el marco elegido; no hace otro raycast. La cara superior
 CAD se vincula a su operación; otras caras conservan un marco capturado. Los planos
