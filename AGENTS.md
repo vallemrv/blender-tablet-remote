@@ -473,6 +473,7 @@ no quedan archivos o referencias temporales.
 
 - CAD bloquea orientación y proyección durante el boceto; orbit desplaza la vista,
   pan/zoom siguen activos. El origen reservado `ORIGIN/POINT` es fijo y seleccionable.
+  Se selecciona tocándolo en el boceto; no tiene un botón duplicado en el rail.
 - Fijar restringe solo puntos/extremos de aristas seleccionados; figura completa
   fija todos sus parámetros. Selección múltiple comparte un undo. Punto medio y
   simetría (último punto = centro) usan el mismo solver, también con el origen.

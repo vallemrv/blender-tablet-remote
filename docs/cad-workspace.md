@@ -49,7 +49,7 @@ Restricciones disponibles: coincidencia entre puntos, horizontal, vertical,
 paralela, perpendicular, tangencia entre línea y círculo/arco, igualdad de
 longitudes o radios, distancia diagonal/horizontal/vertical, radio, punto medio, simetría respecto al
 último de tres puntos y fijación estricta de la selección. El origen (0,0) se puede
-seleccionar desde la vista o el rail y usar como referencia fija.
+seleccionar tocándolo en la vista y usar como referencia fija.
 
 Para una cota, selecciona dos puntos (también centros de círculos u origen) o una
 línea/lado y elige **Distancia diagonal**, **Distancia horizontal** o **Distancia

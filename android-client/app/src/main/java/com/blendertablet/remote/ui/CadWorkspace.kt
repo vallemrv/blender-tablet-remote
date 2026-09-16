@@ -87,11 +87,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
     ToolRail(Modifier.align(Alignment.CenterStart).padding(start = Metrics.EdgeMargin, top = 120.dp, bottom = 160.dp).heightIn(max = availableHeight)) {
         CadAction("SELECT", "Cursor · tocar alterna selección · arrastrar mueve", selected = state.cadTool == null && cad.surface.mode == "PROFILE", enabled = !cad.sessionActive) { vm.cadTool(null) }
         if (editing) {
-            if (capabilities.sketchEditing) {
-                CadAction("ORIGIN", "Seleccionar origen fijo (0,0)", enabled = !cad.sessionActive) {
-                    command("cad.select", "kind" to "ENTITY", "id" to "ORIGIN", "part" to "POINT", "additive" to true)
-                }
-            }
             RailDivider()
             capabilities.entities.forEach { type ->
                 CadAction(type, cadLabel(type), selected = state.cadTool == type, enabled = !cad.sessionActive || cad.operation == type) { vm.cadTool(type) }
