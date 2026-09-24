@@ -83,6 +83,7 @@ class GestureManager:
         self._options: dict[tuple[int, str], dict] = {}
 
     def reset(self) -> None:
+        view_cmds.orbit_end()
         self._acc.clear()
         self._open.clear()
         self._options.clear()
@@ -111,6 +112,8 @@ class GestureManager:
                 "pivot": msg.get("pivot"),
                 "axis": msg.get("axis"),
             }
+            if gesture == "orbit":
+                view_cmds.orbit_begin()
             log.debug("gesture %s begin", gesture)
             return
 
@@ -238,6 +241,8 @@ class GestureManager:
         )
 
     def _close(self, key) -> None:
+        if key[1] == "orbit":
+            view_cmds.orbit_end()  # Un vistazo al boceto termina en su vista del plano.
         self._acc.pop(key, None)
         self._options.pop(key, None)
         self._open.discard(key)

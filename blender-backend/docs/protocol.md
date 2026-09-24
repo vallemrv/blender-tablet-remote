@@ -1258,6 +1258,10 @@ Los `update` **no reciben respuesta** — es intencionado, evita el tráfico de 
 Solo se responde si el mensaje es inválido. Si necesitas confirmar el resultado, pide
 `scene.get_state` tras el `end`.
 
+Durante un boceto CAD, un gesto `orbit` es un vistazo: `begin` guarda la vista del
+plano, los `update` orbitan en perspectiva y `end`/`cancel`/desconexión la restauran
+en ortográfica. Un `view.orbit` suelto sigue desplazando el plano sin inclinarlo.
+
 Los gestos de transformación (`move`, `rotate`, `scale`) generan **un único paso de
 undo** al recibir el `end`. Un `cancel` descarta lo pendiente sin cerrar el paso.
 

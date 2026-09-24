@@ -219,6 +219,21 @@ class FeedbackTests(CadTests):
         reconnect.clear()
 
     @unittest.skipIf(bpy.app.background,'GPU viewport required')
+    def test_sketch_orbit_gesture_peeks_in_perspective_and_returns_to_plane_view(self):
+        from blender_tablet_remote.gestures import GestureManager
+        self.draw('LINE',(0,0),(.04,0))
+        runtime.focus(runtime.doc()['sketches'][0])
+        before=(camera.location.copy(),camera.rotation.copy(),camera.distance,camera.perspective)
+        gestures=GestureManager()
+        gestures.handle(1,dict(gesture='orbit',phase='begin'))
+        gestures.handle(1,dict(gesture='orbit',phase='update',dx=.2,dy=.1)); gestures.flush()
+        self.assertNotEqual(camera.rotation,before[1]); self.assertEqual(camera.perspective,'PERSP')
+        gestures.handle(1,dict(gesture='orbit',phase='end'))
+        self.assertEqual((camera.location,camera.rotation,camera.distance,camera.perspective),before)
+        view.orbit_delta(.1,0)  # Without the held circle, one-finger orbit still pans the plane.
+        self.assertEqual(camera.rotation,before[1]); self.assertEqual(camera.perspective,'ORTHO')
+
+    @unittest.skipIf(bpy.app.background,'GPU viewport required')
     def test_sketch_navigation_locked_and_dimensions_projected(self):
         e=self.draw('LINE',(0,0),(.04,0)); self.refs((e,'BODY')); self.rule('DISTANCE',value=.04)
         runtime.focus(runtime.doc()['sketches'][0]); rotation=camera.rotation.copy()

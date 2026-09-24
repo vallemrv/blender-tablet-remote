@@ -245,7 +245,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     val materialActive = state.blender.material.active
     val sculptActive = state.blender.mode == BlenderMode.SCULPT
     // En el boceto, y en Extruir/Vaciar, un dedo pertenece a CAD: el círculo navega
-    // (en el boceto desplaza la vista). Se oculta bajo la pila abierta.
+    // (en el boceto, un vistazo en perspectiva que vuelve al plano al soltar).
+    // Se oculta bajo la pila abierta.
     val cad = state.blender.cad
     val cadNavigationOrbit = cad.workspace && !cadStackOpen &&
         (cad.activeSketchId != null || (cad.sessionActive && cad.operation in listOf("EXTRUDE", "CUT")))

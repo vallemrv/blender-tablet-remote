@@ -40,11 +40,35 @@ def _sketch_locked():
     return runtime.workspace and runtime.active_sketch_id is not None
 
 
+# Vista del plano guardada mientras se sostiene el círculo de navegación en un
+# boceto: orbitar allí es un vistazo en perspectiva y soltar vuelve a ella.
+_sketch_peek = None
+
+
+def orbit_begin() -> None:
+    global _sketch_peek
+    if _sketch_locked() and _sketch_peek is None:
+        _sketch_peek = (camera.location.copy(), camera.rotation.copy(), camera.distance,
+                        camera.perspective, camera.axis_view, camera._ortho_depth)
+
+
+def orbit_end() -> None:
+    global _sketch_peek
+    if _sketch_peek is None:
+        return
+    (camera.location, camera.rotation, camera.distance, camera.perspective,
+     camera.axis_view, camera._ortho_depth) = _sketch_peek
+    _sketch_peek = None
+    camera._invalidate()
+
+
 def orbit_delta(dx: float, dy: float) -> None:
-    if _sketch_locked():
+    if _sketch_locked() and _sketch_peek is None:
         pan_delta(dx, dy)
         return
     _region_view()
+    if _sketch_peek is not None:
+        camera.perspective = "PERSP"
     camera.orbit(dx, dy, ORBIT_SENSITIVITY)
 
 
