@@ -61,7 +61,7 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   rotación del objeto destino, con preview reversible.
 - H.264 preferido con fallback MJPEG.
 - CAD v1: planos XY/XZ/YZ y cara superior asociativa, líneas, rectángulos (cuadrado =
-  rectángulo con Igualdad),
+  rectángulo con Igualdad), polígonos regulares (`NGON`),
   círculos, arcos, polígonos irregulares, redondeo de sketch, selección de puntos/aristas
   y restricciones.
   Extrusión de perfiles cerrados y vaciado por profundidad con incrementos. Documento JSON
@@ -408,6 +408,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   de línea) o cae en la rejilla del paso; con Incremento, tamaño y radio se redondean
   al paso y una figura menor que un paso no se crea. Snap/Paso siguen visibles con
   la herramienta armada y las medidas se ven en vivo, de solo lectura, hasta soltar.
+- `NGON` es un polígono regular nativo: parámetros centro, `flats` (entre caras =
+  Ø inscrito) y `angle` en grados; `sides` (3–32) es discreto y nunca lo resuelve el
+  solver. Sus esquinas son `P0…Pn-1`, sus lados `EDGEi` y su cota es un RADIUS
+  inscrito (`value_factor` 0,5). Cambiar lados conserva la medida y se rechaza si hay
+  reglas sobre esquinas/lados. Dibujar redondea Entre caras al paso.
 - La bandeja de una figura CAD solo ofrece medidas (longitud, ancho/alto, radio,
   ángulo del arco), nunca coordenadas; la posición se fija con candados y cotas a
   otros puntos. No existe herramienta Cuadrado: es un rectángulo con Igualdad.

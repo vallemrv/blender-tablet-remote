@@ -318,6 +318,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 cad.surface.mode != "PROFILE" -> "Toca hasta dos referencias para medir · durante el boceto puedes proyectarlas para acotar desde ellas"
                 state.cadTool == "ARC" -> "Arrastra centro → inicio del arco · al soltar, arrastra el rombo del extremo para variar el ángulo"
                 entity?.type == "ARC" && !entity.isFillet -> "Arrastra el rombo del extremo para variar el ángulo; centro, radio e inicio permanecen fijos"
+                state.cadTool == "NGON" -> "Polígono regular: arrastra del centro a un vértice · elige los lados antes o después · Entre caras es la llave de la tuerca"
                 state.cadTool != null -> "${cadLabel(state.cadTool!!)} · arrastra para dibujar · dos dedos navegan"
                 entity?.isSquare == true -> if (entity.dimensions.any { it.constraintIds.isNotEmpty() })
                     "Cuadrado: una cota controla ambos lados; editar Lado actualiza esa misma cota"
@@ -355,7 +356,16 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                 step = cad.step, enabled = connected, minimum = if (type in listOf("DISTANCE_X", "DISTANCE_Y")) 0.0 else .0000001,
                                 onDone = ::acceptValues) { drafts["constraint"] = it }
                         }
+                        if (state.cadTool == "NGON" && entity == null) {
+                            CadSidesControl(state.cadNgonSides, enabled = !cad.sessionActive) { vm.cadNgonSides(it) }
+                        }
                         entity?.let { selected ->
+                            if (selected.type == "NGON") {
+                                val sides = selected.values["sides"]?.toInt() ?: 6
+                                CadSidesControl(sides, enabled = connected && !livePreview && drafts.isEmpty()) {
+                                    command("cad.entity.set", "entity_id" to selected.id, "values" to mapOf("sides" to it))
+                                }
+                            }
                             if (selected.type == "CIRCLE") {
                                 PillButton("Radio", selected = !showDiameter, enabled = drafts.isEmpty()) { showDiameter = false }
                                 PillButton("Diámetro", selected = showDiameter, enabled = drafts.isEmpty()) { showDiameter = true }
@@ -550,7 +560,7 @@ internal fun cadConstraintEnabled(cad: CadState, type: String): Boolean {
 }
 
 internal fun cadLabel(type: String) = when (type) {
-    "RECTANGLE" -> "Rectángulo"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"
+    "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
     "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad (tamaño del primero)"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
     "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; else -> type
@@ -758,5 +768,17 @@ private fun CadSurfaceControls(cad: CadState, unit: LengthUnit, enabled: Boolean
         val scale = when (measurement.unit) { "AREA" -> factor * factor; "ANGLE" -> 1.0; else -> factor }
         val suffix = when (measurement.unit) { "AREA" -> unit.short + "²"; "ANGLE" -> "°"; else -> unit.short }
         Text("${measurement.label}: ${formatToolDistance(measurement.value * scale, detailDecimalPlaces(measurement.value * scale, 3))} $suffix", color = Ink.OnPanel, fontSize = 12.sp)
+    }
+}
+
+
+/** Número de lados de un polígono regular: 6 hace tuercas y sus alojamientos. */
+@Composable
+private fun CadSidesControl(sides: Int, enabled: Boolean, onChange: (Int) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Lados", color = Ink.Muted, fontSize = 12.sp)
+        StepperButton("−", enabled && sides > 3) { onChange(sides - 1) }
+        Text("$sides", fontSize = 14.sp)
+        StepperButton("+", enabled && sides < 32) { onChange(sides + 1) }
     }
 }

@@ -195,8 +195,11 @@ def entity_begin(payload):
     anchor=_endpoint(payload,sketch)
     start=(geometry.point(sketch,dict(id=anchor['entity_id'],part=anchor['part'])) if anchor
            else _on_grid(runtime.point(payload,sketch)))
+    sides=payload.get('sides',6)
+    if typ=='NGON' and (isinstance(sides,bool) or not isinstance(sides,int) or not model.SIDES[0]<=sides<=model.SIDES[1]):
+        raise BadPayload(f'El polígono regular necesita entre {model.SIDES[0]} y {model.SIDES[1]} lados')
     session = runtime.begin(payload,typ)
-    session.update(sketch_id=sketch['id'],start=start,entity_id=model.uid('entity'),anchor=anchor)
+    session.update(sketch_id=sketch['id'],start=start,entity_id=model.uid('entity'),anchor=anchor,sides=sides)
     return runtime.status()
 
 
@@ -217,6 +220,10 @@ def entity_update(payload):
     if e['type']=='RECTANGLE':
         if not endpoint: x2,y2=x+_on_grid((x2-x,))[0],y+_on_grid((y2-y,))[0]
         e.update(x=min(x,x2),y=min(y,y2),width=abs(x2-x),height=abs(y2-y))
+    elif e['type']=='NGON':
+        # Center → vertex sets size and rotation; Increment rounds the across-flats size.
+        n=session['sides']; circum=math.hypot(x2-x,y2-y)
+        e.update(sides=n,flats=_on_grid((2*circum*math.cos(math.pi/n),))[0],angle=math.degrees(math.atan2(y2-y,x2-x)))
     elif e['type'] in ('ARC','CIRCLE'):
         # Increment rounds the radius itself, not the rim position.
         radius=_on_grid((math.hypot(x2-x,y2-y),))[0]
@@ -236,7 +243,7 @@ def entity_update(payload):
         session['candidate'] = None
         return runtime.status()
     sketch['entities'].append(e)
-    roles={'LINE':('START','END'),'CIRCLE':('CENTER',None),'ARC':('CENTER',None)}.get(e['type'])
+    roles={'LINE':('START','END'),'CIRCLE':('CENTER',None),'ARC':('CENTER',None),'NGON':('CENTER',None)}.get(e['type'])
     if e['type']=='RECTANGLE': roles=(_corner(e,(x,y)),_corner(e,(x2,y2)))
     for role,anchor,label in ((roles[0],session.get('anchor'),'START'),(roles[1],endpoint,'END')):
         if anchor:
@@ -257,9 +264,15 @@ def entity_set(payload):
         sketch, e = model.entity(doc,payload.get('entity_id'))
         allowed = set(model.FIELDS[e['type']]) | ({'length'} if e['type']=='LINE' else set())
         if e['type']=='CIRCLE': allowed.add('radius')
+        if e['type']=='NGON': allowed.add('sides')
         if not set(changes)<=allowed:
             raise BadPayload('Dimensión no compatible con la entidad')
-        values={k:model.number(v) for k,v in changes.items()}
+        values={k:model.number(v) for k,v in changes.items() if k!='sides'}
+        if 'sides' in changes:
+            # Discrete: the across-flats size and constraints are kept.
+            e['sides']=changes['sides']; model.validate_entity(e)
+            if any(r['id']==e['id'] and r.get('part','').startswith(('P','EDGE')) for c in sketch.get('constraints',[]) for r in c['refs']):
+                raise BadPayload('Quita antes las reglas de sus esquinas o lados para cambiar el número de lados')
         if e['type']=='CIRCLE' and 'radius' in values:
             diameter=2*model.number(values.pop('radius'),positive=True)
             if 'diameter' in values and not math.isclose(values['diameter'],diameter,rel_tol=1e-9,abs_tol=1e-12):
@@ -658,7 +671,7 @@ def _pick(payload):
             distance=math.hypot((u-a[0])*aspect-t*dx,v-a[1]-t*dy)
             if distance<.024 and runtime.active_sketch_id:
                 _,e=model.entity(runtime.doc(),item['id'])
-                part='EDGE'+str(index) if e['type']=='RECTANGLE' else 'BODY'
+                part='EDGE'+str(index) if e['type'] in ('RECTANGLE','NGON') else 'BODY'
                 candidates.append((1,distance,dict(kind='ENTITY',id=item['id'],part=part)))
     return min(candidates,key=lambda c:c[:2])[2] if candidates else None
 
@@ -673,7 +686,9 @@ def _covers(selected, hit):
     if part=='BODY' or part==target: return True
     if part.startswith('EDGE') and target.startswith('P'):
         index=int(part[4:])
-        return target in ('P'+str(index),'P'+str((index+1)%4))
+        try: count=model.entity(runtime.doc(),selected['id'])[1].get('sides',4)
+        except CommandError: count=4
+        return target in ('P'+str(index),'P'+str((index+1)%count))
     return False
 
 
@@ -797,7 +812,7 @@ def drag_update(payload):
         # Keep the last visible valid preview. END never retries the pointer.
         raise
     baseline=model.find(session['baseline'],'sketches',sketch['id'])
-    changed=any(abs(e[k]-original[k])>(1e-7 if k in ('start','sweep') else 1e-9)
+    changed=any(abs(e[k]-original[k])>(1e-7 if k in model.ANGULAR else 1e-9)
                 for e,original in zip(sketch['entities'],baseline['entities']) for k in model.FIELDS[e['type']])
     session.update(preview=doc,candidate=sketch['id'] if changed else None)
     if session['hit'].get('intent')=='ANGLE':
@@ -867,8 +882,8 @@ def constraint_add(payload):
                 e=geometry.get_entity(sketch,ref); part=ref.get('part','BODY')
                 fixed=dict(id=model.uid('constraint'),type='FIX',refs=[ref])
                 if part in geometry.handles(e): fixed['points']={part:list(geometry.handles(e)[part])}
-                elif e['type']=='RECTANGLE' and part.startswith('EDGE'):
-                    index=int(part[4:]); roles=['P'+str(index),'P'+str((index+1)%4)]
+                elif e['type'] in ('RECTANGLE','NGON') and part.startswith('EDGE'):
+                    index=int(part[4:]); roles=['P'+str(index),'P'+str((index+1)%e.get('sides',4))]
                     fixed['points']={role:list(geometry.handles(e)[role]) for role in roles}
                 else: fixed['values']={k:e[k] for k in model.FIELDS[e['type']]}
                 sketch.setdefault('constraints',[]).append(fixed)

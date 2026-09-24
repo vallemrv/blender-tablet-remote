@@ -526,6 +526,8 @@ data class AppUiState(
     val blender: BlenderState = BlenderState(),
     val activeTool: ActiveTool = ActiveTool.SELECT,
     val cadTool: String? = null,
+    /** Lados del próximo polígono regular (CAD `NGON`); se envían al empezar a dibujarlo. */
+    val cadNgonSides: Int = 6,
     val sculptSmooth: Boolean = false,
     val sculptInvert: Boolean = false,
     val sculptStylusOnly: Boolean = true,

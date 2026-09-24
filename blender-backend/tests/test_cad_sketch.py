@@ -17,6 +17,29 @@ from test_cad import CadTests, OWNER, volume
 
 
 class SketchTests(CadTests):
+    def test_regular_polygon_draws_by_across_flats_and_extrudes_a_nut_profile(self):
+        with patch.object(runtime,'point',return_value=(0,0)), patch.object(cad,'_endpoint',return_value=None):
+            cad.entity_begin(dict(type='NGON',u=.1,v=.1,**OWNER))
+        with patch.object(runtime,'point',return_value=(.0059,0)), patch.object(cad,'_endpoint',return_value=None):
+            identifier=cad.entity_update(dict(u=.2,v=.1,**OWNER))['selection']['id']
+        cad.confirm(OWNER)
+        sketch,e=model.entity(runtime.doc(),identifier)
+        self.assertEqual(e['sides'],6)
+        self.assertAlmostEqual(e['flats'],.010,places=9)  # 2·5.9 mm·cos 30° = 10.2 → 10 mm with Increment
+        self.assertEqual(len(geometry.handles(e)),7)  # center and six corners
+        cad.entity_set(dict(entity_id=identifier,values={'flats':.013},**OWNER))  # M8 nut wrench size
+        sketch,e=model.entity(runtime.doc(),identifier)
+        corners=[geometry.point(sketch,dict(id=identifier,part='P'+str(i))) for i in range(6)]
+        for a,b in zip(corners,corners[1:]+corners[:1]): self.assertAlmostEqual(math.dist(a,b),.013/math.sqrt(3),places=9)
+        self.extrude(identifier,.0065)
+        self.assertAlmostEqual(volume(self.obj()),math.sqrt(3)/2*.013**2*.0065,places=12)
+        cad.entity_set(dict(entity_id=identifier,values={'sides':8},**OWNER))
+        sketch,e=model.entity(runtime.doc(),identifier)
+        self.assertEqual((e['sides'],len(model.outline(e))),(8,8))
+        self.assertAlmostEqual(e['flats'],.013,places=9)
+        described=model.public(runtime.doc())['sketches'][0]['entities'][0]['dimensions'][0]
+        self.assertEqual((described['field'],described['constraint_type'],described['value_factor']),('flats','RADIUS',.5))
+
     def test_drawing_uses_increment_grid_point_snap_and_drops_collapsed_figures(self):
         def entity(identifier):
             return next(e for s in runtime.doc()['sketches'] for e in s['entities'] if e['id']==identifier)

@@ -1411,7 +1411,7 @@ de banda y configuración de latencia interactiva.
 ## CAD paramétrico — versión 2 extendida: sketch y vaciado
 
 `features.cad` anuncia `version:2`, `planes:[XY,XZ,YZ]`,
-`entities:[LINE,RECTANGLE,CIRCLE,ARC,POLYGON]`, `features:[EXTRUDE,CUT]`,
+`entities:[LINE,RECTANGLE,CIRCLE,ARC,NGON,POLYGON]`, `features:[EXTRUDE,CUT]`,
 `sketch_editing:true`, `fillet:true`, `length_unit:METERS` y `constraints` con
 `COINCIDENT,HORIZONTAL,VERTICAL,PARALLEL,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,DISTANCE_X,DISTANCE_Y,RADIUS,FIX,MIDPOINT,SYMMETRIC,SYMMETRIC_LINE`.
 También anuncia `construction`, `datum_planes`, `bodies`, `origin`, `mesh_copy`,
@@ -1456,13 +1456,13 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.sketch.rename` | `{sketch_id,name}` | Nombre de 1–80 caracteres; conserva IDs y geometría, un undo |
 | `cad.sketch.finish` | `{}` | Sale del dibujo conservando perfiles seleccionables |
 | `cad.select` | `{kind:"ENTITY\\|PROFILE\\|SKETCH\\|FEATURE",id,part?,additive?}` o `{u,v,additive?}` | Geometría de boceto, perfil individual, croquis completo o feature; aditiva alterna pertenencia |
-| `cad.entity.begin` | `{type:"LINE\|RECTANGLE\|CIRCLE\|ARC\|POLYGON",u,v}` | Inicia dibujo reversible |
+| `cad.entity.begin` | `{type:"LINE\|RECTANGLE\|CIRCLE\|ARC\|NGON\|POLYGON",u,v,sides?}` | Inicia dibujo reversible; `sides` (3–32, def. 6) solo en NGON |
 | `cad.entity.update` | `{u,v}` | Actualiza extremo desde baseline; con `increment` el inicio cae en la rejilla del paso (o en un punto existente, con coincidencia) y tamaño/radio se redondean al paso |
 | `cad.polygon.begin` | `{u,v}` | Inicia o continúa la cadena de un polígono irregular; el primer vértice admite snap de extremos |
 | `cad.polygon.update` | `{u,v}` | Tramo provisional desde el último vértice, con snap a extremos incluidos los de la propia cadena |
 | `cad.polygon.segment` | `{u,v}` | Consolida un vértice por trazo o toque; si el extremo es el punto inicial con tres o más vértices, cierra y confirma con un único undo |
 | `cad.polygon.close` | `{}` | Cierra la cadena con el segmento final y confirma; con menos de tres vértices responde error y conserva la sesión |
-| `cad.entity.set` | `{entity_id,values:{width?,height?,diameter?,radius?,start?,sweep?,length?,x?,y?,x2?,y2?}}` | Edita dimensiones y reconstruye dependientes |
+| `cad.entity.set` | `{entity_id,values:{width?,height?,diameter?,radius?,start?,sweep?,length?,flats?,angle?,sides?,x?,y?,x2?,y2?}}` | Edita dimensiones y reconstruye dependientes |
 | `cad.entity.delete` | `{entity_id}` o `{}` | Borra una figura completa o la selección de puntos/aristas/figuras en un undo; protege perfiles usados |
 | `cad.extrude.begin` | `{profile_id?,sketch_id?,depth,operation:"EXTRUDE\\|CUT",target_id?,extent?}` | Un perfil o el croquis completo; contornos exteriores como volumen e interiores como huecos. CUT exige destino. `extent` es `ONE` (defecto) o `BOTH` |
 | `cad.extrude.update` | `{depth}` o `{gesture,baseline_depth}` o `{extent}` | Cota exacta o delta vertical desde inicio del gesto, positivo hacia arriba. En CUT, `extent` cambia una o dos direcciones sin confirmar |

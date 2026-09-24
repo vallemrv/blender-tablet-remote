@@ -8,9 +8,19 @@ from ..errors import BadPayload, CommandError
 VERSION = 1
 KEY = 'btr_cad_document'
 PLANES = ('XY', 'XZ', 'YZ')
-TYPES = ('LINE', 'RECTANGLE', 'CIRCLE', 'ARC')
+TYPES = ('LINE', 'RECTANGLE', 'CIRCLE', 'ARC', 'NGON')
+# NGON is a regular polygon: its across-flats size (inscribed diameter, the
+# wrench size of a nut) and the rotation of its first vertex are solver
+# parameters; `sides` is a discrete property, never solved.
 FIELDS = {'LINE': ('x','y','x2','y2'), 'RECTANGLE': ('x','y','width','height'),
-          'CIRCLE': ('x','y','diameter'), 'ARC': ('x','y','radius','start','sweep')}
+          'CIRCLE': ('x','y','diameter'), 'ARC': ('x','y','radius','start','sweep'),
+          'NGON': ('x','y','flats','angle')}
+ANGULAR = ('start','sweep','angle')  # degrees, independent of the sketch size
+SIDES = (3, 32)
+
+
+def circumradius(e):
+    return e['flats']/2/math.cos(math.pi/e['sides'])
 
 
 def uid(prefix):
@@ -126,7 +136,7 @@ def closed_entities(sketch):
     A chain profile identity derives from its member IDs, never mesh topology.
     """
     import hashlib
-    result = [e for e in sketch['entities'] if not e.get('construction',False) and e['type'] in ('RECTANGLE', 'CIRCLE')]
+    result = [e for e in sketch['entities'] if not e.get('construction',False) and e['type'] in ('RECTANGLE', 'CIRCLE', 'NGON')]
     edges = [e for e in sketch['entities'] if not e.get('construction',False) and e['type'] in ('LINE', 'ARC')]
     remaining = {e['id']: e for e in edges}
     def near(a, b):
@@ -170,7 +180,7 @@ def profile(doc, identifier):
 
 def profiles(sketch):
     return [dict(id='profile_' + e['id'], entity_id=e['id'],
-                 label={'RECTANGLE':'Rectángulo','CIRCLE':'Círculo','POLYGON':'Contorno cerrado'}[e['type']])
+                 label={'RECTANGLE':'Rectángulo','CIRCLE':'Círculo','NGON':'Polígono regular','POLYGON':'Contorno cerrado'}[e['type']])
             for e in closed_entities(sketch)]
 
 
@@ -184,6 +194,10 @@ def outline(e):
                  y + e['radius']*math.sin(math.radians(e['start']+e['sweep']*i/count))) for i in range(count+1)]
     if e['type'] == 'LINE':
         return [(x, y), (e['x2'], e['y2'])]
+    if e['type'] == 'NGON':
+        r = circumradius(e)
+        return [(x + r*math.cos(math.radians(e['angle'])+i*math.tau/e['sides']),
+                 y + r*math.sin(math.radians(e['angle'])+i*math.tau/e['sides'])) for i in range(e['sides'])]
     if e['type'] == 'RECTANGLE':
         w, h = e['width'], e['height']
         return [(x, y), (x+w, y), (x+w, y+h), (x, y+h)]
@@ -205,11 +219,15 @@ def validate_entity(e):
     if e.get('type') not in TYPES:
         raise BadPayload('Tipo de entidad CAD no compatible')
     for key in FIELDS[e['type']]:
-        e[key] = number(e.get(key), positive=key in ('width','height','diameter','radius'))
+        e[key] = number(e.get(key), positive=key in ('width','height','diameter','radius','flats'))
     if e['type'] == 'ARC' and not .01 <= abs(e['sweep']) < 360:
         raise BadPayload('El arco necesita un barrido entre 0.01° y menos de 360°')
     if e['type'] == 'LINE' and math.hypot(e['x2']-e['x'], e['y2']-e['y']) < 1e-7:
         raise BadPayload('La línea necesita dos puntos distintos')
+    if e['type'] == 'NGON':
+        sides = e.get('sides')
+        if isinstance(sides, bool) or not isinstance(sides, int) or not SIDES[0] <= sides <= SIDES[1]:
+            raise BadPayload(f'El polígono regular necesita entre {SIDES[0]} y {SIDES[1]} lados')
     return e
 
 

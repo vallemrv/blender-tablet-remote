@@ -19,8 +19,9 @@ def handles(e):
     if typ == 'ORIGIN': return {'POINT': (0., 0.)}
     if typ == 'LINE':
         return {'START': (e['x'],e['y']), 'END': (e['x2'],e['y2'])}
-    if typ == 'RECTANGLE':
-        return dict(zip(('P0','P1','P2','P3'),model.outline(e)))
+    if typ in ('RECTANGLE', 'NGON'):
+        corners = {'P'+str(i): p for i, p in enumerate(model.outline(e))}
+        return {'CENTER': (e['x'], e['y']), **corners} if typ == 'NGON' else corners
     if typ == 'ARC':
         path = model.outline(e)
         return {'CENTER': (e['x'],e['y']), 'START': path[0], 'END': path[-1]}
@@ -42,12 +43,12 @@ def point(sketch, ref):
 
 def line(sketch, ref):
     e = get_entity(sketch, ref)
-    if e['type'] == 'RECTANGLE' and str(ref.get('part','')).startswith('EDGE'):
+    if e['type'] in ('RECTANGLE', 'NGON') and str(ref.get('part','')).startswith('EDGE'):
         ring = model.outline(e)
         i = int(ref['part'][4:])
-        if i not in range(4):
+        if i not in range(len(ring)):
             raise BadPayload('Arista inexistente')
-        return np.array(ring[i]), np.array(ring[(i+1)%4])
+        return np.array(ring[i]), np.array(ring[(i+1)%len(ring)])
     if e['type'] != 'LINE':
         raise BadPayload('Selecciona líneas o lados rectos')
     return np.array((e['x'],e['y'])), np.array((e['x2'],e['y2']))
@@ -79,9 +80,10 @@ def measure_line(sketch, ref):
 
 def radius(sketch, ref):
     e = get_entity(sketch, ref)
-    if e['type'] not in ('CIRCLE', 'ARC'):
-        raise BadPayload('Selecciona un círculo o arco')
-    return e['diameter']/2 if e['type']=='CIRCLE' else e['radius']
+    if e['type'] not in ('CIRCLE', 'ARC', 'NGON'):
+        raise BadPayload('Selecciona un círculo, arco o polígono regular')
+    # A regular polygon's radius is its inscribed one: half the across-flats size.
+    return e['diameter']/2 if e['type']=='CIRCLE' else e['flats']/2 if e['type']=='NGON' else e['radius']
 
 
 def residual(sketch, c, scale):
@@ -90,7 +92,7 @@ def residual(sketch, c, scale):
         e = get_entity(sketch, refs[0])
         if 'points' in c:
             return [(handles(e)[role][i]-p[i])/scale for role,p in c['points'].items() for i in (0,1)]
-        return [(e[k]-v)/(1 if k in ('start','sweep') else scale) for k,v in c['values'].items()]
+        return [(e[k]-v)/(1 if k in model.ANGULAR else scale) for k,v in c['values'].items()]
     if typ == 'SYMMETRIC':
         return ((point(sketch,refs[0])+point(sketch,refs[1]))*.5-point(sketch,refs[2]))/scale
     if typ == 'SYMMETRIC_LINE':
@@ -186,8 +188,8 @@ def solve(sketch, goals=(), *, drag=False):
     layout = [(e,k) for e in work['entities'] for k in model.FIELDS[e['type']]]
     if len(layout)>300:
         raise CommandError('Este solver admite hasta 300 parámetros por boceto',code='cad_solver_limit')
-    scale = max([abs(e[k]) for e,k in layout if k not in ('start','sweep')]+[.001])
-    units = np.array([180. if k in ('start','sweep') else scale for e,k in layout])
+    scale = max([abs(e[k]) for e,k in layout if k not in model.ANGULAR]+[.001])
+    units = np.array([180. if k in model.ANGULAR else scale for e,k in layout])
     x = np.array([e[k] for e,k in layout])/units
     def evaluate(values):
         for (e,k),v,u in zip(layout,values,units): e[k]=float(v*u)
@@ -199,7 +201,7 @@ def solve(sketch, goals=(), *, drag=False):
                 result.extend(residual(work,goal['constraint'],scale))
             elif 'field' in goal:
                 e = get_entity(work,goal)
-                divisor = 180 if goal['field'] in ('start','sweep') else scale
+                divisor = 180 if goal['field'] in model.ANGULAR else scale
                 result.append((e[goal['field']]-goal['value'])/divisor)
             elif 'center' in goal:
                 e = get_entity(work,goal)
@@ -260,7 +262,8 @@ def weld_points(sketch, refs):
     refs=[dict(id=i,part=p) for i,p in keys]
     for ref in refs:
         e=get_entity(sketch,ref)
-        allowed={'LINE':('START','END'),'ARC':('START','END'),'RECTANGLE':('P0','P1','P2','P3'),'ORIGIN':('POINT',)}
+        allowed={'LINE':('START','END'),'ARC':('START','END'),'RECTANGLE':('P0','P1','P2','P3'),'ORIGIN':('POINT',),
+                 'NGON':tuple(p for p in handles(e) if p!='CENTER') if e['type']=='NGON' else ()}
         if ref['part'] not in allowed.get(e['type'],()):
             raise BadPayload('Soldar requiere extremos de líneas/arcos o esquinas, no figuras completas')
     anchor=next((r for r in refs if r['id']=='ORIGIN'),refs[-1])
@@ -300,6 +303,9 @@ def move_goals(sketch, refs, dx, dy):
             if e['type']=='RECTANGLE' and single_handle:
                 # A symmetric shape: the center stays put and all four corners follow.
                 goals.append(dict(id=e['id'],center=(e['x']+e['width']/2.,e['y']+e['height']/2.),hard=True))
+            if e['type']=='NGON' and single_handle and part!='CENTER':
+                # A vertex resizes and turns the polygon around its fixed center.
+                goals.append(dict(id=e['id'],part='CENTER',point=np.array(points['CENTER']),hard=True))
         elif e['type']=='RECTANGLE' and part.startswith('EDGE'):
             index=int(part[4:]); roles=['P'+str(index),'P'+str((index+1)%4)]
         else:

@@ -31,6 +31,10 @@ actualiza las operaciones dependientes y registra un paso de undo.
 - La bandeja muestra solo medidas (longitud, ancho/alto, radio y el ángulo del arco),
   no coordenadas. La posición se fija con candados y con cotas a otros puntos: el
   origen, esquinas, extremos o centros de otras figuras.
+- Polígono regular: arrastrar centro → vértice (6 lados por defecto; los lados se eligen
+  antes de dibujar o después con −/+). Su medida es **Entre caras** (la llave de una
+  tuerca; en impares, el Ø inscrito) y su candado la fija. Con la medida fijada,
+  arrastrar un vértice solo lo gira. Sirve para tuercas y alojamientos de tuerca.
 - Círculo: arrastrar centro → radio. Arco: arrastrar centro → inicio; inicialmente
   barre 90° y permite editar radio, ángulo inicial y barrido en grados.
 - Dibujar usa las mismas ayudas que editar: el Snap Incremento y su Paso siguen en la

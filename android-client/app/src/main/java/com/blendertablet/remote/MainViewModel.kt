@@ -352,6 +352,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         cancelCadStroke()
         client.cadCommand(name, payload)
     }
+    fun cadNgonSides(sides: Int) {
+        local.update { it.copy(cadNgonSides = sides.coerceIn(3, 32)) }
+    }
+
     fun cadTool(type: String?) {
         cancelCadStroke()
         if (client.state.value.cad.surface.mode != "PROFILE") client.cadCommand("cad.surface.mode", mapOf("mode" to "PROFILE"))
@@ -395,7 +399,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     "DRAG" -> "cad.drag.begin"
                     "POLY" -> "cad.polygon.begin"
                     else -> "cad.entity.begin"
-                }, if (type == null) mapOf("u" to u, "v" to v) else mapOf("type" to type, "u" to u, "v" to v))
+                }, when (type) {
+                    null -> mapOf("u" to u, "v" to v)
+                    "NGON" -> mapOf("type" to type, "sides" to local.value.cadNgonSides, "u" to u, "v" to v)
+                    else -> mapOf("type" to type, "u" to u, "v" to v)
+                })
             }
             GesturePhase.UPDATE -> if (cadStroke) {
                 when (cadGestureMode) {
