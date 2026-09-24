@@ -22,7 +22,11 @@ data class CadConstraint(val id: String, val type: String, val value: Double?, v
 data class CadSelection(val id: String, val part: String = "BODY")
 data class CadFeature(val id: String, val name: String, val sketchId: String,
     val profileId: String, val depth: Double, val enabled: Boolean,
-    val type: String = "EXTRUDE", val targetId: String? = null, val bodyId: String = "", val extent: String = "ONE")
+    val type: String = "EXTRUDE", val targetId: String? = null, val bodyId: String = "", val extent: String = "ONE",
+    /** Redondeo/Chaflán (`FILLET`/`CHAMFER`): ancho, segmentos y aristas elegidas. */
+    val width: Double = 0.0, val segments: Int = 1, val edgeCount: Int = 0) {
+    val isFinish get() = type in listOf("FILLET", "CHAMFER")
+}
 data class CadHandle(val part: String, val point: Pair<Float, Float>, val selected: Boolean, val intent: String = "POINT")
 data class CadOverlay(val id: String, val points: List<Pair<Float, Float>>, val closed: Boolean, val selected: Boolean,
     val handles: List<CadHandle> = emptyList(), val selectedParts: List<String> = emptyList(), val construction: Boolean = false,
@@ -51,6 +55,8 @@ data class CadState(
     val operation: String = "",
     val depth: Double = 0.02,
     val extent: String = "ONE",
+    val width: Double = 0.0,
+    val segments: Int = 1,
     val overlay: List<CadOverlay> = emptyList(),
     val error: String? = null,
     val selection: List<CadSelection> = emptyList(),

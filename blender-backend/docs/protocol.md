@@ -1411,7 +1411,7 @@ de banda y configuración de latencia interactiva.
 ## CAD paramétrico — versión 2 extendida: sketch y vaciado
 
 `features.cad` anuncia `version:2`, `planes:[XY,XZ,YZ]`,
-`entities:[LINE,RECTANGLE,CIRCLE,ARC,NGON,POLYGON]`, `features:[EXTRUDE,CUT]`,
+`entities:[LINE,RECTANGLE,CIRCLE,ARC,NGON,POLYGON]`, `features:[EXTRUDE,CUT]` (más FILLET/CHAMFER en la pila vía `cad.finish.*`),
 `sketch_editing:true`, `fillet:true`, `length_unit:METERS` y `constraints` con
 `COINCIDENT,HORIZONTAL,VERTICAL,PARALLEL,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,DISTANCE_X,DISTANCE_Y,RADIUS,FIX,MIDPOINT,SYMMETRIC,SYMMETRIC_LINE`.
 También anuncia `construction`, `datum_planes`, `bodies`, `origin`, `mesh_copy`,
@@ -1465,10 +1465,12 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.entity.set` | `{entity_id,values:{width?,height?,diameter?,radius?,start?,sweep?,length?,flats?,angle?,sides?,x?,y?,x2?,y2?}}` | Edita dimensiones y reconstruye dependientes |
 | `cad.entity.delete` | `{entity_id}` o `{}` | Borra una figura completa o la selección de puntos/aristas/figuras en un undo; protege perfiles usados |
 | `cad.extrude.begin` | `{profile_id?,sketch_id?,depth,operation:"EXTRUDE\\|CUT",target_id?,extent?}` | Un perfil o el croquis completo; contornos exteriores como volumen e interiores como huecos. CUT exige destino. `extent` es `ONE` (defecto) o `BOTH` |
+| `cad.finish.begin` | `{operation:"FILLET\|CHAMFER",width?,segments?}` | Redondea/achaflana las aristas seleccionadas del sólido (`surface` en EDGE, un mismo cuerpo) como nuevo nodo de la pila; preview reversible |
+| `cad.finish.update` | `{width}` o `{gesture,baseline_width}` o `{segments}` | Ancho exacto o delta vertical (un paso por 4 % de altura); segmentos 1–16, chaflán siempre 1. Confirmar/cancelar con `cad.session.*`; el estado de sesión publica `width` y `segments` |
 | `cad.extrude.update` | `{depth}` o `{gesture,baseline_depth}` o `{extent}` | Cota exacta o delta vertical desde inicio del gesto, positivo hacia arriba. En CUT, `extent` cambia una o dos direcciones sin confirmar |
 | `cad.session.confirm` | `{}` | Confirma candidato estable, un undo |
 | `cad.session.cancel` | `{}` | Restaura documento y geometría originales |
-| `cad.feature.set` | `{feature_id,depth?,enabled?,extent?}` | Edita o suprime feature. `extent` solo en CUT: `ONE` o `BOTH` |
+| `cad.feature.set` | `{feature_id,depth?,enabled?,extent?,width?,segments?}` | Edita o suprime feature. `extent` solo en CUT: `ONE` o `BOTH`; `width`/`segments` solo en FILLET/CHAMFER |
 | `cad.feature.delete` | `{feature_id}` | Borra feature y resultado |
 | `cad.convert` | `{body_id}` o `{feature_id}` | Copia el cuerpo completo como malla independiente con sus modificadores, sale a Object y conserva el documento; el original queda oculto fuera de CAD |
 | `cad.settings` | `{step?,increment?,construction?,show_scene?}` | Paso métrico positivo y snap, sin undo ni cambio geométrico |

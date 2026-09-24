@@ -64,7 +64,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   rectángulo con Igualdad), polígonos regulares (`NGON`),
   círculos, arcos, polígonos irregulares, redondeo de sketch, selección de puntos/aristas
   y restricciones.
-  Extrusión de perfiles cerrados y vaciado por profundidad con incrementos. Documento JSON
+  Extrusión de perfiles cerrados, vaciado por profundidad con incrementos y redondeo/chaflán
+  de varias aristas del sólido. Documento JSON
   persistente en `.blend`, árbol, preview reversible y conversión explícita a malla.
 
 ## Invariantes técnicos
@@ -451,6 +452,14 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   mantiene una actualización de profundidad en vuelo y solo el último candidato
   pendiente entre comandos; confirmar y navegar respetan ese orden. Un fallo de
   profundidad impide confirmar una medida anterior. Repetir el mismo paso no reconstruye.
+- Redondeo/Chaflán (`FILLET`/`CHAMFER`) son nodos de la pila del cuerpo sin boceto
+  (`sketch_id: null`): guardan `edges` como segmentos en metros de las aristas de
+  diseño elegidas (nunca índices), `width` y `segments` (chaflán = 1). Se evalúan con
+  `bmesh.ops.bevel` sobre el sólido compacto tras disolver la teselación coplanar; una
+  arista coincide si está en la recta de un segmento guardado y lo solapa, así sobrevive
+  a cambios de longitud. Sin coincidencia → error explícito. En modo Aristas la
+  selección del sólido se acumula; Redondear/Chaflán abren una sesión `cad.finish.*`
+  excluyente, con preview desde el baseline y un undo. No sirven de apoyo de bocetos.
 - Un boceto sobre la cara superior sigue el plano/altura de su operación soporte.
   Los soportes con dependientes no se borran; crear una copia de malla conserva sus referencias.
 - La iconografía se resuelve por intención desde `ui/Iconography.kt`; las pantallas no

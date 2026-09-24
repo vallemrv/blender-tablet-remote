@@ -270,3 +270,49 @@ def cut_mesh(base, cutter, *, operation='DIFFERENCE'):
         for obj in objects: bpy.data.objects.remove(obj,do_unlink=True)
         for mesh in meshes:
             if mesh.users==0: bpy.data.meshes.remove(mesh)
+
+
+def finish_edges(solid, edges, width, segments):
+    """Fillet (segments > 1) or chamfer (1) the design edges on a compact solid.
+
+    Each design edge is stored as its segments in metres, never mesh indices:
+    a solid edge on the line of one of them that overlaps it is bevelled, so a
+    straight edge survives a changed length (e.g. a deeper extrusion). A design
+    edge with nothing left (the design moved away) is an explicit error.
+    """
+    import bmesh
+    from mathutils.geometry import intersect_point_line
+    vertices, faces = solid
+    extent = max(max(v[i] for v in vertices)-min(v[i] for v in vertices) for i in range(3))
+    tolerance = extent*1e-6+1e-9
+    lines = [[(Vector(a), Vector(b)) for a, b in edge] for edge in edges]
+    def on(edge, segments):
+        p, q = edge.verts[0].co, edge.verts[1].co
+        for a, b in segments:
+            (cp, tp), (cq, tq) = intersect_point_line(p, a, b), intersect_point_line(q, a, b)
+            overlap = min(max(tp, tq), 1.) - max(min(tp, tq), 0.)
+            if (cp-p).length <= tolerance and (cq-q).length <= tolerance and overlap > 1e-6: return True
+        return False
+    bm = bmesh.new()
+    try:
+        verts = [bm.verts.new(v) for v in vertices]
+        for face in faces: bm.faces.new([verts[i] for i in face])
+        bm.normal_update()
+        # Coplanar boolean tessellation is not a design edge; merge it first.
+        bmesh.ops.dissolve_limit(bm, angle_limit=1e-4, verts=list(bm.verts), edges=list(bm.edges))
+        chosen = set()
+        for segments_of in lines:
+            found = [e for e in bm.edges if on(e, segments_of)]
+            if not found:
+                raise CommandError('Una arista del redondeo ya no existe; edita o borra la operación', code='cad_reference_missing')
+            chosen.update(found)
+        bmesh.ops.bevel(bm, geom=list(chosen)+list({v for e in chosen for v in e.verts}), offset=width,
+                        offset_type='OFFSET', profile_type='SUPERELLIPSE', segments=segments,
+                        profile=.5, affect='EDGES', clamp_overlap=True, loop_slide=True)
+        bm.normal_update()
+        if not all(e.is_manifold for e in bm.edges) or bm.calc_volume() <= 1e-18:
+            raise CommandError('El redondeo no cabe en esas aristas; reduce el ancho', code='cad_finish_invalid')
+        bm.verts.index_update()
+        return [tuple(v.co) for v in bm.verts], [tuple(v.index for v in f.verts) for f in bm.faces]
+    finally:
+        bm.free()

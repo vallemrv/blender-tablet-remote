@@ -373,6 +373,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (cadStroke) {
             cadStroke = false
             if (cadGestureMode == "DEPTH") client.cadCommand("cad.extrude.update", mapOf("depth" to cadDepthStart))
+            else if (cadGestureMode == "FINISH") client.cadCommand("cad.finish.update", mapOf("width" to cadDepthStart))
             else client.cadCommand("cad.session.cancel")
             cadGestureMode = null
         }
@@ -385,6 +386,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 cadPointerStartV = v
                 if (cad.sessionActive && cad.operation in listOf("EXTRUDE", "CUT")) {
                     cadStroke = true; cadGestureMode = "DEPTH"; cadDepthStart = cad.depth
+                    return
+                }
+                if (cad.sessionActive && cad.operation in listOf("FILLET", "CHAMFER")) {
+                    // Como Extruir: deslizar arriba/abajo cambia el ancho por pasos.
+                    cadStroke = true; cadGestureMode = "FINISH"; cadDepthStart = cad.width
                     return
                 }
                 val type = local.value.cadTool
@@ -408,6 +414,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             GesturePhase.UPDATE -> if (cadStroke) {
                 when (cadGestureMode) {
                     "DEPTH" -> client.cadCommand("cad.extrude.update", mapOf("gesture" to (cadPointerStartV - v), "baseline_depth" to cadDepthStart))
+                    "FINISH" -> client.cadCommand("cad.finish.update", mapOf("gesture" to (cadPointerStartV - v), "baseline_width" to cadDepthStart))
                     "DRAG" -> client.cadCommand("cad.drag.update", mapOf("u" to u, "v" to v))
                     "POLY" -> client.cadCommand("cad.polygon.update", mapOf("u" to u, "v" to v))
                     "DRAW" -> client.cadCommand("cad.entity.update", mapOf("u" to u, "v" to v))

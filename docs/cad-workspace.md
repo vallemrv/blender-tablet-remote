@@ -287,6 +287,20 @@ Un perfil que no intersecta el destino o elimina todo el sólido se rechaza.
 No se pueden borrar soportes con operaciones o bocetos dependientes:
 primero se eliminan los dependientes. El árbol permite borrar bocetos sin operaciones.
 
+## Redondear y achaflanar aristas del sólido
+
+1. Fuera del boceto, elige **Aristas** (icono junto al selector CAD/Object).
+2. Toca las aristas: la selección se acumula (toca otra vez para quitar una).
+3. Pulsa **Redondear aristas** o **Chaflán en aristas** en la bandeja.
+4. Desliza arriba/abajo o escribe el **Ancho**; el redondeo admite 1–16 **Segmentos**.
+5. ✓ añade la operación a la pila del cuerpo con un undo; × la descarta.
+
+Es una operación más de la pila: se puede ocultar, borrar o editar su ancho y
+segmentos tocando su nodo. Las aristas se guardan por su geometría, no por índices
+de malla: si alargas una extrusión, sus aristas rectas conservan el redondeo. Si
+una arista desaparece del diseño, la pila lo indica con un error en vez de ignorarla.
+Usa el bisel nativo de Blender sobre el sólido; no es un fillet B-rep.
+
 ## Persistencia y límites
 
 - Documento JSON v1 extendido con IDs estables, revisión, restricciones, planos de

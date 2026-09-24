@@ -119,7 +119,9 @@ class SurfaceSelection:
         old=next((i for i in self.items if i['id']==item['id']),None)
         if old: self.items.remove(old); return
         # Two references are enough for a measurement; a third starts a fresh pair.
-        if len(self.items)>=2: self.clear()
+        # Edges accumulate: Redondear/Chaflán act on every selected edge at once.
+        if len(self.items)>=2 and not (item['kind']=='EDGE' and all(i['kind']=='EDGE' and i['object']==item['object'] for i in self.items)):
+            self.clear()
         self.items.append(item)
         self._stamps[item['object']]=stamp(bpy.data.objects[item['object']])
 

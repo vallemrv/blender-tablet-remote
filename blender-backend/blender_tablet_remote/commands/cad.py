@@ -98,6 +98,8 @@ def _new_sketch(doc,payload):
     support_id=payload.get('support_id')
     if support_id:
         feature=model.find(doc,'features',support_id)
+        if feature['type'] in model.FINISHES:
+            raise BadPayload('Un redondeo no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
         source,_=model.profile(doc,feature['profile_id'])
         plane_local=source['plane']
         offset=source.get('offset',0)+(feature['depth'] if feature['type']=='EXTRUDE' else 0)
@@ -545,6 +547,75 @@ def extrude_update(payload):
     return runtime.status()
 
 
+def _finish_edges():
+    """Selected solid edges as design segments in metres, with their body."""
+    runtime.surface.validate()
+    items=[i for i in runtime.surface.items if i['kind']=='EDGE']
+    if not items or len(items)!=len(runtime.surface.items):
+        raise BadPayload('Selecciona una o varias aristas del sólido (Aristas)')
+    obj=bpy.data.objects.get(items[0]['object'])
+    body=obj.get(BODY_KEY) if obj else None
+    if not body or any(i['object']!=items[0]['object'] for i in items):
+        raise BadPayload('Las aristas deben pertenecer a una misma pieza CAD')
+    from mathutils import Vector
+    inverse=obj.matrix_world.inverted_safe(); scale=bpy.context.scene.unit_settings.scale_length
+    edges=[[[list(inverse@Vector(p)*scale) for p in segment] for segment in item['segments']] for item in items]
+    return body,edges
+
+
+def _finish_step(payload, session):
+    width=session['width']
+    if 'gesture' in payload:
+        distance=model.number(payload['gesture'])/.04*runtime.step
+        if runtime.increment: distance=round(distance/runtime.step)*runtime.step
+        width=max(1e-7,model.number(payload.get('baseline_width',session['width']),positive=True)+distance)
+    elif 'width' in payload: width=model.number(payload['width'],positive=True)
+    return width
+
+
+@command('cad.finish.begin')
+def finish_begin(payload):
+    """Fillet/chamfer the selected solid edges as a new operation of their body."""
+    operation=str(payload.get('operation','FILLET')).upper()
+    if operation not in model.FINISHES: raise BadPayload('Operación CAD no compatible')
+    body,edges=_finish_edges()
+    doc=runtime.doc()
+    segments=1 if operation=='CHAMFER' else payload.get('segments',4)
+    feature=model.validate_finish(dict(id=model.uid('feature'),type=operation,order=model.next_order(doc),
+        name=('Chaflán ' if operation=='CHAMFER' else 'Redondeo ')+str(len(doc['features'])+1),
+        sketch_id=None,body_id=body,enabled=True,edges=edges,segments=segments,
+        width=model.number(payload.get('width',runtime.step),positive=True)))
+    bar=runtime.bar(doc)
+    session=runtime.begin(payload,operation)
+    preview=copy.deepcopy(session['baseline']); preview['features'].append(feature)
+    if bar: model.insert_after(preview,feature,bar)
+    try:
+        runtime.rebuild(preview,limit=feature['id'] if bar else None)
+    except Exception:
+        runtime.session=None
+        raise
+    session.update(feature_id=feature['id'],preview=preview,candidate=feature['id'],width=feature['width'],
+                   segments=feature['segments'],at_bar=bool(bar))
+    runtime.surface.clear()
+    runtime.selection=dict(kind='FEATURE',id=feature['id'])
+    return runtime.status()
+
+
+@command('cad.finish.update')
+def finish_update(payload):
+    session=runtime.require(payload)
+    if session['operation'] not in model.FINISHES: raise CommandError('La sesión no es un redondeo',code='wrong_tool')
+    width=_finish_step(payload,session)
+    segments=payload.get('segments',session['segments'])
+    if width==session['width'] and segments==session['segments']: return runtime.status()
+    preview=copy.deepcopy(session['preview'])
+    feature=model.find(preview,'features',session['feature_id'])
+    feature.update(width=width,segments=segments); model.validate_finish(feature)
+    runtime.rebuild(preview,limit=session['feature_id'] if session.get('at_bar') else None)
+    session.update(preview=preview,width=width,segments=segments)
+    return runtime.status()
+
+
 @command('cad.session.confirm')
 def confirm(payload):
     session = runtime.require(payload)
@@ -578,7 +649,12 @@ def feature_set(payload):
     def change(doc):
         feature = model.find(doc,'features',payload.get('feature_id'))
         _require_reachable(doc,feature['id'])
+        if feature['type'] in model.FINISHES:
+            if 'width' in payload: feature['width']=payload['width']
+            if 'segments' in payload: feature['segments']=payload['segments']
+            model.validate_finish(feature)
         if 'depth' in payload:
+            if feature['type'] in model.FINISHES: raise BadPayload('Un redondeo se edita por su ancho')
             feature['depth'] = model.number(payload['depth'],positive=True)
         if 'extent' in payload:
             if feature['type']!='CUT':
@@ -1057,6 +1133,7 @@ def sketch_on_face(payload):
                    translation=[0,0,0],rotation=[0,0,0],face_frame=frame)
         feature=next((f for f in doc['features'] if f['id']==source['feature_id']),None)
         candidates=[node for node in reversed(model.history(doc)) if node['kind']=='FEATURE' and node['enabled'] and
+                    node['type'] not in model.FINISHES and
                     feature and node['body_id']==feature['body_id'] and node['id'] in _reachable_ids(doc)]
         for support in candidates:
             source_sketch=model.find(doc,'sketches',support['sketch_id']); base=model.frame(source_sketch)

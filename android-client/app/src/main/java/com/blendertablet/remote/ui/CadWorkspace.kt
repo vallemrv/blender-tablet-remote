@@ -74,6 +74,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     // Dibujar muestra las mismas medidas en vivo que arrastrar; se editan al soltar.
     val drawPreview = cad.sessionActive && cad.operation in listOf("LINE", "RECTANGLE", "CIRCLE", "ARC")
     val livePreview = dragPreview || drawPreview
+    val finishPreview = cad.sessionActive && cad.operation in listOf("FILLET", "CHAMFER")
     val availableHeight = (LocalConfiguration.current.screenHeightDp - 320).coerceAtLeast(100).dp
     fun command(name: String, vararg values: Pair<String, Any?>) { if (connected) vm.cadCommand(name, mapOf(*values)) }
     fun editSketch(sketchId: String) {
@@ -221,11 +222,11 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                 CadStackNodeRow(feature.type, feature.name + if (!feature.enabled) " · desactivada" else "",
                                     cad.selectedFeature?.id == feature.id, dimmed, nodeEnabled,
                                     tap = { command("cad.history.rollback", "node_id" to node.id) },
-                                    actions = listOf(
+                                    actions = listOfNotNull(
                                         CadNodeAction("Seleccionar") {
                                             vm.cadTool(null); command("cad.select", "kind" to "FEATURE", "id" to feature.id)
                                         },
-                                        CadNodeAction("Editar ${cad.sketches.firstOrNull { it.id == feature.sketchId }?.name ?: "boceto fuente"}") { editSketch(feature.sketchId) },
+                                        if (!feature.isFinish) CadNodeAction("Editar ${cad.sketches.firstOrNull { it.id == feature.sketchId }?.name ?: "boceto fuente"}") { editSketch(feature.sketchId) } else null,
                                         CadNodeAction(if (feature.enabled) "Desactivar" else "Activar") {
                                             command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled)
                                         },
@@ -273,6 +274,11 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 drafts["depth"]?.let { command("cad.extrude.update", "depth" to it) }
                 if (cad.canConfirm) command("cad.session.confirm")
             }
+            finishPreview -> {
+                drafts["width"]?.let { command("cad.finish.update", "width" to it) }
+                if (cad.canConfirm) command("cad.session.confirm")
+            }
+            feature?.isFinish == true && drafts["width"] != null -> command("cad.feature.set", "feature_id" to feature.id, "width" to drafts["width"])
             pendingDimension != null -> {
                 val type = pendingDimension!!
                 val value = drafts["constraint"] ?: cad.dimensionOptions[type]?.value ?: cad.step * 5
@@ -293,16 +299,16 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     }
     fun discardValues() {
         focusManager.clearFocus()
-        if (depthPreview) command("cad.session.cancel")
+        if (depthPreview || finishPreview) command("cad.session.cancel")
         pendingDimension = null; editingConstraint = null; resetInputs++
     }
     val canAccept = connected && validDrafts && when {
-        depthPreview -> cad.canConfirm
+        depthPreview || finishPreview -> cad.canConfirm
         pendingDimension != null -> true
         else -> drafts.isNotEmpty()
     }
     val parameterScroll = rememberScrollState()
-    val hasValues = depthPreview || pendingDimension != null || editingConstraint != null || entity != null || feature != null
+    val hasValues = depthPreview || finishPreview || pendingDimension != null || editingConstraint != null || entity != null || feature != null
     FloatingPanel(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { onTrayHeight(it.height) }.padding(Metrics.EdgeMargin)) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(cad.error ?: when {
@@ -311,6 +317,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 depthPreview -> "${cadLabel(cad.operation)} · desliza arriba/abajo para profundidad" +
                     (if (cad.operation == "CUT") " · una dirección o las dos" else "") +
                     " · dos dedos navegan" + if (cad.transparent) " · transparencia automática" else ""
+                finishPreview -> "${cadLabel(cad.operation)} · desliza arriba/abajo o escribe el ancho · ✓ lo añade a la pila"
                 dragPreview -> "Medidas en vivo · suelta para fijar una medida con su candado"
                 drawPreview -> "Medidas en vivo · Incremento redondea al paso y los puntos existentes atraen · suelta para editar las medidas"
                 cad.sessionActive && cad.operation == "POLYGON" -> "Polígono: traza o toca cada vértice · cierra tocando el primer punto o con Cerrar · dos dedos descarta"
@@ -424,6 +431,23 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             CadDimension("Profundidad", cad.depth, unit, cad.sessionId.orEmpty(), step = cad.step,
                                 minimum = .0000001, enabled = connected, onNudge = ::preview,
                                 onDone = { drafts["depth"]?.let(::preview) }) { drafts["depth"] = it }
+                        } else if (finishPreview) {
+                            fun preview(value: Double) { drafts.remove("width"); command("cad.finish.update", "width" to value) }
+                            CadDimension("Ancho", cad.width, unit, cad.sessionId.orEmpty(), step = cad.step,
+                                minimum = .0000001, enabled = connected, onNudge = ::preview,
+                                onDone = { drafts["width"]?.let(::preview) }) { drafts["width"] = it }
+                            if (cad.operation == "FILLET") CadCountControl("Segmentos", cad.segments, 1..16, connected) {
+                                command("cad.finish.update", "segments" to it)
+                            }
+                        } else if (feature?.isFinish == true) {
+                            CadDimension("Ancho", drafts["width"] ?: feature.width, unit, feature.id,
+                                step = cad.step, minimum = .0000001, enabled = connected, onDone = ::acceptValues) { drafts["width"] = it }
+                            if (feature.type == "FILLET") CadCountControl("Segmentos", feature.segments, 1..16, connected && drafts.isEmpty()) {
+                                command("cad.feature.set", "feature_id" to feature.id, "segments" to it)
+                            }
+                            Text("${feature.edgeCount} aristas", color = Ink.Muted, fontSize = 12.sp)
+                            CadAction("VISIBLE", if (feature.enabled) "Ocultar" else "Mostrar", selected = feature.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled) }
+                            CadAction("DELETE", "Borrar operación", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
                         } else feature?.let { selected ->
                             if (selected.type == "CUT") {
                                 PillButton("Una dirección", selected = selected.extent != "BOTH", enabled = connected) {
@@ -442,9 +466,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 }
                 if (hasValues && !livePreview) {
                     Spacer(Modifier.width(10.dp))
-                    RoundAction(AppIcons.cad("CANCEL"), if (depthPreview) "Descartar preview" else "Descartar medidas", Ink.Bad, ::discardValues)
+                    RoundAction(AppIcons.cad("CANCEL"), if (depthPreview || finishPreview) "Descartar preview" else "Descartar medidas", Ink.Bad, ::discardValues)
                     Spacer(Modifier.width(4.dp))
-                    RoundAction(AppIcons.cad("FINISH"), if (depthPreview) "Confirmar ${cadLabel(cad.operation)}" else "Aplicar medidas",
+                    RoundAction(AppIcons.cad("FINISH"), if (depthPreview || finishPreview) "Confirmar ${cadLabel(cad.operation)}" else "Aplicar medidas",
                         if (canAccept) Ink.Ok else Ink.Faint, { if (canAccept) acceptValues() })
                 }
             }
@@ -560,7 +584,7 @@ internal fun cadConstraintEnabled(cad: CadState, type: String): Boolean {
 }
 
 internal fun cadLabel(type: String) = when (type) {
-    "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"
+    "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
     "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad (tamaño del primero)"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
     "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; else -> type
@@ -754,11 +778,20 @@ private fun CadVectorFields(label: String, values: List<String>, unit: String, c
 @Composable
 private fun CadSurfaceControls(cad: CadState, unit: LengthUnit, enabled: Boolean, vm: MainViewModel) {
     if (cad.surface.mode != "PROFILE") PillButton("Ver escena", selected = cad.showScene, enabled = enabled) { vm.cadCommand("cad.settings", mapOf("show_scene" to !cad.showScene)) }
-    if (cad.surface.selection.isNotEmpty()) {
+    val edges = cad.surface.selection.isNotEmpty() && cad.surface.selection.all { it.kind == "EDGE" }
+    if (cad.surface.selection.size > 2 && edges) {
+        Text("${cad.surface.selection.size} aristas · ${cad.surface.selection.first().objectName}", color = Ink.Accent, fontSize = 11.sp)
+        PillButton("Limpiar", enabled = enabled) { vm.cadCommand("cad.surface.clear") }
+    } else if (cad.surface.selection.isNotEmpty()) {
         cad.surface.selection.forEachIndexed { index,item ->
             Text("${index+1} · ${if (index == 0) "Azul" else "Naranja"} · ${item.objectName}", color = if (index == 0) Ink.Accent else Ink.Warn, fontSize = 11.sp)
         }
         PillButton("Limpiar", enabled = enabled) { vm.cadCommand("cad.surface.clear") }
+    }
+    if (cad.activeSketchId == null && edges) {
+        // Varias aristas del sólido se redondean o achaflanan de una vez, como un paso de la pila.
+        CadAction("FILLET", "Redondear aristas", enabled = enabled) { vm.cadCommand("cad.finish.begin", mapOf("operation" to "FILLET")) }
+        CadAction("CHAMFER", "Chaflán en aristas", enabled = enabled) { vm.cadCommand("cad.finish.begin", mapOf("operation" to "CHAMFER")) }
     }
     if (cad.activeSketchId != null && cad.surface.selection.isNotEmpty() && cad.surface.selection.none { it.kind == "VERTEX" }) {
         PillButton("Proyectar referencia fija", enabled = enabled) { vm.cadCommand("cad.reference.project") }
@@ -774,11 +807,16 @@ private fun CadSurfaceControls(cad: CadState, unit: LengthUnit, enabled: Boolean
 
 /** Número de lados de un polígono regular: 6 hace tuercas y sus alojamientos. */
 @Composable
-private fun CadSidesControl(sides: Int, enabled: Boolean, onChange: (Int) -> Unit) {
+private fun CadSidesControl(sides: Int, enabled: Boolean, onChange: (Int) -> Unit) =
+    CadCountControl("Lados", sides, 3..32, enabled, onChange)
+
+/** Cantidad discreta (lados, segmentos) con −/+ compartidos; nunca usa unidades. */
+@Composable
+private fun CadCountControl(label: String, value: Int, range: IntRange, enabled: Boolean, onChange: (Int) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("Lados", color = Ink.Muted, fontSize = 12.sp)
-        StepperButton("−", enabled && sides > 3) { onChange(sides - 1) }
-        Text("$sides", fontSize = 14.sp)
-        StepperButton("+", enabled && sides < 32) { onChange(sides + 1) }
+        Text(label, color = Ink.Muted, fontSize = 12.sp)
+        StepperButton("−", enabled && value > range.first) { onChange(value - 1) }
+        Text("$value", fontSize = 14.sp)
+        StepperButton("+", enabled && value < range.last) { onChange(value + 1) }
     }
 }

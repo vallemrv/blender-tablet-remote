@@ -359,7 +359,7 @@ class WebSocketRemoteBlenderClient(
     }
 
     private fun sendCommand(name: String, payload: JSONObject = JSONObject()): Boolean = synchronized(sculptTransportLock) {
-        if (name == "cad.extrude.update" || cadDepthQueue.busy) {
+        if (name in CadDepthCommandQueue.CANDIDATES || cadDepthQueue.busy) {
             if (_connection.value != ConnectionStatus.CONNECTED) { reportOffline(); return@synchronized false }
             cadDepthQueue.add(CadQueuedMessage(name, payload))
             flushCadDepth()
@@ -1099,7 +1099,7 @@ class WebSocketRemoteBlenderClient(
                         requestState()
                     }
                 }
-                if (command == "cad.extrude.update") synchronized(sculptTransportLock) {
+                if (command in CadDepthCommandQueue.CANDIDATES) synchronized(sculptTransportLock) {
                     cadDepthQueue.acknowledge(message.optBoolean("ok", false))
                     flushCadDepth()
                 }

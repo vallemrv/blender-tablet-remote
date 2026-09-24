@@ -16,6 +16,30 @@ FIELDS = {'LINE': ('x','y','x2','y2'), 'RECTANGLE': ('x','y','width','height'),
           'CIRCLE': ('x','y','diameter'), 'ARC': ('x','y','radius','start','sweep'),
           'NGON': ('x','y','flats','angle')}
 ANGULAR = ('start','sweep','angle')  # degrees, independent of the sketch size
+# Edge finishes act on a body's solid: no sketch or profile, only design edges
+# stored as their segments in metres (never mesh indices). Chamfer is one segment.
+FINISHES = ('FILLET', 'CHAMFER')
+
+
+def validate_finish(feature):
+    edges = feature.get('edges')
+    if not isinstance(edges, list) or not edges or len(edges) > 200:
+        raise BadPayload('Selecciona las aristas del sólido')
+    for edge in edges:
+        if not isinstance(edge, list) or not edge or len(edge) > 2000:
+            raise BadPayload('Arista del sólido no válida')
+        for segment in edge:
+            if not isinstance(segment, list) or len(segment) != 2: raise BadPayload('Arista del sólido no válida')
+            for p in segment:
+                if not isinstance(p, list) or len(p) != 3: raise BadPayload('Arista del sólido no válida')
+                for c in p: number(c)
+    feature['width'] = number(feature.get('width'), positive=True)
+    segments = feature.get('segments', 1)
+    if isinstance(segments, bool) or not isinstance(segments, int) or not 1 <= segments <= 16:
+        raise BadPayload('Los segmentos del redondeo van de 1 a 16')
+    if feature['type'] == 'CHAMFER' and segments != 1:
+        raise BadPayload('El chaflán es un único segmento')
+    return feature
 SIDES = (3, 32)
 
 
@@ -78,6 +102,13 @@ def loads(raw):
             unique(feature['id'])
             if not isinstance(feature.get('name'),str):
                 raise ValueError('invalid feature name')
+            if feature.get('type') in FINISHES:
+                find(doc,'bodies',feature['body_id'])
+                if not isinstance(feature.get('enabled'),bool) or feature.get('sketch_id') is not None:
+                    raise ValueError('invalid feature')
+                validate_finish(feature)
+                seen_features.add(feature['id'])
+                continue
             sketch, _ = profile(doc, feature['profile_id'])
             feature.setdefault('body_id',sketch['body_id'])
             find(doc,'bodies',feature['body_id'])
@@ -271,6 +302,8 @@ def resolve_supports(doc):
         visiting.remove(item['id']); resolved.add(item['id'])
     def supported(feature_id):
         f=find(doc,'features',feature_id)
+        if f['type'] in FINISHES:
+            raise BadPayload('Un redondeo no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
         source=find(doc,'sketches',f['sketch_id']); resolve(source)
         result=copy.deepcopy(frame(source))
         depth=f['depth'] if f['type']=='EXTRUDE' else 0
@@ -319,6 +352,8 @@ def history(doc):
     # Older documents had no order. Preserve feature order and place each source
     # sketch immediately before its first operation; unused sketches follow.
     for feature in doc['features']:
+        if feature.get('sketch_id') is None:
+            nodes.append(dict(feature,kind='FEATURE')); continue
         sketch=find(doc,'sketches',feature['sketch_id'])
         if sketch['id'] not in seen:
             nodes.append(dict(sketch,kind='SKETCH')); seen.add(sketch['id'])

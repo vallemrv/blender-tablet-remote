@@ -5,7 +5,7 @@ import math
 import bpy
 from mathutils import Vector
 from . import document as model
-from .kernel import kernel, world, ExtrusionPreviewCache
+from .kernel import kernel, world, ExtrusionPreviewCache, finish_edges
 from .quad_layout import quad_mesh
 from . import sketch as sketch_geometry
 from ..errors import BadPayload, CommandError
@@ -190,6 +190,19 @@ class CadRuntime:
             if feature['kind']!='FEATURE' or not feature['enabled']: continue
             identifier=feature['id']; body=feature['body_id']
             previous=tips.get(body)
+            if feature['type'] in model.FINISHES:
+                if previous is None:
+                    raise CommandError('El cuerpo no tiene un sólido que redondear',code='cad_dependency')
+                signature=(doc['id'],feature['type'],feature['width'],feature.get('segments',1),
+                           model.dumps(feature['edges']),keys.get(previous))
+                cached=self._solids.get(identifier)
+                if cached is None or cached[0]!=signature:
+                    cached=(signature,finish_edges(solids[previous],feature['edges'],feature['width'],feature.get('segments',1)))
+                    self._solids[identifier]=cached
+                solids[identifier]=cached[1]
+                keys[identifier]=hashlib.blake2b(repr(signature).encode(),digest_size=16).digest()
+                tips[body]=identifier; direct[body]=None
+                continue
             sketch,entity=model.profile(doc,feature['profile_id'])
             depth=model.number(feature['depth'],positive=True)
             cut=feature['type']=='CUT'
@@ -259,7 +272,7 @@ class CadRuntime:
         body_ids={b['id'] for b in doc['bodies']}
         self._body_meshes={k:v for k,v in self._body_meshes.items() if k in body_ids}
         self._materialized={k:v for k,v in self._materialized.items() if k in body_ids}
-        profile_ids={f['profile_id'].removeprefix('profile_') for f in doc['features']}
+        profile_ids={f['profile_id'].removeprefix('profile_') for f in doc['features'] if f.get('profile_id')}
         self._extrusion_cache.entries={k:v for k,v in self._extrusion_cache.entries.items() if k in profile_ids}
         bpy.context.view_layer.update()
 
@@ -509,6 +522,8 @@ class CadRuntime:
                         session=dict(active=bool(session),id=session['id'] if session else None,
                                      operation=session['operation'] if session else None,
                                      depth=session.get('depth') if session else None,
+                                     width=session.get('width') if session else None,
+                                     segments=session.get('segments') if session else None,
                                       extent=session.get('extent','ONE') if session and session.get('operation')=='CUT' else None,
                                       transparent=bool(session and session['operation']=='CUT'),
                                      can_confirm=bool(session and session.get('candidate')),

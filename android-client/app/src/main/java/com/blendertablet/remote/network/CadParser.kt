@@ -48,12 +48,15 @@ object CadParser {
                     sketch.optBoolean("visible",true),sketch.optString("body_id"),sketch.id("plane_id"),sketch.optString("plane_label",sketch.optString("plane","XY")))
             },
             features = objects(document?.optJSONArray("features")).map { CadFeature(it.optString("id"), it.optString("name", "Extrusión"),
-                it.optString("sketch_id"), it.optString("profile_id"), it.optDouble("depth", 0.02), it.optBoolean("enabled", true), it.optString("type", "EXTRUDE"), it.id("target_id"), it.optString("body_id"),
-                if (it.optString("extent") == "BOTH") "BOTH" else "ONE") },
+                it.id("sketch_id").orEmpty(), it.id("profile_id").orEmpty(), it.optDouble("depth", 0.02), it.optBoolean("enabled", true), it.optString("type", "EXTRUDE"), it.id("target_id"), it.optString("body_id"),
+                if (it.optString("extent") == "BOTH") "BOTH" else "ONE", it.optDouble("width", 0.0), it.optInt("segments", 1),
+                it.optJSONArray("edges")?.length() ?: 0) },
             activeSketchId = j.id("active_sketch_id"), selectionKind = selection?.id("kind"), selectionId = selection?.id("id"),
             sessionActive = session?.optBoolean("active") == true, sessionId = session?.id("id"), canConfirm = session?.optBoolean("can_confirm", true) == true,
             canClose = session?.optBoolean("can_close") == true, operation = session?.optString("operation").orEmpty(),
             depth = session?.optDouble("depth", 0.02) ?: 0.02,
+            width = session?.optDouble("width", 0.0)?.takeIf { it.isFinite() } ?: 0.0,
+            segments = session?.optInt("segments", 1) ?: 1,
             extent = if (session?.optString("extent") == "BOTH") "BOTH" else "ONE",
             overlay = objects(j.optJSONArray("overlay")).map { item ->
                 val points = item.optJSONArray("points")
