@@ -71,6 +71,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     }
     val depthPreview = cad.sessionActive && cad.operation in listOf("EXTRUDE", "CUT")
     val dragPreview = cad.sessionActive && cad.operation == "DRAG"
+    // Dibujar muestra las mismas medidas en vivo que arrastrar; se editan al soltar.
+    val drawPreview = cad.sessionActive && cad.operation in listOf("LINE", "RECTANGLE", "CIRCLE", "ARC")
+    val livePreview = dragPreview || drawPreview
     val availableHeight = (LocalConfiguration.current.screenHeightDp - 320).coerceAtLeast(100).dp
     fun command(name: String, vararg values: Pair<String, Any?>) { if (connected) vm.cadCommand(name, mapOf(*values)) }
     fun editSketch(sketchId: String) {
@@ -260,10 +263,10 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     var resetInputs by remember(editScope) { mutableIntStateOf(0) }
     val drafts = remember(editScope, resetInputs) { mutableStateMapOf<String, Double?>() }
     val validDrafts = drafts.values.all { it != null }
-    val entity = cad.selectedEntity?.takeUnless { (cad.sessionActive && !dragPreview) || pendingDimension != null || editingConstraint != null || cad.surface.mode != "PROFILE" }
+    val entity = cad.selectedEntity?.takeUnless { (cad.sessionActive && !livePreview) || pendingDimension != null || editingConstraint != null || cad.surface.mode != "PROFILE" }
     val feature = cad.selectedFeature?.takeUnless { cad.sessionActive || editing || cad.surface.mode != "PROFILE" }
     fun acceptValues() {
-        if (!connected || !validDrafts || dragPreview) return
+        if (!connected || !validDrafts || livePreview) return
         focusManager.clearFocus()
         when {
             depthPreview -> {
@@ -309,6 +312,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                     (if (cad.operation == "CUT") " · una dirección o las dos" else "") +
                     " · dos dedos navegan" + if (cad.transparent) " · transparencia automática" else ""
                 dragPreview -> "Medidas en vivo · suelta para fijar una medida con su candado"
+                drawPreview -> "Medidas en vivo · Incremento redondea al paso y los puntos existentes atraen · suelta para editar las medidas"
                 cad.sessionActive && cad.operation == "POLYGON" -> "Polígono: traza o toca cada vértice · cierra tocando el primer punto o con Cerrar · dos dedos descarta"
                 cad.surface.mode == "FACE" -> if (cad.surface.selection.size > 1) "Dos referencias para medir · quita una cara seleccionada para crear el boceto" else "Toca una cara: se resalta en el vídeo · Boceto en cara usa exactamente esa selección"
                 cad.surface.mode != "PROFILE" -> "Toca hasta dos referencias para medir · durante el boceto puedes proyectarlas para acotar desde ellas"
@@ -331,15 +335,11 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                         if (cad.surface.mode != "PROFILE" || !editing) {
                             CadSurfaceControls(cad, unit, connected && !cad.sessionActive, vm)
                         }
-                        if (capabilities.sketchEditing && ((editing && state.cadTool == null) || depthPreview)) {
+                        if (capabilities.sketchEditing && (editing || depthPreview)) {
                             SnapControl(listOf(SnapType.NONE, SnapType.INCREMENT), if (cad.increment) SnapType.INCREMENT else SnapType.NONE,
                                 { command("cad.settings", "increment" to (it == SnapType.INCREMENT)) })
                         }
                         CadSnapStepInput(cad.step, unit, { unit = it }) { command("cad.settings", "step" to it) }
-                        if (cad.sessionActive && cad.operation == "CIRCLE") {
-                            CadDimension("Radio", if (cad.canConfirm) cad.selectedEntity?.values?.get("radius") ?: 0.0 else 0.0,
-                                unit, cad.sessionId.orEmpty(), step = cad.step, enabled = false, onDone = {}) {}
-                        }
                         editingConstraint?.let { constraint ->
                             PillButton("Quitar cota", enabled = connected) {
                                 command("cad.constraint.delete", "constraint_id" to constraint.id,
@@ -377,12 +377,12 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     CadDimension(label + if (measure != null) if (bound) " · cota" else " · sin cota" else "",
                                         drafts[field] ?: selected.values[field] ?: 0.0, unit, selected.id + field,
-                                        degrees = degrees, step = if (degrees) 1.0 else cad.step, enabled = connected, readOnly = dragPreview,
+                                        degrees = degrees, step = if (degrees) 1.0 else cad.step, enabled = connected, readOnly = livePreview,
                                         minimum = if (measure != null) .0000001 else -10000.0,
                                         maximum = if (field == "sweep") 359.99 else 10000.0,
                                         onDone = ::acceptValues) { drafts[field] = it?.takeIf { value -> field != "sweep" || kotlin.math.abs(value) in .01..359.99 } }
                                     if (measure != null) CadAction("FIX", (if (bound) "Quitar cota: " else "Fijar medida: ") + label,
-                                        selected = bound, enabled = connected && !dragPreview && drafts.isEmpty()) {
+                                        selected = bound, enabled = connected && !livePreview && drafts.isEmpty()) {
                                         if (bound) command("cad.constraint.delete", "constraint_id" to measure.constraintIds.first())
                                         else command("cad.constraint.add", "type" to measure.constraintType,
                                             "value" to ((selected.values[field] ?: 0.0) * measure.valueFactor),
@@ -433,7 +433,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                         }
                     }
                 }
-                if (hasValues && !dragPreview) {
+                if (hasValues && !livePreview) {
                     Spacer(Modifier.width(10.dp))
                     RoundAction(AppIcons.cad("CANCEL"), if (depthPreview) "Descartar preview" else "Descartar medidas", Ink.Bad, ::discardValues)
                     Spacer(Modifier.width(4.dp))

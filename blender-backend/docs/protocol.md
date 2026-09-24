@@ -1457,7 +1457,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.sketch.finish` | `{}` | Sale del dibujo conservando perfiles seleccionables |
 | `cad.select` | `{kind:"ENTITY\\|PROFILE\\|SKETCH\\|FEATURE",id,part?,additive?}` o `{u,v,additive?}` | Geometría de boceto, perfil individual, croquis completo o feature; aditiva alterna pertenencia |
 | `cad.entity.begin` | `{type:"LINE\|RECTANGLE\|SQUARE\|CIRCLE\|ARC\|POLYGON",u,v}` | Inicia dibujo reversible |
-| `cad.entity.update` | `{u,v}` | Actualiza extremo desde baseline |
+| `cad.entity.update` | `{u,v}` | Actualiza extremo desde baseline; con `increment` el inicio cae en la rejilla del paso (o en un punto existente, con coincidencia) y tamaño/radio se redondean al paso |
 | `cad.polygon.begin` | `{u,v}` | Inicia o continúa la cadena de un polígono irregular; el primer vértice admite snap de extremos |
 | `cad.polygon.update` | `{u,v}` | Tramo provisional desde el último vértice, con snap a extremos incluidos los de la propia cadena |
 | `cad.polygon.segment` | `{u,v}` | Consolida un vértice por trazo o toque; si el extremo es el punto inicial con tres o más vértices, cierra y confirma con un único undo |

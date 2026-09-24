@@ -174,6 +174,16 @@ def _endpoint(payload, sketch, previous=None):
                                  model.number(payload.get('v')),found[2].width/max(found[2].height,1),previous)
 
 
+def _on_grid(point):
+    if not runtime.increment: return tuple(point)
+    return tuple(round(c/runtime.step)*runtime.step for c in point)
+
+
+def _corner(e, point):
+    """Rectangle corner role lying on a drawn point, for its coincidence."""
+    return min(geometry.handles(e).items(),key=lambda item:math.dist(item[1],point))[0]
+
+
 @command('cad.entity.begin')
 def entity_begin(payload):
     typ = str(payload.get('type','')).upper()
@@ -182,9 +192,11 @@ def entity_begin(payload):
     if typ not in model.TYPES:
         raise BadPayload('Tipo de entidad CAD no compatible')
     sketch = model.find(runtime.doc(),'sketches',runtime.active_sketch_id)
-    start = runtime.point(payload,sketch)
-    anchor=_endpoint(payload,sketch) if typ=='LINE' else None
-    if anchor: start=geometry.point(sketch,dict(id=anchor['entity_id'],part=anchor['part']))
+    # Drawing follows the same aids as editing: an existing point attracts the
+    # start, otherwise Increment places it on the step grid.
+    anchor=_endpoint(payload,sketch)
+    start=(geometry.point(sketch,dict(id=anchor['entity_id'],part=anchor['part'])) if anchor
+           else _on_grid(runtime.point(payload,sketch)))
     session = runtime.begin(payload,typ)
     session.update(sketch_id=sketch['id'],start=start,entity_id=model.uid('entity'),square=square,anchor=anchor)
     return runtime.status()
@@ -199,20 +211,26 @@ def entity_update(payload):
     sketch = model.find(doc,'sketches',session['sketch_id'])
     x,y = session['start']
     x2,y2 = runtime.point(payload,sketch)
-    endpoint=_endpoint(payload,sketch,session.get('endpoint')) if session['operation']=='LINE' else None
+    endpoint=(_endpoint(payload,sketch,session.get('endpoint'))
+              if session['operation']=='LINE' or (session['operation']=='RECTANGLE' and not session.get('square')) else None)
     session['endpoint']=endpoint
     if endpoint: x2,y2=geometry.point(sketch,dict(id=endpoint['entity_id'],part=endpoint['part']))
     e = dict(id=session['entity_id'],type=session['operation'],x=x,y=y,construction=runtime.construction)
     if e['type']=='RECTANGLE':
+        if not endpoint: x2,y2=x+_on_grid((x2-x,))[0],y+_on_grid((y2-y,))[0]
         if session.get('square'):
             size=max(abs(x2-x),abs(y2-y))
             x2=x+math.copysign(size,x2-x); y2=y+math.copysign(size,y2-y)
         e.update(x=min(x,x2),y=min(y,y2),width=abs(x2-x),height=abs(y2-y))
-    elif e['type']=='ARC':
-        e.update(radius=math.hypot(x2-x,y2-y),start=math.degrees(math.atan2(y2-y,x2-x)),sweep=90.)
-    elif e['type']=='CIRCLE':
-        e['diameter'] = 2*math.hypot(x2-x,y2-y)
+    elif e['type'] in ('ARC','CIRCLE'):
+        # Increment rounds the radius itself, not the rim position.
+        radius=_on_grid((math.hypot(x2-x,y2-y),))[0]
+        if e['type']=='ARC':
+            e.update(radius=radius,start=math.degrees(math.atan2(y2-y,x2-x)),sweep=90.)
+        else:
+            e['diameter'] = 2*radius
     else:
+        if not endpoint: x2,y2=_on_grid((x2,y2))
         e.update(x2=x2,y2=y2)
     # Returning to the start clears the candidate so a collapsed drag cannot
     # silently confirm an older rectangle.
@@ -223,9 +241,11 @@ def entity_update(payload):
         session['candidate'] = None
         return runtime.status()
     sketch['entities'].append(e)
-    for role,anchor in (('START',session.get('anchor')),('END',endpoint)):
+    roles={'LINE':('START','END'),'CIRCLE':('CENTER',None),'ARC':('CENTER',None)}.get(e['type'])
+    if e['type']=='RECTANGLE': roles=(_corner(e,(x,y)),_corner(e,(x2,y2)))
+    for role,anchor,label in ((roles[0],session.get('anchor'),'START'),(roles[1],endpoint,'END')):
         if anchor:
-            sketch.setdefault('constraints',[]).append(dict(id='join_'+e['id']+'_'+role,type='COINCIDENT',
+            sketch.setdefault('constraints',[]).append(dict(id='join_'+e['id']+'_'+label,type='COINCIDENT',
                 refs=[dict(id=e['id'],part=role),dict(id=anchor['entity_id'],part=anchor['part'])]))
     if session.get('square'):
         sketch.setdefault('constraints',[]).append(dict(id='square_'+e['id'],type='EQUAL',

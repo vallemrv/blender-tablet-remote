@@ -30,6 +30,11 @@ actualiza las operaciones dependientes y registra un paso de undo.
   lados; cambiar su ancho también modifica su alto.
 - Círculo: arrastrar centro → radio. Arco: arrastrar centro → inicio; inicialmente
   barre 90° y permite editar radio, ángulo inicial y barrido en grados.
+- Dibujar usa las mismas ayudas que editar: el Snap Incremento y su Paso siguen en la
+  bandeja con la herramienta elegida. El inicio se engancha a un punto existente
+  (origen, esquina, extremo o centro) con una coincidencia; si no, cae en la rejilla
+  del paso. Tamaños y radios se redondean al paso y las medidas se ven en vivo;
+  al soltar se editan en la misma bandeja. Una figura menor que un paso no se crea.
 - Cursor: tocar un punto o arista lo añade a la selección; tocarlo otra vez lo
   quita. Los toques sucesivos seleccionan varios sin activar otra herramienta.
   Tocar vacío limpia la selección; arrastrar vacío no la altera.

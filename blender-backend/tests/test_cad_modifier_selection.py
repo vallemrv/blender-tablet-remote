@@ -121,6 +121,7 @@ class ModifierSelectionTests(CadTests):
 
     def pocket(self):
         bpy.context.scene.unit_settings.scale_length=.001
+        runtime.step=.0005  # Drawing snaps to Increment; these are half-millimetre design values.
         base=self.draw('RECTANGLE',(-.0915,-.051),(.0915,.051))
         first=self.extrude(base,.03)
         cad.sketch_create(dict(support_id=first,**OWNER))

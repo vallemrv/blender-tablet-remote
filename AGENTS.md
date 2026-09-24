@@ -402,6 +402,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   `DISTANCE_X`, `DISTANCE_Y`). Las dos últimas miden la separación absoluta en los
   ejes del croquis, admiten cero y conservan cantidades independientes. Pueden usar
   dos puntos (incluido origen/centros) o una línea/lado; se editan desde la misma bandeja.
+- Dibujar primitivas CAD aplica las ayudas de editar: el inicio adquiere un punto
+  existente con coincidencia (esquina de rectángulo, centro de círculo/arco, extremo
+  de línea) o cae en la rejilla del paso; con Incremento, tamaño y radio se redondean
+  al paso y una figura menor que un paso no se crea. Snap/Paso siguen visibles con
+  la herramienta armada y las medidas se ven en vivo, de solo lectura, hasta soltar.
 - Durante el arrastre CAD, las dimensiones de la figura seleccionada permanecen
   visibles y se actualizan desde la preview, también con Incremento. Se leen sin
   editar durante el gesto; al soltar se habilitan sus campos y candados para fijarlas.

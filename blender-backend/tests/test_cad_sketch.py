@@ -17,6 +17,29 @@ from test_cad import CadTests, OWNER, volume
 
 
 class SketchTests(CadTests):
+    def test_drawing_uses_increment_grid_point_snap_and_drops_collapsed_figures(self):
+        def entity(identifier):
+            return next(e for s in runtime.doc()['sketches'] for e in s['entities'] if e['id']==identifier)
+        rect=entity(self.draw('RECTANGLE',(.01234,.00488),(.05071,.03012)))
+        self.assertEqual([round(rect[k],9) for k in ('x','y','width','height')],[.012,.005,.039,.025])
+        circle=entity(self.draw('CIRCLE',(.1,.1),(.1173,.1)))
+        self.assertAlmostEqual(circle['diameter'],.034,places=9)  # Increment rounds the radius (17 mm).
+        with patch.object(runtime,'point',return_value=(0,0)), patch.object(cad,'_endpoint',return_value=None):
+            cad.entity_begin(dict(type='RECTANGLE',u=.1,v=.1,**OWNER))
+        with patch.object(runtime,'point',return_value=(.0004,.0001)), patch.object(cad,'_endpoint',return_value=None):
+            status=cad.entity_update(dict(u=.1,v=.1,**OWNER))
+        self.assertFalse(status['session']['can_confirm'])  # An accidental tap never leaves a sub-step rectangle.
+        cad.cancel(OWNER)
+        origin=dict(entity_id='ORIGIN',part='POINT',id='ORIGIN:POINT',distance=0.)
+        with patch.object(runtime,'point',return_value=(.0003,-.0002)), patch.object(cad,'_endpoint',return_value=origin):
+            cad.entity_begin(dict(type='CIRCLE',u=.1,v=.1,**OWNER))
+        with patch.object(runtime,'point',return_value=(.02,0)), patch.object(cad,'_endpoint',return_value=None):
+            identifier=cad.entity_update(dict(u=.2,v=.1,**OWNER))['selection']['id']
+        cad.confirm(OWNER)
+        self.assertEqual((entity(identifier)['x'],entity(identifier)['y']),(0,0))
+        sketch=runtime.doc()['sketches'][0]
+        self.assertTrue(any(c['type']=='COINCIDENT' and dict(id=identifier,part='CENTER') in c['refs'] for c in sketch['constraints']))
+
     def test_reopen_selected_profile_or_feature_edits_source_without_duplicate_or_navigation_undo(self):
         entity = self.rect()
         sketch_id = runtime.active_sketch_id
