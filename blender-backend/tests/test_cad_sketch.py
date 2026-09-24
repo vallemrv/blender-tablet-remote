@@ -167,6 +167,29 @@ class SketchTests(CadTests):
         state=cad.extrude_begin(dict(operation='CUT',target_id=base,profile_id='profile_'+hole,depth=.005,**OWNER))
         return base,hole,state['selection']['id']
 
+    def test_cut_extent_grows_one_side_or_both(self):
+        base=self.extrude(self.rect())
+        cad.sketch_create(dict(plane='XY',offset=.01,**OWNER))
+        hole=self.draw('RECTANGLE',(.01,.01),(.03,.025))
+        area=.02*.015
+        original=.08*.045*.02
+        state=cad.extrude_begin(dict(operation='CUT',target_id=base,profile_id='profile_'+hole,depth=.004,extent='ONE',**OWNER))
+        cut=state['selection']['id']
+        def cut_object(): return next(o for o in runtime.objects(runtime.doc()) if o[FEATURE_KEY]==cut)
+        self.assertEqual(state['session']['extent'],'ONE')
+        self.assertAlmostEqual(volume(cut_object()),original-area*.004,places=10)
+        state=cad.extrude_update(dict(extent='BOTH',**OWNER))
+        self.assertEqual(state['session']['extent'],'BOTH')
+        self.assertAlmostEqual(volume(cut_object()),original-area*.008,places=10)
+        cad.extrude_update(dict(extent='ONE',depth=.004,**OWNER))
+        self.assertAlmostEqual(volume(cut_object()),original-area*.004,places=10)
+        with self.assertRaises(CommandError): cad.extrude_update(dict(extent='SIDEWAYS',**OWNER))
+        cad.confirm(OWNER)
+        self.assertEqual(model.find(runtime.doc(),'features',cut)['extent'],'ONE')
+        cad.feature_set(dict(feature_id=cut,extent='BOTH',**OWNER))
+        self.assertEqual(model.find(runtime.doc(),'features',cut)['extent'],'BOTH')
+        self.assertAlmostEqual(volume(cut_object()),original-area*.008,places=10)
+
     def test_cut_depth_is_subtractive_and_cancel_restores(self):
         base,hole,cut=self.pocket()
         original=.08*.045*.02
@@ -203,13 +226,14 @@ class SketchTests(CadTests):
         cutobj=next(o for o in runtime.objects(doc) if o[FEATURE_KEY]==cut)
         self.assertAlmostEqual(volume(cutobj),.08*.045*.03-.02*.015*.005,places=10)
 
-    def test_square_drag_projects_to_constraint_and_keeps_opposite_corner(self):
+    def test_square_drag_projects_to_constraint_and_keeps_center(self):
         identifier=self.draw('SQUARE',(0,0),(.04,.04))
         sketch=runtime.doc()['sketches'][0]
         goals=geometry.move_goals(sketch,[dict(id=identifier,part='P2')],.01,.02)
         geometry.solve(sketch,goals,drag=True)
         e=model.find(sketch,'entities',identifier)
-        self.assertAlmostEqual(e['x'],0,places=8); self.assertAlmostEqual(e['y'],0,places=8)
+        self.assertAlmostEqual(e['x']+e['width']/2,.02,places=8)
+        self.assertAlmostEqual(e['y']+e['height']/2,.02,places=8)
         self.assertAlmostEqual(e['width'],e['height'],places=8)
         self.assertGreater(e['width'],.04)
 

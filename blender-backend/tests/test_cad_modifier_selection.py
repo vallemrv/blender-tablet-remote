@@ -63,7 +63,7 @@ class ModifierSelectionTests(CadTests):
     def test_temporary_lineage_is_removed_even_when_evaluation_fails(self):
         obj,mod=self.subdivided()
         before=list(obj.data.attributes.keys()); topology=snap._cad_topology
-        def fail(mesh,matrix,face_labels=None,edge_labels=None):
+        def fail(mesh,matrix,face_labels=None,edge_labels=None,**_):
             if face_labels is not None: raise RuntimeError('evaluation failed')
             return topology(mesh,matrix)
         with patch.object(snap,'_cad_topology',side_effect=fail):

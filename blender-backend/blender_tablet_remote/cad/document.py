@@ -74,6 +74,10 @@ def loads(raw):
             if feature['type'] not in ('EXTRUDE', 'CUT') or sketch['id'] != feature['sketch_id'] or not isinstance(feature['enabled'], bool):
                 raise ValueError('invalid feature')
             number(feature['depth'], positive=True)
+            if feature['type'] == 'CUT':
+                feature.setdefault('extent', 'ONE')
+                if feature['extent'] not in ('ONE', 'BOTH'):
+                    raise ValueError('invalid cut extent')
             if feature['type'] == 'CUT' and feature.get('target_id') not in seen_features:
                 raise ValueError('invalid cut dependency')
             seen_features.add(feature['id'])

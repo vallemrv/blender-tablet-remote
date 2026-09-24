@@ -8,7 +8,7 @@ data class CadCapabilities(
     val features: List<String> = emptyList(),
     val constraints: List<String> = emptyList(),
     val sketchEditing: Boolean = false,
-) { val available get() = version == 1 && planes.isNotEmpty() }
+) { val available get() = version == 2 && planes.isNotEmpty() }
 data class CadEntity(val id: String, val type: String, val values: Map<String, Double>, val construction: Boolean = false,
     val dimensions: List<CadMeasure> = emptyList(), val isFillet: Boolean = false, val isSquare: Boolean = false, val reference: Boolean = false)
 data class CadMeasure(val field: String, val label: String, val constraintType: String,
@@ -22,7 +22,7 @@ data class CadConstraint(val id: String, val type: String, val value: Double?, v
 data class CadSelection(val id: String, val part: String = "BODY")
 data class CadFeature(val id: String, val name: String, val sketchId: String,
     val profileId: String, val depth: Double, val enabled: Boolean,
-    val type: String = "EXTRUDE", val targetId: String? = null, val bodyId: String = "")
+    val type: String = "EXTRUDE", val targetId: String? = null, val bodyId: String = "", val extent: String = "ONE")
 data class CadHandle(val part: String, val point: Pair<Float, Float>, val selected: Boolean, val intent: String = "POINT")
 data class CadOverlay(val id: String, val points: List<Pair<Float, Float>>, val closed: Boolean, val selected: Boolean,
     val handles: List<CadHandle> = emptyList(), val selectedParts: List<String> = emptyList(), val construction: Boolean = false,
@@ -50,6 +50,7 @@ data class CadState(
     val canClose: Boolean = false,
     val operation: String = "",
     val depth: Double = 0.02,
+    val extent: String = "ONE",
     val overlay: List<CadOverlay> = emptyList(),
     val error: String? = null,
     val selection: List<CadSelection> = emptyList(),

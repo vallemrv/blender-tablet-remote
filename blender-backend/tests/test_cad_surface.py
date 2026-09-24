@@ -112,6 +112,21 @@ class SurfaceTests(CadTests):
         geometry.solve(sketch,geometry.move_goals(sketch,[dict(id=reference['id'],part='START')],.01,.01),drag=True)
         for field in model.FIELDS['LINE']: self.assertAlmostEqual(sketch['entities'][0][field],original[field],places=7)
 
+    def test_circle_selection_uses_the_cad_contour_not_mesh_samples(self):
+        self.extrude(self.draw('CIRCLE',(.02,.02),(.03,.02)))
+        graph=snap._cad_mesh(self.obj())
+        self.assertEqual(len(set(graph[7])),3)
+        self.assertEqual(len({id(region) for region in graph[8].values()}),2)
+        self.assertEqual(snap._cad_corners(graph[8]),[])
+        cad.body_create(OWNER)
+        cad.sketch_create(dict(plane='XY',**OWNER))
+        feature=self.extrude(self.rect())
+        box=next(o for o in runtime.objects(runtime.doc()) if o.get('btr_cad_feature_id')==feature)
+        graph=snap._cad_mesh(box)
+        self.assertEqual(len(set(graph[7])),6)
+        self.assertEqual(len({id(region) for region in graph[8].values()}),12)
+        self.assertEqual(len(snap._cad_corners(graph[8])),8)
+
     @unittest.skipIf(bpy.app.background,'GPU viewport required')
     def test_selection_is_invalidated_by_geometry_edit_before_face_confirmation(self):
         f=self.extrude(self.rect()); self.pick('FACE',(.04,.0225,.02))

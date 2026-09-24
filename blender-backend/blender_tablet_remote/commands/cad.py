@@ -435,6 +435,13 @@ def entity_delete(payload):
     return runtime.status()
 
 
+def _extent(value):
+    value=str(value or 'ONE').upper()
+    if value not in ('ONE','BOTH'):
+        raise BadPayload('La extensión debe ser una dirección o dos')
+    return value
+
+
 @command('cad.extrude.begin')
 def extrude_begin(payload):
     depth = model.number(payload.get('depth',.02),positive=True)
@@ -444,6 +451,7 @@ def extrude_begin(payload):
     _require_reachable(doc,sketch['id'])
     operation=str(payload.get('operation','EXTRUDE')).upper()
     if operation not in ('EXTRUDE','CUT'): raise BadPayload('Operación CAD no compatible')
+    extent=_extent(payload.get('extent','ONE')) if operation=='CUT' else 'ONE'
     target=None
     if operation=='CUT':
         target=model.find(doc,'features',payload.get('target_id'))
@@ -454,6 +462,7 @@ def extrude_begin(payload):
     session['extrusion_cache'] = ExtrusionPreviewCache()
     feature = dict(id=model.uid('feature'),name=('Vaciado ' if operation=='CUT' else 'Extrusión ')+str(len(doc['features'])+1),
                    type=operation,order=model.next_order(doc),sketch_id=sketch['id'],profile_id='profile_'+e['id'],depth=depth,enabled=True,body_id=target['body_id'] if target else sketch['body_id'])
+    if operation=='CUT': feature['extent']=extent
     if target: feature['target_id']=target['id']
     preview = copy.deepcopy(session['baseline'])
     preview['features'].append(feature)
@@ -463,7 +472,7 @@ def extrude_begin(payload):
     except Exception:
         runtime.session = None
         raise
-    session.update(feature_id=feature['id'],preview=preview,candidate=feature['id'],depth=depth,at_bar=bool(bar))
+    session.update(feature_id=feature['id'],preview=preview,candidate=feature['id'],depth=depth,extent=extent,at_bar=bool(bar))
     runtime.selection = dict(kind='FEATURE',id=feature['id'])
     runtime.solid_view()
     return runtime.status()
@@ -474,20 +483,26 @@ def extrude_update(payload):
     session = runtime.require(payload)
     if session['operation'] not in ('EXTRUDE','CUT'):
         raise CommandError('La sesión no es una extrusión',code='wrong_tool')
+    if 'extent' in payload and session['operation']!='CUT':
+        raise BadPayload('Solo el vaciado elige una dirección o dos')
+    extent=_extent(payload['extent']) if 'extent' in payload else session.get('extent','ONE')
     if 'gesture' in payload:
         delta=model.number(payload['gesture'])
         base=model.number(payload.get('baseline_depth',session['depth']),positive=True)
         distance=delta/.04*runtime.step
         if runtime.increment: distance=round(distance/runtime.step)*runtime.step
         depth=max(1e-7,base+distance)
-    else: depth = model.number(payload.get('depth'),positive=True)
-    if depth == session['depth']:
+    elif 'depth' in payload: depth = model.number(payload.get('depth'),positive=True)
+    else: depth = session['depth']
+    if depth == session['depth'] and extent == session.get('extent','ONE'):
         return runtime.status()
     preview = copy.deepcopy(session['preview'])
-    model.find(preview,'features',session['feature_id'])['depth'] = depth
+    feature=model.find(preview,'features',session['feature_id'])
+    feature['depth'] = depth
+    if feature['type']=='CUT': feature['extent']=extent
     runtime.rebuild(preview,limit=session['feature_id'] if session.get('at_bar') else None,
                     extrusion_cache=session['extrusion_cache'])
-    session.update(preview=preview,depth=depth)
+    session.update(preview=preview,depth=depth,extent=extent)
     return runtime.status()
 
 
@@ -526,6 +541,10 @@ def feature_set(payload):
         _require_reachable(doc,feature['id'])
         if 'depth' in payload:
             feature['depth'] = model.number(payload['depth'],positive=True)
+        if 'extent' in payload:
+            if feature['type']!='CUT':
+                raise BadPayload('Solo el vaciado elige una dirección o dos')
+            feature['extent']=_extent(payload['extent'])
         if 'enabled' in payload:
             if not isinstance(payload['enabled'],bool):
                 raise BadPayload('enabled debe ser booleano')
@@ -562,15 +581,14 @@ def convert(payload):
     if not objs:
         raise CommandError('Activa la operación antes de crear su malla',code='cad_reference_missing')
     copies=[]
+    from ..cad.runtime import mesh_copy, archive_copy_sources
     for obj in objs:
-        mesh=obj.copy(); mesh.data=obj.data.copy(); mesh.name=obj.name+' · malla'
-        del mesh[FEATURE_KEY]; del mesh[DOC_KEY]
-        if BODY_KEY in mesh: del mesh[BODY_KEY]
-        mesh.hide_viewport=False; mesh.hide_render=False
+        mesh=mesh_copy(obj)
         bpy.context.scene.collection.objects.link(mesh)
         copies.append(mesh)
     # Export a snapshot for Edit while retaining the entire parametric document.
     runtime.leave()
+    archive_copy_sources(objs)
     for obj in bpy.context.view_layer.objects: obj.select_set(False)
     for obj in copies: obj.select_set(True)
     bpy.context.view_layer.objects.active=copies[-1]

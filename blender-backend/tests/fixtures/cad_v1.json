@@ -1,6 +1,6 @@
 {
   "capability": {
-    "version": 1,
+    "version": 2,
     "planes": [
       "XY",
       "XZ",
@@ -27,10 +27,13 @@
       "TANGENT",
       "EQUAL",
       "DISTANCE",
+      "DISTANCE_X",
+      "DISTANCE_Y",
       "RADIUS",
       "FIX",
       "MIDPOINT",
-      "SYMMETRIC"
+      "SYMMETRIC",
+      "SYMMETRIC_LINE"
     ],
     "sketch_editing": true,
     "solid_selection": true,

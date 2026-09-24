@@ -108,7 +108,11 @@ def delete(payload: dict) -> dict:
 @command("object.duplicate", mutating=True)
 def duplicate(payload: dict) -> dict:
     """linked=True comparte los datos de malla (como Alt+D)."""
+    from ..cad.runtime import runtime, FEATURE_KEY, mesh_copy, archive_copy_sources
     objs = resolve_objects(payload)
+    cad_sources=[obj for obj in objs if obj.get(FEATURE_KEY)]
+    if cad_sources and runtime.session:
+        raise CommandError('Confirma o cancela la operación CAD antes de copiar',code='session_active')
     linked = bool(payload.get("linked", False))
     view_layer = bpy.context.view_layer
     collection = bpy.context.collection
@@ -118,8 +122,8 @@ def duplicate(payload: dict) -> dict:
 
     created = []
     for obj in objs:
-        copy = obj.copy()
-        if not linked and copy.data is not None:
+        copy = mesh_copy(obj) if obj.get(FEATURE_KEY) else obj.copy()
+        if not obj.get(FEATURE_KEY) and not linked and copy.data is not None:
             copy.data = obj.data.copy()
         collection.objects.link(copy)
         _select(copy, True)
@@ -127,6 +131,9 @@ def duplicate(payload: dict) -> dict:
 
     if created:
         view_layer.objects.active = bpy.data.objects[created[-1]]
+    if cad_sources:
+        runtime.leave()
+        archive_copy_sources(cad_sources)
     undo_push("Remote duplicate")
     return {"created": created}
 

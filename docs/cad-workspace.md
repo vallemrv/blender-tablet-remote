@@ -35,8 +35,9 @@ actualiza las operaciones dependientes y registra un paso de undo.
   Tocar vacío limpia la selección; arrastrar vacío no la altera.
 - Con el mismo cursor, arrastrar un punto o una arista lo selecciona y mueve.
   Conserva el grupo al tocar un miembro seleccionado; un punto restringido se ajusta a sus grados de libertad. Mover una
-  esquina de rectángulo conserva la opuesta; mover el radio del círculo conserva
-  su centro. Un toque sin movimiento no crea undo.
+  esquina de rectángulo/cuadrado conserva su centro: las otras tres esquinas
+  se reajustan en simetría; mover el radio del círculo conserva su centro.
+  Un toque sin movimiento no crea undo.
 - Redondear: seleccionar dos líneas con un extremo común, una esquina de un
   rectángulo o dos lados contiguos, y elegir **Redondear esquina** y el radio.
   Recorta los lados e inserta un arco con coincidencias, tangencias y radio.
@@ -48,8 +49,9 @@ actualiza las operaciones dependientes y registra un paso de undo.
 Restricciones disponibles: coincidencia entre puntos, horizontal, vertical,
 paralela, perpendicular, tangencia entre línea y círculo/arco, igualdad de
 longitudes o radios, distancia diagonal/horizontal/vertical, radio, punto medio, simetría respecto al
-último de tres puntos y fijación estricta de la selección. El origen (0,0) se puede
-seleccionar tocándolo en la vista y usar como referencia fija.
+último de tres puntos, simetría respecto a una línea (eje) y fijación estricta de
+la selección. El origen (0,0) se puede seleccionar tocándolo en la vista y usar
+como referencia fija.
 
 Para una cota, selecciona dos puntos (también centros de círculos u origen) o una
 línea/lado y elige **Distancia diagonal**, **Distancia horizontal** o **Distancia
@@ -61,6 +63,12 @@ independientemente. El valor inicial es la medida actual.
 Para dos círculos, puedes seleccionar sus centros y después el origen. Si eliges
 otro centro y quieres que permanezca inmóvil, fíjalo antes. Es simetría respecto
 a un punto; no se elige una línea como eje.
+
+**Simetría respecto a línea** usa dos puntos y una línea/lado como eje, en ese
+orden: primer punto, segundo punto y la línea. Sirve para horizontal, vertical o
+cualquier diagonal según la orientación de esa línea — no hace falta elegir un
+tipo distinto para cada caso. Si el eje no debe moverse al arrastrar, fíjalo
+antes, igual que con la simetría por punto.
 
 **Igualdad** admite dos o más círculos/arcos o líneas/lados del mismo croquis.
 Selecciona primero la figura cuyo tamaño quieres conservar, luego las demás y
@@ -162,7 +170,9 @@ alterar el documento. Estas transacciones conservan un único undo.
 ## Elegir caras, medir y usar referencias
 
 En 3D, **Puntos**, **Aristas** y **Caras** son iconos junto al selector CAD/Object,
-como en Edit, y permiten seleccionar directamente el sólido. **Cursor**, en el
+como en Edit, y permiten seleccionar directamente el sólido. En una pieza CAD
+eligen la figura de diseño, no los trozos de la malla: la arista de un círculo
+es el contorno entero y sus muestras no son puntos. **Cursor**, en el
 rail, vuelve a seleccionar perfiles o geometría del boceto. La primera referencia
 se resalta en azul y la segunda en naranja dentro
 del vídeo. Tocar una seleccionada la retira; **Limpiar** deja la vista sin
@@ -278,7 +288,7 @@ primero se eliminan los dependientes. El árbol permite borrar bocetos sin opera
 - El resultado es una malla. Círculos/arcos mantienen parámetros analíticos en el
   documento y se segmentan al visualizar/evaluar. No es BREP ni exporta STEP.
 - El redondeo es de sketch entre líneas conectadas o en esquinas de rectángulos. No es fillet de aristas
-  del sólido. Vaciar quita un perfil por profundidad; no es una operación Shell
+  del sólido. Vaciar quita un perfil por profundidad, a un lado del croquis o a los dos; no es una operación Shell
   de espesor automático sobre caras arbitrarias.
 - **Planos y bocetos** empieza por Superior/Frontal/Lateral o una cara y una medida
   de **Separación**. **Crear croquis** crea su plano y lo abre en un solo paso.
@@ -296,8 +306,17 @@ primero se eliminan los dependientes. El árbol permite borrar bocetos sin opera
 - **Construcción** dibuja geometría auxiliar discontinua. También puede convertir
   las figuras seleccionadas; sus restricciones siguen activas y sus contornos
   nunca extruyen ni abren huecos. Si rompería un perfil usado, se rechaza el cambio.
-- **Pila → menú del cuerpo → Crear copia de malla del cuerpo** sale a Object con una copia de la pieza completa seleccionada para Edit o
-  Materiales. El original y todo el árbol CAD permanecen editables al regresar.
+- **Pila → menú del cuerpo → Copia editable · Edición / Escultura** sale a Object
+  con una copia de la pieza completa seleccionada. Su malla es independiente y
+  conserva los modificadores; puedes entrar en Edit o Sculpt directamente.
+  **Duplicar** en Object sobre una pieza CAD produce esa misma copia independiente.
+  El original queda oculto para evitar superficies superpuestas y vuelve a verse
+  al entrar en CAD, con todo su árbol paramétrico intacto.
+- En la copia, **Edit → Caras → seleccionar una cara → Bisel** bisela su contorno;
+  **Edit → Aristas → seleccionar una arista → Bisel** actúa sobre esa arista.
+  Para biselar el objeto completo, usa el modificador Bisel y sus campos Ancho y
+  Segmentos. Son operaciones nativas sobre la copia; no añaden un fillet de sólido
+  al historial paramétrico CAD.
 - Las extrusiones de rectángulos y contornos convexos pares usan tapas y paredes
   en quads ordenados. Los perfiles con huecos y vaciados convierten sus parches a
   quads con puntos medios compartidos, conservando frontera, volumen y conectividad.

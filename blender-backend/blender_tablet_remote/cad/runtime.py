@@ -14,6 +14,29 @@ from ..camera import camera
 FEATURE_KEY = 'btr_cad_feature_id'
 DOC_KEY = 'btr_cad_document_id'
 BODY_KEY = 'btr_cad_body_id'
+COPY_SOURCE_KEY = 'btr_cad_copy_source'
+
+
+def mesh_copy(obj):
+    """Independent native mesh and modifier stack, without CAD ownership."""
+    copy=obj.copy()
+    try:
+        copy.data=obj.data.copy()
+        copy.name=obj.name+' · malla'
+        for key in (FEATURE_KEY,DOC_KEY,BODY_KEY,COPY_SOURCE_KEY):
+            if key in copy: del copy[key]
+        copy.hide_viewport=False;copy.hide_render=False
+        return copy
+    except Exception:
+        bpy.data.objects.remove(copy)
+        raise
+
+
+def archive_copy_sources(objects):
+    """Keep design bodies available in CAD without overlapping their editable copy."""
+    for obj in objects:
+        obj[COPY_SOURCE_KEY]=True
+        obj.hide_set(True);obj.hide_render=True
 
 
 class CadRuntime:
@@ -25,6 +48,7 @@ class CadRuntime:
         self._scene = None
         self.workspace_owner = None
         self._hidden = []
+        self._shown = []
         self._save_suspended = False
         self._empty = model.new_document()
         self.step = .001
@@ -52,22 +76,25 @@ class CadRuntime:
             # old scene preview; explicit file loads call reset_session().
             workspace, active = self.workspace, self.active_sketch_id
             settings={k:getattr(self,k) for k in ("active_body_id","step","increment","construction","show_scene","_solid_view","rollback_id")}
-            hidden, owner = self._hidden, self.workspace_owner
+            hidden, shown, owner = self._hidden, self._shown, self.workspace_owner
             self.reset()
             self.workspace, self.active_sketch_id = workspace, active
             for key,value in settings.items(): setattr(self,key,value)
-            self._hidden, self.workspace_owner = hidden, owner
+            self._hidden, self._shown, self.workspace_owner = hidden, shown, owner
             self._scene = identity
         raw = scene.get(model.KEY)
         return model.loads(raw) if raw else copy.deepcopy(self._empty)
 
     def isolate(self):
         """Same hide_set technique as view.local, with a separate restoration set."""
-        if not self.workspace or self._save_suspended or self.show_scene:
+        if not self.workspace or self._save_suspended:
             return
         doc = self.doc()
         for obj in bpy.context.view_layer.objects:
-            if obj.get(DOC_KEY) != doc['id'] and not obj.hide_get() and not obj.hide_viewport:
+            if obj.get(DOC_KEY)==doc['id'] and obj.get(COPY_SOURCE_KEY) and obj.hide_get():
+                if obj.name not in self._shown: self._shown.append(obj.name)
+                obj.hide_set(False)
+            elif not self.show_scene and obj.get(DOC_KEY) != doc['id'] and not obj.hide_get() and not obj.hide_viewport:
                 if obj.name not in self._hidden:
                     self._hidden.append(obj.name)
                 obj.hide_set(True)
@@ -78,8 +105,12 @@ class CadRuntime:
                 obj = bpy.context.view_layer.objects.get(name)
                 if obj is not None:
                     obj.hide_set(False)
+            for name in self._shown:
+                obj = bpy.context.view_layer.objects.get(name)
+                if obj is not None: obj.hide_set(True)
         if clear:
             self._hidden = []
+            self._shown = []
 
     def leave(self):
         self.cancel()
@@ -106,6 +137,9 @@ class CadRuntime:
                 obj = bpy.context.view_layer.objects.get(name)
                 if obj is not None:
                     obj.hide_set(True)
+            for name in self._shown:
+                obj = bpy.context.view_layer.objects.get(name)
+                if obj is not None: obj.hide_set(False)
 
     @contextmanager
     def saving(self):
@@ -158,14 +192,16 @@ class CadRuntime:
             sketch,entity=model.profile(doc,feature['profile_id'])
             depth=model.number(feature['depth'],positive=True)
             cut=feature['type']=='CUT'
+            extent=feature.get('extent','ONE') if cut else 'ONE'
+            if extent not in ('ONE','BOTH'): extent='ONE'
             if cut and feature.get('target_id') not in solids:
                 raise CommandError('Activa el sólido destino antes del vaciado',code='cad_dependency')
-            signature=(doc['id'],feature['profile_id'],feature['type'],depth,
+            signature=(doc['id'],feature['profile_id'],feature['type'],depth,extent,
                        model.dumps(dict(frame=model.frame(sketch),entities=sketch['entities'])),
                        keys.get(previous))
             cached=self._solids.get(identifier)
             if cached is None or cached[0]!=signature:
-                operand=extrusion_cache.extrude(sketch,entity,-depth if cut else depth,display=False)
+                operand=extrusion_cache.extrude(sketch,entity,depth,display=False,symmetric=True) if extent=='BOTH' else extrusion_cache.extrude(sketch,entity,-depth if cut else depth,display=False)
                 if previous:
                     operand=kernel.cut(solids[previous],operand) if cut else kernel.union(solids[previous],operand)
                 elif cut:
@@ -211,7 +247,7 @@ class CadRuntime:
                 self._materialized[identifier]=(obj.as_pointer(),obj.data.as_pointer(),signature,stamp(obj))
             obj.name=body['name']
             obj[FEATURE_KEY]=tips[identifier];obj[DOC_KEY]=doc['id'];obj[BODY_KEY]=identifier
-            obj.hide_viewport=False;obj.hide_render=False
+            obj.hide_viewport=False;obj.hide_render=bool(obj.get(COPY_SOURCE_KEY))
             retained.add(obj.as_pointer())
         for obj in existing:
             if obj.as_pointer() not in retained:
@@ -414,7 +450,8 @@ class CadRuntime:
                                    selected=selected,handles=handle_points,selected_parts=selected_parts,construction=e.get('construction',False)))
             if sketch['id']==self.active_sketch_id:
                 labels={'COINCIDENT':'●','HORIZONTAL':'H','VERTICAL':'V','PARALLEL':'∥',
-                        'PERPENDICULAR':'⊥','TANGENT':'T','EQUAL':'=','FIX':'Fijo','MIDPOINT':'½','SYMMETRIC':'Sim'}
+                        'PERPENDICULAR':'⊥','TANGENT':'T','EQUAL':'=','FIX':'Fijo','MIDPOINT':'½',
+                        'SYMMETRIC':'Sim','SYMMETRIC_LINE':'Sim⟋'}
                 unit=bpy.context.scene.unit_settings.length_unit
                 factor,suffix={'MILLIMETERS':(1000,'mm'),'CENTIMETERS':(100,'cm')}.get(unit,(1,'m'))
                 for index,c in enumerate(sketch.get('constraints',[])):
@@ -471,7 +508,8 @@ class CadRuntime:
                         session=dict(active=bool(session),id=session['id'] if session else None,
                                      operation=session['operation'] if session else None,
                                      depth=session.get('depth') if session else None,
-                                     transparent=bool(session and session['operation']=='CUT'),
+                                      extent=session.get('extent','ONE') if session and session.get('operation')=='CUT' else None,
+                                      transparent=bool(session and session['operation']=='CUT'),
                                      can_confirm=bool(session and session.get('candidate')),
                                      can_close=bool(session and session.get('can_close'))),
                         overlay=self.overlay(doc),error=None)

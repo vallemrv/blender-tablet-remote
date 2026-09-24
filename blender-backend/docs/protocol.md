@@ -306,6 +306,14 @@ En Edit Mode, duplicar geometría no usa `object.duplicate`: `mesh.duplicate` co
 únicamente la selección efectiva del submodo actual (vértices, aristas o caras) y deja
 seleccionada la copia, equivalente a `Shift+D` antes de moverla.
 
+Sobre un cuerpo CAD, `object.duplicate` crea siempre una copia de malla independiente,
+incluido si llega `linked:true`: conserva los modificadores y elimina la propiedad
+paramétrica. Comparte la copia con `cad.convert`, deja seleccionado el resultado en
+Object y oculta el cuerpo original fuera de CAD para evitar solapes. Al volver a CAD
+se muestra temporalmente el original y se oculta la copia. El documento se conserva,
+y copiar más ocultar el original forman un único undo. Para objetos ordinarios,
+`linked:true` sigue compartiendo la malla como Alt+D.
+
 ### Modos
 
 `mode.object`, `mode.edit`, `mode.toggle`, `mode.set` (`mode`: `OBJECT`, `EDIT`, `CAD`, `SCULPT` o `MATERIAL`).
@@ -1396,12 +1404,12 @@ con Blender a 53 Hz.
 MJPEG permanece como fallback. H.264/libx264 es la ruta preferida por su menor ancho
 de banda y configuración de latencia interactiva.
 
-## CAD paramétrico — versión 1 extendida: sketch y vaciado
+## CAD paramétrico — versión 2 extendida: sketch y vaciado
 
-`features.cad` anuncia `version:1`, `planes:[XY,XZ,YZ]`,
+`features.cad` anuncia `version:2`, `planes:[XY,XZ,YZ]`,
 `entities:[LINE,RECTANGLE,SQUARE,CIRCLE,ARC,POLYGON]`, `features:[EXTRUDE,CUT]`,
 `sketch_editing:true`, `fillet:true`, `length_unit:METERS` y `constraints` con
-`COINCIDENT,HORIZONTAL,VERTICAL,PARALLEL,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,DISTANCE_X,DISTANCE_Y,RADIUS,FIX,MIDPOINT,SYMMETRIC`.
+`COINCIDENT,HORIZONTAL,VERTICAL,PARALLEL,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,DISTANCE_X,DISTANCE_Y,RADIUS,FIX,MIDPOINT,SYMMETRIC,SYMMETRIC_LINE`.
 También anuncia `construction`, `datum_planes`, `bodies`, `origin`, `mesh_copy`,
 `smart_cursor`, `selection_delete`, `editable_dimensions`, `fillet_remove`,
 `solid_selection`, `face_sketch`, `project_reference` y `history_order`.
@@ -1452,13 +1460,13 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.polygon.close` | `{}` | Cierra la cadena con el segmento final y confirma; con menos de tres vértices responde error y conserva la sesión |
 | `cad.entity.set` | `{entity_id,values:{width?,height?,diameter?,radius?,start?,sweep?,length?,x?,y?,x2?,y2?}}` | Edita dimensiones y reconstruye dependientes |
 | `cad.entity.delete` | `{entity_id}` o `{}` | Borra una figura completa o la selección de puntos/aristas/figuras en un undo; protege perfiles usados |
-| `cad.extrude.begin` | `{profile_id?,sketch_id?,depth,operation:"EXTRUDE\\|CUT",target_id?}` | Un perfil o el croquis completo; contornos exteriores como volumen e interiores como huecos. CUT exige destino |
-| `cad.extrude.update` | `{depth}` o `{gesture,baseline_depth}` | Cota exacta o delta vertical desde inicio del gesto, positivo hacia arriba |
+| `cad.extrude.begin` | `{profile_id?,sketch_id?,depth,operation:"EXTRUDE\\|CUT",target_id?,extent?}` | Un perfil o el croquis completo; contornos exteriores como volumen e interiores como huecos. CUT exige destino. `extent` es `ONE` (defecto) o `BOTH` |
+| `cad.extrude.update` | `{depth}` o `{gesture,baseline_depth}` o `{extent}` | Cota exacta o delta vertical desde inicio del gesto, positivo hacia arriba. En CUT, `extent` cambia una o dos direcciones sin confirmar |
 | `cad.session.confirm` | `{}` | Confirma candidato estable, un undo |
 | `cad.session.cancel` | `{}` | Restaura documento y geometría originales |
-| `cad.feature.set` | `{feature_id,depth?,enabled?}` | Edita o suprime feature |
+| `cad.feature.set` | `{feature_id,depth?,enabled?,extent?}` | Edita o suprime feature. `extent` solo en CUT: `ONE` o `BOTH` |
 | `cad.feature.delete` | `{feature_id}` | Borra feature y resultado |
-| `cad.convert` | `{body_id}` o `{feature_id}` | Copia el cuerpo completo en el estado visible (feature_id resuelve su cuerpo), sale a Object y conserva el documento |
+| `cad.convert` | `{body_id}` o `{feature_id}` | Copia el cuerpo completo como malla independiente con sus modificadores, sale a Object y conserva el documento; el original queda oculto fuera de CAD |
 | `cad.settings` | `{step?,increment?,construction?,show_scene?}` | Paso métrico positivo y snap, sin undo ni cambio geométrico |
 | `cad.drag.begin` | `{u,v}` | Sondea y conserva selección previa; prepara arrastre del grupo si cubre el elemento, sin cambiar selección todavía |
 | `cad.drag.update` | `{u,v}` | Reconstruye y resuelve restricciones desde baseline |
@@ -1551,6 +1559,10 @@ EQUAL acepta dos o más medidas compatibles en `cad.constraint.add`; conserva
 inicialmente la primera, persiste parejas de igualdad y mantiene las cotas existentes.
 El tamaño sigue libre si ninguna cota lo fija. SYMMETRIC conserva sus tres referencias:
 los primeros dos puntos deben quedar equidistantes del tercero, que es su centro.
+SYMMETRIC_LINE conserva sus tres referencias: los primeros dos puntos deben quedar
+a la misma distancia de una tercera referencia de línea (o lado), con el segmento
+que los une perpendicular a ella. Sirve para simetría horizontal, vertical o
+diagonal según la orientación de esa línea; si el eje no debe moverse, fíjalo antes.
 
 Los redondeos se reconocen por sus coincidencias y tangencias con dos líneas, sin
 requerir metadatos nuevos en archivos anteriores. Radio y el campo numérico usan
@@ -1568,7 +1580,8 @@ crea una fijación por referencia dentro de un único undo. El origen reservado
 `{id:"ORIGIN",part:"POINT"}` existe en cada boceto, es siempre (0,0) y nunca es un
 parámetro del solver. MIDPOINT recibe punto + lado (en cualquier orden al crear);
 SYMMETRIC recibe tres puntos, con el centro en último lugar. COINCIDENT admite el
-origen. La construcción participa en las restricciones y queda fuera de perfiles.
+origen. SYMMETRIC_LINE recibe dos puntos y una línea/lado como eje, en ese orden.
+La construcción participa en las restricciones y queda fuera de perfiles.
 `overlay` anuncia `construction` para líneas discontinuas y `label`, `label_point`,
 `label_offset` para cotas/etiquetas; las entradas `kind:DIMENSION` no son seleccionables.
 Las medidas del overlay usan la unidad de escena. El panel Android filtra por IDs
@@ -1602,7 +1615,7 @@ siguientes, que usan la evaluación compacta del kernel para evitar crecimiento
 exponencial al encadenar vaciados.
 
 `document.revision` aumenta con cada transacción confirmada y vuelve al valor
-correspondiente al usar undo/redo. `session.depth` describe la preview de EXTRUDE/CUT y
+correspondiente al usar undo/redo. `session.depth` y, en CUT, `session.extent` (`ONE` o `BOTH`) describen la preview de EXTRUDE/CUT y
 `session.can_confirm` exige un candidato no degenerado. Una cadena cerrada de
 líneas/arcos no ramificada forma un perfil; las redes cruzadas no se subdividen
 en regiones implícitas. Los vaciados sin intersección o que eliminan todo el

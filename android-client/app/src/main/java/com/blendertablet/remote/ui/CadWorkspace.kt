@@ -183,7 +183,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
                         PillButton(cad.bodies.firstOrNull { it.id == cad.activeBodyId }?.name ?: "Cuerpo") { bodiesOpen = true }
                         DropdownMenu(bodiesOpen, { bodiesOpen = false }) {
                             cad.bodies.forEach { body -> DropdownMenuItem(text = { Text(body.name) }, onClick = { bodiesOpen = false; command("cad.body.activate", "body_id" to body.id) }) }
-                            DropdownMenuItem(text = { Text("Crear copia de malla del cuerpo") },
+                            DropdownMenuItem(text = { Text("Copia editable · Edición / Escultura") },
                                 enabled = connected && !cad.sessionActive && targets.any { it.bodyId == cad.activeBodyId },
                                 onClick = { bodiesOpen = false; command("cad.convert", "body_id" to cad.activeBodyId) })
                             DropdownMenuItem(text = { Text("Nuevo cuerpo") }, onClick = { bodiesOpen = false; command("cad.body.create") })
@@ -305,7 +305,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
             Text(cad.error ?: when {
                 !connected -> "Reconectando · recuperando el documento de Blender"
                 drafts.isNotEmpty() && !depthPreview -> "Medidas pendientes · ✓ aplica los cambios · × descarta"
-                depthPreview -> "${cadLabel(cad.operation)} · desliza arriba/abajo para profundidad · dos dedos navegan" + if (cad.transparent) " · transparencia automática" else ""
+                depthPreview -> "${cadLabel(cad.operation)} · desliza arriba/abajo para profundidad" +
+                    (if (cad.operation == "CUT") " · una dirección o las dos" else "") +
+                    " · dos dedos navegan" + if (cad.transparent) " · transparencia automática" else ""
                 dragPreview -> "Medidas en vivo · suelta para fijar una medida con su candado"
                 cad.sessionActive && cad.operation == "POLYGON" -> "Polígono: traza o toca cada vértice · cierra tocando el primer punto o con Cerrar · dos dedos descarta"
                 cad.surface.mode == "FACE" -> if (cad.surface.selection.size > 1) "Dos referencias para medir · quita una cara seleccionada para crear el boceto" else "Toca una cara: se resalta en el vídeo · Boceto en cara usa exactamente esa selección"
@@ -403,11 +405,27 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
                             RoundAction(AppIcons.cad("CANCEL"), "Descartar polígono", Ink.Bad, { vm.cadCommand("cad.session.cancel") })
                         }
                         if (depthPreview) {
+                            if (cad.operation == "CUT") {
+                                PillButton("Una dirección", selected = cad.extent != "BOTH", enabled = connected) {
+                                    command("cad.extrude.update", "extent" to "ONE")
+                                }
+                                PillButton("Dos direcciones", selected = cad.extent == "BOTH", enabled = connected) {
+                                    command("cad.extrude.update", "extent" to "BOTH")
+                                }
+                            }
                             fun preview(value: Double) { drafts.remove("depth"); command("cad.extrude.update", "depth" to value) }
                             CadDimension("Profundidad", cad.depth, unit, cad.sessionId.orEmpty(), step = cad.step,
                                 minimum = .0000001, enabled = connected, onNudge = ::preview,
                                 onDone = { drafts["depth"]?.let(::preview) }) { drafts["depth"] = it }
                         } else feature?.let { selected ->
+                            if (selected.type == "CUT") {
+                                PillButton("Una dirección", selected = selected.extent != "BOTH", enabled = connected) {
+                                    command("cad.feature.set", "feature_id" to selected.id, "extent" to "ONE")
+                                }
+                                PillButton("Dos direcciones", selected = selected.extent == "BOTH", enabled = connected) {
+                                    command("cad.feature.set", "feature_id" to selected.id, "extent" to "BOTH")
+                                }
+                            }
                             CadDimension("Profundidad", drafts["depth"] ?: selected.depth, unit, selected.id,
                                 step = cad.step, minimum = .0000001, enabled = connected, onDone = ::acceptValues) { drafts["depth"] = it }
                             CadAction("VISIBLE", if (selected.enabled) "Ocultar" else "Mostrar", selected = selected.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to selected.id, "enabled" to !selected.enabled) }
@@ -523,6 +541,7 @@ internal fun cadConstraintEnabled(cad: CadState, type: String): Boolean {
         "COINCIDENT" -> refs.size == 2 && points
         "MIDPOINT" -> refs.size == 2 && ((point(0) && line(1)) || (line(0) && point(1)))
         "SYMMETRIC" -> refs.size == 3 && points
+        "SYMMETRIC_LINE" -> refs.size == 3 && point(0) && point(1) && line(2)
         "HORIZONTAL", "VERTICAL" -> refs.size == 1 && lines
         "PARALLEL", "PERPENDICULAR" -> refs.size == 2 && lines
         "EQUAL" -> if (curves) refs.map { it.id }.distinct().size >= 2 else refs.size >= 2 && lines
@@ -536,7 +555,7 @@ internal fun cadConstraintEnabled(cad: CadState, type: String): Boolean {
 internal fun cadLabel(type: String) = when (type) {
     "RECTANGLE" -> "Rectángulo"; "SQUARE" -> "Cuadrado"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
-    "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad (tamaño del primero)"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"
+    "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad (tamaño del primero)"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
     "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; else -> type
 }
 

@@ -6,7 +6,7 @@ import org.junit.Test
 
 class CadParserTest {
     @Test fun directionalDistancesAreAdvertisedAndZeroRemainsEditable() {
-        val capabilities = CadParser.capabilities(JSONObject("""{"version":1,"length_unit":"METERS","planes":["XY"],
+        val capabilities = CadParser.capabilities(JSONObject("""{"version":2,"length_unit":"METERS","planes":["XY"],
             "constraints":["DISTANCE","DISTANCE_X","DISTANCE_Y"]}"""))
         assertEquals(listOf("DISTANCE","DISTANCE_X","DISTANCE_Y"), capabilities.constraints)
         val state = CadParser.state(JSONObject("""{"version":1,"dimension_options":{"DISTANCE_X":{"value":0,"constraint_id":"dx"}}}"""))
@@ -41,7 +41,7 @@ class CadParserTest {
         assertEquals("END", cad.overlay.single().handles.single().part)
         assertEquals("ANGLE", cad.overlay.single().handles.single().intent)
     }
-    private val capabilities = """{"version":1,"length_unit":"METERS","planes":["XY","FUTURE"],"entities":["RECTANGLE","CIRCLE","LINE","FUTURE"],"features":["EXTRUDE","FUTURE"]}"""
+    private val capabilities = """{"version":2,"length_unit":"METERS","planes":["XY","FUTURE"],"entities":["RECTANGLE","CIRCLE","LINE","FUTURE"],"features":["EXTRUDE","FUTURE"]}"""
     @Test fun sharedBackendFixturePreservesFeatureAndDocumentRevision() {
         val fixture = javaClass.classLoader!!.getResourceAsStream("cad_v1.json")!!.bufferedReader().use { JSONObject(it.readText()) }
         assertTrue(CadParser.capabilities(fixture.getJSONObject("capability")).available)
@@ -85,7 +85,8 @@ class CadParserTest {
         assertFalse(StateParser.features(JSONObject("""{"features":{}}""")).cad.available)
     }
     @Test fun futureProtocolAndUnknownLengthConventionAreNotActivated() {
-        assertFalse(CadParser.capabilities(JSONObject(capabilities).put("version", 2)).available)
+        assertFalse(CadParser.capabilities(JSONObject(capabilities).put("version", 3)).available)
+        assertFalse(CadParser.capabilities(JSONObject(capabilities).put("version", 1)).available)
         assertFalse(CadParser.capabilities(JSONObject(capabilities).put("length_unit", "BLENDER_UNITS")).available)
     }
     @Test fun unsupportedToolsDoNotEnterCatalog() {
@@ -156,8 +157,8 @@ class CadParserTest {
           "active_sketch_id":"s", "selection":{"kind":"ENTITY","id":"b","items":[{"id":"a","part":"END"},{"id":"b","part":"START"}]},
           "document":{"sketches":[{"id":"s","plane":"XY","entities":[{"id":"a","type":"ARC","radius":0.01,"sweep":90}],
             "constraints":[{"id":"c","type":"COINCIDENT","refs":[{"id":"a"},{"id":"b"}]}]}],
-            "features":[{"id":"cut","type":"CUT","target_id":"base","depth":0.005,"enabled":true}]},
-          "session":{"id":"preview","active":true,"operation":"CUT","depth":0.005,"transparent":true,"can_confirm":true},
+            "features":[{"id":"cut","type":"CUT","target_id":"base","depth":0.005,"extent":"BOTH","enabled":true}]},
+          "session":{"id":"preview","active":true,"operation":"CUT","depth":0.005,"extent":"BOTH","transparent":true,"can_confirm":true},
           "overlay":[{"id":"a","points":[[0.1,0.2]],"handles":[{"part":"END","point":[0.2,0.3],"selected":true},{"part":"BAD","point":[null,0]}],"selected_parts":["END"]}]
         }"""))
         assertEquals(listOf("END", "START"), state.selection.map { it.part })
@@ -165,6 +166,8 @@ class CadParserTest {
         assertEquals(90.0, state.activeSketch!!.entities.single().values["sweep"]!!, 0.0)
         assertEquals("base", state.features.single().targetId)
         assertEquals("CUT", state.features.single().type)
+        assertEquals("BOTH", state.features.single().extent)
+        assertEquals("BOTH", state.extent)
         assertEquals("preview", state.sessionId)
         assertTrue(state.transparent && state.canConfirm)
         assertFalse(state.increment)

@@ -7,6 +7,7 @@ seleccionado, mover lo seleccionado al cursor, y recolocar el origen del objeto.
 
 from __future__ import annotations
 
+import math
 import bmesh
 import bpy
 from mathutils import Vector
@@ -565,7 +566,71 @@ def query_sketch_endpoint(overlay, u, v, aspect, previous=None):
     return choose_sticky_candidate(candidates,previous,.018)
 
 
-def _cad_topology(mesh, matrix, face_labels=None, edge_labels=None):
+def _outgoing(points, edge, vertex):
+    other = edge[1] if edge[0] == vertex else edge[0]
+    delta = points[other] - points[vertex]
+    return delta.normalized() if delta.length > 1e-12 else None
+
+
+def _straight_boundary(points, incident, edge_regions, edge):
+    """A design corner ends a straight CAD edge; a circle sample has none."""
+    limit = -math.cos(math.radians(25))
+    for vertex in edge:
+        others = [item for item in incident.get(vertex, ()) if item != edge and item in edge_regions]
+        direction = _outgoing(points, edge, vertex)
+        if direction is None or not others:
+            return True
+        if any((other := _outgoing(points, item, vertex)) is None or direction.dot(other) > limit for item in others):
+            return True
+    return False
+
+
+def _merge_smooth_contours(points, incident, edge_regions):
+    """Join tessellated samples of one CAD contour without swallowing straight edges."""
+    limit = -math.cos(math.radians(25))
+    changed = True
+    while changed:
+        changed = False
+        sealed = {id(region) for region in edge_regions.values() if len(region) > 1 and _straight_boundary(points, incident, edge_regions, min(region))}
+        for edge, region in list(edge_regions.items()):
+            if id(region) in sealed or _straight_boundary(points, incident, edge_regions, edge):
+                continue
+            for vertex in edge:
+                direction = _outgoing(points, edge, vertex)
+                if direction is None:
+                    continue
+                for other in incident.get(vertex, ()):
+                    if other == edge or other not in edge_regions:
+                        continue
+                    other_region = edge_regions[other]
+                    if other_region is region or id(other_region) in sealed or _straight_boundary(points, incident, edge_regions, other):
+                        continue
+                    outgoing = _outgoing(points, other, vertex)
+                    if outgoing is None or direction.dot(outgoing) > limit:
+                        continue
+                    merged = region | other_region
+                    for item in merged:
+                        edge_regions[item] = merged
+                    changed = True
+                    break
+                if changed:
+                    break
+            if changed:
+                break
+
+
+def _cad_corners(edge_regions):
+    """CAD points are contour corners, never samples of a circle or arc."""
+    counts = {}
+    for edge, region in edge_regions.items():
+        for vertex in edge:
+            counts.setdefault(vertex, {}).setdefault(id(region), 0)
+            counts[vertex][id(region)] += 1
+    return sorted(vertex for vertex, regions in counts.items()
+                  if len(regions) >= 2 or any(count < 2 for count in regions.values()))
+
+
+def _cad_topology(mesh, matrix, face_labels=None, edge_labels=None, *, smooth=False):
     """Snapshot geometry and logical regions; no evaluated RNA survives this call."""
     points=[matrix@v.co for v in mesh.vertices]
     faces=[tuple(p.vertices) for p in mesh.polygons]
@@ -588,11 +653,17 @@ def _cad_topology(mesh, matrix, face_labels=None, edge_labels=None):
         origin=centers[source]; normal=normals[source]
         chosen={source}; pending=[source]
         while pending:
-            for neighbor in neighbors[pending.pop()]:
+            current=pending.pop()
+            for neighbor in neighbors[current]:
                 if neighbor in chosen or face_regions[neighbor] is not None: continue
-                same=(face_labels[neighbor]==face_labels[source] and face_labels[source]>0) if face_labels is not None else (
-                    normals[neighbor].dot(normal)>1-1e-7 and
-                    all(abs((points[i]-origin).dot(normal))<=tolerance for i in faces[neighbor]))
+                if face_labels is not None:
+                    same=face_labels[neighbor]==face_labels[source] and face_labels[source]>0
+                else:
+                    coplanar=(normals[neighbor].dot(normal)>1-1e-7 and
+                              all(abs((points[i]-origin).dot(normal))<=tolerance for i in faces[neighbor]))
+                    # A tessellated cylinder is one CAD face; a cube corner is not.
+                    curved=smooth and normals[neighbor].dot(normals[current])>math.cos(math.radians(20))
+                    same=coplanar or curved
                 if same: chosen.add(neighbor); pending.append(neighbor)
         region=frozenset(chosen)
         for face in chosen: face_regions[face]=region
@@ -619,6 +690,8 @@ def _cad_topology(mesh, matrix, face_labels=None, edge_labels=None):
                 if same: chosen.add(edge); pending.extend(edge)
         region=frozenset(chosen)
         for edge in chosen: edge_regions[edge]=region
+    if smooth and edge_labels is None:
+        _merge_smooth_contours(points, incident, edge_regions)
     mesh.calc_loop_triangles()
     triangles=[(tri.polygon_index,tuple(tri.vertices)) for tri in mesh.loop_triangles]
     return triangles,points,faces,normals,centers,adjacency,edges,face_regions,edge_regions
@@ -640,10 +713,11 @@ def _cad_mesh(obj):
     # These modifiers finish the displayed CAD body. Its design planes and
     # dimensions still belong to the parametric result before that finish.
     # Stacks that move/copy geometry (e.g. Array) must use their evaluated frame.
-    reference=bool(obj.get('btr_cad_feature_id')) and all(mod.type in {'BEVEL','SUBSURF'} for mod in active_modifiers)
+    cad=bool(obj.get('btr_cad_feature_id'))
+    reference=cad and all(mod.type in {'BEVEL','SUBSURF'} for mod in active_modifiers)
     mapping=dict(reference=reference)
     if active_modifiers:
-        base=_cad_topology(mesh,obj.matrix_world)
+        base=_cad_topology(mesh,obj.matrix_world,smooth=cad)
         names=[]
         try:
             # Native FACE/EDGE integer attributes follow subdivision without
@@ -675,7 +749,7 @@ def _cad_mesh(obj):
                 if attr is not None: mesh.attributes.remove(attr)
             mesh.update()
     else:
-        result=_cad_topology(obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data,obj.matrix_world)
+        result=_cad_topology(obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data,obj.matrix_world,smooth=cad)
     if not active_modifiers:
         mapping.update(base=result,faces=list(range(len(result[2]))),edges={edge:edge for edge in result[6]})
     result=(*result,mapping)
@@ -715,8 +789,11 @@ def query_cad_surface(payload, kind):
             design_tree=BVHTree.FromPolygons(points,pick_graph[2]) if pick_graph is not graph else None
             vertices={i for edge in edges for i in edge}
             if kind=='VERTEX':
-                linked={i for edge in pick_graph[5] for i in edge}
-                vertices.update(i for i in range(len(points)) if i not in linked)
+                if obj.get('btr_cad_feature_id'):
+                    vertices=set(_cad_corners(pick_graph[8]))
+                else:
+                    linked={i for edge in pick_graph[5] for i in edge}
+                    vertices.update(i for i in range(len(points)) if i not in linked)
             sources=edges if kind=='EDGE' else [(i,) for i in sorted(vertices)]
             for source in sources:
                 a=points[source[0]]; pa=camera.project(a,rv3d)

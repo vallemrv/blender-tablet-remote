@@ -415,6 +415,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   pieza independiente. El objeto conserva su identidad al editar y recorrer la pila;
   `btr_cad_body_id` identifica el cuerpo y `btr_cad_feature_id` su operación visible final.
   Crear copia de malla vive en el menú del cuerpo y exporta la pieza completa a Object.
+  «Copia editable · Edición / Escultura» y Duplicar desde Object sobre una pieza
+  CAD generan mallas independientes, conservan modificadores y retiran sus marcas
+  CAD. La copia admite Edit/Sculpt; el original se guarda oculto para evitar solapes
+  y reaparece temporalmente al volver a CAD. En CAD no hay duplicado enlazado;
+  sobre mallas ordinarias Normal/Enlazado conserva el comportamiento nativo.
 - La evaluación reutiliza operandos y resultados de operaciones que no cambian,
   y conserva su malla Blender. Las claves incluyen geometría, plano, profundidad y
   predecesor; el estado se descarta al cargar/deshacer. Renombrar no evalúa geometría.
@@ -422,7 +427,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   su matriz de proyección. Las medidas y la adyacencia se reutilizan mientras la firma
   de geometría/topología/transformación/unidades siga igual. No se retienen referencias RNA.
 - Extruir/Vaciar CAD recorren un paso por 4 % de altura con lápiz; Incremento
-  redondea el gesto, las cotas escritas son exactas. Vaciar consume su sólido
+  redondea el gesto, las cotas escritas son exactas. Vaciar crece a un lado del
+  croquis (`ONE`) o a los dos (`BOTH`); la profundidad es la de cada lado.
+  Vaciar consume su sólido
   destino en el árbol y reconstruye desde los parámetros. La transparencia se
   limita a GPUOffScreen mediante un contexto que restaura el sombreado siempre.
   La sesión reutiliza la teselación local del perfil y sus huecos al variar profundidad;
@@ -582,6 +589,9 @@ no quedan archivos o referencias temporales.
   Los puntos son los vértices de diseño: el bisel no los elimina como referencias.
   Su visibilidad respeta el cuerpo de diseño y los demás objetos oclusores.
   El resaltado se dibuja dentro de GPUOffScreen, nunca duplicado en Android.
+- En un sólido CAD, Caras/Aristas/Puntos siguen la figura de diseño, no la
+  teselación: un círculo extruido tiene dos contornos y ninguna muestra de malla
+  como arista o punto. Un cubo conserva seis caras, doce aristas y ocho puntos.
 - Boceto en cara consume la cara resaltada sin repetir raycast y crea plano+boceto
   en un solo undo. Las caras superiores CAD conservan soporte asociativo; otras
   caras guardan su marco. Las selecciones del sólido son transitorias y se invalidan

@@ -10,7 +10,8 @@ from . import document as model
 from ..errors import BadPayload, CommandError
 
 CONSTRAINTS = ('COINCIDENT', 'HORIZONTAL', 'VERTICAL', 'PARALLEL', 'PERPENDICULAR',
-               'TANGENT', 'EQUAL', 'DISTANCE', 'DISTANCE_X', 'DISTANCE_Y', 'RADIUS', 'FIX', 'MIDPOINT', 'SYMMETRIC')
+               'TANGENT', 'EQUAL', 'DISTANCE', 'DISTANCE_X', 'DISTANCE_Y', 'RADIUS', 'FIX', 'MIDPOINT',
+               'SYMMETRIC', 'SYMMETRIC_LINE')
 
 
 def handles(e):
@@ -92,6 +93,14 @@ def residual(sketch, c, scale):
         return [(e[k]-v)/(1 if k in ('start','sweep') else scale) for k,v in c['values'].items()]
     if typ == 'SYMMETRIC':
         return ((point(sketch,refs[0])+point(sketch,refs[1]))*.5-point(sketch,refs[2]))/scale
+    if typ == 'SYMMETRIC_LINE':
+        p1, p2 = point(sketch,refs[0]), point(sketch,refs[1])
+        a, b = line(sketch,refs[2])
+        length = np.linalg.norm(b-a)
+        if length < 1e-9: raise BadPayload('El eje de simetría necesita dos puntos distintos')
+        d = (b-a)/length; n = np.array([-d[1], d[0]])
+        mid = (p1+p2)*.5
+        return [np.dot(mid-a,n)/scale, np.dot(p2-p1,d)/scale]
     if typ == 'MIDPOINT':
         a,b = line(sketch,refs[1])
         return (point(sketch,refs[0])-(a+b)*.5)/scale
@@ -140,7 +149,7 @@ def validate_constraints(sketch):
         ids.add(c['id'])
         refs = c.get('refs')
         typ = c['type']
-        count = (3,) if typ=='SYMMETRIC' else (1,2) if typ in ('DISTANCE','DISTANCE_X','DISTANCE_Y') else (1,) if typ in ('FIX','HORIZONTAL','VERTICAL','RADIUS') else (2,)
+        count = (3,) if typ in ('SYMMETRIC','SYMMETRIC_LINE') else (1,2) if typ in ('DISTANCE','DISTANCE_X','DISTANCE_Y') else (1,) if typ in ('FIX','HORIZONTAL','VERTICAL','RADIUS') else (2,)
         if not isinstance(refs,list) or len(refs) not in count or (len(refs)==2 and refs[0]==refs[1]):
             raise BadPayload('Número de elementos incorrecto para la restricción')
         for ref in refs:
@@ -192,6 +201,10 @@ def solve(sketch, goals=(), *, drag=False):
                 e = get_entity(work,goal)
                 divisor = 180 if goal['field'] in ('start','sweep') else scale
                 result.append((e[goal['field']]-goal['value'])/divisor)
+            elif 'center' in goal:
+                e = get_entity(work,goal)
+                cx,cy = goal['center']
+                result.extend([(e['x']+e['width']/2-cx)/scale, (e['y']+e['height']/2-cy)/scale])
             else:
                 result.extend((point(work,goal)-goal['point'])/scale)
             if drag and not goal.get('hard'):
@@ -285,8 +298,8 @@ def move_goals(sketch, refs, dx, dy):
             if e['type']=='CIRCLE' and part=='RIM' and single_handle:
                 goals.append(dict(id=e['id'],part='CENTER',point=np.array(points['CENTER']),hard=True))
             if e['type']=='RECTANGLE' and single_handle:
-                opposite='P'+str((int(part[1:])+2)%4)
-                goals.append(dict(id=e['id'],part=opposite,point=np.array(points[opposite]),hard=True))
+                # A symmetric shape: the center stays put and all four corners follow.
+                goals.append(dict(id=e['id'],center=(e['x']+e['width']/2.,e['y']+e['height']/2.),hard=True))
         elif e['type']=='RECTANGLE' and part.startswith('EDGE'):
             index=int(part[4:]); roles=['P'+str(index),'P'+str((index+1)%4)]
         else:

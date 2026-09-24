@@ -20,7 +20,7 @@ class ExtrusionPreviewCache:
     def __init__(self):
         self.entries = {}
 
-    def extrude(self, sketch, source, depth, *, display):
+    def extrude(self, sketch, source, depth, *, display, symmetric=False):
         from .document import dumps
         key = source['id']
         signature = dumps(sketch)
@@ -35,9 +35,12 @@ class ExtrusionPreviewCache:
         if display and 'display' not in cached:
             cached['display'] = tidy_mesh(*cached['solid'])
         vertices, faces = cached['display' if display else 'solid']
-        vertices = [world(sketch, x, y, z * depth) for x,y,z in vertices]
-        if depth < 0:
-            faces = [tuple(reversed(face)) for face in faces]
+        if symmetric:
+            vertices = [world(sketch, x, y, (z - .5) * 2 * abs(depth)) for x,y,z in vertices]
+        else:
+            vertices = [world(sketch, x, y, z * depth) for x,y,z in vertices]
+            if depth < 0:
+                faces = [tuple(reversed(face)) for face in faces]
         return vertices, faces
 
 
