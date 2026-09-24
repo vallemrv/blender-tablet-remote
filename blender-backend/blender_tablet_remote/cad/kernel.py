@@ -33,7 +33,8 @@ class ExtrusionPreviewCache:
             cached = dict(signature=signature, solid=(vertices, faces))
             self.entries[key] = cached
         if display and 'display' not in cached:
-            cached['display'] = tidy_mesh(*cached['solid'])
+            from .quad_layout import quad_mesh
+            cached['display'] = quad_mesh(*cached['solid'])
         vertices, faces = cached['display' if display else 'solid']
         if symmetric:
             vertices = [world(sketch, x, y, (z - .5) * 2 * abs(depth)) for x,y,z in vertices]
@@ -174,11 +175,11 @@ class BlenderNativeKernel(CadKernel):
 
 
 def tidy_mesh(vertices, faces):
-    """Remove boolean tessellation, then form connected planar quads.
+    """Finish faces the quad layout could not structure as connected quads.
 
     Shared edge midpoints avoid T-junctions. Concave patches are triangulated
-    before splitting so their face centers cannot escape the surface. This is
-    the display mesh; boolean evaluation keeps its compact kernel result.
+    before splitting so their face centers cannot escape the surface. Boolean
+    evaluation keeps its compact kernel result.
     """
     if all(len(face)==4 for face in faces): return vertices,faces
     import bmesh

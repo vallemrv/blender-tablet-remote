@@ -507,10 +507,14 @@ no quedan archivos o referencias temporales.
   evaluados persistentes; su adquisición pasa por `commands/snap.py`.
 - `cad.convert` crea una copia de malla y sale a Object con ella seleccionada;
   conserva el original, el documento y todos los dependientes. No elimina histórico.
-- Las extrusiones simples usan perímetro y tapas ordenados en quads. Huecos y
-  booleanos materializan parches en quads con puntos medios compartidos; las zonas
-  cóncavas se descomponen antes. Los operandos booleanos conservan su malla compacta:
-  nunca se realimenta la subdivisión de presentación a operaciones posteriores.
+- La malla de presentación CAD se ordena por cara plana de diseño (`cad/quad_layout.py`):
+  sin hueco es un parche de cuatro lados; con un hueco, un marco de cuatro parches.
+  Se rellenan por interpolación de Coons, sin polo central en círculos. Los lados
+  opuestos tienen igual subdivisión: las polilíneas teseladas son fijas y las aristas
+  rectas y conectores son libres, resueltas en toda la pieza sin T-junctions. Las
+  caras sin disposición válida (varios huecos, contornos cóncavos) caen en los parches
+  con puntos medios compartidos. Los operandos booleanos conservan su malla compacta:
+  nunca se realimenta la malla de presentación a operaciones posteriores.
 - Materiales conserva tinte y acabado al cambiar de preset salvo valores explícitos.
   Óxido/Suciedad/Arañazos configuran el pincel de detalle sin sustituir la base.
   La pintura indexa muestras visibles por teselas y reutiliza atlas/profundidad

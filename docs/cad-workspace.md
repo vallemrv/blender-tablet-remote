@@ -319,13 +319,15 @@ primero se eliminan los dependientes. El árbol permite borrar bocetos sin opera
   Para biselar el objeto completo, usa el modificador Bisel y sus campos Ancho y
   Segmentos. Son operaciones nativas sobre la copia; no añaden un fillet de sólido
   al historial paramétrico CAD.
-- Las extrusiones de rectángulos y contornos convexos pares usan tapas y paredes
-  en quads ordenados. Los perfiles con huecos y vaciados convierten sus parches a
-  quads con puntos medios compartidos, conservando frontera, volumen y conectividad.
-  Las zonas cóncavas se descomponen antes para no crear caras cruzadas. La evaluación
-  booleana conserva operandos compactos; la malla de presentación no se realimenta
-  a cortes posteriores. Es topología editable en quads, sin prometer una cuadrícula
-  regular ni un reparto de polos elegido por un artista.
+- La malla del cuerpo se ordena por caras de diseño: cada cara plana sin hueco es
+  una rejilla de quads (un círculo queda como rejilla, sin polo central) y una cara
+  con un agujero forma un marco de cuatro rejillas que crecen desde el agujero hacia
+  el borde. Las caras vecinas comparten sus divisiones: los loops recorren la pieza
+  sin T-junctions ni triángulos, listos para Edit, Bisel o Subdivisión.
+- Todavía sin rejilla ordenada: caras con varios agujeros y contornos cóncavos
+  (forma de L). Esas caras usan quads con puntos medios compartidos, conservando
+  frontera, volumen y conectividad. La evaluación booleana conserva operandos
+  compactos; la malla de presentación no se realimenta a cortes posteriores.
 - El overlay se proyecta en Blender y se dibuja en el rectángulo del vídeo Android.
   Sus píxeles no se guardan como geometría. El control y el vídeo tienen canales
   separados, por lo que puede existir un pequeño desfase durante la navegación.

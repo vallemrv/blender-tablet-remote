@@ -1607,8 +1607,10 @@ como huecos. Contornos abiertos no se pueden extruir; intersecciones/tangencias 
 valores no finitos o degenerados producen errores explícitos sin perder la última
 geometría válida. El kernel V1 genera malla nativa; no anuncia STEP, BREP ni solver
 general. Rectángulos conservan lados horizontales/verticales y círculos diámetro.
-La malla materializada tiene quads: perímetro ordenado para extrusiones simples;
-para huecos/booleanos, parches convexos con centros y puntos medios compartidos.
+La malla materializada tiene quads dispuestos por cara plana: un parche de Coons
+por cara sin hueco y un marco de cuatro parches alrededor de un hueco, con
+subdivisiones iguales en lados opuestos y vértices compartidos entre caras. Las
+caras sin esa disposición usan parches con centros y puntos medios compartidos.
 Se conserva la frontera sin grietas y los parches cóncavos se descomponen antes.
 Esta malla de presentación/exportación no es el operando de las operaciones
 siguientes, que usan la evaluación compacta del kernel para evitar crecimiento

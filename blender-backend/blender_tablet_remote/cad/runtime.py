@@ -5,7 +5,8 @@ import math
 import bpy
 from mathutils import Vector
 from . import document as model
-from .kernel import kernel, world, tidy_mesh, ExtrusionPreviewCache
+from .kernel import kernel, world, ExtrusionPreviewCache
+from .quad_layout import quad_mesh
 from . import sketch as sketch_geometry
 from ..errors import BadPayload, CommandError
 from ..bpy_utils import find_view3d, undo_push
@@ -218,7 +219,7 @@ class CadRuntime:
             signature=(keys[identifier],scale)
             cached=self._body_meshes.get(body)
             if cached is None or cached[0]!=signature:
-                vertices,faces=(extrusion_cache.extrude(*direct[body],display=True) if direct[body] else tidy_mesh(*solids[identifier]))
+                vertices,faces=(extrusion_cache.extrude(*direct[body],display=True) if direct[body] else quad_mesh(*solids[identifier]))
                 cached=(signature,([tuple(c/scale for c in v) for v in vertices],faces))
                 self._body_meshes[body]=cached
             display[body]=cached

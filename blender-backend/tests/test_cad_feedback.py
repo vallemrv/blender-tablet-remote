@@ -148,6 +148,24 @@ class FeedbackTests(CadTests):
         self.assertTrue(all(len(p.vertices)==4 for p in obj.data.polygons))
         self.assertAlmostEqual(volume(obj),math.pi*.02**2*.02,delta=2e-8)
 
+    def test_circle_caps_and_holed_faces_use_pole_free_quad_patches(self):
+        def valences(obj):
+            counts={}
+            for edge in obj.data.edges:
+                for v in edge.vertices: counts[v]=counts.get(v,0)+1
+            return counts
+        outer=self.rect(); self.draw('CIRCLE',(.02,.02),(.025,.02))
+        self.extrude(outer)
+        obj=self.obj()
+        self.assertTrue(all(len(p.vertices)==4 for p in obj.data.polygons))
+        self.assertLessEqual(max(valences(obj).values()),4)  # Frame patches, no fan around the hole.
+        cad.body_create(OWNER)
+        cad.sketch_create(dict(plane='XY',**OWNER))
+        f=self.extrude(self.draw('CIRCLE',(.2,0),(.22,0)))
+        obj=next(o for o in runtime.objects(runtime.doc()) if o[FEATURE_KEY]==f)
+        self.assertLessEqual(max(valences(obj).values()),4)  # Grid cap without a central pole.
+        self.assertAlmostEqual(volume(obj),math.pi*.02**2*.02,delta=2e-8)
+
     def test_holes_and_repeated_pockets_remain_quads_without_exponential_growth(self):
         outer=self.rect(); hole=self.draw('CIRCLE',(.02,.02),(.025,.02))
         feature=self.extrude(outer)
