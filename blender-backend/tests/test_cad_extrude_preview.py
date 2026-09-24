@@ -94,14 +94,14 @@ class ExtrudePreviewTests(CadTests):
         cache = ExtrusionPreviewCache()
         with patch.object(kernel, 'extrude', wraps=kernel.extrude) as tessellate:
             for depth in (.02, .04, -.03):
-                vertices, faces = cache.extrude(sketch, source, depth, display=True)
+                vertices, faces = cache.extrude(sketch, source, depth)
                 expected, expected_faces = kernel.extrude(sketch, source, depth)
                 self.assertEqual(faces, expected_faces)
                 for a,b in zip(vertices, expected):
                     for x,y in zip(a,b): self.assertAlmostEqual(x,y,places=7)
             self.assertEqual(tessellate.call_count, 4)  # One template plus three references.
             source['width'] = .12
-            cache.extrude(sketch, source, .04, display=True)
+            cache.extrude(sketch, source, .04)
             self.assertEqual(tessellate.call_count, 5)
 
     def test_cache_preserves_each_base_plane_and_offset(self):
@@ -111,7 +111,7 @@ class ExtrudePreviewTests(CadTests):
         for plane in model.PLANES:
             sketch.update(plane=plane, offset=.12)
             for depth in (.02, -.04):
-                vertices, faces = cache.extrude(sketch, source, depth, display=True)
+                vertices, faces = cache.extrude(sketch, source, depth)
                 expected, expected_faces = kernel.extrude(sketch, source, depth)
                 self.assertEqual(faces, expected_faces)
                 for a,b in zip(vertices, expected):

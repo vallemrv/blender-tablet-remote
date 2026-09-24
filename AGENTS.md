@@ -28,7 +28,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Vídeo HTTP en `:8766`: H.264 preferido y MJPEG como fallback.
 - GPUOffScreen es la única fuente de vídeo y usa la cámara independiente de la tablet.
 - Los threads de red solo encolan mensajes; `bpy` y `bmesh` se usan exclusivamente
-  en el hilo principal mediante `bridge._pump()`.
+  en el hilo principal de cada proceso. El proceso interactivo publica mediante
+  `bridge._pump()`; CAD evalúa snapshots en un Blender auxiliar aislado, sin abrir
+  la escena del usuario ni compartir referencias RNA.
 - Android tiene una única superficie de entrada en `ui/InputSurface.kt`.
 - Tweak en Edit selecciona y arrastra vértices, aristas o caras con un gesto; conserva
   el grupo al tocar un elemento seleccionado. Un toque sin arrastre no mueve ni crea
@@ -451,8 +453,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   limita a GPUOffScreen mediante un contexto que restaura el sombreado siempre.
   La sesión reutiliza la teselación local del perfil y sus huecos al variar profundidad;
   conserva operandos compactos para Vaciar y descarta la caché al cerrar. Android
-  mantiene una actualización de profundidad en vuelo y solo el último candidato
-  pendiente entre comandos; confirmar y navegar respetan ese orden. Un fallo de
+  mantiene una petición CAD en vuelo y solo el último candidato absoluto pendiente
+  de profundidad, ancho o lápiz; confirmar respeta ese orden. Navegar continúa
+  durante el cálculo; cancelar/guardar/salir descartan la cola y el cálculo pendiente. Un fallo de
   profundidad impide confirmar una medida anterior. Repetir el mismo paso no reconstruye.
 - Redondeo/Chaflán (`FILLET`/`CHAMFER`) son nodos de la pila del cuerpo sin boceto
   (`sketch_id: null`): guardan `edges` como segmentos en metros de las aristas de
@@ -538,14 +541,24 @@ no quedan archivos o referencias temporales.
   evaluados persistentes; su adquisición pasa por `commands/snap.py`.
 - `cad.convert` crea una copia de malla y sale a Object con ella seleccionada;
   conserva el original, el documento y todos los dependientes. No elimina histórico.
-- La malla de presentación CAD se ordena por cara plana de diseño (`cad/quad_layout.py`):
+- CAD presenta y mueve la malla compacta del kernel. La retícula de cuadriláteros
+  se genera únicamente al crear una copia editable, también al duplicar una pieza CAD.
+  La copia se ordena por cara plana de diseño (`cad/quad_layout.py`):
   sin hueco es un parche de cuatro lados; con un hueco, un marco de cuatro parches.
   Se rellenan por interpolación de Coons, sin polo central en círculos. Los lados
   opuestos tienen igual subdivisión: las polilíneas teseladas son fijas y las aristas
   rectas y conectores son libres, resueltas en toda la pieza sin T-junctions. Las
   caras sin disposición válida (varios huecos, contornos cóncavos) caen en los parches
   con puntos medios compartidos. Los operandos booleanos conservan su malla compacta:
-  nunca se realimenta la malla de presentación a operaciones posteriores.
+  nunca se realimenta la copia editable a operaciones posteriores.
+- Los comandos CAD suspenden su respuesta durante la evaluación y se reanudan
+  desde el pump. Un proceso Blender persistente calcula booleanos, redondeos y
+  el solver de arrastre sobre snapshots; vídeo y navegación siguen atendidos.
+  Cada resultado valida escena, documento, unidades y generación de cancelación.
+  Cancelar/guardar/desconectar descarta el trabajo y restaura la evaluación baseline;
+  cargar/deshacer invalida las cachés. Los ficheros privados y el proceso se retiran
+  al cerrar; un error del worker no publica geometría ni crea undo. La retícula
+  editable y la materialización final siguen usando el hilo principal del host.
 - Materiales conserva tinte y acabado al cambiar de preset salvo valores explícitos.
   Óxido/Suciedad/Arañazos configuran el pincel de detalle sin sustituir la base.
   La pintura indexa muestras visibles por teselas y reutiliza atlas/profundidad

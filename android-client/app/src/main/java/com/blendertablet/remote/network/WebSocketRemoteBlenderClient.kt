@@ -269,6 +269,7 @@ class WebSocketRemoteBlenderClient(
 
     private val sculptTransportLock = Any()
     private val cadDepthQueue = CadDepthCommandQueue()
+    private var cadInFlightRequest: String? = null
     private val sculptQueue = SculptCommandQueue()
     private var sculptInFlight = false
     private var sculptInFlightId: String? = null
@@ -278,6 +279,7 @@ class WebSocketRemoteBlenderClient(
 
     private fun clearSculptTransport() = synchronized(sculptTransportLock) {
         cadDepthQueue.clear()
+        cadInFlightRequest = null
         sculptQueue.clear()
         sculptInFlight = false
         sculptInFlightId = null
@@ -350,16 +352,17 @@ class WebSocketRemoteBlenderClient(
     private fun flushCadDepth() {
         while (true) {
             val next = cadDepthQueue.poll() ?: break
-            val sent = if (next.raw != null) {
-                sendGestureAfterCad(next.raw)
-                true
-            } else sendCommandAfterCad(next.name, next.payload)
+            val sent = sendCommandAfterCad(next.name, next.payload)
             if (!sent) { cadDepthQueue.clear(); break }
         }
     }
 
     private fun sendCommand(name: String, payload: JSONObject = JSONObject()): Boolean = synchronized(sculptTransportLock) {
-        if (name in CadDepthCommandQueue.CANDIDATES || cadDepthQueue.busy) {
+        if (name in setOf("cad.session.cancel", "history.undo", "history.redo", "mode.set", "file.new", "file.open", "file.save", "file.save_as")) {
+            cadDepthQueue.clear()
+            cadInFlightRequest = null
+        }
+        if (CadDepthCommandQueue.waitsForResponse(name) || (cadDepthQueue.busy && !name.startsWith("view.") && name != "cad.state")) {
             if (_connection.value != ConnectionStatus.CONNECTED) { reportOffline(); return@synchronized false }
             cadDepthQueue.add(CadQueuedMessage(name, payload))
             flushCadDepth()
@@ -392,6 +395,7 @@ class WebSocketRemoteBlenderClient(
         // Registrar antes de enviar evita una carrera con sockets/fakes muy rápidos:
         // la respuesta nunca puede adelantarse a su entrada en `pending`.
         pending[id] = name
+        if (CadDepthCommandQueue.waitsForResponse(name)) cadInFlightRequest = id
         sentAtNs[id] = System.nanoTime()
         return if (socket?.send(message.toString()) == true) {
             if (name == "selection.pick" || name == "selection.shortest_path") pickInFlight.set(true)
@@ -443,8 +447,8 @@ class WebSocketRemoteBlenderClient(
             append('}')
         }
         synchronized(sculptTransportLock) {
-            if (cadDepthQueue.busy) cadDepthQueue.add(CadQueuedMessage("gesture", JSONObject(), message))
-            else sendGestureAfterCad(message)
+            // Navigation remains live while the isolated CAD worker calculates.
+            sendGestureAfterCad(message)
         }
     }
 
@@ -940,7 +944,7 @@ class WebSocketRemoteBlenderClient(
                         // (el usuario dibuja de nuevo), no un error que enseñar: el
                         // backend ya deja la tool exactamente como estaba (armada o
                         // activa con el plano anterior).
-                        else if (command == "tool.drag_line") Unit
+                        else if (command == "tool.drag_line" || message.optString("code") == "cad_cancelled") Unit
                         else _errors.value = message.optString("error", "Error remoto")
                     }
                     command == "scene.capture" -> { _capturePng.value = result?.optString("png_base64") }
@@ -1099,9 +1103,12 @@ class WebSocketRemoteBlenderClient(
                         requestState()
                     }
                 }
-                if (command in CadDepthCommandQueue.CANDIDATES) synchronized(sculptTransportLock) {
-                    cadDepthQueue.acknowledge(message.optBoolean("ok", false))
-                    flushCadDepth()
+                synchronized(sculptTransportLock) {
+                    if (message.optString("id") == cadInFlightRequest) {
+                        cadInFlightRequest = null
+                        cadDepthQueue.acknowledge(message.optBoolean("ok", false))
+                        flushCadDepth()
+                    }
                 }
             }
             "event" -> {

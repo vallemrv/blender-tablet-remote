@@ -1613,14 +1613,28 @@ como huecos. Contornos abiertos no se pueden extruir; intersecciones/tangencias 
 valores no finitos o degenerados producen errores explícitos sin perder la última
 geometría válida. El kernel V1 genera malla nativa; no anuncia STEP, BREP ni solver
 general. Rectángulos conservan lados horizontales/verticales y círculos diámetro.
-La malla materializada tiene quads dispuestos por cara plana: un parche de Coons
+El cuerpo CAD materializa la malla compacta del kernel. Solo la copia editable
+(`cad.convert` o duplicar una pieza CAD) genera quads por cara plana: un parche de Coons
 por cara sin hueco y un marco de cuatro parches alrededor de un hueco, con
 subdivisiones iguales en lados opuestos y vértices compartidos entre caras. Las
 caras sin esa disposición usan parches con centros y puntos medios compartidos.
 Se conserva la frontera sin grietas y los parches cóncavos se descomponen antes.
-Esta malla de presentación/exportación no es el operando de las operaciones
+Esta malla de edición/exportación no es el operando de las operaciones
 siguientes, que usan la evaluación compacta del kernel para evitar crecimiento
 exponencial al encadenar vaciados.
+
+La respuesta de una operación CAD puede quedar pendiente mientras un proceso
+Blender auxiliar calcula su snapshot. El servidor sigue procesando vídeo, navegación
+y consultas; publica el resultado y responde con el mismo `id` al terminar. No es un
+acuse anticipado. Android serializa comandos CAD y conserva solo la última muestra
+absoluta pendiente (`cad.extrude.update`, `cad.finish.update`, `cad.drag.update`,
+`cad.entity.update`, `cad.polygon.update`), sin atravesar fronteras begin/settle/end.
+La navegación no espera a la evaluación. Cancelar, guardar, cambiar de modo, undo,
+redo o desconectar invalidan el cálculo pendiente; su respuesta es `cad_cancelled`
+y no se confirma una muestra anterior. Otra mutación concurrente devuelve `cad_busy`;
+otro propietario no puede cancelar la operación (`session_owned`). Un fallo o tiempo
+límite del proceso auxiliar devuelve `cad_worker_failed` y conserva el último sólido
+publicado. No cambia el formato del documento, las longitudes ni los IDs de selección.
 
 `document.revision` aumenta con cada transacción confirmada y vuelve al valor
 correspondiente al usar undo/redo. `session.depth` y, en CUT, `session.extent` (`ONE` o `BOTH`) describen la preview de EXTRUDE/CUT y

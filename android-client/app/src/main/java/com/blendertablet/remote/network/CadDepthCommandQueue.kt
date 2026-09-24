@@ -2,13 +2,14 @@ package com.blendertablet.remote.network
 
 import org.json.JSONObject
 
-internal data class CadQueuedMessage(val name: String, val payload: JSONObject, val raw: String? = null)
+internal data class CadQueuedMessage(val name: String, val payload: JSONObject)
 
-/** Depth (and a fillet width) is an absolute candidate: keep the newest unsent value, before its confirmation. */
+/** Serialize CAD computations; absolute pointer samples keep only the newest unsent candidate. */
 internal class CadDepthCommandQueue {
     companion object {
-        val CANDIDATES = setOf("cad.extrude.update", "cad.finish.update")
-        private val BEGINS = setOf("cad.extrude.begin", "cad.finish.begin")
+        val CANDIDATES = setOf("cad.extrude.update", "cad.finish.update", "cad.drag.update", "cad.entity.update", "cad.polygon.update")
+        private val BEGINS = setOf("cad.extrude.begin", "cad.finish.begin", "cad.drag.begin", "cad.entity.begin", "cad.polygon.begin")
+        fun waitsForResponse(name: String?) = name?.startsWith("cad.") == true && name != "cad.state"
     }
     private val queue = java.util.ArrayDeque<CadQueuedMessage>()
     private var inFlight = false
@@ -23,7 +24,7 @@ internal class CadDepthCommandQueue {
 
     fun poll(): CadQueuedMessage? {
         if (inFlight) return null
-        return queue.pollFirst()?.also { if (it.name in CANDIDATES) inFlight = true }
+        return queue.pollFirst()?.also { if (waitsForResponse(it.name)) inFlight = true }
     }
 
     fun acknowledge(ok: Boolean) {

@@ -13,14 +13,14 @@ from ..errors import CommandError
 class ExtrusionPreviewCache:
     """Session-local tessellation: depth changes only stretch the same solid.
 
-    Build in the sketch's local frame at unit depth, including display quads.
+    Build the compact solid in the sketch's local frame at unit depth.
     Coordinates are then mapped to the current frame in metres. A changed sketch
     invalidates its entry, including holes and associative support planes.
     """
     def __init__(self):
         self.entries = {}
 
-    def extrude(self, sketch, source, depth, *, display, symmetric=False):
+    def extrude(self, sketch, source, depth, *, symmetric=False):
         from .document import dumps
         key = source['id']
         signature = dumps(sketch)
@@ -32,14 +32,15 @@ class ExtrusionPreviewCache:
             vertices, faces = kernel.extrude(local, source, 1.0)
             cached = dict(signature=signature, solid=(vertices, faces))
             self.entries[key] = cached
-        if display and 'display' not in cached:
-            from .quad_layout import quad_mesh
-            cached['display'] = quad_mesh(*cached['solid'])
-        vertices, faces = cached['display' if display else 'solid']
+        vertices, faces = cached['solid']
+        basis = frame(sketch)
+        origin, axis_x, axis_y, normal = (basis[k] for k in ('origin', 'x', 'y', 'normal'))
+        def project(x, y, z):
+            return tuple(origin[i] + x*axis_x[i] + y*axis_y[i] + z*normal[i] for i in range(3))
         if symmetric:
-            vertices = [world(sketch, x, y, (z - .5) * 2 * abs(depth)) for x,y,z in vertices]
+            vertices = [project(x, y, (z - .5) * 2 * abs(depth)) for x,y,z in vertices]
         else:
-            vertices = [world(sketch, x, y, z * depth) for x,y,z in vertices]
+            vertices = [project(x, y, z * depth) for x,y,z in vertices]
             if depth < 0:
                 faces = [tuple(reversed(face)) for face in faces]
         return vertices, faces
@@ -248,21 +249,23 @@ def cut_mesh(base, cutter, *, operation='DIFFERENCE'):
             bm=bmesh.new()
             try:
                 bm.from_mesh(mesh)
-                valid=bool(bm.faces) and all(e.is_manifold for e in bm.edges) and bm.calc_volume()>1e-18
+                result_volume = bm.calc_volume()
+                valid=bool(bm.faces) and all(e.is_manifold for e in bm.edges) and result_volume>1e-18
             finally: bm.free()
             if not valid:
                 raise CommandError('La operación produce un sólido vacío o geometría inválida',code='cad_cut_invalid' if operation=='DIFFERENCE' else 'cad_union_invalid')
             def volume(data):
                 bm=bmesh.new()
-                m=bpy.data.meshes.new('CAD volume')
                 try:
-                    m.from_pydata(data[0],[],data[1]); bm.from_mesh(m)
+                    vertices = [bm.verts.new(v) for v in data[0]]
+                    for face in data[1]: bm.faces.new([vertices[i] for i in face])
+                    bm.normal_update()
                     return abs(bm.calc_volume())
                 finally:
-                    bm.free(); bpy.data.meshes.remove(m)
+                    bm.free()
             if operation=='DIFFERENCE':
                 base_volume=volume(base)
-                if base_volume-volume(result) <= max(base_volume*1e-7,1e-18):
+                if base_volume-result_volume <= max(base_volume*1e-7,1e-18):
                     raise CommandError('El perfil no quita material del sólido destino',code='cad_cut_miss')
             return result
         finally: evaluated.to_mesh_clear()

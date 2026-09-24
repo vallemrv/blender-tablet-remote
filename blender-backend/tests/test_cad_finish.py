@@ -38,7 +38,8 @@ class FinishTests(CadTests):
         self.assertAlmostEqual(base-volume(self.obj()),2*.5*.003**2*.08,places=10)
         feature=runtime.doc()['features'][-1]
         self.assertEqual((feature['type'],feature['segments'],len(feature['edges'])),('CHAMFER',1,2))
-        self.assertTrue(all(len(p.vertices)==4 for p in self.obj().data.polygons))
+        from blender_tablet_remote.cad.runtime import mesh_copy
+        self.assertTrue(all(len(p.vertices)==4 for p in mesh_copy(self.obj()).data.polygons))
 
     def test_fillet_follows_a_deeper_extrusion_and_width_edits(self):
         feature=self.box()

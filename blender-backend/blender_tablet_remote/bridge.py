@@ -35,6 +35,7 @@ _timer_registered = False
 _last_event_poll = 0.0
 _last_modal_status: dict | None = None
 _last_alignment_status: dict | None = None
+_pending_cad = None
 _stats = {"commands": 0, "gestures": 0, "errors": 0, "started_at": 0.0}
 
 DEFAULT_STREAM_PORT = 8766
@@ -153,6 +154,7 @@ def _start_stream(host: str, cfg: dict) -> None:
 def stop() -> None:
     global _server
     _unregister_timer()
+    _cancel_pending_cad()
     # Antes que nada: el pump ya no va a correr, y es quien suelta la inhibición.
     # Dejarla puesta significaría dejar la pantalla del usuario sin ahorro de energía.
     screen.keep_awake(False)
@@ -167,6 +169,8 @@ def stop() -> None:
     from .cad.runtime import runtime
     from .cad.lifecycle import unregister_handlers
     runtime.leave()
+    from .cad.worker import worker
+    worker.stop()
     unregister_handlers()
     from .commands import sculpt
     sculpt.unregister_handlers()
@@ -351,6 +355,7 @@ def _pump() -> float | None:
             log.error("unhandled error while processing message:\n%s", traceback.format_exc())
 
     try:
+        _poll_pending_cad()
         _gestures.flush()
     except Exception:  # noqa: BLE001
         _stats["errors"] += 1
@@ -453,6 +458,8 @@ def _handle(client: WSClient, msg: dict) -> None:
     kind = str(msg.get("type", "command")).lower()
 
     if kind == "_client_gone":
+        if _pending_cad and _pending_cad[0].id == msg['client_id']:
+            _cancel_pending_cad()
         from .commands import reconnect
         reconnect.disconnected(msg["client_id"])
         _gestures.drop_client(msg["client_id"])
@@ -486,6 +493,8 @@ def _handle(client: WSClient, msg: dict) -> None:
 
     if kind == "gesture":
         try:
+            if _pending_cad and str(msg.get('gesture', '')).lower() not in {'orbit', 'pan', 'zoom', 'roll'}:
+                raise CommandError('Espera al cálculo CAD', code='cad_busy')
             from .materials.runtime import runtime as materials
             if materials.active:
                 materials.require(client.id, targets=False)
@@ -537,6 +546,7 @@ def _authorized(client: WSClient, msg: dict) -> bool:
 
 
 def _handle_command(client: WSClient, msg: dict) -> None:
+    global _pending_cad
     from .commands.sculpt import finish_saved_preview
     finish_saved_preview()
     name = msg.get("command")
@@ -561,6 +571,23 @@ def _handle_command(client: WSClient, msg: dict) -> None:
 
     log.info("command %s", name)
     try:
+        if _pending_cad:
+            safe = name.startswith(('view.', 'stream.')) or name in {
+                'server.ping', 'server.capabilities', 'cad.state',
+                'scene.get_state', 'scene.list_objects', 'scene.scale', 'scene.capture',
+                'file.info', 'file.browse', 'file.locations', 'file.recent', 'file.default_folder',
+            }
+            cancels = name in {'cad.session.cancel', 'history.undo', 'history.redo', 'mode.set',
+                              'file.new', 'file.open', 'file.save', 'file.save_as',
+                              'transform.begin', 'tool.begin'}
+            if cancels:
+                if _pending_cad[0].id != client.id:
+                    raise CommandError('El cálculo pertenece a otra conexión', code='session_owned')
+                _cancel_pending_cad()
+                from .cad.runtime import runtime
+                runtime.cancel()
+            elif not safe:
+                raise CommandError('Espera al cálculo CAD', code='cad_busy')
         # Native sculpt previews own the latest undo step. Close them before
         # any unrelated intention can write geometry or change active context.
         if not name.startswith("sculpt.") and not name.startswith(("stream.", "scene.")) and name not in {"view.get", "server.ping", "server.capabilities", "server.resume", "file.info", "file.list", "file.locations"}:
@@ -583,6 +610,12 @@ def _handle_command(client: WSClient, msg: dict) -> None:
             if name.startswith(('transform.', 'tool.', 'mesh.', 'object.', 'selection.', 'modifier.', 'cad.', 'sculpt.')):
                 raise CommandError('Sal de Materiales para cambiar la geometría o selección', code='wrong_mode')
         result = func(payload)
+        from .cad.jobs import PendingCommand
+        if isinstance(result, PendingCommand):
+            if not result.poll():
+                _pending_cad = (client, msg, payload, result)
+                return
+            result = result.result
         from .commands import history as command_history
         command_history.remember(name, payload)
     except CommandError as exc:
@@ -599,6 +632,40 @@ def _handle_command(client: WSClient, msg: dict) -> None:
     _stats["commands"] += 1
     _respond(client, msg, True, result=result)
     log.info("command complete %s", name)
+
+
+def _cancel_pending_cad():
+    global _pending_cad
+    if _pending_cad is None:
+        return
+    client, msg, _, task = _pending_cad
+    _pending_cad = None
+    task.cancel()
+    _respond(client, msg, False, error='Cálculo CAD cancelado', code='cad_cancelled')
+
+
+def _poll_pending_cad():
+    global _pending_cad
+    from .cad.worker import worker
+    worker.reap()
+    if _pending_cad is None:
+        return
+    client, msg, payload, task = _pending_cad
+    try:
+        if not task.poll():
+            return
+        from .commands import history as command_history
+        command_history.remember(msg['command'], payload)
+        _stats['commands'] += 1
+        _respond(client, msg, True, result=task.result)
+        _capture.request_frame()
+        log.info('command complete %s', msg['command'])
+    except Exception as exc:
+        task.cancel()
+        _stats['errors'] += 1
+        log.warn('command %s failed: %s', msg['command'], exc)
+        _respond(client, msg, False, error=str(exc), code=getattr(exc, 'code', 'internal_error'))
+    _pending_cad = None
 
 
 def _respond(client: WSClient, msg: dict, ok: bool, result=None, error: str = "", code: str = "") -> None:

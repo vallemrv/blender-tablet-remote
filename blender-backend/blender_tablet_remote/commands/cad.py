@@ -68,7 +68,7 @@ def history_rollback(payload):
         runtime.surface.clear()
         runtime.solid_view()
     else:
-        runtime.rebuild(doc, limit=bar)
+        yield from runtime.rebuild_steps(doc, limit=bar)
     if not runtime.active_sketch_id and identifier:
         node=next(node for node in model.history(doc) if node['id']==identifier)
         runtime.active_body_id=node['body_id']
@@ -90,7 +90,7 @@ def sketch_create(payload):
     plane = str(payload.get('plane','XY')).upper()
     if plane not in model.PLANES:
         raise BadPayload('Plano CAD no compatible')
-    return runtime.transaction(payload,lambda doc: _new_sketch(doc,payload),'CAD crear sketch')
+    return (yield from runtime.transaction_steps(payload,lambda doc: _new_sketch(doc,payload),'CAD crear sketch'))
 
 
 def _new_sketch(doc,payload):
@@ -143,7 +143,7 @@ def sketch_rename(payload):
     def change(doc):
         sketch=model.find(doc,'sketches',payload.get('sketch_id'))
         sketch['name']=name.strip()
-    return runtime.transaction(payload,change,'CAD renombrar croquis',geometry=False)
+    return (yield from runtime.transaction_steps(payload,change,'CAD renombrar croquis',geometry=False))
 
 
 @command('cad.sketch.finish')
@@ -282,7 +282,7 @@ def entity_set(payload):
             values['diameter']=diameter
         goals=dimensions.set_values(sketch,e,values)
         geometry.solve(sketch,goals)
-    return runtime.transaction(payload,change,'CAD editar dimensiones')
+    return (yield from runtime.transaction_steps(payload,change,'CAD editar dimensiones'))
 
 
 @command('cad.entity.construction')
@@ -294,7 +294,7 @@ def entity_construction(payload):
         refs=[r for r in _refs() if r['kind']=='ENTITY' and r['id']!='ORIGIN']
         if not refs: raise BadPayload('Selecciona geometría del boceto')
         for ref in refs: geometry.get_entity(sketch,ref)['construction']=value
-    return runtime.transaction(payload,change,'CAD geometría de construcción')
+    return (yield from runtime.transaction_steps(payload,change,'CAD geometría de construcción'))
 
 
 def _preview_endpoint(payload, preview, previous=None):
@@ -401,7 +401,7 @@ def polygon_segment(payload):
     if closes:
         session['points'].append(tuple(session['points'][0]))
         doc,_=_polygon_state(session,None)
-        _polygon_confirm(session,doc)
+        yield from _polygon_confirm(session,doc)
         return runtime.status()
     session['points'].append(current)
     _set_selection([dict(kind='ENTITY',id=segment['id'],part='BODY')])
@@ -423,12 +423,12 @@ def polygon_close(payload):
                                     _polygon_closing(session,segment)))
         session['points'].append(first)
         doc,_=_polygon_state(session,None)
-    _polygon_confirm(session,doc)
+    yield from _polygon_confirm(session,doc)
     return runtime.status()
 
 
 def _polygon_confirm(session, doc):
-    runtime.rebuild(doc,limit=runtime.bar(doc))
+    yield from runtime.rebuild_steps(doc,limit=runtime.bar(doc))
     runtime.persist(doc,advance=True)
     runtime.session=None
     sketch=model.find(doc,'sketches',session['sketch_id'])
@@ -449,7 +449,7 @@ def sketch_visibility(payload):
         sketch=model.find(doc,'sketches',payload.get('sketch_id'))
         _require_reachable(doc,sketch['id'])
         sketch['visible']=value; sketch['visibility_explicit']=True
-    return runtime.transaction(payload,change,'CAD visibilidad de boceto')
+    return (yield from runtime.transaction_steps(payload,change,'CAD visibilidad de boceto'))
 
 
 @command('cad.entity.delete')
@@ -471,7 +471,7 @@ def entity_delete(payload):
                 try: model.profile(doc,feature['profile_id'])
                 except CommandError as exc:
                     raise CommandError('El borrado abriría un perfil utilizado; elimina primero su operación CAD',code='cad_dependency') from exc
-    runtime.transaction(payload,change,'CAD borrar selección')
+    yield from runtime.transaction_steps(payload,change,'CAD borrar selección')
     runtime.selection=None
     return runtime.status()
 
@@ -578,7 +578,7 @@ def extrude_begin(payload):
     preview['features'].append(feature)
     if bar: model.insert_after(preview,feature,bar)
     try:
-        runtime.rebuild(preview,limit=feature['id'] if bar else None,extrusion_cache=session['extrusion_cache'])
+        yield from runtime.rebuild_steps(preview,limit=feature['id'] if bar else None,extrusion_cache=session['extrusion_cache'])
     except Exception:
         runtime.session = None
         raise
@@ -605,15 +605,18 @@ def extrude_update(payload):
     feature=model.find(preview,'features',session['feature_id'])
     feature['depth'] = depth
     if feature['type']=='CUT': feature['extent']=extent
-    session.update(preview=preview,depth=depth,extent=extent)
     if stylus and not settle:
+        previous = dict(preview=session['preview'], depth=session['depth'], extent=session.get('extent', 'ONE'))
+        session.update(preview=preview,depth=depth,extent=extent)
         try:
             runtime.fast_depth(session)
             return runtime.status()
         except CommandError:
+            session.update(previous)
             runtime.drop_prisms()
-    runtime.rebuild(preview,limit=session['feature_id'] if session.get('at_bar') else None,
+    yield from runtime.rebuild_steps(preview,limit=session['feature_id'] if session.get('at_bar') else None,
                     extrusion_cache=session['extrusion_cache'])
+    session.update(preview=preview,depth=depth,extent=extent)
     return runtime.status()
 
 
@@ -660,7 +663,7 @@ def finish_begin(payload):
     preview=copy.deepcopy(session['baseline']); preview['features'].append(feature)
     if bar: model.insert_after(preview,feature,bar)
     try:
-        runtime.rebuild(preview,limit=feature['id'] if bar else None)
+        yield from runtime.rebuild_steps(preview,limit=feature['id'] if bar else None)
     except Exception:
         runtime.session=None
         raise
@@ -681,7 +684,7 @@ def finish_update(payload):
     preview=copy.deepcopy(session['preview'])
     feature=model.find(preview,'features',session['feature_id'])
     feature.update(width=width,segments=segments); model.validate_finish(feature)
-    runtime.rebuild(preview,limit=session['feature_id'] if session.get('at_bar') else None)
+    yield from runtime.rebuild_steps(preview,limit=session['feature_id'] if session.get('at_bar') else None)
     session.update(preview=preview,width=width,segments=segments)
     return runtime.status()
 
@@ -696,7 +699,7 @@ def confirm(payload):
     if session.get('at_bar'):
         # A node inserted at the bar becomes the viewed state immediately.
         runtime.rollback_id = session['feature_id']
-    runtime.rebuild(doc, limit=runtime.bar(doc), extrusion_cache=session.get('extrusion_cache'))
+    yield from runtime.rebuild_steps(doc, limit=runtime.bar(doc), extrusion_cache=session.get('extrusion_cache'))
     runtime.persist(doc, advance=True)
     runtime.session = None
     if session['operation'] in ('EXTRUDE','CUT'):
@@ -734,7 +737,7 @@ def feature_set(payload):
             if not isinstance(payload['enabled'],bool):
                 raise BadPayload('enabled debe ser booleano')
             feature['enabled'] = payload['enabled']
-    return runtime.transaction(payload,change,'CAD editar extrusión')
+    return (yield from runtime.transaction_steps(payload,change,'CAD editar extrusión'))
 
 
 @command('cad.feature.delete')
@@ -744,7 +747,7 @@ def feature_delete(payload):
         _require_reachable(doc,feature['id'])
         _require_no_dependents(doc,feature['id'])
         doc['features'].remove(feature)
-    runtime.transaction(payload,change,'CAD eliminar extrusión')
+    yield from runtime.transaction_steps(payload,change,'CAD eliminar extrusión')
     runtime.selection = None
     return runtime.status()
 
@@ -756,7 +759,7 @@ def convert(payload):
         raise CommandError('Confirma o cancela antes de convertir',code='session_active')
     doc = runtime.doc()
     if any(not obj.get(BODY_KEY) for obj in runtime.objects(doc)):
-        runtime.rebuild(doc,limit=runtime.bar(doc))
+        yield from runtime.rebuild_steps(doc,limit=runtime.bar(doc))
     if payload.get('body_id'):
         body=model.find(doc,'bodies',payload['body_id'])['id']
     else:
@@ -952,8 +955,10 @@ def drag_update(payload):
             goals=geometry.arc_angle_goals(arc,p,session.get('last_sweep',arc['sweep']))
         else:
             goals=geometry.move_goals(sketch,session['refs'],dx,dy)
-        geometry.solve(sketch,goals,drag=True)
-        runtime.rebuild(doc,limit=runtime.bar(doc))
+        from ..cad.jobs import Calculation
+        solved = yield Calculation(operation='solve', sketch=sketch, goals=[{k: v.tolist() if hasattr(v, 'tolist') else v for k, v in goal.items()} for goal in goals])
+        sketch.update(solved)
+        yield from runtime.rebuild_steps(doc,limit=runtime.bar(doc))
     except CommandError:
         # Keep the last visible valid preview. END never retries the pointer.
         raise
@@ -971,7 +976,7 @@ def drag_end(payload):
     if not runtime.session: return runtime.status()
     session=runtime.require(payload)
     if session['operation']!='DRAG': raise BadPayload('La sesión no es de arrastre')
-    if session.get('candidate'): return confirm(payload)
+    if session.get('candidate'): return (yield from confirm.__wrapped__(payload))
     if not session.get('dragged'):
         previous=session.get('selection_before') or {}
         refs=previous.get('items',[previous] if previous else [])
@@ -987,7 +992,7 @@ def points_weld(payload):
     doc=runtime.doc()
     sketch=model.find(doc,'sketches',runtime.active_sketch_id)
     refs=[dict(id=r['id'],part=r.get('part','BODY')) for r in _refs() if r.get('kind')=='ENTITY']
-    if geometry.weld_points(sketch,refs): runtime.commit(doc,'CAD soldar puntos')
+    if geometry.weld_points(sketch,refs): yield from runtime.commit_steps(doc,'CAD soldar puntos')
     return runtime.status()
 
 
@@ -1038,7 +1043,7 @@ def constraint_add(payload):
         else: sketch.setdefault('constraints',[]).append(c)
         if typ in dimensions.NUMERIC: dimensions.solve_dimension(sketch,c)
         else: geometry.solve(sketch)
-    return runtime.transaction(payload,change,'CAD restringir boceto')
+    return (yield from runtime.transaction_steps(payload,change,'CAD restringir boceto'))
 
 
 @command('cad.constraint.delete')
@@ -1047,7 +1052,7 @@ def constraint_delete(payload):
         sketch=model.find(doc,'sketches',payload.get('sketch_id') or runtime.active_sketch_id)
         c=model.find(sketch,'constraints',payload.get('constraint_id'))
         dimensions.remove(sketch,c)
-    return runtime.transaction(payload,change,'CAD quitar restricción')
+    return (yield from runtime.transaction_steps(payload,change,'CAD quitar restricción'))
 
 
 @command('cad.fillet')
@@ -1065,7 +1070,7 @@ def fillet(payload):
             if f['sketch_id']==sketch['id'] and f['profile_id'] in previous-remaining:
                 if replacement is None: raise BadPayload('El redondeo debe conservar cerrado el perfil de la operación')
                 f['profile_id']='profile_'+replacement['id']
-    runtime.transaction(payload,change,'CAD redondear esquina')
+    yield from runtime.transaction_steps(payload,change,'CAD redondear esquina')
     _set_selection([dict(kind='ENTITY',id=identifier,part='BODY') for identifier in created])
     return runtime.status()
 
@@ -1084,7 +1089,7 @@ def fillet_remove(payload):
                 after=next((p for p in new_profiles if set(p.get('members',[]))==members),None)
                 if after is None: raise BadPayload('No se puede cerrar el perfil al quitar este redondeo')
                 feature['profile_id']='profile_'+after['id']
-    runtime.transaction(payload,change,'CAD quitar redondeo')
+    yield from runtime.transaction_steps(payload,change,'CAD quitar redondeo')
     runtime.selection=None
     return runtime.status()
 
@@ -1098,7 +1103,7 @@ def constraint_set(payload):
         updated=dict(c,value=model.number(payload.get('value'),positive=c['type'] in ('RADIUS','DISTANCE')))
         c=dimensions.put(sketch,updated)
         dimensions.solve_dimension(sketch,c)
-    return runtime.transaction(payload,change,'CAD editar restricción')
+    return (yield from runtime.transaction_steps(payload,change,'CAD editar restricción'))
 
 
 @command('cad.sketch.delete')
@@ -1114,7 +1119,7 @@ def sketch_delete(payload):
         if plane_id and not any(s.get('plane_id')==plane_id for s in doc['sketches']):
             plane=model.find(doc,'planes',plane_id)
             if plane.get('implicit'): doc['planes'].remove(plane)
-    runtime.transaction(payload,change,'CAD eliminar boceto')
+    yield from runtime.transaction_steps(payload,change,'CAD eliminar boceto')
     if runtime.active_sketch_id==identifier: runtime.active_sketch_id=None
     runtime.selection=None
     return runtime.status()
@@ -1126,7 +1131,7 @@ def body_create(payload):
         body=dict(id=model.uid('body'),name='Cuerpo '+str(len(doc['bodies'])+1))
         doc['bodies'].append(body); runtime.active_body_id=body['id']
         runtime.active_sketch_id=None; runtime.selection=None
-    return runtime.transaction(payload,change,'CAD crear cuerpo')
+    return (yield from runtime.transaction_steps(payload,change,'CAD crear cuerpo'))
 
 
 @command('cad.body.activate')
@@ -1149,7 +1154,7 @@ def plane_create(payload):
         if 'u' in payload or 'v' in payload: raise BadPayload('Selecciona una cara y pulsa Boceto en cara')
         model.validate_plane(plane); doc['planes'].append(plane); model.resolve_supports(doc)
         if payload.get('start_sketch'): _new_sketch(doc,dict(plane_id=plane['id']))
-    return runtime.transaction(payload,change,'CAD crear plano')
+    return (yield from runtime.transaction_steps(payload,change,'CAD crear plano'))
 
 
 @command('cad.plane.set')
@@ -1159,7 +1164,7 @@ def plane_set(payload):
         for key in ('translation','rotation'):
             if key in payload: plane[key]=payload[key]
         model.validate_plane(plane)
-    result=runtime.transaction(payload,change,'CAD colocar plano')
+    result = yield from runtime.transaction_steps(payload,change,'CAD colocar plano')
     if runtime.active_sketch_id: runtime.focus(model.find(runtime.doc(),'sketches',runtime.active_sketch_id))
     return runtime.status()
 
@@ -1221,7 +1226,7 @@ def sketch_on_face(payload):
         from ..camera import camera
         found=find_view3d()
         if found: camera.look_at(Vector(source['center']),[Vector(p) for p in source['points']],found[3])
-    return runtime.transaction(payload,change,'CAD boceto en cara seleccionada')
+    return (yield from runtime.transaction_steps(payload,change,'CAD boceto en cara seleccionada'))
 
 
 @command('cad.reference.project')
@@ -1256,7 +1261,7 @@ def project_reference(payload):
                 refs=[dict(id=entity['id'],part='BODY')],values={k:entity[k] for k in model.FIELDS['LINE']}))
         if not created: raise BadPayload('La referencia se proyecta como un punto; elige otra arista')
         geometry.solve(sketch)
-    runtime.transaction(payload,change,'CAD proyectar referencia fija')
+    yield from runtime.transaction_steps(payload,change,'CAD proyectar referencia fija')
     runtime.surface.clear(); runtime.surface.mode='PROFILE'; runtime.selection=None
     return runtime.status()
 

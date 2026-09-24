@@ -284,8 +284,12 @@ La pila conserva los pasos paramétricos y permite ver el cuerpo en cada momento
 La evaluación y el resaltado reutilizan resultados y geometría GPU mientras no cambien;
 dibujar en otro croquis no obliga a reconstruir las operaciones anteriores.
 Durante la preview, cambiar profundidad reutiliza los contornos y huecos ya
-teselados. Android envía una actualización de profundidad cada vez y conserva el
-último valor pendiente; confirmar espera a ese valor. Una profundidad rechazada
+teselados. Android mantiene una petición CAD en vuelo y conserva la última muestra
+absoluta pendiente de profundidad, ancho o lápiz; confirmar espera a ese valor.
+Los booleanos y el solver de arrastre se calculan en un proceso Blender auxiliar
+aislado; el vídeo y la navegación continúan. Cancelar, guardar o desconectar descartan
+el cálculo pendiente y restauran el baseline. La primera evaluación arranca ese
+proceso y puede tardar más que las siguientes. Una profundidad rechazada
 muestra el error e impide que una confirmación pendiente acepte el sólido anterior.
 El vaciado consume visualmente su operación destino conservando su dependencia en el árbol.
 Cambiar el perfil, la profundidad o la altura del soporte reconstruye el resultado.
@@ -352,7 +356,9 @@ Usa el bisel nativo de Blender sobre el sólido; no es un fillet B-rep.
   Para biselar el objeto completo, usa el modificador Bisel y sus campos Ancho y
   Segmentos. Son operaciones nativas sobre la copia; no añaden un fillet de sólido
   al historial paramétrico CAD.
-- La malla del cuerpo se ordena por caras de diseño: cada cara plana sin hueco es
+- Durante CAD se muestra la malla compacta del kernel y se reutiliza su topología
+  al variar profundidad. La retícula densa se genera solo al crear una copia editable.
+  Esa copia se ordena por caras de diseño: cada cara plana sin hueco es
   una rejilla de quads (un círculo queda como rejilla, sin polo central) y una cara
   con un agujero forma un marco de cuatro rejillas que crecen desde el agujero hacia
   el borde. Las caras vecinas comparten sus divisiones: los loops recorren la pieza
@@ -360,7 +366,7 @@ Usa el bisel nativo de Blender sobre el sólido; no es un fillet B-rep.
 - Todavía sin rejilla ordenada: caras con varios agujeros y contornos cóncavos
   (forma de L). Esas caras usan quads con puntos medios compartidos, conservando
   frontera, volumen y conectividad. La evaluación booleana conserva operandos
-  compactos; la malla de presentación no se realimenta a cortes posteriores.
+  compactos; la copia editable no se realimenta a cortes posteriores.
 - El overlay se proyecta en Blender y se dibuja en el rectángulo del vídeo Android.
   Sus píxeles no se guardan como geometría. El control y el vídeo tienen canales
   separados, por lo que puede existir un pequeño desfase durante la navegación.

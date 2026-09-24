@@ -5,7 +5,8 @@ import math
 import bpy
 from mathutils import Vector
 from . import document as model
-from .kernel import kernel, world, ExtrusionPreviewCache, finish_edges
+from .kernel import world, ExtrusionPreviewCache
+from .jobs import Calculation, blocking
 from .quad_layout import quad_mesh
 from . import sketch as sketch_geometry
 from ..errors import BadPayload, CommandError
@@ -22,8 +23,16 @@ PRISM_KEY = 'btr_cad_depth_prism'
 def mesh_copy(obj):
     """Independent native mesh and modifier stack, without CAD ownership."""
     copy=obj.copy()
+    owned_mesh = None
     try:
-        copy.data=obj.data.copy()
+        vertices, faces = quad_mesh([tuple(v.co) for v in obj.data.vertices],
+                                    [tuple(p.vertices) for p in obj.data.polygons])
+        owned_mesh = bpy.data.meshes.new(obj.data.name + ' · editable')
+        copy.data = owned_mesh
+        copy.data.from_pydata(vertices, [], faces)
+        for material in obj.data.materials:
+            copy.data.materials.append(material)
+        copy.data.update()
         copy.name=obj.name+' · malla'
         for key in (FEATURE_KEY,DOC_KEY,BODY_KEY,COPY_SOURCE_KEY):
             if key in copy: del copy[key]
@@ -31,6 +40,8 @@ def mesh_copy(obj):
         return copy
     except Exception:
         bpy.data.objects.remove(copy)
+        if owned_mesh is not None and owned_mesh.users == 0:
+            bpy.data.meshes.remove(owned_mesh)
         raise
 
 
@@ -62,13 +73,22 @@ class CadRuntime:
         self.rollback_id = None
         self._extrusion_cache = ExtrusionPreviewCache()
         self._solids = {}
-        self._body_meshes = {}
+        self._evaluations = {}
+        self._baseline_evaluation = {}
+        self._current_evaluation = {}
+        self._epoch = 0
         self._materialized = {}
         from .surface import SurfaceSelection
         self.surface = SurfaceSelection()
 
     def reset(self):
+        from .worker import worker
+        from .evaluation import evaluator
+        worker.stop()
+        evaluator.__init__()
+        epoch = self._epoch + 1
         self.__init__()
+        self._epoch = epoch
 
     def doc(self):
         scene = bpy.context.scene
@@ -171,73 +191,35 @@ class CadRuntime:
         return None
 
     def rebuild(self, doc, *, limit=None, extrusion_cache=None):
-        """Evaluate a body's chronological operations, then publish one mesh per body.
+        return blocking(self.rebuild_steps(doc, limit=limit, extrusion_cache=extrusion_cache))
 
-        Cached operands are plain geometry, never RNA. Unchanged predecessors and
-        unchanged display meshes survive transactions, including sketch editing.
-        Failed evaluation leaves every published body at its previous valid state.
-        """
-        self.drop_prisms()
-        import hashlib
-        from .surface import stamp
-        scale = max(float(bpy.context.scene.unit_settings.scale_length), 1e-12)
+    def rebuild_steps(self, doc, *, limit=None, extrusion_cache=None):
+        """Evaluate snapshots off-process; publish compact geometry on the pump."""
         model.resolve_supports(doc)
-        sequence = model.history(doc)
-        if limit:
-            end=next((i for i,node in enumerate(sequence) if node['id']==limit),None)
-            if end is not None: sequence=sequence[:end+1]
-        extrusion_cache=extrusion_cache or self._extrusion_cache
-        tips={}; solids={}; keys={}; direct={}
-        for feature in sequence:
-            if feature['kind']!='FEATURE' or not feature['enabled']: continue
-            identifier=feature['id']; body=feature['body_id']
-            previous=tips.get(body)
-            if feature['type'] in model.FINISHES:
-                if previous is None:
-                    raise CommandError('El cuerpo no tiene un sólido que redondear',code='cad_dependency')
-                signature=(doc['id'],feature['type'],feature['width'],feature.get('segments',1),
-                           model.dumps(feature['edges']),keys.get(previous))
-                cached=self._solids.get(identifier)
-                if cached is None or cached[0]!=signature:
-                    cached=(signature,finish_edges(solids[previous],feature['edges'],feature['width'],feature.get('segments',1)))
-                    self._solids[identifier]=cached
-                solids[identifier]=cached[1]
-                keys[identifier]=hashlib.blake2b(repr(signature).encode(),digest_size=16).digest()
-                tips[body]=identifier; direct[body]=None
-                continue
-            sketch,entity=model.profile(doc,feature['profile_id'])
-            cut=feature['type']=='CUT'
-            depth=model.number(feature['depth'], positive=cut)
-            extent=feature.get('extent','ONE') if cut else 'ONE'
-            if extent not in ('ONE','BOTH'): extent='ONE'
-            if cut and feature.get('target_id') not in solids:
-                raise CommandError('Activa el sólido destino antes del vaciado',code='cad_dependency')
-            signature=(doc['id'],feature['profile_id'],feature['type'],depth,extent,
-                       model.dumps(dict(frame=model.frame(sketch),entities=sketch['entities'])),
-                       keys.get(previous))
-            cached=self._solids.get(identifier)
-            if cached is None or cached[0]!=signature:
-                operand=extrusion_cache.extrude(sketch,entity,depth,display=False,symmetric=True) if extent=='BOTH' else extrusion_cache.extrude(sketch,entity,-depth if cut else depth,display=False)
-                if previous:
-                    operand=kernel.cut(solids[previous],operand) if cut else kernel.union(solids[previous],operand)
-                elif cut:
-                    raise CommandError('El cuerpo no tiene un sólido para vaciar',code='cad_dependency')
-                cached=(signature,operand)
-                self._solids[identifier]=cached
-            solids[identifier]=cached[1]
-            keys[identifier]=hashlib.blake2b(repr(signature).encode(),digest_size=16).digest()
-            tips[body]=identifier
-            direct[body]=(sketch,entity,depth) if previous is None and not cut else None
-        # Form every display mesh before touching existing Blender objects.
-        display={}
-        for body,identifier in tips.items():
-            signature=(keys[identifier],scale)
-            cached=self._body_meshes.get(body)
-            if cached is None or cached[0]!=signature:
-                vertices,faces=(extrusion_cache.extrude(*direct[body],display=True) if direct[body] else quad_mesh(*solids[identifier]))
-                cached=(signature,([tuple(c/scale for c in v) for v in vertices],faces))
-                self._body_meshes[body]=cached
-            display[body]=cached
+        scale = max(float(bpy.context.scene.unit_settings.scale_length), 1e-12)
+        from .evaluation import geometry_key
+        key = geometry_key(doc, limit, scale)
+        cached = self._evaluations.get(key)
+        if cached is None and not any(f['enabled'] for f in doc['features']):
+            cached = dict(display={}, tips={}, solids={}, profiles={})
+        if cached is None:
+            epoch, scene, raw = self._epoch, bpy.context.scene.as_pointer(), bpy.context.scene.get(model.KEY)
+            cached = yield Calculation(operation='evaluate', doc=copy.deepcopy(doc), limit=limit, scale=scale)
+            if (epoch != self._epoch or scene != bpy.context.scene.as_pointer()
+                    or raw != bpy.context.scene.get(model.KEY)):
+                raise CommandError('Cálculo CAD cancelado', code='cad_cancelled')
+        self._evaluations = {key: cached, **self._baseline_evaluation}
+        self._current_evaluation = {key: cached}
+        self._solids = cached['solids']
+        self._extrusion_cache.entries = cached['profiles']
+        if extrusion_cache is not None:
+            extrusion_cache.entries = cached['profiles'].copy()
+        self._publish(doc, cached)
+
+    def _publish(self, doc, evaluated):
+        from .surface import stamp
+        self.drop_prisms()
+        display, tips = evaluated['display'], evaluated['tips']
         existing=self.objects(doc)
         feature_bodies={f['id']:f['body_id'] for f in doc['features']}
         retained=set()
@@ -252,14 +234,7 @@ class CadRuntime:
             signature,(vertices,faces)=display[identifier]
             record=(obj.as_pointer(),obj.data.as_pointer(),signature,stamp(obj)) if obj else None
             if record is None or self._materialized.get(identifier)!=record:
-                mesh=bpy.data.meshes.new(body['name'])
-                mesh.from_pydata(vertices,[],faces);mesh.update()
-                if obj is None:
-                    obj=bpy.data.objects.new(body['name'],mesh)
-                    bpy.context.scene.collection.objects.link(obj)
-                else:
-                    old=obj.data;obj.data=mesh
-                    if old.users==0:bpy.data.meshes.remove(old)
+                obj = self._paint(obj, vertices, faces)
                 self._materialized[identifier]=(obj.as_pointer(),obj.data.as_pointer(),signature,stamp(obj))
             obj.name=body['name']
             obj[FEATURE_KEY]=tips[identifier];obj[DOC_KEY]=doc['id'];obj[BODY_KEY]=identifier
@@ -269,13 +244,8 @@ class CadRuntime:
             if obj.as_pointer() not in retained:
                 old=obj.data;bpy.data.objects.remove(obj,do_unlink=True)
                 if old.users==0:bpy.data.meshes.remove(old)
-        feature_ids={f['id'] for f in doc['features']}
-        self._solids={k:v for k,v in self._solids.items() if k in feature_ids}
-        body_ids={b['id'] for b in doc['bodies']}
-        self._body_meshes={k:v for k,v in self._body_meshes.items() if k in body_ids}
-        self._materialized={k:v for k,v in self._materialized.items() if k in body_ids}
-        profile_ids={f['profile_id'].removeprefix('profile_') for f in doc['features'] if f.get('profile_id')}
-        self._extrusion_cache.entries={k:v for k,v in self._extrusion_cache.entries.items() if k in profile_ids}
+        self._materialized = {key: value for key, value in self._materialized.items()
+                              if key in {body['id'] for body in doc['bodies']}}
         bpy.context.view_layer.update()
 
     def drop_prisms(self):
@@ -294,7 +264,7 @@ class CadRuntime:
     def _paint(self, obj, vertices, faces):
         mesh = obj.data if obj is not None else None
         flat = [c for v in vertices for c in v]
-        if mesh is not None and len(mesh.vertices) == len(vertices) and len(mesh.polygons) == len(faces):
+        if mesh is not None and len(mesh.vertices) == len(vertices) and len(mesh.polygons) == len(faces) and all(tuple(p.vertices) == tuple(f) for p, f in zip(mesh.polygons, faces)):
             mesh.vertices.foreach_set('co', flat)
             mesh.update()
             obj.update_tag()
@@ -327,7 +297,7 @@ class CadRuntime:
         extent = feature.get('extent', 'ONE') if cut else 'ONE'
         cache = session['extrusion_cache']
         signed = -depth if cut else depth
-        vertices, faces = cache.extrude(sketch, entity, signed, display=True, symmetric=extent == 'BOTH')
+        vertices, faces = cache.extrude(sketch, entity, signed, symmetric=extent == 'BOTH')
         scale = max(float(bpy.context.scene.unit_settings.scale_length), 1e-12)
         vertices = [tuple(c / scale for c in v) for v in vertices]
         previous = None
@@ -348,7 +318,7 @@ class CadRuntime:
             if previous and (solid is None or body is None):
                 raise CommandError('No hay sólido anterior para la preview', code='cad_dependency')
             if previous:
-                pred_vertices, pred_faces = quad_mesh(*solid[1])
+                pred_vertices, pred_faces = solid[1]
                 self._paint(body, [tuple(c / scale for c in v) for v in pred_vertices], pred_faces)
             session['fast'] = True
         sign = -1 if signed < 0 else 1
@@ -379,6 +349,10 @@ class CadRuntime:
         return self.session
 
     def cancel(self, restore=True):
+        from .worker import worker
+        if worker.pending:
+            worker.stop()
+        self._epoch += 1
         self.drop_prisms()
         if self.session:
             session=self.session
@@ -387,6 +361,8 @@ class CadRuntime:
             if restore and self._scene == bpy.context.scene.as_pointer():
                 if session['operation']!='DRAG' or session.get('preview'): self.rebuild(original, limit=self.bar(original))
             self.selection = copy.deepcopy(session.get('selection_before')) if session['operation']=='DRAG' and restore else None
+        self._baseline_evaluation = {}
+        self._evaluations = self._current_evaluation.copy()
 
     def begin(self, payload, operation):
         self.require_workspace()
@@ -396,23 +372,48 @@ class CadRuntime:
         from ..commands.sessions import cancel_transform, cancel_tool
         cancel_transform()
         cancel_tool()
+        baseline = self.doc()
+        from .evaluation import geometry_key
+        scale = max(float(bpy.context.scene.unit_settings.scale_length), 1e-12)
+        key = geometry_key(baseline, self.bar(baseline), scale)
+        cached = self._evaluations.get(key)
+        if cached is None:
+            # On the first session after loading, restoring the published solid
+            # must not synchronously reevaluate its entire operation history.
+            display, tips = {}, {}
+            for obj in self.objects(baseline):
+                body = obj.get(BODY_KEY)
+                if body and not obj.hide_viewport:
+                    display[body] = (model.uid('baseline'), (
+                        [tuple(v.co) for v in obj.data.vertices],
+                        [tuple(p.vertices) for p in obj.data.polygons]))
+                    tips[body] = obj[FEATURE_KEY]
+            cached = dict(display=display, tips=tips, solids={}, profiles={})
+        self._baseline_evaluation = {key: cached}
+        self._evaluations[key] = cached
         self.session = dict(id=model.uid('session'), owner=payload.get('_client_id'),
-                            operation=operation, baseline=self.doc(), candidate=None)
+                            operation=operation, baseline=baseline, candidate=None)
         return self.session
 
     def commit(self, doc, label, *, geometry=True):
-        if geometry: self.rebuild(doc, limit=self.bar(doc))
+        return blocking(self.commit_steps(doc, label, geometry=geometry))
+
+    def commit_steps(self, doc, label, *, geometry=True):
+        if geometry: yield from self.rebuild_steps(doc, limit=self.bar(doc))
         self.persist(doc, advance=True)
         with self.saving():
             undo_push(label)
 
     def transaction(self, payload, change, label, *, geometry=True):
+        return blocking(self.transaction_steps(payload, change, label, geometry=geometry))
+
+    def transaction_steps(self, payload, change, label, *, geometry=True):
         self.require_workspace()
         if self.session:
             raise CommandError('Confirma o cancela la preview primero', code='session_active')
         doc = self.doc()
         change(doc)
-        self.commit(doc,label,geometry=geometry)
+        yield from self.commit_steps(doc,label,geometry=geometry)
         return self.status()
 
     def point(self, payload, plane, offset=None):
