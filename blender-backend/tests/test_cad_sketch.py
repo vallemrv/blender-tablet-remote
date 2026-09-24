@@ -76,7 +76,7 @@ class SketchTests(CadTests):
         return cad.constraint_add(dict(type=typ,**payload,**OWNER))
 
     def test_square_is_persistent_equal_sides_constraint(self):
-        e=self.draw('SQUARE',(0,0),(.04,.02))
+        e=self.square((0,0),(.04,.02))
         cad.entity_set(dict(entity_id=e,values={'width':.06},**OWNER))
         sketch,entity=model.entity(runtime.doc(),e)
         self.assertAlmostEqual(entity['height'],.06,places=8)
@@ -250,7 +250,7 @@ class SketchTests(CadTests):
         self.assertAlmostEqual(volume(cutobj),.08*.045*.03-.02*.015*.005,places=10)
 
     def test_square_drag_projects_to_constraint_and_keeps_center(self):
-        identifier=self.draw('SQUARE',(0,0),(.04,.04))
+        identifier=self.square((0,0),(.04,.04))
         sketch=runtime.doc()['sketches'][0]
         goals=geometry.move_goals(sketch,[dict(id=identifier,part='P2')],.01,.02)
         geometry.solve(sketch,goals,drag=True)

@@ -360,12 +360,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                 PillButton("Radio", selected = !showDiameter, enabled = drafts.isEmpty()) { showDiameter = false }
                                 PillButton("Diámetro", selected = showDiameter, enabled = drafts.isEmpty()) { showDiameter = true }
                             }
-                            val coordinates = when (selected.type) {
-                                "RECTANGLE" -> emptyList()
-                                "CIRCLE" -> listOf("x" to "Centro X", "y" to "Centro Y")
-                                "ARC" -> if (selected.isFillet) emptyList() else listOf("start" to "Inicio", "sweep" to "Ángulo")
-                                else -> listOf("x" to "X inicio", "y" to "Y inicio", "x2" to "X final", "y2" to "Y final")
-                            }
+                            // Solo medidas: la posición se fija con candados y cotas a otros
+                            // puntos (origen, esquinas, centros), no escribiendo coordenadas.
+                            val coordinates = if (selected.type == "ARC" && !selected.isFillet) listOf("sweep" to "Ángulo") else emptyList()
                             val measures = selected.dimensions.map {
                                 if (selected.type == "CIRCLE" && showDiameter && it.field == "radius") it.copy(field = "diameter", label = "Diámetro", valueFactor = .5) else it
                             }
@@ -553,7 +550,7 @@ internal fun cadConstraintEnabled(cad: CadState, type: String): Boolean {
 }
 
 internal fun cadLabel(type: String) = when (type) {
-    "RECTANGLE" -> "Rectángulo"; "SQUARE" -> "Cuadrado"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"
+    "RECTANGLE" -> "Rectángulo"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
     "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad (tamaño del primero)"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
     "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; else -> type

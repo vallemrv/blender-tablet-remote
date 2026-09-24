@@ -176,11 +176,11 @@ class CadParserTest {
     }
     @Test fun extendedCapabilitiesFilterUnsupportedConstraints() {
         val caps = CadParser.capabilities(JSONObject(capabilities).put("sketch_editing", true)
-            .put("entities", org.json.JSONArray(listOf("SQUARE", "ARC")))
+            .put("entities", org.json.JSONArray(listOf("CIRCLE", "ARC")))
             .put("features", org.json.JSONArray(listOf("EXTRUDE", "CUT")))
             .put("constraints", org.json.JSONArray(listOf("TANGENT", "COINCIDENT", "UNSUPPORTED"))))
         assertTrue(caps.sketchEditing)
-        assertEquals(listOf("SQUARE", "ARC"), caps.entities)
+        assertEquals(listOf("CIRCLE", "ARC"), caps.entities)
         assertEquals(listOf("EXTRUDE", "CUT"), caps.features)
         assertEquals(listOf("TANGENT", "COINCIDENT"), caps.constraints)
     }

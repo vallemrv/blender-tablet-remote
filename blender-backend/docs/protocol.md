@@ -1411,7 +1411,7 @@ de banda y configuración de latencia interactiva.
 ## CAD paramétrico — versión 2 extendida: sketch y vaciado
 
 `features.cad` anuncia `version:2`, `planes:[XY,XZ,YZ]`,
-`entities:[LINE,RECTANGLE,SQUARE,CIRCLE,ARC,POLYGON]`, `features:[EXTRUDE,CUT]`,
+`entities:[LINE,RECTANGLE,CIRCLE,ARC,POLYGON]`, `features:[EXTRUDE,CUT]`,
 `sketch_editing:true`, `fillet:true`, `length_unit:METERS` y `constraints` con
 `COINCIDENT,HORIZONTAL,VERTICAL,PARALLEL,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,DISTANCE_X,DISTANCE_Y,RADIUS,FIX,MIDPOINT,SYMMETRIC,SYMMETRIC_LINE`.
 También anuncia `construction`, `datum_planes`, `bodies`, `origin`, `mesh_copy`,
@@ -1442,7 +1442,7 @@ Las longitudes CAD son **metros**, independientes de `scene.scale_length`.
 Android convierte únicamente la representación mm/cm/m. LINE contiene
 `x,y,x2,y2`; RECTANGLE `x,y,width,height` (esquina mínima); CIRCLE `x,y,diameter`
 (centro); ARC `x,y,radius,start,sweep` (centro, radio y ángulos en grados).
-SQUARE es una intención de creación: persiste RECTANGLE con igualdad entre lados.
+Un cuadrado es un RECTANGLE con igualdad entre dos lados contiguos (no hay tipo propio).
 El sketch guarda `offset` en metros y opcionalmente `support_id` de una feature;
 el soporte actualiza el plano/offset desde su cara superior. Las coordenadas están
 en el plano local del sketch. La normal positiva
@@ -1456,7 +1456,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.sketch.rename` | `{sketch_id,name}` | Nombre de 1–80 caracteres; conserva IDs y geometría, un undo |
 | `cad.sketch.finish` | `{}` | Sale del dibujo conservando perfiles seleccionables |
 | `cad.select` | `{kind:"ENTITY\\|PROFILE\\|SKETCH\\|FEATURE",id,part?,additive?}` o `{u,v,additive?}` | Geometría de boceto, perfil individual, croquis completo o feature; aditiva alterna pertenencia |
-| `cad.entity.begin` | `{type:"LINE\|RECTANGLE\|SQUARE\|CIRCLE\|ARC\|POLYGON",u,v}` | Inicia dibujo reversible |
+| `cad.entity.begin` | `{type:"LINE\|RECTANGLE\|CIRCLE\|ARC\|POLYGON",u,v}` | Inicia dibujo reversible |
 | `cad.entity.update` | `{u,v}` | Actualiza extremo desde baseline; con `increment` el inicio cae en la rejilla del paso (o en un punto existente, con coincidencia) y tamaño/radio se redondean al paso |
 | `cad.polygon.begin` | `{u,v}` | Inicia o continúa la cadena de un polígono irregular; el primer vértice admite snap de extremos |
 | `cad.polygon.update` | `{u,v}` | Tramo provisional desde el último vértice, con snap a extremos incluidos los de la propia cadena |

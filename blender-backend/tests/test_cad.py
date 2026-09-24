@@ -63,6 +63,14 @@ class CadTests(unittest.TestCase):
         cad.confirm(OWNER)
         return identifier
 
+    def square(self,a,b):
+        """A square is a rectangle whose sides share an Igualdad constraint."""
+        size=max(abs(b[0]-a[0]),abs(b[1]-a[1]))
+        e=self.draw('RECTANGLE',a,(a[0]+math.copysign(size,b[0]-a[0]),a[1]+math.copysign(size,b[1]-a[1])))
+        cad._set_selection([dict(kind='ENTITY',id=e,part='EDGE0'),dict(kind='ENTITY',id=e,part='EDGE1')])
+        cad.constraint_add(dict(type='EQUAL',**OWNER))
+        return e
+
     def rect(self):
         return self.draw('RECTANGLE',(0,0),(.08,.045))
 

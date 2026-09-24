@@ -26,8 +26,11 @@ actualiza las operaciones dependientes y registra un paso de undo.
 
 - Dibujar una línea: arrastrar entre extremos. Acercarse a un extremo existente
   lo adquiere con la política táctil común y guarda una coincidencia persistente.
-- Rectángulo/cuadrado: arrastrar entre esquinas. El cuadrado guarda igualdad entre
-  lados; cambiar su ancho también modifica su alto.
+- Rectángulo: arrastrar entre esquinas. Para un cuadrado, selecciona dos lados
+  contiguos y aplica Igualdad; cambiar su ancho también modifica su alto.
+- La bandeja muestra solo medidas (longitud, ancho/alto, radio y el ángulo del arco),
+  no coordenadas. La posición se fija con candados y con cotas a otros puntos: el
+  origen, esquinas, extremos o centros de otras figuras.
 - Círculo: arrastrar centro → radio. Arco: arrastrar centro → inicio; inicialmente
   barre 90° y permite editar radio, ángulo inicial y barrido en grados.
 - Dibujar usa las mismas ayudas que editar: el Snap Incremento y su Paso siguen en la

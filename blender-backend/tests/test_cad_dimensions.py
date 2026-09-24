@@ -72,7 +72,7 @@ class DimensionTests(CadTests):
         self.assertFalse(any(c['type']=='RADIUS' for c in sketch['constraints']))
 
     def test_square_size_is_free_until_dimensioned_then_field_updates_same_dimension(self):
-        e=self.draw('SQUARE',(0,0),(.04,.04))
+        e=self.square((0,0),(.04,.04))
         public=model.public(runtime.doc())['sketches'][0]['entities'][0]
         self.assertTrue(public['is_square']); self.assertEqual(len(public['dimensions']),1)
         self.assertEqual(public['dimensions'][0]['label'],'Lado'); self.assertEqual(public['dimensions'][0]['constraint_ids'],[])
@@ -111,7 +111,7 @@ class DimensionTests(CadTests):
         self.assertAlmostEqual(model.public(runtime.doc())['sketches'][0]['entities'][-1]['length'],.07)
 
     def test_conflicting_square_fields_do_not_silently_choose_one(self):
-        e=self.draw('SQUARE',(0,0),(.04,.04)); self.refs((e,'EDGE0')); self.dimension('DISTANCE',.04)
+        e=self.square((0,0),(.04,.04)); self.refs((e,'EDGE0')); self.dimension('DISTANCE',.04)
         baseline=model.dumps(runtime.doc())
         with self.assertRaises(CommandError): cad.entity_set(dict(entity_id=e,values={'width':.08,'height':.09},**OWNER))
         self.assertEqual(model.dumps(runtime.doc()),baseline)
@@ -149,7 +149,7 @@ class DimensionTests(CadTests):
         self.assertEqual(model.dumps(runtime.doc()),raw)
 
     def test_removing_square_equality_releases_height_and_keeps_width_dimension(self):
-        e=self.draw('SQUARE',(0,0),(.04,.04)); self.refs((e,'EDGE0')); self.dimension('DISTANCE',.04)
+        e=self.square((0,0),(.04,.04)); self.refs((e,'EDGE0')); self.dimension('DISTANCE',.04)
         equal=next(c for c in runtime.doc()['sketches'][0]['constraints'] if c['type']=='EQUAL')
         cad.constraint_delete(dict(constraint_id=equal['id'],**OWNER))
         entity=model.public(runtime.doc())['sketches'][0]['entities'][0]
@@ -160,7 +160,7 @@ class DimensionTests(CadTests):
 
 
     def test_square_rounding_keeps_complete_sides_equal_and_editable(self):
-        e=self.draw('SQUARE',(0,0),(.04,.04))
+        e=self.square((0,0),(.04,.04))
         self.refs((e,'EDGE0')); self.dimension('DISTANCE',.04)
         self.refs((e,'P2')); cad.fillet(dict(radius=.005,**OWNER))
         arc=next(e['id'] for e in runtime.doc()['sketches'][0]['entities'] if e['type']=='ARC')

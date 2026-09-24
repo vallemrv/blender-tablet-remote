@@ -137,7 +137,6 @@ object AppIcons {
     private val cadPaths = mapOf(
         "LINE" to "M4,20 L20,4 M3,18 L6,21 M18,3 L21,6",
         "RECTANGLE" to "M3,6 L21,6 L21,18 L3,18 Z M3,3 L3,4 M21,3 L21,4",
-        "SQUARE" to "M5,5 L19,5 L19,19 L5,19 Z M10,2 L14,2 M2,10 L2,14",
         "CIRCLE" to "M21,12 A9,9 0,1 1,3,12 A9,9 0,1 1,21,12 M10,12 L14,12 M12,10 L12,14",
         "ARC" to "M3,18 A15,15 0,0 1,18,3 M2,16 L4,20 M16,2 L20,4 M17,18 L21,18 M19,16 L19,20",
         "FILLET" to "M3,3 L3,11 Q3,21 13,21 L21,21 M8,3 L8,9 M15,16 L21,16 M13,9 L8,14 M10,9 L13,9 L13,12",
