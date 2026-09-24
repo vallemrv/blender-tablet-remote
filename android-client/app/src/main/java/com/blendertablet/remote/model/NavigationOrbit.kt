@@ -10,7 +10,7 @@ import kotlin.math.min
  * coordenada Compose: así lo que se dibuja y lo que captura [InputSurface] son
  * exactamente el mismo objetivo. Se sitúa en el lateral derecho y a media altura,
  * fuera de la barra superior y de los paneles inferiores (incluido su desplazamiento
- * cuando aparece una bandeja).
+ * cuando aparece una bandeja). `rightInset` lo aparta de un rail derecho visible.
  */
 object NavigationOrbitLayout {
     private const val RADIUS_FRACTION = .13f
@@ -19,19 +19,19 @@ object NavigationOrbitLayout {
 
     data class Circle(val x: Float, val y: Float, val radius: Float)
 
-    fun circle(width: Int, height: Int): Circle? {
+    fun circle(width: Int, height: Int, rightInset: Float = 0f): Circle? {
         if (width <= 0 || height <= 0) return null
         val base = min(width, height).toFloat()
         val radius = base * RADIUS_FRACTION
         return Circle(
-            x = width - radius - base * RIGHT_MARGIN_FRACTION,
+            x = width - radius - base * RIGHT_MARGIN_FRACTION - rightInset,
             y = height * CENTER_Y_FRACTION,
             radius = radius,
         )
     }
 
-    fun contains(width: Int, height: Int, x: Float, y: Float): Boolean {
-        val circle = circle(width, height) ?: return false
+    fun contains(width: Int, height: Int, x: Float, y: Float, rightInset: Float = 0f): Boolean {
+        val circle = circle(width, height, rightInset) ?: return false
         return hypot(x - circle.x, y - circle.y) <= circle.radius
     }
 }

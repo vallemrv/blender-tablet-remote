@@ -42,7 +42,9 @@ actualiza las operaciones dependientes y registra un paso de undo.
   rectángulo o dos lados contiguos, y elegir **Redondear esquina** y el radio.
   Recorta los lados e inserta un arco con coincidencias, tangencias y radio.
 - Al editar, la vista queda perpendicular al plano; el manejador de órbita desplaza
-  la vista y dos dedos permiten pan/zoom sin inclinar el boceto.
+  la vista y dos dedos permiten pan/zoom sin inclinar el boceto. Con la pila cerrada,
+  el círculo de navegación de la derecha (el mismo de Mover/Rotar/Escalar) desplaza
+  el boceto con un dedo; en Extruir/Vaciar orbita la preview.
 - Dos dedos cancelan el trazo/arrastre actual y permiten navegar. Al soltar se
   consume la última preview válida, sin repetir el sondeo.
 

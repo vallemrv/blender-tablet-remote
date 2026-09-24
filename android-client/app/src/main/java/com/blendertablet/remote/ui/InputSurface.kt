@@ -86,6 +86,7 @@ fun InputSurface(
     fixedCircleRadius: Float? = null,
     /** Círculo derecho que navega sin alimentar una sesión modal. */
     navigationOrbitEnabled: Boolean = false,
+    navigationOrbitRightInsetDp: Float = 0f,
     /** Forma terminada: esquinas (box) o centro+borde (circle) normalizados. */
     onShape: (ShapeTool, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> },
     /** Puntos del Knife en pantalla, para dibujarlos sobre el vídeo. */
@@ -125,6 +126,7 @@ fun InputSurface(
                 view.onTweakDrag = onTweakDrag
                 view.longPressEnabled = longPressEnabled
                 view.navigationOrbitEnabled = navigationOrbitEnabled
+                view.navigationOrbitRightInset = navigationOrbitRightInsetDp * view.resources.displayMetrics.density
                 view.onShape = onShape
                 view.knifePoints = knifePoints
                 view.snapCandidate = snapCandidate
@@ -253,6 +255,8 @@ private class GestureView(
     private var tweakDrawing = false
     private var suppressSingleAfterTweak = false
     var navigationOrbitEnabled: Boolean = false
+    var navigationOrbitRightInset = 0f
+        set(value) { if (field != value) { field = value; invalidate() } }
     var onShape: (ShapeTool, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> }
     var onSculptStroke: (GesturePhase, List<SculptPoint>, Boolean, Boolean) -> Unit = { _, _, _, _ -> }
     var sculptEnabled = false
@@ -392,7 +396,7 @@ private class GestureView(
                 longPressFired = false
                 // El hit-test se hace solo al bajar: si el dedo entra después en el
                 // círculo continúa el nudge que ya había empezado fuera.
-                if (navigationOrbitEnabled && NavigationOrbitLayout.contains(width, height, event.x, event.y)) {
+                if (navigationOrbitEnabled && NavigationOrbitLayout.contains(width, height, event.x, event.y, navigationOrbitRightInset)) {
                     navigationOrbitActive = true
                     navigationOrbitBegan = false
                     invalidate()
@@ -594,7 +598,7 @@ private class GestureView(
             MotionEvent.ACTION_DOWN -> {
                 lightSuppressed = false
                 onLightPointer(null)
-                if (navigationOrbitEnabled && NavigationOrbitLayout.contains(width, height, event.x, event.y)) return false
+                if (navigationOrbitEnabled && NavigationOrbitLayout.contains(width, height, event.x, event.y, navigationOrbitRightInset)) return false
                 parent?.requestDisallowInterceptTouchEvent(true)
                 lightTouch = true
                 startX = event.x; startY = event.y
@@ -675,7 +679,7 @@ private class GestureView(
                 startX = event.x; startY = event.y
                 downToolType = event.getToolType(0)
                 resetPending()
-                if (navigationOrbitEnabled && NavigationOrbitLayout.contains(width, height, event.x, event.y)) {
+                if (navigationOrbitEnabled && NavigationOrbitLayout.contains(width, height, event.x, event.y, navigationOrbitRightInset)) {
                     navigationOrbitActive = true; navigationOrbitBegan = false
                 } else if (isStylus(downToolType) || !sculptStylusOnly) {
                     beginSculpt(event, 0)
@@ -1196,7 +1200,7 @@ private class GestureView(
     }
 
     private fun drawNavigationOrbit(canvas: Canvas) {
-        val circle = NavigationOrbitLayout.circle(width, height) ?: return
+        val circle = NavigationOrbitLayout.circle(width, height, navigationOrbitRightInset) ?: return
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.parseColor(if (navigationOrbitActive) "#6B4C8DFF" else "#384C8DFF")
             style = Paint.Style.FILL

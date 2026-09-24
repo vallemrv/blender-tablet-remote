@@ -178,6 +178,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     // Acción pendiente de confirmar porque descarta cambios sin guardar.
     var pendingDiscard by remember { mutableStateOf<PendingDiscard?>(null) }
     var modifiersOpen by remember { mutableStateOf(false) }
+    var cadStackOpen by rememberSaveable { mutableStateOf(true) }
     var referencesOpen by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(state.blender.activeObject, state.blender.mode, state.blender.features.modifiers, state.blender.cad.workspace, state.blender.material.active) {
         if (state.blender.material.active || state.blender.cad.workspace || !state.blender.features.modifiers || state.blender.mode != BlenderMode.OBJECT || state.blender.activeObjectType != "MESH") modifiersOpen = false
@@ -243,6 +244,12 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     // toque. Mientras exista, el teclado de vistas se eleva para no solaparse.
     val materialActive = state.blender.material.active
     val sculptActive = state.blender.mode == BlenderMode.SCULPT
+    // En el boceto, y en Extruir/Vaciar, un dedo pertenece a CAD: el círculo navega
+    // (en el boceto desplaza la vista). Se oculta bajo la pila abierta.
+    val cad = state.blender.cad
+    val cadNavigationOrbit = cad.workspace && !cadStackOpen &&
+        (cad.activeSketchId != null || (cad.sessionActive && cad.operation in listOf("EXTRUDE", "CUT")))
+    val cadConstraintRail = cad.workspace && cad.activeSketchId != null && state.blender.features.cad.constraints.isNotEmpty()
     var cadTrayHeightPx by remember { mutableStateOf(0) }
     var cadFooterHeightPx by remember { mutableStateOf(0) }
     val density = LocalDensity.current
@@ -329,11 +336,12 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             snapCandidate = if (state.blender.cad.workspace) null else toolSession.snapCandidate,
             cancelPickOnNavigation = toolSession.input == "FACE_PAIR",
             proportionalCircle = if (state.blender.cad.workspace) null else session.proportionalCircle,
-            navigationOrbitEnabled = (materialActive || sculptActive || navigationOrbitVisible(
+            navigationOrbitEnabled = (materialActive || sculptActive || cadNavigationOrbit || navigationOrbitVisible(
                 session.active,
                 toolSession.active,
                 state.activeTool,
             )) && quickMenuAt == null && !modifiersOpen,
+            navigationOrbitRightInsetDp = if (cadConstraintRail) 80f else 0f,
             onShape = vm::shapeSelect,
             onLongPress = { x, y, u, v ->
                 // El menú se abre ya, en el sitio donde está el dedo, y en paralelo
@@ -528,7 +536,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 )
 
                 }
-                if (state.blender.cad.workspace) CadWorkspace(state, vm,
+                if (state.blender.cad.workspace) CadWorkspace(state, vm, cadStackOpen, { cadStackOpen = it },
                     stackBottom = cadTrayHeight + if (cadFooterVisible) cadFooterHeight + Metrics.EdgeMargin * 2 else Metrics.EdgeMargin,
                     onTrayHeight = { cadTrayHeightPx = it })
                 if (sculptActive) SculptWorkspace(state, vm)
@@ -787,6 +795,7 @@ private fun ViewportLayer(
     proportionalCircle: com.blendertablet.remote.model.ProportionalCircle?,
     cancelPickOnNavigation: Boolean,
     navigationOrbitEnabled: Boolean,
+    navigationOrbitRightInsetDp: Float,
     onShape: (ShapeTool, Float, Float, Float, Float) -> Unit,
     onLongPress: (px: Float, py: Float, u: Float, v: Float) -> Unit,
 ) {
@@ -833,6 +842,7 @@ private fun ViewportLayer(
                     shapeTool = shapeTool,
                     fixedCircleRadius = fixedCircleRadius,
                     navigationOrbitEnabled = navigationOrbitEnabled,
+                    navigationOrbitRightInsetDp = navigationOrbitRightInsetDp,
                     knifePoints = knifePoints,
                     snapCandidate = snapCandidate,
                     cancelPickOnNavigation = cancelPickOnNavigation,
@@ -875,6 +885,7 @@ private fun ViewportLayer(
                 shapeTool = shapeTool,
                 fixedCircleRadius = fixedCircleRadius,
                 navigationOrbitEnabled = sculptEnabled && navigationOrbitEnabled,
+                navigationOrbitRightInsetDp = navigationOrbitRightInsetDp,
                 knifePoints = knifePoints,
                 snapCandidate = snapCandidate,
                 cancelPickOnNavigation = cancelPickOnNavigation,
@@ -932,6 +943,7 @@ private fun ViewportLayer(
                 shapeTool = shapeTool,
                 fixedCircleRadius = fixedCircleRadius,
                 navigationOrbitEnabled = sculptEnabled && navigationOrbitEnabled,
+                navigationOrbitRightInsetDp = navigationOrbitRightInsetDp,
                 knifePoints = knifePoints,
                 snapCandidate = snapCandidate,
                 cancelPickOnNavigation = cancelPickOnNavigation,

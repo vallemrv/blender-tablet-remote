@@ -483,7 +483,9 @@ no quedan archivos o referencias temporales.
 ## Pulido de feedback (septiembre 2026)
 
 - CAD bloquea orientación y proyección durante el boceto; orbit desplaza la vista,
-  pan/zoom siguen activos. El origen reservado `ORIGIN/POINT` es fijo y seleccionable.
+  pan/zoom siguen activos. En el boceto y en Extruir/Vaciar aparece el círculo de
+  navegación de las transformaciones (en el boceto desplaza); se aparta del rail
+  de restricciones y se oculta mientras la pila CAD está abierta. El origen reservado `ORIGIN/POINT` es fijo y seleccionable.
   Se selecciona tocándolo en el boceto; no tiene un botón duplicado en el rail.
 - Fijar restringe solo puntos/extremos de aristas seleccionados; figura completa
   fija todos sus parámetros. Selección múltiple comparte un undo. Punto medio y

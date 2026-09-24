@@ -32,11 +32,11 @@ import java.util.Locale
 
 /** Sketch geometry and constraints own their rails; all input still uses InputSurface. */
 @Composable
-fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp, onTrayHeight: (Int) -> Unit) {
+fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boolean, onStackOpen: (Boolean) -> Unit,
+                          stackBottom: Dp, onTrayHeight: (Int) -> Unit) {
     val cad = state.blender.cad
     val capabilities = state.blender.features.cad
     val connected = state.connection == ConnectionStatus.CONNECTED
-    var stackOpen by rememberSaveable { mutableStateOf(true) }
     var constraintsVisible by rememberSaveable { mutableStateOf(false) }
     var constraintsSelectionOnly by rememberSaveable { mutableStateOf(true) }
     var showDiameter by rememberSaveable { mutableStateOf(false) }
@@ -137,14 +137,14 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackBottom: Dp,
     if (!stackOpen) FloatingPanel(
         Modifier.align(Alignment.TopEnd).padding(top = 142.dp, end = stackEnd),
     ) {
-        IconAction(Icons.Default.AccountTree, "Abrir pila de operaciones") { stackOpen = true }
+        IconAction(Icons.Default.AccountTree, "Abrir pila de operaciones") { onStackOpen(true) }
     }
     if (stackOpen) FloatingPanel(
         Modifier.align(Alignment.TopEnd).fillMaxHeight().padding(top = 142.dp, end = stackEnd, bottom = stackBottom)
     ) {
         Column(Modifier.width(300.dp).fillMaxHeight()) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                IconAction(Icons.AutoMirrored.Filled.ArrowBack, "Cerrar pila de operaciones") { stackOpen = false }
+                IconAction(Icons.AutoMirrored.Filled.ArrowBack, "Cerrar pila de operaciones") { onStackOpen(false) }
                 Text(if (editing) "Editando ${cad.activeSketch?.name.orEmpty()}" else "Pila de operaciones",
                     color = Ink.Accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f).padding(start = 2.dp))
