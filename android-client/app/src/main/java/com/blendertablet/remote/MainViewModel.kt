@@ -368,6 +368,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     private var cadGestureMode: String? = null
     private var cadDepthStart = .02
+    private var cadPointerStartU = 0f
     private var cadPointerStartV = 0f
     private fun cancelCadStroke() {
         if (cadStroke) {
@@ -383,6 +384,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         when (phase) {
             GesturePhase.BEGIN -> {
                 val cad = client.state.value.cad
+                cadPointerStartU = u
                 cadPointerStartV = v
                 if (cad.sessionActive && cad.operation in listOf("EXTRUDE", "CUT")) {
                     cadStroke = true; cadGestureMode = "DEPTH"; cadDepthStart = cad.depth
@@ -413,7 +415,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             GesturePhase.UPDATE -> if (cadStroke) {
                 when (cadGestureMode) {
-                    "DEPTH" -> client.cadCommand("cad.extrude.update", mapOf("gesture" to (cadPointerStartV - v), "baseline_depth" to cadDepthStart))
+                    "DEPTH" -> client.cadCommand("cad.extrude.update", mapOf(
+                        "gesture_u" to (u - cadPointerStartU), "gesture_v" to (v - cadPointerStartV), "baseline_depth" to cadDepthStart))
                     "FINISH" -> client.cadCommand("cad.finish.update", mapOf("gesture" to (cadPointerStartV - v), "baseline_width" to cadDepthStart))
                     "DRAG" -> client.cadCommand("cad.drag.update", mapOf("u" to u, "v" to v))
                     "POLY" -> client.cadCommand("cad.polygon.update", mapOf("u" to u, "v" to v))
@@ -423,6 +426,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             GesturePhase.END -> if (cadStroke) {
                 cadStroke = false
                 when (cadGestureMode) {
+                    "DEPTH" -> client.cadCommand("cad.extrude.update", mapOf("settle" to true))
                     "DRAG" -> client.cadCommand("cad.drag.end")
                     "POLY" -> client.cadCommand("cad.polygon.segment", mapOf("u" to u, "v" to v))
                     "DRAW" -> {

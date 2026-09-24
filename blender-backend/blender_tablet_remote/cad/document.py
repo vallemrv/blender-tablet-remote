@@ -114,7 +114,13 @@ def loads(raw):
             find(doc,'bodies',feature['body_id'])
             if feature['type'] not in ('EXTRUDE', 'CUT') or sketch['id'] != feature['sketch_id'] or not isinstance(feature['enabled'], bool):
                 raise ValueError('invalid feature')
-            number(feature['depth'], positive=True)
+            depth = number(feature['depth'])
+            if feature['type'] == 'CUT':
+                if depth < 1e-7:
+                    raise ValueError('invalid feature')
+            elif abs(depth) < 1e-7:
+                raise ValueError('invalid feature')
+            feature['depth'] = depth
             if feature['type'] == 'CUT':
                 feature.setdefault('extent', 'ONE')
                 if feature['extent'] not in ('ONE', 'BOTH'):

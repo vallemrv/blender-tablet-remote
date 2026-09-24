@@ -16,6 +16,7 @@ FEATURE_KEY = 'btr_cad_feature_id'
 DOC_KEY = 'btr_cad_document_id'
 BODY_KEY = 'btr_cad_body_id'
 COPY_SOURCE_KEY = 'btr_cad_copy_source'
+PRISM_KEY = 'btr_cad_depth_prism'
 
 
 def mesh_copy(obj):
@@ -176,6 +177,7 @@ class CadRuntime:
         unchanged display meshes survive transactions, including sketch editing.
         Failed evaluation leaves every published body at its previous valid state.
         """
+        self.drop_prisms()
         import hashlib
         from .surface import stamp
         scale = max(float(bpy.context.scene.unit_settings.scale_length), 1e-12)
@@ -204,8 +206,8 @@ class CadRuntime:
                 tips[body]=identifier; direct[body]=None
                 continue
             sketch,entity=model.profile(doc,feature['profile_id'])
-            depth=model.number(feature['depth'],positive=True)
             cut=feature['type']=='CUT'
+            depth=model.number(feature['depth'], positive=cut)
             extent=feature.get('extent','ONE') if cut else 'ONE'
             if extent not in ('ONE','BOTH'): extent='ONE'
             if cut and feature.get('target_id') not in solids:
@@ -276,6 +278,95 @@ class CadRuntime:
         self._extrusion_cache.entries={k:v for k,v in self._extrusion_cache.entries.items() if k in profile_ids}
         bpy.context.view_layer.update()
 
+    def drop_prisms(self):
+        """Remove the light stylus prism. A settled preview uses the real solid."""
+        for obj in list(bpy.data.objects):
+            if not obj.get(PRISM_KEY):
+                continue
+            mesh = obj.data
+            bpy.data.objects.remove(obj, do_unlink=True)
+            if mesh is not None and mesh.users == 0:
+                bpy.data.meshes.remove(mesh)
+        if self.session:
+            self.session.pop('fast', None)
+            self.session.pop('fast_sign', None)
+
+    def _paint(self, obj, vertices, faces):
+        mesh = obj.data if obj is not None else None
+        flat = [c for v in vertices for c in v]
+        if mesh is not None and len(mesh.vertices) == len(vertices) and len(mesh.polygons) == len(faces):
+            mesh.vertices.foreach_set('co', flat)
+            mesh.update()
+            obj.update_tag()
+            return obj
+        new = bpy.data.meshes.new('CAD preview' if obj is None else obj.name)
+        new.from_pydata(vertices, [], faces)
+        new.update()
+        if obj is None:
+            obj = bpy.data.objects.new('CAD preview', new)
+            bpy.context.scene.collection.objects.link(obj)
+        else:
+            old = obj.data
+            obj.data = new
+            if old.users == 0:
+                bpy.data.meshes.remove(old)
+        return obj
+
+    def fast_depth(self, session):
+        """Move the prism with the stylus. The exact boolean waits until the pen lifts.
+
+        A first extrusion only stretches its cached display mesh. A later extrude
+        or a cut keeps the previous solid and shows the moving profile, so the
+        main thread is not blocked by a boolean on every sample.
+        """
+        doc = session['preview']
+        feature = model.find(doc, 'features', session['feature_id'])
+        sketch, entity = model.profile(doc, feature['profile_id'])
+        depth = feature['depth']
+        cut = feature['type'] == 'CUT'
+        extent = feature.get('extent', 'ONE') if cut else 'ONE'
+        cache = session['extrusion_cache']
+        signed = -depth if cut else depth
+        vertices, faces = cache.extrude(sketch, entity, signed, display=True, symmetric=extent == 'BOTH')
+        scale = max(float(bpy.context.scene.unit_settings.scale_length), 1e-12)
+        vertices = [tuple(c / scale for c in v) for v in vertices]
+        previous = None
+        for node in model.history(doc):
+            if node['id'] == feature['id']:
+                break
+            if node.get('kind') == 'FEATURE' and node.get('enabled') and node.get('body_id') == feature['body_id']:
+                previous = node['id']
+        body = next((o for o in self.objects(doc) if o.get(BODY_KEY) == feature['body_id']), None)
+        if previous is None and not cut:
+            if body is None:
+                raise CommandError('No hay sólido que estirar', code='cad_dependency')
+            self.drop_prisms()
+            self._paint(body, vertices, faces)
+            return
+        if not session.get('fast'):
+            solid = self._solids.get(previous) if previous else None
+            if previous and (solid is None or body is None):
+                raise CommandError('No hay sólido anterior para la preview', code='cad_dependency')
+            if previous:
+                pred_vertices, pred_faces = quad_mesh(*solid[1])
+                self._paint(body, [tuple(c / scale for c in v) for v in pred_vertices], pred_faces)
+            session['fast'] = True
+        sign = -1 if signed < 0 else 1
+        prism = next((o for o in bpy.data.objects if o.get(PRISM_KEY)), None)
+        if prism is not None and session.get('fast_sign') != sign:
+            mesh = prism.data
+            bpy.data.objects.remove(prism, do_unlink=True)
+            if mesh is not None and mesh.users == 0:
+                bpy.data.meshes.remove(mesh)
+            prism = None
+        prism = self._paint(prism, vertices, faces)
+        prism[PRISM_KEY] = True
+        prism[DOC_KEY] = doc['id']
+        prism.hide_viewport = False
+        prism.hide_render = False
+        prism.hide_set(False)
+        session['fast_sign'] = sign
+
     def require_workspace(self):
         if not self.workspace:
             raise CommandError('Activa CAD antes de editar el documento', code='wrong_mode')
@@ -288,6 +379,7 @@ class CadRuntime:
         return self.session
 
     def cancel(self, restore=True):
+        self.drop_prisms()
         if self.session:
             session=self.session
             original = session['baseline']
@@ -515,6 +607,14 @@ class CadRuntime:
             sketch=next((s for s in doc['sketches'] if s['id']==self.active_sketch_id),None)
             refs=(self.selection or {}).get('items',[])
             numeric=dimensions.offers(sketch,[r for r in refs if r.get('kind')=='ENTITY']) if sketch else {}
+            labels = None
+            if session and session.get('operation') == 'EXTRUDE' and session.get('preview') and session.get('feature_id'):
+                try:
+                    sketch, _ = model.profile(session['preview'], model.find(session['preview'], 'features', session['feature_id'])['profile_id'])
+                    from ..commands.cad import direction_labels
+                    labels = direction_labels(model.frame(sketch)['normal'])
+                except CommandError:
+                    labels = None
             return dict(version=1,workspace=self.workspace,isolated=bool(self.workspace and not self.show_scene),document=model.public(doc),
                         dimension_options=numeric,surface=self.surface.status(),
                         rollback_id=self.bar(doc),
@@ -525,6 +625,8 @@ class CadRuntime:
                                      width=session.get('width') if session else None,
                                      segments=session.get('segments') if session else None,
                                       extent=session.get('extent','ONE') if session and session.get('operation')=='CUT' else None,
+                                      positive_label=labels[0] if labels else None,
+                                      negative_label=labels[1] if labels else None,
                                       transparent=bool(session and session['operation']=='CUT'),
                                      can_confirm=bool(session and session.get('candidate')),
                                      can_close=bool(session and session.get('can_close'))),

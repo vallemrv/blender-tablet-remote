@@ -14,15 +14,15 @@ package com.blendertablet.remote.model
  */
 object ValueParser {
 
-    fun parse(input: String, mode: TransformMode): Double? = when (mode) {
-        TransformMode.MOVE -> parseMove(input)
-        TransformMode.ROTATE -> parseRotate(input)
-        TransformMode.SCALE -> parseScale(input)
+    fun parse(input: String, mode: TransformMode, current: Double? = null): Double? = when (mode) {
+        TransformMode.MOVE -> parseMove(input, current)
+        TransformMode.ROTATE -> parseRotate(input, current)
+        TransformMode.SCALE -> parseScale(input, current)
     }
 
     /** Metros. Sufijos: `m`, `cm`, `mm`. Sin sufijo, metros. */
-    fun parseMove(input: String): Double? {
-        val (number, unit) = split(input) ?: return null
+    fun parseMove(input: String, current: Double? = null): Double? {
+        val (number, unit) = split(input, current) ?: return null
         return when (unit) {
             "" -> number
             "m" -> number
@@ -33,8 +33,8 @@ object ValueParser {
     }
 
     /** Grados. Sufijos opcionales: `°`, `º`, `deg`. */
-    fun parseRotate(input: String): Double? {
-        val (number, unit) = split(input) ?: return null
+    fun parseRotate(input: String, current: Double? = null): Double? {
+        val (number, unit) = split(input, current) ?: return null
         return when (unit) {
             "", "°", "º", "deg" -> number
             else -> null
@@ -42,8 +42,8 @@ object ValueParser {
     }
 
     /** Factor. Sufijo `%` divide entre 100; sin sufijo es el factor tal cual. */
-    fun parseScale(input: String): Double? {
-        val (number, unit) = split(input) ?: return null
+    fun parseScale(input: String, current: Double? = null): Double? {
+        val (number, unit) = split(input, current) ?: return null
         return when (unit) {
             "" -> number
             "%" -> number / 100.0
@@ -57,15 +57,16 @@ object ValueParser {
         unit: TransformStepUnit,
         unitScaleLength: Double,
         baseDimension: Double,
+        current: Double? = null,
     ): Double? {
         if (unit == TransformStepUnit.PERCENT) {
-            val number = input.trim().replace(',', '.').removeSuffix("%").toDoubleOrNull() ?: return null
+            val number = NumericExpression.evaluate(input.trim().removeSuffix("%"), current) ?: return null
             return (number / 100.0).takeIf { it.isFinite() && it >= 0.0 }
         }
         if (unitScaleLength <= 1e-12) return null
         val explicit = split(input)?.second?.isNotEmpty() == true
-        val physicalMeters = (if (explicit) parseMove(input) else {
-            val number = input.trim().replace(',', '.').toDoubleOrNull() ?: return null
+        val physicalMeters = (if (explicit) parseMove(input, current) else {
+            val number = NumericExpression.evaluate(input, current) ?: return null
             when (unit) {
                 TransformStepUnit.MM -> number / 1000.0
                 TransformStepUnit.CM -> number / 100.0
@@ -80,13 +81,13 @@ object ValueParser {
     }
 
     /** Separa el número de su sufijo: `"25cm"` -> `(25.0, "cm")`. */
-    private fun split(input: String): Pair<Double, String>? {
+    private fun split(input: String, current: Double? = null): Pair<Double, String>? {
         val text = input.trim().replace(',', '.').lowercase()
         if (text.isEmpty()) return null
-        // El sufijo son letras o símbolos de unidad al final; el número es el resto.
+        // El sufijo son letras o símbolos de unidad al final; la cuenta es el resto.
         var i = text.length
         while (i > 0 && (text[i - 1].isLetter() || text[i - 1] in "°º%")) i--
-        val number = text.substring(0, i).toDoubleOrNull() ?: return null
+        val number = NumericExpression.evaluate(text.substring(0, i), current) ?: return null
         return number to text.substring(i)
     }
 }

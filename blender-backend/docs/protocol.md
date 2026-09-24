@@ -1467,7 +1467,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.extrude.begin` | `{profile_id?,sketch_id?,depth,operation:"EXTRUDE\\|CUT",target_id?,extent?}` | Un perfil o el croquis completo; contornos exteriores como volumen e interiores como huecos. CUT exige destino. `extent` es `ONE` (defecto) o `BOTH` |
 | `cad.finish.begin` | `{operation:"FILLET\|CHAMFER",width?,segments?}` | Redondea/achaflana las aristas seleccionadas del sólido (`surface` en EDGE, un mismo cuerpo) como nuevo nodo de la pila; preview reversible |
 | `cad.finish.update` | `{width}` o `{gesture,baseline_width}` o `{segments}` | Ancho exacto o delta vertical (un paso por 4 % de altura); segmentos 1–16, chaflán siempre 1. Confirmar/cancelar con `cad.session.*`; el estado de sesión publica `width` y `segments` |
-| `cad.extrude.update` | `{depth}` o `{gesture,baseline_depth}` o `{extent}` | Cota exacta o delta vertical desde inicio del gesto, positivo hacia arriba. En CUT, `extent` cambia una o dos direcciones sin confirmar |
+| `cad.extrude.update` | `{depth}` o `{gesture,baseline_depth}` o `{gesture_u,gesture_v,baseline_depth}` o `{settle}` o `{extent}` | Cota exacta, también negativa en EXTRUDE (sentido contrario a la normal del plano). El gesto de lápiz sigue esa normal en pantalla y no rehace el booleano; `settle` al soltar asienta el sólido. En CUT, `extent` cambia una o dos direcciones sin confirmar |
 | `cad.session.confirm` | `{}` | Confirma candidato estable, un undo |
 | `cad.session.cancel` | `{}` | Restaura documento y geometría originales |
 | `cad.feature.set` | `{feature_id,depth?,enabled?,extent?,width?,segments?}` | Edita o suprime feature. `extent` solo en CUT: `ONE` o `BOTH`; `width`/`segments` solo en FILLET/CHAMFER |
@@ -1482,7 +1482,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.constraint.add` | `{type,value?,refs?}` | Restringe selección o referencias explícitas del boceto activo; una cota equivalente se actualiza conservando ID |
 | `cad.constraint.set` | `{constraint_id,value,sketch_id?}` | Cambia la cota canónica y resuelve dependientes; Radio de redondeo ajusta su contacto |
 | `cad.constraint.delete` | `{constraint_id,sketch_id?}` | Elimina una restricción del sketch activo |
-| `cad.fillet` | `{radius}` | Redondea dos líneas conectadas, una esquina de rectángulo o dos lados contiguos; conserva restricciones y operaciones dependientes |
+| `cad.fillet` | `{radius}` | Redondea cada esquina de la selección (rectángulo entero, varias esquinas, extremos de línea o líneas unidas) con un radio compartido; conserva restricciones y operaciones dependientes |
 | `cad.fillet.remove` | `{entity_id}` | Quita un redondeo, extiende los lados hasta la esquina y remapea el perfil usado por sólidos, con un undo |
 | `cad.sketch.delete` | `{sketch_id}` | Elimina un boceto sin operaciones dependientes |
 | `cad.sketch.visibility` | `{sketch_id,visible}` | Muestra/oculta el overlay; el boceto activo siempre se ve |

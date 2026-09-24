@@ -22,6 +22,18 @@ class CadDepthCommandQueueTest {
         assertFalse(queue.busy)
     }
 
+    @Test fun settleStaysBehindTheLatestGesture() {
+        val queue = CadDepthCommandQueue()
+        queue.add(message("cad.extrude.update", .01)); queue.poll()
+        queue.add(message("cad.extrude.update", .02))
+        queue.add(message("cad.extrude.update", .03))
+        queue.add(CadQueuedMessage("cad.extrude.update", JSONObject().put("settle", true)))
+        queue.acknowledge(true)
+        assertEquals(.03, queue.poll()!!.payload.getDouble("depth"), 0.0)
+        queue.acknowledge(true)
+        assertTrue(queue.poll()!!.payload.optBoolean("settle"))
+    }
+
     @Test fun settingsCancellationAndNextSessionKeepTheirOrder() {
         val queue = CadDepthCommandQueue()
         queue.add(message("cad.extrude.update")); queue.poll()

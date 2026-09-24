@@ -1,5 +1,6 @@
 package com.blendertablet.remote.ui
 
+import com.blendertablet.remote.model.NumericExpression
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -11,7 +12,7 @@ internal class CadNumberDraft {
 
     fun read(remote: Double, factor: Double, minimum: Double, maximum: Double): Double? {
         val value = if (text == null) pending ?: remote else
-            text!!.trim().replace(',', '.').toDoubleOrNull()?.div(factor) ?: return null
+            NumericExpression.evaluate(text!!, remote * factor)?.div(factor) ?: return null
         return value.takeIf { it.isFinite() && it in minimum..maximum }
     }
 

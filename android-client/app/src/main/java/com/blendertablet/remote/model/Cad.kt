@@ -54,6 +54,8 @@ data class CadState(
     val canClose: Boolean = false,
     val operation: String = "",
     val depth: Double = 0.02,
+    val positiveDirection: String = "",
+    val negativeDirection: String = "",
     val extent: String = "ONE",
     val width: Double = 0.0,
     val segments: Int = 1,

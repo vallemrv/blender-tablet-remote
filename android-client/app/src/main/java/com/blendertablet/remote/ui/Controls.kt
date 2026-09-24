@@ -58,7 +58,7 @@ fun CompactNumericField(
         singleLine = true,
         textStyle = TextStyle(color = textColor, fontSize = 13.sp, textAlign = textAlign),
         cursorBrush = SolidColor(Ink.Accent),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { onDone() }),
         modifier = modifier
             .onFocusChanged { onFocusChange(it.isFocused) }

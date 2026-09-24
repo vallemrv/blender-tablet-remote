@@ -16,6 +16,34 @@ from blender_tablet_remote.commands import cad
 
 
 class ExtrudePreviewTests(CadTests):
+    def test_negative_extrude_grows_against_the_normal_and_the_pen_skips_the_boolean(self):
+        from blender_tablet_remote.cad.runtime import PRISM_KEY
+        rectangle = self.rect()
+        status = cad.extrude_begin(dict(profile_id='profile_'+rectangle, depth=.02, **OWNER))
+        self.assertEqual(status['session']['positive_label'], 'Arriba')
+        self.assertEqual(status['session']['negative_label'], 'Abajo')
+        cad.extrude_update(dict(depth=-.015, **OWNER))
+        obj = self.obj()
+        zs = [(obj.matrix_world @ v.co).z for v in obj.data.vertices]
+        self.assertAlmostEqual(max(zs), 0, places=6)
+        self.assertAlmostEqual(min(zs), -.015, places=6)
+        self.assertAlmostEqual(volume(obj), .08*.045*.015, places=8)
+        cad.confirm(OWNER)
+        cad.sketch_create(dict(support_id=runtime.doc()['features'][-1]['id'], **OWNER))
+        rim = self.draw('RECTANGLE', (.01, .01), (.07, .03))
+        cad.extrude_begin(dict(profile_id='profile_'+rim, depth=.004, **OWNER))
+        from blender_tablet_remote.cad import kernel as kernel_module
+        with patch.object(kernel_module, 'cut_mesh', wraps=kernel_module.cut_mesh) as boolean:
+            cad.extrude_update(dict(gesture_u=0, gesture_v=-.4, baseline_depth=.004, **OWNER))
+            self.assertEqual(boolean.call_count, 0)
+            self.assertTrue(any(o.get(PRISM_KEY) for o in bpy.data.objects))
+            cad.extrude_update(dict(settle=True, **OWNER))
+            self.assertGreater(boolean.call_count, 0)
+        self.assertFalse(any(o.get(PRISM_KEY) for o in bpy.data.objects))
+        cad.cancel(OWNER)
+        self.assertFalse(any(o.get(PRISM_KEY) for o in bpy.data.objects))
+
+
     def plate(self):
         outer = self.draw('RECTANGLE', (0, 0), (.27, .15))
         for x, y in ((.04, .03), (.04, .12), (.23, .03), (.23, .12)):

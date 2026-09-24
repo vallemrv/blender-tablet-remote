@@ -476,6 +476,75 @@ def entity_delete(payload):
     return runtime.status()
 
 
+def direction_labels(normal):
+    """World names for positive and negative depth along the sketch normal."""
+    axis = max(range(3), key=lambda i: abs(normal[i]))
+    pairs = (('Derecha', 'Izquierda'), ('Atrás', 'Adelante'), ('Arriba', 'Abajo'))
+    positive, negative = pairs[axis]
+    if normal[axis] < 0:
+        positive, negative = negative, positive
+    return positive, negative
+
+
+def _screen_axis(sketch):
+    """Unit screen direction of the sketch normal. v grows downward."""
+    from ..bpy_utils import find_view3d
+    from ..camera import camera
+    from mathutils import Vector
+    found = find_view3d()
+    if found is None:
+        return 0.0, -1.0
+    rv3d = found[3]
+    camera.sync_from_region(rv3d)
+    scale = max(float(bpy.context.scene.unit_settings.scale_length), 1e-12)
+    basis = model.frame(sketch)
+    origin = Vector(basis['origin']) / scale
+    tip = origin + Vector(basis['normal']) / scale
+    start = camera.project(origin, rv3d)
+    end = camera.project(tip, rv3d)
+    if not start or not end:
+        return 0.0, -1.0
+    sx, sy = end[0] - start[0], end[1] - start[1]
+    length = math.hypot(sx, sy)
+    if length < .02:
+        return 0.0, -1.0
+    return sx / length, sy / length
+
+
+def _depth_value(session, payload):
+    """Signed extrude depth, or a positive cut depth. Gesture may cross zero."""
+    cut = session['operation'] == 'CUT'
+    if payload.get('settle'):
+        depth = session['depth']
+        if runtime.increment:
+            snapped = max(runtime.step, round(abs(depth) / runtime.step) * runtime.step)
+            depth = max(snapped, 1e-7) if cut else math.copysign(snapped, depth or 1)
+        return depth
+    if 'gesture_u' in payload or 'gesture_v' in payload or 'gesture' in payload:
+        if 'gesture_u' in payload or 'gesture_v' in payload:
+            sketch, _ = model.profile(session['preview'], model.find(session['preview'], 'features', session['feature_id'])['profile_id'])
+            sx, sy = _screen_axis(sketch)
+            along = model.number(payload.get('gesture_u', 0)) * sx + model.number(payload.get('gesture_v', 0)) * sy
+            if cut:
+                along = -along
+            distance = along / .04 * runtime.step
+        else:
+            distance = model.number(payload['gesture']) / .04 * runtime.step
+            if runtime.increment:
+                distance = round(distance / runtime.step) * runtime.step
+        base = model.number(payload.get('baseline_depth', session['depth']), positive=cut)
+        depth = base + distance
+    elif 'depth' in payload:
+        depth = model.number(payload.get('depth'), positive=cut)
+    else:
+        depth = session['depth']
+    if cut:
+        return max(1e-7, depth)
+    if abs(depth) < 1e-7:
+        return math.copysign(1e-7, depth or 1)
+    return depth
+
+
 def _extent(value):
     value=str(value or 'ONE').upper()
     if value not in ('ONE','BOTH'):
@@ -527,23 +596,24 @@ def extrude_update(payload):
     if 'extent' in payload and session['operation']!='CUT':
         raise BadPayload('Solo el vaciado elige una dirección o dos')
     extent=_extent(payload['extent']) if 'extent' in payload else session.get('extent','ONE')
-    if 'gesture' in payload:
-        delta=model.number(payload['gesture'])
-        base=model.number(payload.get('baseline_depth',session['depth']),positive=True)
-        distance=delta/.04*runtime.step
-        if runtime.increment: distance=round(distance/runtime.step)*runtime.step
-        depth=max(1e-7,base+distance)
-    elif 'depth' in payload: depth = model.number(payload.get('depth'),positive=True)
-    else: depth = session['depth']
-    if depth == session['depth'] and extent == session.get('extent','ONE'):
+    stylus = 'gesture_u' in payload or 'gesture_v' in payload
+    settle = bool(payload.get('settle'))
+    depth = _depth_value(session, payload)
+    if not settle and depth == session['depth'] and extent == session.get('extent','ONE'):
         return runtime.status()
     preview = copy.deepcopy(session['preview'])
     feature=model.find(preview,'features',session['feature_id'])
     feature['depth'] = depth
     if feature['type']=='CUT': feature['extent']=extent
+    session.update(preview=preview,depth=depth,extent=extent)
+    if stylus and not settle:
+        try:
+            runtime.fast_depth(session)
+            return runtime.status()
+        except CommandError:
+            runtime.drop_prisms()
     runtime.rebuild(preview,limit=session['feature_id'] if session.get('at_bar') else None,
                     extrusion_cache=session['extrusion_cache'])
-    session.update(preview=preview,depth=depth,extent=extent)
     return runtime.status()
 
 
@@ -655,7 +725,7 @@ def feature_set(payload):
             model.validate_finish(feature)
         if 'depth' in payload:
             if feature['type'] in model.FINISHES: raise BadPayload('Un redondeo se edita por su ancho')
-            feature['depth'] = model.number(payload['depth'],positive=True)
+            feature['depth'] = _depth_value(dict(operation=feature['type'], depth=feature['depth'], preview=doc), dict(depth=payload['depth']))
         if 'extent' in payload:
             if feature['type']!='CUT':
                 raise BadPayload('Solo el vaciado elige una dirección o dos')
@@ -986,17 +1056,17 @@ def fillet(payload):
     def change(doc):
         sketch=model.find(doc,'sketches',runtime.active_sketch_id)
         previous={p['id'] for p in model.profiles(sketch)}
-        arc=geometry.fillet(sketch,_refs(),model.number(payload.get('radius'),positive=True))
-        created.append(arc['id'])
+        arcs=geometry.fillet(sketch,_refs(),model.number(payload.get('radius'),positive=True))
+        created.extend(arc['id'] for arc in arcs)
         current=model.closed_entities(sketch)
-        replacement=next((p for p in current if arc['id'] in p.get('members',[])),None)
+        replacement=next((p for p in current if set(created)&set(p.get('members',[]))),None)
         remaining={'profile_'+p['id'] for p in current}
         for f in doc['features']:
             if f['sketch_id']==sketch['id'] and f['profile_id'] in previous-remaining:
                 if replacement is None: raise BadPayload('El redondeo debe conservar cerrado el perfil de la operación')
                 f['profile_id']='profile_'+replacement['id']
     runtime.transaction(payload,change,'CAD redondear esquina')
-    _set_selection([dict(kind='ENTITY',id=created[0],part='BODY')])
+    _set_selection([dict(kind='ENTITY',id=identifier,part='BODY') for identifier in created])
     return runtime.status()
 
 

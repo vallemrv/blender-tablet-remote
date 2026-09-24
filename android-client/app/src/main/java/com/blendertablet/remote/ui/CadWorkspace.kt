@@ -95,8 +95,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             capabilities.entities.forEach { type ->
                 CadAction(type, cadLabel(type), selected = state.cadTool == type, enabled = !cad.sessionActive || cad.operation == type) { vm.cadTool(type) }
             }
-            if (capabilities.sketchEditing) CadAction("FILLET", "Redondeo de dos líneas conectadas", selected = pendingDimension == "FILLET",
-                enabled = !cad.sessionActive && (cad.selection.size == 2 || cad.selectedEntity?.type == "RECTANGLE")) { pendingDimension = "FILLET" }
+            if (capabilities.sketchEditing) CadAction("FILLET", "Redondear esquinas seleccionadas", selected = pendingDimension == "FILLET",
+                enabled = !cad.sessionActive && cad.selection.any { it.id != "ORIGIN" }) { pendingDimension = "FILLET" }
         } else {
             RailDivider()
             capabilities.planes.forEach { plane ->
@@ -313,10 +313,12 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(cad.error ?: when {
                 !connected -> "Reconectando · recuperando el documento de Blender"
+                pendingDimension == "FILLET" -> "Redondeo: varias esquinas, el rectángulo entero o líneas unidas · un radio para todas · tras el primero, toca otra esquina"
                 drafts.isNotEmpty() && !depthPreview -> "Medidas pendientes · ✓ aplica los cambios · × descarta"
-                depthPreview -> "${cadLabel(cad.operation)} · desliza arriba/abajo para profundidad" +
-                    (if (cad.operation == "CUT") " · una dirección o las dos" else "") +
-                    " · dos dedos navegan" + if (cad.transparent) " · transparencia automática" else ""
+                depthPreview -> if (cad.operation == "EXTRUDE")
+                    "Extrusión · desliza en el sentido del plano: arriba/abajo o izquierda/derecha · el botón elige el lado · suelta para asentar"
+                else "${cadLabel(cad.operation)} · desliza en el sentido del vaciado" +
+                    " · una dirección o las dos · dos dedos navegan" + if (cad.transparent) " · transparencia automática" else ""
                 finishPreview -> "${cadLabel(cad.operation)} · desliza arriba/abajo o escribe el ancho · ✓ lo añade a la pila"
                 dragPreview -> "Medidas en vivo · suelta para fijar una medida con su candado"
                 drawPreview -> "Medidas en vivo · Incremento redondea al paso y los puntos existentes atraen · suelta para editar las medidas"
@@ -427,9 +429,18 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                     command("cad.extrude.update", "extent" to "BOTH")
                                 }
                             }
+                            if (cad.operation == "EXTRUDE" && cad.positiveDirection.isNotEmpty()) {
+                                val magnitude = kotlin.math.abs(cad.depth).coerceAtLeast(cad.step)
+                                PillButton(cad.positiveDirection, selected = cad.depth >= 0, enabled = connected) {
+                                    command("cad.extrude.update", "depth" to magnitude)
+                                }
+                                PillButton(cad.negativeDirection, selected = cad.depth < 0, enabled = connected) {
+                                    command("cad.extrude.update", "depth" to -magnitude)
+                                }
+                            }
                             fun preview(value: Double) { drafts.remove("depth"); command("cad.extrude.update", "depth" to value) }
                             CadDimension("Profundidad", cad.depth, unit, cad.sessionId.orEmpty(), step = cad.step,
-                                minimum = .0000001, enabled = connected, onNudge = ::preview,
+                                minimum = if (cad.operation == "EXTRUDE") -10000.0 else .0000001, enabled = connected, onNudge = ::preview,
                                 onDone = { drafts["depth"]?.let(::preview) }) { drafts["depth"] = it }
                         } else if (finishPreview) {
                             fun preview(value: Double) { drafts.remove("width"); command("cad.finish.update", "width" to value) }
@@ -458,7 +469,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                 }
                             }
                             CadDimension("Profundidad", drafts["depth"] ?: selected.depth, unit, selected.id,
-                                step = cad.step, minimum = .0000001, enabled = connected, onDone = ::acceptValues) { drafts["depth"] = it }
+                                step = cad.step, minimum = if (selected.type == "EXTRUDE") -10000.0 else .0000001,
+                                enabled = connected, onDone = ::acceptValues) { drafts["depth"] = it }
                             CadAction("VISIBLE", if (selected.enabled) "Ocultar" else "Mostrar", selected = selected.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to selected.id, "enabled" to !selected.enabled) }
                             CadAction("DELETE", "Borrar operación", enabled = connected) { command("cad.feature.delete", "feature_id" to selected.id) }
                         }
@@ -698,7 +710,7 @@ private fun CadPlanesDialog(cad: CadState, unit: LengthUnit, dismiss: () -> Unit
     val factor = when (unit) { LengthUnit.MILLIMETERS -> 1000.0; LengthUnit.CENTIMETERS -> 100.0; LengthUnit.METERS -> 1.0 }
     var translation by remember { mutableStateOf(listOf("0","0","0")) }
     var rotation by remember { mutableStateOf(listOf("0","0","0")) }
-    fun parse(values: List<String>) = values.map { it.replace(',', '.').toDoubleOrNull()?.takeIf { number -> number.isFinite() } }
+    fun parse(values: List<String>) = values.map { NumericExpression.evaluate(it)?.takeIf { number -> number.isFinite() } }
     val position = parse(translation)
     val angles = parse(rotation)
     val valid = position.all { it != null } && angles.all { it != null }
@@ -721,7 +733,7 @@ private fun CadPlanesDialog(cad: CadState, unit: LengthUnit, dismiss: () -> Unit
                 OutlinedTextField(translation[2], { value -> translation = translation.toMutableList().also { it[2] = value } },
                     label = { Text("Separación · ${unit.short}") }, singleLine = true,
                     supportingText = { Text("0 dibuja sobre el plano. Un valor positivo lo aleja; negativo, al otro lado.") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text))
             }
             PillButton(if (advanced) "Ocultar ajustes avanzados" else "Inclinación y ajustes avanzados", selected = advanced) { advanced = !advanced }
             if (advanced) {
@@ -768,8 +780,8 @@ private fun CadVectorFields(label: String, values: List<String>, unit: String, c
         listOf("X","Y","Z").forEachIndexed { index, axis ->
             OutlinedTextField(values[index], { value -> change(values.toMutableList().also { it[index] = value }) },
                 label = { Text(axis) }, singleLine = true,
-                isError = values[index].replace(',', '.').toDoubleOrNull()?.isFinite() != true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f))
+                isError = NumericExpression.evaluate(values[index])?.isFinite() != true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text), modifier = Modifier.weight(1f))
         }
     }
 }

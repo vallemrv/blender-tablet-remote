@@ -385,19 +385,8 @@ def delete_selected(sketch, refs):
     solve(sketch)
 
 
-def _rectangle_corner(sketch, refs):
+def _rectangle_lines(sketch, rectangle):
     """Expose rectangle sides as a constrained chain, preserving reference roles."""
-    if not refs or len({r['id'] for r in refs})!=1: return refs,None
-    rectangle=get_entity(sketch,refs[0])
-    if rectangle['type']!='RECTANGLE': return refs,None
-    parts=[ref.get('part','BODY') for ref in refs]
-    if len(parts)==1 and parts[0] in ('P0','P1','P2','P3'): corner=int(parts[0][1:])
-    elif len(parts)==2 and all(p.startswith('EDGE') for p in parts):
-        edges=[int(p[4:]) for p in parts]
-        shared=set((edges[0],(edges[0]+1)%4)) & set((edges[1],(edges[1]+1)%4))
-        if len(shared)!=1: raise BadPayload('Elige dos lados contiguos del rectángulo')
-        corner=shared.pop()
-    else: raise BadPayload('Toca una esquina del rectángulo o selecciona dos lados contiguos')
     ring=model.outline(rectangle)
     lines=[dict(id=model.uid('entity'),type='LINE',x=a[0],y=a[1],x2=b[0],y2=b[1],
                 construction=rectangle.get('construction',False)) for a,b in zip(ring,ring[1:]+ring[:1])]
@@ -421,7 +410,54 @@ def _rectangle_corner(sketch, refs):
         constraints.append(dict(id=model.uid('constraint'),type='COINCIDENT',refs=[dict(id=line['id'],part='END'),dict(id=lines[(i+1)%4]['id'],part='START')]))
         constraints.append(dict(id=model.uid('constraint'),type='HORIZONTAL' if i%2==0 else 'VERTICAL',refs=[dict(id=line['id'],part='BODY')]))
     sketch['constraints']=constraints
-    return [dict(id=lines[(corner-1)%4]['id'],part='BODY'),dict(id=lines[corner]['id'],part='BODY')],rectangle['id']
+    return lines
+
+
+def _corner_pairs(sketch, refs):
+    """Corners to round, as pairs of line references sharing an endpoint.
+
+    A whole rectangle gives its four corners; a rectangle corner or two adjacent
+    sides give one. A line endpoint pairs with the line joined to it, so corners
+    keep working after a rectangle became lines. Selected lines form every
+    corner where two of them share an endpoint.
+    """
+    pairs=[]
+    rectangles={}
+    for ref in refs:
+        e=get_entity(sketch,ref)
+        if e['type']=='RECTANGLE': rectangles.setdefault(e['id'],[]).append(ref.get('part','BODY'))
+    for identifier,parts in rectangles.items():
+        rectangle=get_entity(sketch,dict(id=identifier))
+        if 'BODY' in parts: corners=[0,1,2,3]
+        else:
+            corners=[int(p[1:]) for p in parts if p in ('P0','P1','P2','P3')]
+            edges=[int(p[4:]) for p in parts if p.startswith('EDGE')]
+            if edges:
+                if len(edges)!=2: raise BadPayload('Elige dos lados contiguos del rectángulo')
+                shared=set((edges[0],(edges[0]+1)%4)) & set((edges[1],(edges[1]+1)%4))
+                if len(shared)!=1: raise BadPayload('Elige dos lados contiguos del rectángulo')
+                corners.append(shared.pop())
+        lines=_rectangle_lines(sketch,rectangle)
+        pairs.extend((dict(id=lines[(c-1)%4]['id'],part='BODY'),dict(id=lines[c]['id'],part='BODY')) for c in sorted(set(corners)))
+    others=[r for r in refs if r['id']!='ORIGIN' and r['id'] not in rectangles]
+    lines=[get_entity(sketch,r) for r in others if r.get('part','BODY')=='BODY' and get_entity(sketch,r)['type']=='LINE']
+    for i,a in enumerate(lines):
+        for b in lines[i+1:]:
+            if any(math.dist(p,q)<1e-7 for p in handles(a).values() for q in handles(b).values()):
+                pairs.append((dict(id=a['id'],part='BODY'),dict(id=b['id'],part='BODY')))
+    for ref in others:
+        e=get_entity(sketch,ref); role=ref.get('part','BODY')
+        if e['type']!='LINE' or role not in ('START','END'): continue
+        p=handles(e)[role]
+        partner=next((o for o in sketch['entities'] if o['type']=='LINE' and o['id']!=e['id']
+                      and any(math.dist(p,q)<1e-7 for q in handles(o).values())),None)
+        if partner is None: raise BadPayload('Ese extremo no forma esquina con otra línea')
+        pairs.append((dict(id=e['id'],part='BODY'),dict(id=partner['id'],part='BODY')))
+    unique=[]; seen=set()
+    for a,b in pairs:
+        key=frozenset((a['id'],b['id']))
+        if key not in seen: seen.add(key); unique.append((a,b))
+    return unique
 
 
 def _round_corner(corner, ends, radius, old_start=None):
@@ -442,11 +478,28 @@ def _round_corner(corner, ends, radius, old_start=None):
 
 
 def fillet(sketch, refs, r):
+    """Round every selected corner with tangent arcs of one shared radius.
+
+    The first arc owns the radius dimension and the rest are Igualdad to it, so
+    four corners of a rectangle are edited with a single value.
+    """
+    pairs=_corner_pairs(sketch,refs)
+    if not pairs:
+        raise BadPayload('Redondeo: toca una esquina, un rectángulo entero o dos líneas conectadas')
+    arcs=[]
+    for a,b in pairs:
+        arc=_fillet_pair(sketch,a,b,r)
+        constraints=sketch['constraints']
+        if arcs: constraints.append(dict(id=model.uid('constraint'),type='EQUAL',refs=[dict(id=arcs[0]['id'],part='BODY'),dict(id=arc['id'],part='BODY')]))
+        else: constraints.append(dict(id=model.uid('constraint'),type='RADIUS',refs=[dict(id=arc['id'],part='BODY')],value=r))
+        arcs.append(arc)
+    solve(sketch)
+    return arcs
+
+
+def _fillet_pair(sketch, ref_a, ref_b, r):
     """Trim two connected straight edges and insert their tangent circular arc."""
-    refs,_ = _rectangle_corner(sketch,refs)
-    if len(refs)!=2:
-        raise BadPayload('Redondeo: selecciona dos líneas conectadas')
-    es=[get_entity(sketch,ref) for ref in refs]
+    es=[get_entity(sketch,ref) for ref in (ref_a,ref_b)]
     if es[0]['id']==es[1]['id'] or any(e['type']!='LINE' for e in es):
         raise BadPayload('Redondeo: selecciona dos líneas distintas')
     pairs=[(ra,rb) for ra,pa in handles(es[0]).items() for rb,pb in handles(es[1]).items() if math.dist(pa,pb)<1e-7]
@@ -467,8 +520,6 @@ def fillet(sketch, refs, r):
     for e,role,arc_role in zip(es,(ra,rb),('START','END')):
         constraints.append(dict(id=model.uid('constraint'),type='COINCIDENT',refs=[dict(id=e['id'],part=role),dict(id=arc['id'],part=arc_role)]))
         constraints.append(dict(id=model.uid('constraint'),type='TANGENT',refs=[dict(id=e['id'],part='BODY'),dict(id=arc['id'],part='BODY')]))
-    constraints.append(dict(id=model.uid('constraint'),type='RADIUS',refs=[dict(id=arc['id'],part='BODY')],value=r))
-    solve(sketch)
     return arc
 
 

@@ -441,8 +441,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - El resaltado CAD conserva lotes de GPU en coordenadas 3D; la cámara solo cambia
   su matriz de proyección. Las medidas y la adyacencia se reutilizan mientras la firma
   de geometría/topología/transformación/unidades siga igual. No se retienen referencias RNA.
-- Extruir/Vaciar CAD recorren un paso por 4 % de altura con lápiz; Incremento
-  redondea el gesto, las cotas escritas son exactas. Vaciar crece a un lado del
+- Extruir/Vaciar CAD siguen la normal del plano en pantalla: arriba/abajo o
+  izquierda/derecha, y también el sentido contrario. El lápiz mueve un prisma
+  ligero; el booleano se asienta al soltar. Incremento redondea ese asiento; las
+  cotas escritas son exactas. Vaciar crece a un lado del
   croquis (`ONE`) o a los dos (`BOTH`); la profundidad es la de cada lado.
   Vaciar consume su sólido
   destino en el árbol y reconstruye desde los parámetros. La transparencia se
@@ -517,8 +519,11 @@ no quedan archivos o referencias temporales.
 - Construcción conserva restricciones y se excluye de los perfiles. El panel de
   restricciones filtra IDs y roles compartidos con la selección; las cotas se
   proyectan en backend y muestran unidades. Los bocetos tienen visibilidad propia.
-- Redondeo admite dos líneas o una esquina de rectángulo; convierte el rectángulo
-  a una cadena restringida y conserva las operaciones que usan el perfil.
+- Redondeo admite varias esquinas en un undo: un rectángulo entero (sus cuatro),
+  esquinas o lados contiguos de rectángulo, extremos de línea (se emparejan con la
+  línea unida) o líneas seleccionadas (cada par con extremo común). Convierte el
+  rectángulo a una cadena restringida y conserva las operaciones que usan el perfil.
+  El primer arco lleva la cota RADIUS y los demás Igualdad: un valor edita todos.
 - El polígono irregular dibuja una cadena de segmentos unidos por coincidencias:
   cada trazo o toque consolida un vértice; cerrar tocando el primer punto o con
   «Cerrar polígono» une también el último tramo con el primero (la esquina se mueve
@@ -549,6 +554,9 @@ no quedan archivos o referencias temporales.
   Desconexión cancela previews y restaura visibilidad; reconectar recupera cámara,
   boceto y ajustes confirmados. Cargar otro archivo invalida la recuperación.
 
+- Los campos numéricos aceptan cuentas (`10-3`, `2x4`, `(1+2)/4`) y, si empiezan
+  por `+`, `*` o `/`, operan sobre el valor actual. Un menos seguido de un número
+  sigue siendo una cota negativa.
 - La bandeja inferior CAD usa `CompactNumericField`, `StepperButton` y el campo
   de paso compartido de `SnapControl.kt`; mantener −/+ acelera la repetición
   común de 180 a 80 ms después de 400 ms, sin multiplicar la cota elegida.

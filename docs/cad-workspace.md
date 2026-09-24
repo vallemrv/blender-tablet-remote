@@ -50,9 +50,12 @@ actualiza las operaciones dependientes y registra un paso de undo.
   esquina de rectángulo/cuadrado conserva su centro: las otras tres esquinas
   se reajustan en simetría; mover el radio del círculo conserva su centro.
   Un toque sin movimiento no crea undo.
-- Redondear: seleccionar dos líneas con un extremo común, una esquina de un
-  rectángulo o dos lados contiguos, y elegir **Redondear esquina** y el radio.
-  Recorta los lados e inserta un arco con coincidencias, tangencias y radio.
+- Redondear: selecciona una o varias esquinas (toca cada una), un rectángulo entero
+  (sus cuatro esquinas; por ejemplo con Seleccionar todo), dos lados contiguos o las
+  líneas de un contorno, y elige **Redondear esquinas seleccionadas** y el radio.
+  Tras el primer redondeo el rectángulo pasa a ser líneas: tocar otra esquina sigue
+  funcionando. Recorta los lados e inserta arcos con coincidencias y tangencias; todos
+  los de una misma vez comparten el radio (editar uno cambia todos).
 - Al editar, la vista queda perpendicular al plano; el manejador de órbita desplaza
   la vista y dos dedos permiten pan/zoom sin inclinar el boceto. Con la pila cerrada,
   el círculo de navegación de la derecha (el mismo de Mover/Rotar/Escalar) gira la
@@ -155,6 +158,9 @@ Al editar un boceto o una operación confirmada, las medidas quedan en borrador:
 **✓** las aplica juntas y **×** las descarta. Ambos botones permanecen fijos a la
 derecha aunque desplaces los parámetros. En la preview de Extruir/Vaciar, −/+
 actualiza la profundidad visible inmediatamente; ✓ confirma y × cancela la sesión.
+Extruir puede ir en el sentido de la normal o en el contrario (Arriba/Abajo,
+Izquierda/Derecha o Adelante/Atrás, según el plano). El lápiz sigue ese eje en
+pantalla; al soltar se asienta el sólido.
 Las respuestas antiguas de Blender no hacen perder pulsaciones acumuladas.
 
 ## Medida libre, cota y redondeo

@@ -15,7 +15,9 @@ internal class CadDepthCommandQueue {
     val busy: Boolean get() = inFlight || queue.isNotEmpty()
 
     fun add(message: CadQueuedMessage) {
-        if (message.name in CANDIDATES && queue.peekLast()?.name == message.name) queue.removeLast()
+        val last = queue.peekLast()
+        val settle = message.payload.optBoolean("settle")
+        if (!settle && message.name in CANDIDATES && last?.name == message.name && !last.payload.optBoolean("settle")) queue.removeLast()
         queue.addLast(message)
     }
 

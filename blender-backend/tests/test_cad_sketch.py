@@ -17,6 +17,24 @@ from test_cad import CadTests, OWNER, volume
 
 
 class SketchTests(CadTests):
+    def test_rounding_all_rectangle_corners_at_once_and_one_by_one_share_a_radius(self):
+        from blender_tablet_remote.cad import dimensions
+        def arcs(): return [e for e in runtime.doc()['sketches'][0]['entities'] if e['type']=='ARC']
+        rectangle=self.rect()
+        self.select_refs((rectangle,'BODY')); cad.fillet(dict(radius=.005,**OWNER))
+        self.assertEqual(len(arcs()),4)
+        self.assertEqual(len(runtime.selection['items']),4)
+        sketch=runtime.doc()['sketches'][0]
+        self.assertEqual(len(model.profiles(sketch)),1)  # still one closed rounded profile
+        cad.entity_set(dict(entity_id=arcs()[2]['id'],values={'radius':.008},**OWNER))  # one value edits all four
+        self.assertTrue(all(abs(a['radius']-.008)<1e-9 for a in arcs()))
+        cad.sketch_create(dict(plane='XY',**OWNER))
+        second=self.rect()
+        self.select_refs((second,'P1')); cad.fillet(dict(radius=.004,**OWNER))
+        line=next(e for e in runtime.doc()['sketches'][1]['entities'] if e['type']=='LINE' and abs(e['x']-.08)<1e-9 and abs(e['y']-.045)<1e-9)
+        self.select_refs((line['id'],'START')); cad.fillet(dict(radius=.004,**OWNER))  # a later corner, after the conversion
+        self.assertEqual(len([e for e in runtime.doc()['sketches'][1]['entities'] if e['type']=='ARC']),2)
+
     def test_regular_polygon_draws_by_across_flats_and_extrudes_a_nut_profile(self):
         with patch.object(runtime,'point',return_value=(0,0)), patch.object(cad,'_endpoint',return_value=None):
             cad.entity_begin(dict(type='NGON',u=.1,v=.1,**OWNER))

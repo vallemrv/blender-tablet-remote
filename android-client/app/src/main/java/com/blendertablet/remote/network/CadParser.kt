@@ -55,6 +55,8 @@ object CadParser {
             sessionActive = session?.optBoolean("active") == true, sessionId = session?.id("id"), canConfirm = session?.optBoolean("can_confirm", true) == true,
             canClose = session?.optBoolean("can_close") == true, operation = session?.optString("operation").orEmpty(),
             depth = session?.optDouble("depth", 0.02) ?: 0.02,
+            positiveDirection = session?.optString("positive_label").orEmpty(),
+            negativeDirection = session?.optString("negative_label").orEmpty(),
             width = session?.optDouble("width", 0.0)?.takeIf { it.isFinite() } ?: 0.0,
             segments = session?.optInt("segments", 1) ?: 1,
             extent = if (session?.optString("extent") == "BOTH") "BOTH" else "ONE",
