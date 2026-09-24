@@ -503,7 +503,9 @@ no quedan archivos o referencias temporales.
   a una cadena restringida y conserva las operaciones que usan el perfil.
 - El polígono irregular dibuja una cadena de segmentos unidos por coincidencias:
   cada trazo o toque consolida un vértice; cerrar tocando el primer punto o con
-  «Cerrar polígono» registra un único undo y deja el perfil seleccionado. Con menos
+  «Cerrar polígono» une también el último tramo con el primero (la esquina se mueve
+  como un punto), registra un único undo y deja el perfil seleccionado. Empezar en
+  un punto existente lo une al primer tramo. Con menos
   de tres vértices el cierre se ignora o responde error sin perder la sesión.
   Cancelar o dos dedos descarta la cadena completa; otra herramienta la abandona
   sin persistir nada. En construcción no genera perfil y selecciona el último tramo.

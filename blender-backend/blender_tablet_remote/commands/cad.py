@@ -304,13 +304,20 @@ def _polygon_join(previous_id, segment_id):
                 refs=[dict(id=previous_id,part='END'),dict(id=segment_id,part='START')])
 
 
+def _polygon_closing(session, segment):
+    """The last side ends on the first vertex: persist it, or the corner splits."""
+    first=session['segments'][0][0]['id']
+    return dict(id='join_'+segment['id']+'_END',type='COINCIDENT',
+                refs=[dict(id=segment['id'],part='END'),dict(id=first,part='START')])
+
+
 def _polygon_state(session, current=None):
     """Baseline + committed segments (+ provisional tail) as a preview document."""
     doc=copy.deepcopy(session['baseline'])
     sketch=model.find(doc,'sketches',session['sketch_id'])
-    for segment,join in session['segments']:
+    for segment,*joins in session['segments']:
         sketch['entities'].append(copy.deepcopy(segment))
-        if join: sketch['constraints'].append(copy.deepcopy(join))
+        sketch['constraints'].extend(copy.deepcopy(join) for join in joins if join)
     if current is not None and session['points']:
         start=session['points'][-1]
         if math.dist(start,current)>=1e-7:
@@ -334,7 +341,7 @@ def polygon_begin(payload):
         start=geometry.point(sketch,dict(id=anchor['entity_id'],part=anchor['part'])) if anchor else runtime.point(payload,sketch)
         session=runtime.begin(payload,'POLYGON')
         session.update(sketch_id=sketch['id'],points=[start],segments=[],temp_id=model.uid('entity'),
-                       can_close=False,provisional=None,anchor=None)
+                       can_close=False,provisional=None,anchor=None,start_anchor=anchor)
     return runtime.status()
 
 
@@ -376,8 +383,14 @@ def polygon_segment(payload):
         model.validate_entity(segment)
     except BadPayload:
         return runtime.status()
-    join=_polygon_join(session['segments'][-1][0]['id'],segment['id']) if session['segments'] else None
-    session['segments'].append((segment,join))
+    if session['segments']:
+        join=_polygon_join(session['segments'][-1][0]['id'],segment['id'])
+    else:
+        # A chain started on an existing point stays attached to it.
+        start=session.get('start_anchor')
+        join=start and dict(id='join_'+segment['id']+'_START',type='COINCIDENT',
+                            refs=[dict(id=segment['id'],part='START'),dict(id=start['entity_id'],part=start['part'])])
+    session['segments'].append((segment,join,_polygon_closing(session,segment) if closes else None))
     if closes:
         session['points'].append(tuple(session['points'][0]))
         doc,_=_polygon_state(session,None)
@@ -399,7 +412,8 @@ def polygon_close(payload):
         segment=dict(id=model.uid('entity'),type='LINE',x=session['points'][-1][0],y=session['points'][-1][1],
                      x2=first[0],y2=first[1],construction=runtime.construction)
         model.validate_entity(segment)
-        session['segments'].append((segment,_polygon_join(session['segments'][-1][0]['id'],segment['id'])))
+        session['segments'].append((segment,_polygon_join(session['segments'][-1][0]['id'],segment['id']),
+                                    _polygon_closing(session,segment)))
         session['points'].append(first)
         doc,_=_polygon_state(session,None)
     _polygon_confirm(session,doc)
@@ -411,7 +425,7 @@ def _polygon_confirm(session, doc):
     runtime.persist(doc,advance=True)
     runtime.session=None
     sketch=model.find(doc,'sketches',session['sketch_id'])
-    members={segment['id'] for segment,_ in session['segments']}
+    members={segment['id'] for segment,*_ in session['segments']}
     profile=next(('profile_'+p['id'] for p in model.closed_entities(sketch)
                   if not any(e.get('construction') for e in sketch['entities'] if e['id'] in members)
                   and set(p.get('members',[]))==members),None)

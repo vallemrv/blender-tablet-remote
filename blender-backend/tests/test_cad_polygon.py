@@ -28,12 +28,24 @@ class PolygonTests(CadTests):
         status=cad.polygon_close(OWNER)
         sketch=runtime.doc()['sketches'][0]
         self.assertEqual(len(sketch['entities']),3)
-        self.assertEqual(len(sketch['constraints']),2)  # two joins
+        self.assertEqual(len(sketch['constraints']),3)  # two joins and the closing corner
         self.assertEqual(status['selection']['kind'],'PROFILE')
         self.assertTrue(runtime.active_sketch_id)  # the sketch view is kept
         self.assertEqual(len(runtime.objects(runtime.doc())),0)  # nothing extruded yet
         f=self.extrude(status['selection']['id'].removeprefix('profile_'),.02)
         self.assertAlmostEqual(volume(self.obj()),.5*.08*.045*.02,places=9)
+
+    def test_closed_corner_moves_as_one_point_and_keeps_the_profile(self):
+        from blender_tablet_remote.cad import sketch as geometry
+        self.stroke((0,0),(.08,0))
+        self.stroke((.08,0),(.08,.045))
+        cad.polygon_close(OWNER)
+        sketch=runtime.doc()['sketches'][0]
+        first=sketch['entities'][0]['id']
+        geometry.solve(sketch,geometry.move_goals(sketch,[dict(kind='ENTITY',id=first,part='START')],.01,.01),drag=True)
+        last=sketch['entities'][-1]
+        self.assertAlmostEqual(last['x2'],.01); self.assertAlmostEqual(last['y2'],.01)
+        self.assertEqual(len(model.profiles(sketch)),1)
 
     def test_tapping_the_first_vertex_closes_automatically(self):
         self.stroke((0,0),(.08,0))
