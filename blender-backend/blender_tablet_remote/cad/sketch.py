@@ -22,10 +22,19 @@ def handles(e):
     if typ in ('RECTANGLE', 'NGON'):
         corners = {'P'+str(i): p for i, p in enumerate(model.outline(e))}
         return {'CENTER': (e['x'], e['y']), **corners} if typ == 'NGON' else corners
+    if typ == 'SLOT':
+        return {'CENTER': (e['x'],e['y']), **dict(zip(('START','END'),slot_centers(e)))}
+    if typ == 'GEAR':
+        return {'CENTER': (e['x'],e['y'])}
     if typ == 'ARC':
         path = model.outline(e)
         return {'CENTER': (e['x'],e['y']), 'START': path[0], 'END': path[-1]}
     return {'CENTER': (e['x'],e['y']), 'RIM': (e['x']+e['diameter']/2,e['y'])}
+
+
+def slot_centers(e):
+    dx,dy=math.cos(math.radians(e['angle']))*e['length']/2,math.sin(math.radians(e['angle']))*e['length']/2
+    return (e['x']-dx,e['y']-dy),(e['x']+dx,e['y']+dy)
 
 
 def get_entity(sketch, ref):
@@ -49,6 +58,8 @@ def line(sketch, ref):
         if i not in range(len(ring)):
             raise BadPayload('Arista inexistente')
         return np.array(ring[i]), np.array(ring[(i+1)%len(ring)])
+    if e['type'] == 'SLOT' and ref.get('part') == 'AXIS':
+        return tuple(np.array(p) for p in slot_centers(e))
     if e['type'] != 'LINE':
         raise BadPayload('Selecciona líneas o lados rectos')
     return np.array((e['x'],e['y'])), np.array((e['x2'],e['y2']))
@@ -80,10 +91,12 @@ def measure_line(sketch, ref):
 
 def radius(sketch, ref):
     e = get_entity(sketch, ref)
-    if e['type'] not in ('CIRCLE', 'ARC', 'NGON'):
-        raise BadPayload('Selecciona un círculo, arco o polígono regular')
+    if e['type'] not in ('CIRCLE', 'ARC', 'NGON', 'SLOT', 'GEAR'):
+        raise BadPayload('Selecciona un círculo, arco, polígono regular, ranura o engranaje')
     # A regular polygon's radius is its inscribed one: half the across-flats size.
-    return e['diameter']/2 if e['type']=='CIRCLE' else e['flats']/2 if e['type']=='NGON' else e['radius']
+    # A slot's is its end caps; a gear's, its pitch circle.
+    return {'CIRCLE': lambda: e['diameter']/2, 'NGON': lambda: e['flats']/2, 'SLOT': lambda: e['width']/2,
+            'GEAR': lambda: e['module']*e['teeth']/2}.get(e['type'], lambda: e['radius'])()
 
 
 def residual(sketch, c, scale):
@@ -306,6 +319,10 @@ def move_goals(sketch, refs, dx, dy):
             if e['type']=='NGON' and single_handle and part!='CENTER':
                 # A vertex resizes and turns the polygon around its fixed center.
                 goals.append(dict(id=e['id'],part='CENTER',point=np.array(points['CENTER']),hard=True))
+            if e['type']=='SLOT' and single_handle and part in ('START','END'):
+                # One end center moves; the other stays, so length and direction follow.
+                other='END' if part=='START' else 'START'
+                goals.append(dict(id=e['id'],part=other,point=np.array(points[other]),hard=True))
         elif e['type']=='RECTANGLE' and part.startswith('EDGE'):
             index=int(part[4:]); roles=['P'+str(index),'P'+str((index+1)%4)]
         else:

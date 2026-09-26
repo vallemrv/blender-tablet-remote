@@ -66,7 +66,8 @@ def _intersects(a,b,c,d):
 
 def region(sketch, source):
     outer = outline(source)
-    if any(_intersects(a,b,c,d) for i,(a,b) in enumerate(zip(outer,outer[1:]+outer[:1]))
+    # Slots and gears are simple by construction; their dense outlines skip the O(n²) test.
+    if source['type'] not in ('SLOT', 'GEAR') and any(_intersects(a,b,c,d) for i,(a,b) in enumerate(zip(outer,outer[1:]+outer[:1]))
            for j,(c,d) in enumerate(zip(outer,outer[1:]+outer[:1]))
            if j>i+1 and not(i==0 and j==len(outer)-1)):
         raise CommandError('El contorno se cruza consigo mismo',code='cad_profile_invalid')

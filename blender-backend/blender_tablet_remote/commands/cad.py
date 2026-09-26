@@ -186,6 +186,10 @@ def _corner(e, point):
     return min(geometry.handles(e).items(),key=lambda item:math.dist(item[1],point))[0]
 
 
+# ISO 54 first-choice modules, in metres.
+STANDARD_MODULES = tuple(m/1000 for m in (.1,.2,.25,.3,.4,.5,.6,.8,1,1.25,1.5,2,2.5,3,4,5,6,8,10,12,16,20,25,32,40,50))
+
+
 @command('cad.entity.begin')
 def entity_begin(payload):
     typ = str(payload.get('type','')).upper()
@@ -200,8 +204,10 @@ def entity_begin(payload):
     sides=payload.get('sides',6)
     if typ=='NGON' and (isinstance(sides,bool) or not isinstance(sides,int) or not model.SIDES[0]<=sides<=model.SIDES[1]):
         raise BadPayload(f'El polígono regular necesita entre {model.SIDES[0]} y {model.SIDES[1]} lados')
+    gear=dict(teeth=payload.get('teeth',20),pressure=payload.get('pressure',20.))
+    if typ=='GEAR': model.validate_entity(dict(type='GEAR',x=0,y=0,module=1,angle=0,**gear))
     session = runtime.begin(payload,typ)
-    session.update(sketch_id=sketch['id'],start=start,entity_id=model.uid('entity'),anchor=anchor,sides=sides)
+    session.update(sketch_id=sketch['id'],start=start,entity_id=model.uid('entity'),anchor=anchor,sides=sides,gear=gear)
     return runtime.status()
 
 
@@ -215,7 +221,7 @@ def entity_update(payload):
     x,y = session['start']
     x2,y2 = runtime.point(payload,sketch)
     endpoint=(_endpoint(payload,sketch,session.get('endpoint'))
-              if session['operation'] in ('LINE','RECTANGLE') else None)
+              if session['operation'] in ('LINE','RECTANGLE','SLOT') else None)
     session['endpoint']=endpoint
     if endpoint: x2,y2=geometry.point(sketch,dict(id=endpoint['entity_id'],part=endpoint['part']))
     e = dict(id=session['entity_id'],type=session['operation'],x=x,y=y,construction=runtime.construction)
@@ -226,6 +232,18 @@ def entity_update(payload):
         # Center → vertex sets size and rotation; Increment rounds the across-flats size.
         n=session['sides']; circum=math.hypot(x2-x,y2-y)
         e.update(sides=n,flats=_on_grid((2*circum*math.cos(math.pi/n),))[0],angle=math.degrees(math.atan2(y2-y,x2-x)))
+    elif e['type']=='SLOT':
+        # First cap center → second cap center; Increment rounds the length.
+        length=math.hypot(x2-x,y2-y) if endpoint else _on_grid((math.hypot(x2-x,y2-y),))[0]
+        angle=math.atan2(y2-y,x2-x)
+        width=_on_grid((length*.4,))[0] or runtime.step
+        e.update(x=x+math.cos(angle)*length/2,y=y+math.sin(angle)*length/2,length=length,width=width,angle=math.degrees(angle))
+    elif e['type']=='GEAR':
+        # Center → pitch circle; Increment picks the nearest standard module.
+        teeth=session['gear']['teeth']; module=2*math.hypot(x2-x,y2-y)/teeth
+        if runtime.increment and module>0:
+            module=min(STANDARD_MODULES,key=lambda m:abs(math.log(m/module)))
+        e.update(module=module,angle=math.degrees(math.atan2(y2-y,x2-x)),**session['gear'])
     elif e['type'] in ('ARC','CIRCLE'):
         # Increment rounds the radius itself, not the rim position.
         radius=_on_grid((math.hypot(x2-x,y2-y),))[0]
@@ -245,7 +263,8 @@ def entity_update(payload):
         session['candidate'] = None
         return runtime.status()
     sketch['entities'].append(e)
-    roles={'LINE':('START','END'),'CIRCLE':('CENTER',None),'ARC':('CENTER',None),'NGON':('CENTER',None)}.get(e['type'])
+    roles={'LINE':('START','END'),'CIRCLE':('CENTER',None),'ARC':('CENTER',None),'NGON':('CENTER',None),
+           'SLOT':('START','END'),'GEAR':('CENTER',None)}.get(e['type'])
     if e['type']=='RECTANGLE': roles=(_corner(e,(x,y)),_corner(e,(x2,y2)))
     for role,anchor,label in ((roles[0],session.get('anchor'),'START'),(roles[1],endpoint,'END')):
         if anchor:
@@ -267,9 +286,14 @@ def entity_set(payload):
         allowed = set(model.FIELDS[e['type']]) | ({'length'} if e['type']=='LINE' else set())
         if e['type']=='CIRCLE': allowed.add('radius')
         if e['type']=='NGON': allowed.add('sides')
+        if e['type']=='GEAR': allowed.update(('teeth','pressure'))
         if not set(changes)<=allowed:
             raise BadPayload('Dimensión no compatible con la entidad')
-        values={k:model.number(v) for k,v in changes.items() if k!='sides'}
+        values={k:model.number(v) for k,v in changes.items() if k not in ('sides','teeth','pressure')}
+        if 'teeth' in changes or 'pressure' in changes:
+            # Discrete: the module is kept, so its dimension follows the new pitch circle.
+            e.update({k:changes[k] for k in ('teeth','pressure') if k in changes}); model.validate_entity(e)
+            values.setdefault('module',e['module'])
         if 'sides' in changes:
             # Discrete: the across-flats size and constraints are kept.
             e['sides']=changes['sides']; model.validate_entity(e)

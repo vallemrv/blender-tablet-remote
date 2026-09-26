@@ -356,6 +356,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         local.update { it.copy(cadNgonSides = sides.coerceIn(3, 32)) }
     }
 
+    fun cadGearTeeth(teeth: Int) {
+        local.update { it.copy(cadGearTeeth = teeth.coerceIn(6, 150)) }
+    }
+
     fun cadTool(type: String?) {
         cancelCadStroke()
         if (client.state.value.cad.surface.mode != "PROFILE") client.cadCommand("cad.surface.mode", mapOf("mode" to "PROFILE"))
@@ -410,6 +414,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }, when (type) {
                     null -> mapOf("u" to u, "v" to v)
                     "NGON" -> mapOf("type" to type, "sides" to local.value.cadNgonSides, "u" to u, "v" to v)
+                    "GEAR" -> mapOf("type" to type, "teeth" to local.value.cadGearTeeth, "u" to u, "v" to v)
                     else -> mapOf("type" to type, "u" to u, "v" to v)
                 })
             }

@@ -9,8 +9,9 @@ NUMERIC = ('DISTANCE', 'DISTANCE_X', 'DISTANCE_Y', 'RADIUS')
 
 def quantity(sketch, ref):
     e=geometry.get_entity(sketch,ref)
-    if e['type'] in ('CIRCLE','ARC') or (e['type']=='NGON' and not ref.get('part','').startswith('EDGE')):
+    if e['type'] in ('CIRCLE','ARC','GEAR') or (e['type']=='NGON' and not ref.get('part','').startswith('EDGE')):
         return (e['id'],'radius')
+    if e['type']=='SLOT': return (e['id'],'length' if ref.get('part')=='AXIS' else 'radius')
     if e['type']=='LINE': return (e['id'],'length')
     if e['type']=='RECTANGLE' and ref.get('part','').startswith('EDGE'):
         return (e['id'],'width' if int(ref['part'][4:])%2==0 else 'height')
@@ -42,6 +43,7 @@ def key(sketch, constraint, root=None):
         if e['type']=='LINE' and parts=={'START','END'} and not any((e['id'],role) in geometry.rounding_links(sketch) for role in ('START','END')):
             return root((e['id'],'length'))
         if e['type']=='CIRCLE' and parts=={'CENTER','RIM'}: return root((e['id'],'radius'))
+        if e['type']=='SLOT' and parts=={'START','END'}: return root((e['id'],'length'))
         if e['type']=='RECTANGLE':
             for i in range(4):
                 if parts=={'P'+str(i),'P'+str((i+1)%4)}:
@@ -72,12 +74,20 @@ def remove(sketch, constraint):
     sketch['constraints']=[c for c in sketch['constraints'] if c not in duplicates]
 
 
+def factor(entity, field):
+    """Measure field → value of the RADIUS/DISTANCE dimension that governs it."""
+    if field=='module': return entity['teeth']/2
+    if field in ('diameter','flats') or (field=='width' and entity['type']=='SLOT'): return .5
+    return 1.
+
+
 def bindings(sketch, entity):
-    fields={'RECTANGLE':('width','height'),'CIRCLE':('diameter',),'ARC':('radius',),'LINE':('length',),'NGON':('flats',)}[entity['type']]
+    fields={'RECTANGLE':('width','height'),'CIRCLE':('diameter',),'ARC':('radius',),'LINE':('length',),'NGON':('flats',),
+            'SLOT':('length','width'),'GEAR':('module',)}[entity['type']]
     root=groups(sketch)
     result={}
     for field in fields:
-        target=root((entity['id'],'radius' if field in ('diameter','flats') else field))
+        target=root((entity['id'],'radius' if field in ('diameter','flats','width','module') and entity['type']!='RECTANGLE' else field))
         result[field]=[c['id'] for c in sketch.get('constraints',[]) if key(sketch,c,root)==target]
     return result
 
@@ -93,7 +103,7 @@ def set_values(sketch, entity, changes):
     for field,value in changes.items():
         for identifier in bound.get(field,[]):
             c=model.find(sketch,'constraints',identifier)
-            target=key(sketch,c,root); amount=value/2 if field in ('diameter','flats') else value
+            target=key(sketch,c,root); amount=value*factor(entity,field)
             if target in updated and not math.isclose(updated[target],amount,rel_tol=1e-9,abs_tol=1e-12):
                 raise BadPayload('Estas medidas están enlazadas por Igualdad; escribe un único valor')
             updated[target]=amount
@@ -103,7 +113,7 @@ def set_values(sketch, entity, changes):
         c['value']=model.number(value,positive=True); put(sketch,c)
     goals=[]
     for field,value in changes.items():
-        if field=='length':
+        if field=='length' and entity['type']=='LINE':
             if any((entity['id'],role) in geometry.rounding_links(sketch) for role in ('START','END')):
                 goals.append(dict(constraint=dict(type='DISTANCE',refs=[dict(id=entity['id'],part='BODY')],value=model.number(value,positive=True))))
                 continue
@@ -136,11 +146,14 @@ def describe(sketch, entity):
             'ARC':[('radius','Radio del redondeo' if geometry.fillet_sides(sketch,entity) else 'Radio','RADIUS','BODY',1.)],
             'LINE':[('length','Lado completo' if any((entity['id'],role) in geometry.rounding_links(sketch) for role in ('START','END')) else 'Longitud','DISTANCE','BODY',1.)],
             # Its dimension is an inscribed RADIUS constraint, shown as the full size.
-            'NGON':[('flats','Entre caras' if entity.get('sides',6)%2==0 else 'Ø inscrito','RADIUS','BODY',.5)]}[typ]
+            'NGON':[('flats','Entre caras' if entity.get('sides',6)%2==0 else 'Ø inscrito','RADIUS','BODY',.5)],
+            'SLOT':[('width','Ancho','RADIUS','BODY',.5),('length','Entre centros','DISTANCE','AXIS',1.)],
+            # Module is governed by the pitch radius: module × teeth / 2.
+            'GEAR':[('module','Módulo','RADIUS','BODY',None)]}[typ]
     if typ=='RECTANGLE' and is_square(sketch,entity): fields=fields[:1]
-    return [dict(field=field,label=label,constraint_type=kind,value_factor=factor,
+    return [dict(field=field,label=label,constraint_type=kind,value_factor=scale if scale is not None else factor(entity,field),
                  refs=[dict(id=entity['id'],part=part)],constraint_ids=bound['diameter' if typ=='CIRCLE' else field])
-            for field,label,kind,part,factor in fields]
+            for field,label,kind,part,scale in fields]
 
 
 def offers(sketch, refs):

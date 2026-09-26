@@ -8,13 +8,18 @@ from ..errors import BadPayload, CommandError
 VERSION = 1
 KEY = 'btr_cad_document'
 PLANES = ('XY', 'XZ', 'YZ')
-TYPES = ('LINE', 'RECTANGLE', 'CIRCLE', 'ARC', 'NGON')
+TYPES = ('LINE', 'RECTANGLE', 'CIRCLE', 'ARC', 'NGON', 'SLOT', 'GEAR')
 # NGON is a regular polygon: its across-flats size (inscribed diameter, the
 # wrench size of a nut) and the rotation of its first vertex are solver
 # parameters; `sides` is a discrete property, never solved.
 FIELDS = {'LINE': ('x','y','x2','y2'), 'RECTANGLE': ('x','y','width','height'),
           'CIRCLE': ('x','y','diameter'), 'ARC': ('x','y','radius','start','sweep'),
-          'NGON': ('x','y','flats','angle')}
+          'NGON': ('x','y','flats','angle'),
+          'SLOT': ('x','y','length','width','angle'), 'GEAR': ('x','y','module','angle')}
+# SLOT is a straight slot: two semicircles of diameter `width` whose centers lie
+# `length` apart, joined by two tangent lines; (x,y) is its middle point.
+# GEAR is an involute spur gear: `module` is its size (pitch diameter = module ×
+# teeth); `teeth` and the pressure angle are discrete properties, never solved.
 ANGULAR = ('start','sweep','angle')  # degrees, independent of the sketch size
 # Edge finishes act on a body's solid: no sketch or profile, only design edges
 # stored as their segments in metres (never mesh indices). Chamfer is one segment.
@@ -41,10 +46,39 @@ def validate_finish(feature):
         raise BadPayload('El chaflán es un único segmento')
     return feature
 SIDES = (3, 32)
+TEETH = (6, 150)
+PRESSURE_ANGLES = (14.5, 20., 25.)
 
 
 def circumradius(e):
     return e['flats']/2/math.cos(math.pi/e['sides'])
+
+
+def gear_radii(e):
+    """Pitch, base, tip and root radii of a standard (1 m addendum, 1.25 m dedendum) gear."""
+    pitch = e['module']*e['teeth']/2
+    return pitch, pitch*math.cos(math.radians(e.get('pressure', 20.))), pitch+e['module'], pitch-1.25*e['module']
+
+
+def _gear_outline(e):
+    x, y, z = e['x'], e['y'], e['teeth']
+    pitch, base, tip, root = gear_radii(e)
+    involute = lambda r: math.tan(math.acos(min(1., base/r)))-math.acos(min(1., base/r))
+    half_base = math.pi/(2*z)+involute(pitch)          # half tooth angle on the base circle
+    start = max(base, root)
+    samples = 6 if z <= 60 else 4
+    flank = [start+(tip-start)*i/(samples-1) for i in range(samples)]
+    ring = []
+    def add(r, a): ring.append((x+r*math.cos(a), y+r*math.sin(a)))
+    for k in range(z):
+        c = math.radians(e['angle'])+k*math.tau/z
+        if root < base: add(root, c-half_base)
+        for r in flank: add(r, c-half_base+involute(r))
+        for r in reversed(flank): add(r, c+half_base-involute(r))
+        if root < base: add(root, c+half_base)
+        gap_start, gap_end = c+half_base-involute(start), c+math.tau/z-half_base+involute(start)
+        for i in (1, 2): add(root, gap_start+(gap_end-gap_start)*i/3)
+    return ring
 
 
 def uid(prefix):
@@ -172,7 +206,7 @@ def closed_entities(sketch):
     A chain profile identity derives from its member IDs, never mesh topology.
     """
     import hashlib
-    result = [e for e in sketch['entities'] if not e.get('construction',False) and e['type'] in ('RECTANGLE', 'CIRCLE', 'NGON')]
+    result = [e for e in sketch['entities'] if not e.get('construction',False) and e['type'] in ('RECTANGLE', 'CIRCLE', 'NGON', 'SLOT', 'GEAR')]
     edges = [e for e in sketch['entities'] if not e.get('construction',False) and e['type'] in ('LINE', 'ARC')]
     remaining = {e['id']: e for e in edges}
     def near(a, b):
@@ -216,7 +250,7 @@ def profile(doc, identifier):
 
 def profiles(sketch):
     return [dict(id='profile_' + e['id'], entity_id=e['id'],
-                 label={'RECTANGLE':'Rectángulo','CIRCLE':'Círculo','NGON':'Polígono regular','POLYGON':'Contorno cerrado'}[e['type']])
+                 label={'RECTANGLE':'Rectángulo','CIRCLE':'Círculo','NGON':'Polígono regular','SLOT':'Ranura','GEAR':'Engranaje','POLYGON':'Contorno cerrado'}[e['type']])
             for e in closed_entities(sketch)]
 
 
@@ -234,6 +268,15 @@ def outline(e):
         r = circumradius(e)
         return [(x + r*math.cos(math.radians(e['angle'])+i*math.tau/e['sides']),
                  y + r*math.sin(math.radians(e['angle'])+i*math.tau/e['sides'])) for i in range(e['sides'])]
+    if e['type'] == 'SLOT':
+        a, half, r = math.radians(e['angle']), e['length']/2, e['width']/2
+        ring = []
+        for sign, turn in ((1, -math.pi/2), (-1, math.pi/2)):   # end cap, then start cap
+            cx, cy = x+sign*half*math.cos(a), y+sign*half*math.sin(a)
+            ring.extend((cx+r*math.cos(a+turn+math.pi*i/24), cy+r*math.sin(a+turn+math.pi*i/24)) for i in range(25))
+        return ring
+    if e['type'] == 'GEAR':
+        return _gear_outline(e)
     if e['type'] == 'RECTANGLE':
         w, h = e['width'], e['height']
         return [(x, y), (x+w, y), (x+w, y+h), (x, y+h)]
@@ -255,7 +298,7 @@ def validate_entity(e):
     if e.get('type') not in TYPES:
         raise BadPayload('Tipo de entidad CAD no compatible')
     for key in FIELDS[e['type']]:
-        e[key] = number(e.get(key), positive=key in ('width','height','diameter','radius','flats'))
+        e[key] = number(e.get(key), positive=key in ('width','height','diameter','radius','flats','length','module'))
     if e['type'] == 'ARC' and not .01 <= abs(e['sweep']) < 360:
         raise BadPayload('El arco necesita un barrido entre 0.01° y menos de 360°')
     if e['type'] == 'LINE' and math.hypot(e['x2']-e['x'], e['y2']-e['y']) < 1e-7:
@@ -264,6 +307,12 @@ def validate_entity(e):
         sides = e.get('sides')
         if isinstance(sides, bool) or not isinstance(sides, int) or not SIDES[0] <= sides <= SIDES[1]:
             raise BadPayload(f'El polígono regular necesita entre {SIDES[0]} y {SIDES[1]} lados')
+    if e['type'] == 'GEAR':
+        teeth = e.get('teeth')
+        if isinstance(teeth, bool) or not isinstance(teeth, int) or not TEETH[0] <= teeth <= TEETH[1]:
+            raise BadPayload(f'El engranaje necesita entre {TEETH[0]} y {TEETH[1]} dientes')
+        if e.setdefault('pressure', 20.) not in PRESSURE_ANGLES:
+            raise BadPayload('Ángulo de presión admitido: 14,5°, 20° o 25°')
     return e
 
 

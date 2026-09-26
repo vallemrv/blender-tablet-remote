@@ -347,7 +347,10 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 state.cadTool == "ARC" -> "Arrastra centro → inicio del arco · al soltar, arrastra el rombo del extremo para variar el ángulo"
                 entity?.type == "ARC" && !entity.isFillet -> "Arrastra el rombo del extremo para variar el ángulo; centro, radio e inicio permanecen fijos"
                 state.cadTool == "NGON" -> "Polígono regular: arrastra del centro a un vértice · elige los lados antes o después · Entre caras es la llave de la tuerca"
+                state.cadTool == "SLOT" -> "Ranura: arrastra del centro de un extremo al del otro · después ajusta Ancho y Entre centros"
+                state.cadTool == "GEAR" -> "Engranaje: arrastra del centro al círculo primitivo · Incremento elige un módulo normalizado · dientes antes o después"
                 state.cadTool != null -> "${cadLabel(state.cadTool!!)} · arrastra para dibujar · dos dedos navegan"
+                entity?.type == "GEAR" -> cadGearSummary(entity, unit)
                 entity?.isSquare == true -> if (entity.dimensions.any { it.constraintIds.isNotEmpty() })
                     "Cuadrado: una cota controla ambos lados; editar Lado actualiza esa misma cota"
                     else "Cuadrado: Igualdad une sus lados; Fijar medida añade una cota de tamaño"
@@ -387,7 +390,21 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                         if (state.cadTool == "NGON" && entity == null) {
                             CadSidesControl(state.cadNgonSides, enabled = !cad.sessionActive) { vm.cadNgonSides(it) }
                         }
+                        if (state.cadTool == "GEAR" && entity == null) {
+                            CadCountControl("Dientes", state.cadGearTeeth, 6..150, enabled = !cad.sessionActive) { vm.cadGearTeeth(it) }
+                        }
                         entity?.let { selected ->
+                            if (selected.type == "GEAR") {
+                                val editable = connected && !livePreview && drafts.isEmpty()
+                                CadCountControl("Dientes", selected.values["teeth"]?.toInt() ?: 20, 6..150, editable) {
+                                    command("cad.entity.set", "entity_id" to selected.id, "values" to mapOf("teeth" to it))
+                                }
+                                listOf(14.5, 20.0, 25.0).forEach { angle ->
+                                    PillButton("${formatToolDistance(angle, 1)}°", selected = selected.values["pressure"] == angle, enabled = editable) {
+                                        command("cad.entity.set", "entity_id" to selected.id, "values" to mapOf("pressure" to angle))
+                                    }
+                                }
+                            }
                             if (selected.type == "NGON") {
                                 val sides = selected.values["sides"]?.toInt() ?: 6
                                 CadSidesControl(sides, enabled = connected && !livePreview && drafts.isEmpty()) {
@@ -624,8 +641,18 @@ internal fun cadConstraintGroups(available: List<String>): List<List<String>> {
     return (groups.map { group -> group.filter { it in available } } + listOf(rest)).filter { it.isNotEmpty() }
 }
 
+/** Medidas derivadas del módulo: el círculo primitivo engrana y el paso es π·m. */
+private fun cadGearSummary(gear: CadEntity, unit: LengthUnit): String {
+    val module = gear.values["module"] ?: return "Engranaje"
+    val teeth = gear.values["teeth"] ?: 20.0
+    val factor = when (unit) { LengthUnit.MILLIMETERS -> 1000.0; LengthUnit.CENTIMETERS -> 100.0; LengthUnit.METERS -> 1.0 }
+    fun text(meters: Double) = formatToolDistance(meters * factor, detailDecimalPlaces(meters * factor, 2)) + " " + unit.short
+    return "Engranaje · Ø primitivo ${text(module * teeth)} · Ø exterior ${text(module * (teeth + 2))} · paso ${text(Math.PI * module)} · " +
+        "engrana con otro del mismo módulo y ángulo de presión"
+}
+
 internal fun cadLabel(type: String) = when (type) {
-    "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
+    "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "SLOT" -> "Ranura"; "GEAR" -> "Engranaje"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
     "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad (tamaño del primero)"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
     "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; else -> type

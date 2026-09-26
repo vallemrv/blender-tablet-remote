@@ -107,6 +107,58 @@ class SketchTests(CadTests):
         described=model.public(runtime.doc())['sketches'][0]['entities'][0]['dimensions'][0]
         self.assertEqual((described['field'],described['constraint_type'],described['value_factor']),('flats','RADIUS',.5))
 
+    def draw_extra(self, typ, start, end, **extra):
+        with patch.object(runtime,'point',return_value=start), patch.object(cad,'_endpoint',return_value=None):
+            cad.entity_begin(dict(type=typ,u=.1,v=.1,**extra,**OWNER))
+        with patch.object(runtime,'point',return_value=end), patch.object(cad,'_endpoint',return_value=None):
+            identifier=cad.entity_update(dict(u=.2,v=.1,**OWNER))['selection']['id']
+        cad.confirm(OWNER)
+        return identifier
+
+    def test_slot_draws_between_cap_centers_and_keeps_its_length_dimension(self):
+        identifier=self.draw_extra('SLOT',(0,0),(.0201,0))
+        sketch,e=model.entity(runtime.doc(),identifier)
+        self.assertAlmostEqual(e['length'],.020,places=9)
+        self.assertAlmostEqual(e['width'],.008,places=9)
+        self.assertAlmostEqual(geometry.point(sketch,dict(id=identifier,part='START'))[0],0,places=9)
+        cad.constraint_add(dict(type='DISTANCE',value=.020,refs=[dict(id=identifier,part='AXIS')],**OWNER))
+        cad.entity_set(dict(entity_id=identifier,values={'width':.006,'length':.030},**OWNER))
+        sketch,e=model.entity(runtime.doc(),identifier)
+        self.assertAlmostEqual(e['length'],.030,places=9)
+        self.assertAlmostEqual(e['width'],.006,places=9)
+        self.assertAlmostEqual(next(c for c in sketch['constraints'] if c['type']=='DISTANCE')['value'],.030,places=9)
+        described=model.public(runtime.doc())['sketches'][0]['entities'][0]['dimensions']
+        self.assertEqual([(d['field'],d['value_factor']) for d in described],[('width',.5),('length',1.)])
+        self.extrude(identifier,.005)
+        expected=(.030*.006+math.pi*.003**2)*.005
+        self.assertAlmostEqual(volume(self.obj()),expected,delta=expected*.005)
+
+    def test_gear_draws_a_standard_module_and_keeps_it_when_teeth_change(self):
+        identifier=self.draw_extra('GEAR',(0,0),(.0105,0),teeth=20)
+        sketch,e=model.entity(runtime.doc(),identifier)
+        self.assertEqual((e['teeth'],e['pressure']),(20,20.))
+        self.assertAlmostEqual(e['module'],.001,places=12)  # 1,05 mm → module 1 with Increment
+        pitch,base,tip,root=model.gear_radii(e)
+        ring=model.outline(e)
+        radii=[math.hypot(*p) for p in ring]
+        self.assertAlmostEqual(max(radii),tip,places=9)
+        self.assertAlmostEqual(min(radii),root,places=9)
+        cad.constraint_add(dict(type='RADIUS',value=pitch,refs=[dict(id=identifier,part='BODY')],**OWNER))
+        cad.entity_set(dict(entity_id=identifier,values={'teeth':30},**OWNER))
+        sketch,e=model.entity(runtime.doc(),identifier)
+        self.assertAlmostEqual(e['module'],.001,places=12)
+        self.assertAlmostEqual(next(c for c in sketch['constraints'] if c['type']=='RADIUS')['value'],.015,places=12)
+        cad.entity_set(dict(entity_id=identifier,values={'module':.0015},**OWNER))
+        sketch,e=model.entity(runtime.doc(),identifier)
+        self.assertAlmostEqual(e['module'],.0015,places=12)
+        described=model.public(runtime.doc())['sketches'][0]['entities'][0]['dimensions'][0]
+        self.assertEqual((described['field'],described['constraint_type'],described['value_factor']),('module','RADIUS',15.))
+        self.extrude(identifier,.005)
+        pitch,base,tip,root=model.gear_radii(e)
+        self.assertTrue(math.pi*root**2*.005 < volume(self.obj()) < math.pi*tip**2*.005)
+        with self.assertRaises(CommandError):
+            cad.entity_set(dict(entity_id=identifier,values={'teeth':3},**OWNER))
+
     def test_drawing_uses_increment_grid_point_snap_and_drops_collapsed_figures(self):
         def entity(identifier):
             return next(e for s in runtime.doc()['sketches'] for e in s['entities'] if e['id']==identifier)

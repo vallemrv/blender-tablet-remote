@@ -528,6 +528,8 @@ data class AppUiState(
     val cadTool: String? = null,
     /** Lados del próximo polígono regular (CAD `NGON`); se envían al empezar a dibujarlo. */
     val cadNgonSides: Int = 6,
+    /** Dientes del próximo engranaje (CAD `GEAR`); se envían al empezar a dibujarlo. */
+    val cadGearTeeth: Int = 20,
     val sculptSmooth: Boolean = false,
     val sculptInvert: Boolean = false,
     val sculptStylusOnly: Boolean = true,

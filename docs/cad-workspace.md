@@ -35,6 +35,14 @@ actualiza las operaciones dependientes y registra un paso de undo.
   antes de dibujar o después con −/+). Su medida es **Entre caras** (la llave de una
   tuerca; en impares, el Ø inscrito) y su candado la fija. Con la medida fijada,
   arrastrar un vértice solo lo gira. Sirve para tuercas y alojamientos de tuerca.
+- Ranura: arrastrar del centro de un extremo al del otro. Sus medidas son **Ancho**
+  (diámetro de los extremos) y **Entre centros**; arrastrar un centro de extremo deja
+  fijo el otro. Sirve para agujeros alargados y ajustes regulables.
+- Engranaje recto de evolvente: arrastrar centro → círculo primitivo (20 dientes por
+  defecto). Su medida es el **Módulo** (Ø primitivo = módulo × dientes; paso = π·módulo);
+  con Incremento se elige el módulo normalizado más cercano. Dientes (6–150) y ángulo de
+  presión (14,5°/20°/25°) se cambian después conservando el módulo. Dos engranajes del
+  mismo módulo y ángulo engranan con sus centros a (Ø₁ + Ø₂)/2.
 - Círculo: arrastrar centro → radio. Arco: arrastrar centro → inicio; inicialmente
   barre 90° y permite editar radio, ángulo inicial y barrido en grados.
 - Dibujar usa las mismas ayudas que editar: el Snap Incremento y su Paso siguen en la
