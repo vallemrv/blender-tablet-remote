@@ -37,6 +37,17 @@ class SelectionEfficiencyTests(CadTests):
                 cad.surface_mode(dict(mode=kind, **OWNER))
                 self.assertIs(snap._cad_mesh(obj), graph)
 
+    def test_tangent_lines_and_arcs_of_the_sketch_stay_separate_faces_edges_and_points(self):
+        with patch.object(cad, '_endpoint', return_value=None):
+            slot = self.draw_unsnapped('SLOT', (0, 0), (.04, 0))
+        self.extrude(slot)
+        graph = snap._cad_mesh(self.obj())
+        # Top, bottom, two flat sides and two half cylinders.
+        self.assertEqual(len(set(graph[7])), 6)
+        # Each cap: two lines and two arcs; plus four tangent seams on the sides.
+        self.assertEqual(len(set(graph[8].values())), 12)
+        self.assertEqual(len(snap._cad_corners(graph[8])), 8)
+
     def test_more_circle_samples_do_not_multiply_global_contour_passes(self):
         for samples in (128, 512):
             with self.subTest(samples=samples):

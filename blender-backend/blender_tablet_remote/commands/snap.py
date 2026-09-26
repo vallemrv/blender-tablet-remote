@@ -639,8 +639,13 @@ def _cad_corners(edge_regions):
                   if len(regions) >= 2 or any(count < 2 for count in regions.values()))
 
 
-def _cad_topology(mesh, matrix, face_labels=None, edge_labels=None, *, smooth=False):
-    """Snapshot geometry and logical regions; no evaluated RNA survives this call."""
+def _cad_topology(mesh, matrix, face_labels=None, edge_labels=None, *, smooth=False, design=None):
+    """Snapshot geometry and logical regions; no evaluated RNA survives this call.
+
+    `design` lists the analytic surfaces of the body's sketches: faces on one
+    surface form one CAD face and each pair of surfaces meets in one CAD edge,
+    so tangent lines and arcs stay separate. Other faces keep the heuristics.
+    """
     points=[matrix@v.co for v in mesh.vertices]
     faces=[tuple(p.vertices) for p in mesh.polygons]
     normals=[]; centers=[]; adjacency={}
@@ -656,6 +661,10 @@ def _cad_topology(mesh, matrix, face_labels=None, edge_labels=None, *, smooth=Fa
     neighbors=[set() for _ in faces]
     for linked in adjacency.values():
         for face in linked: neighbors[face].update(i for i in linked if i!=face)
+    labels=None
+    if design and face_labels is None:
+        from ..cad.design_surfaces import label_faces
+        labels=label_faces(points,faces,normals,design,extent*1e-5+1e-9)
     face_regions=[None]*len(faces)
     for source in range(len(faces)):
         if face_regions[source] is not None: continue
@@ -667,6 +676,8 @@ def _cad_topology(mesh, matrix, face_labels=None, edge_labels=None, *, smooth=Fa
                 if neighbor in chosen or face_regions[neighbor] is not None: continue
                 if face_labels is not None:
                     same=face_labels[neighbor]==face_labels[source] and face_labels[source]>0
+                elif labels is not None and (labels[source] or labels[neighbor]):
+                    same=labels[neighbor]==labels[source]
                 else:
                     coplanar=(normals[neighbor].dot(normal)>1-1e-7 and
                               all(abs((points[i]-origin).dot(normal))<=tolerance for i in faces[neighbor]))
@@ -685,6 +696,23 @@ def _cad_topology(mesh, matrix, face_labels=None, edge_labels=None, *, smooth=Fa
     for edge in edges:
         for vertex in edge: incident.setdefault(vertex,[]).append(edge)
     edge_regions={}
+    if labels is not None and edge_labels is None:
+        # A design edge is where two labelled surfaces meet: group by that pair.
+        pairs={}
+        for edge in edges:
+            linked=adjacency[edge]
+            if len(linked)==2 and labels[linked[0]] and labels[linked[1]]:
+                pairs[edge]=tuple(sorted((labels[linked[0]],labels[linked[1]])))
+        for source in pairs:
+            if source in edge_regions: continue
+            chosen={source}; pending=list(source)
+            while pending:
+                for edge in incident[pending.pop()]:
+                    if edge not in chosen and pairs.get(edge)==pairs[source]:
+                        chosen.add(edge); pending.extend(edge)
+            region=frozenset(chosen)
+            for edge in chosen: edge_regions[edge]=region
+    designed=set(edge_regions)
     for source in edges:
         if source in edge_regions: continue
         a,b=(points[i] for i in source); direction=(b-a).normalized()
@@ -700,7 +728,10 @@ def _cad_topology(mesh, matrix, face_labels=None, edge_labels=None, *, smooth=Fa
         region=frozenset(chosen)
         for edge in chosen: edge_regions[edge]=region
     if smooth and edge_labels is None:
-        _merge_smooth_contours(points, incident, edge_regions)
+        # Only heuristic contours merge; designed edges already are exact.
+        loose={edge:region for edge,region in edge_regions.items() if edge not in designed}
+        _merge_smooth_contours(points, {v:[e for e in es if e not in designed] for v,es in incident.items()}, loose)
+        edge_regions.update(loose)
     mesh.calc_loop_triangles()
     triangles=[(tri.polygon_index,tuple(tri.vertices)) for tri in mesh.loop_triangles]
     return triangles,points,faces,normals,centers,adjacency,edges,face_regions,edge_regions
@@ -725,8 +756,13 @@ def _cad_mesh(obj):
     cad=bool(obj.get('btr_cad_feature_id'))
     reference=cad and all(mod.type in {'BEVEL','SUBSURF'} for mod in active_modifiers)
     mapping=dict(reference=reference)
+    design=None
+    if cad and obj.get('btr_cad_body_id'):
+        from ..cad.design_surfaces import surfaces
+        try: design=surfaces(runtime.doc(),obj['btr_cad_body_id'],bpy.context.scene.unit_settings.scale_length)
+        except Exception: design=None   # a stale document keeps the mesh heuristics
     if active_modifiers:
-        base=_cad_topology(mesh,obj.matrix_world,smooth=cad)
+        base=_cad_topology(mesh,obj.matrix_world,smooth=cad,design=design)
         names=[]
         try:
             # Native FACE/EDGE integer attributes follow subdivision without
@@ -758,7 +794,7 @@ def _cad_mesh(obj):
                 if attr is not None: mesh.attributes.remove(attr)
             mesh.update()
     else:
-        result=_cad_topology(obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data,obj.matrix_world,smooth=cad)
+        result=_cad_topology(obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data,obj.matrix_world,smooth=cad,design=design)
     if not active_modifiers:
         mapping.update(base=result,faces=list(range(len(result[2]))),edges={edge:edge for edge in result[6]})
     result=(*result,mapping)

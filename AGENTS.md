@@ -658,6 +658,13 @@ no quedan archivos o referencias temporales.
 - En un sólido CAD, Caras/Aristas/Puntos siguen la figura de diseño, no la
   teselación: un círculo extruido tiene dos contornos y ninguna muestra de malla
   como arista o punto. Un cubo conserva seis caras, doce aristas y ocho puntos.
+- Extrusiones y vaciados etiquetan cada cara evaluada por la superficie analítica de
+  su croquis (`cad/design_surfaces.py`): planos de tapa y de lados rectos, cilindros
+  de arcos/círculos. Una cara CAD es una superficie; una arista, el par de
+  superficies que separa. Así líneas y arcos tangentes (ranura, rectángulo
+  redondeado) son caras, aristas y puntos distintos. No se propaga nada por los
+  booleanos: las caras cortadas siguen sobre su superficie. Redondeos, solevado,
+  helicoidal y flancos de engranaje quedan sin etiqueta y usan la heurística.
 - La primera selección CAD agrupa contornos suaves mediante uniones de conjuntos:
   calcula una vez qué segmentos terminan en esquinas y materializa cada grupo al
   final. No reinicia un recorrido global ni copia el contorno creciente por cada
