@@ -663,7 +663,8 @@ no quedan archivos o referencias temporales.
   final. No reinicia un recorrido global ni copia el contorno creciente por cada
   unión. Conserva las aristas rectas y reutiliza el grafo entre Caras/Aristas/Puntos.
 - Boceto en cara consume la cara resaltada sin repetir raycast y crea plano+boceto
-  en un solo undo. Las caras superiores CAD conservan soporte asociativo; otras
+  en un solo undo. Sus ejes siguen la vista enderezada (Z del mundo arriba; Y en
+  caras horizontales), nunca una arista teselada: un rectángulo sale recto en pantalla. Las caras superiores CAD conservan soporte asociativo; otras
   caras guardan su marco. Las selecciones del sólido son transitorias y se invalidan
   al cambiar geometría o transformación; no persisten índices de la malla evaluada.
 - En un boceto, Proyectar está en el rail: cualquier arista, aunque esté a otra

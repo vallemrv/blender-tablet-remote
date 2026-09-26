@@ -131,8 +131,10 @@ class SurfaceSelection:
             raise BadPayload('Selecciona una única cara plana resaltada')
         face=self.items[0]; normal=Vector(face['normal'])
         if not face['segments']: raise BadPayload('La cara no tiene un contorno utilizable')
-        a,b=map(Vector,max(face['segments'],key=lambda edge:(Vector(edge[1])-Vector(edge[0])).length))
-        x=(b-a).normalized(); y=normal.cross(x).normalized(); x=y.cross(normal).normalized()
+        # Axes follow the upright sketch view (world Z up; Y on horizontal faces), never
+        # a tessellation edge: rectangles are then drawn square to the screen.
+        up=Vector((0,0,1)) if abs(normal.z)<=.9 else Vector((0,1,0))
+        y=(up-normal*up.dot(normal)).normalized(); x=y.cross(normal).normalized()
         scale=bpy.context.scene.unit_settings.scale_length
         return dict(origin=list(Vector(face['center'])*scale),x=list(x),y=list(y),normal=list(normal))
 

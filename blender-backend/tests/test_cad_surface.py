@@ -20,6 +20,19 @@ from blender_tablet_remote.errors import CommandError
 
 
 class SurfaceTests(CadTests):
+    def test_face_sketch_axes_follow_the_upright_view_not_a_tessellation_edge(self):
+        import math
+        from blender_tablet_remote.cad.surface import SurfaceSelection
+        ring=[(math.cos(a)*.02,math.sin(a)*.02,.01) for a in [i*math.tau/64+.73 for i in range(64)]]
+        def frame(normal):
+            surface=SurfaceSelection()
+            surface.items=[dict(kind='FACE',planar=True,normal=normal,center=(0,0,.01),segments=[list(p) for p in zip(ring,ring[1:])])]
+            with patch.object(surface,'validate'): return surface.face_frame()
+        top=frame((0,0,1))
+        self.assertEqual([round(v,9) for v in top['x']+top['y']],[1,0,0,0,1,0])
+        side=frame((0,-1,0))   # a front face: X across, Z up, like Enderezar
+        self.assertEqual([round(v,9) for v in side['x']+side['y']],[1,0,0,0,0,1])
+
     def pick(self, kind, position):
         cad.surface_mode(dict(mode=kind,**OWNER))
         screen=camera.project(Vector(position),find_view3d()[3])
