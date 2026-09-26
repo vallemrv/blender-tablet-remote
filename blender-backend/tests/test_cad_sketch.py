@@ -159,6 +159,24 @@ class SketchTests(CadTests):
         with self.assertRaises(CommandError):
             cad.entity_set(dict(entity_id=identifier,values={'teeth':3},**OWNER))
 
+    def test_sketch_copy_sits_on_a_parallel_plane_whose_separation_stays_editable(self):
+        rect=self.rect()
+        source=runtime.doc()['sketches'][0]
+        cad.constraint_add(dict(type='DISTANCE',value=.08,refs=[dict(id=rect,part='EDGE0')],**OWNER))
+        status=cad.sketch_copy(dict(sketch_id=source['id'],offset=.03,**OWNER))
+        doc=runtime.doc(); copy_=doc['sketches'][1]
+        self.assertEqual(status['selection'],dict(kind='SKETCH',id=copy_['id']))
+        self.assertAlmostEqual(model.frame(copy_)['origin'][2],.03,places=12)
+        self.assertEqual(len(copy_['entities']),1)
+        self.assertNotEqual(copy_['entities'][0]['id'],rect)
+        self.assertEqual(copy_['constraints'][0]['refs'][0]['id'],copy_['entities'][0]['id'])
+        self.assertEqual(model.outline(copy_['entities'][0]),model.outline(source['entities'][0]))
+        cad.plane_set(dict(plane_id=copy_['plane_id'],translation=[0,0,-.02],**OWNER))
+        self.assertAlmostEqual(model.frame(runtime.doc()['sketches'][1])['origin'][2],-.02,places=12)
+        with self.assertRaises(CommandError): cad.sketch_delete(dict(sketch_id=source['id'],**OWNER))
+        cad.sketch_delete(dict(sketch_id=copy_['id'],**OWNER))
+        self.assertEqual(runtime.doc()['planes'],[])
+
     def test_drawing_uses_increment_grid_point_snap_and_drops_collapsed_figures(self):
         def entity(identifier):
             return next(e for s in runtime.doc()['sketches'] for e in s['entities'] if e['id']==identifier)

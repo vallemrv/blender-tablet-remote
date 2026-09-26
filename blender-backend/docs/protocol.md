@@ -1485,6 +1485,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.fillet` | `{radius}` | Redondea cada esquina de la selección (rectángulo entero, varias esquinas, extremos de línea o líneas unidas) con un radio compartido; conserva restricciones y operaciones dependientes |
 | `cad.fillet.remove` | `{entity_id}` | Quita un redondeo, extiende los lados hasta la esquina y remapea el perfil usado por sólidos, con un undo |
 | `cad.sketch.delete` | `{sketch_id}` | Elimina un boceto sin operaciones dependientes |
+| `cad.sketch.copy` | `{sketch_id,offset}` | Copia el croquis a un plano implícito paralelo, `offset` metros por su normal; un undo y selecciona la copia (`SKETCH`). La separación se edita con `cad.plane.set` (`translation[2]`) |
 | `cad.sketch.visibility` | `{sketch_id,visible}` | Muestra/oculta el overlay; el boceto activo siempre se ve |
 | `cad.entity.construction` | `{construction}` | Cambia las figuras seleccionadas a auxiliares o perfiles; rechaza romper una operación dependiente |
 | `cad.body.create` | `{}` | Crea y activa otro cuerpo independiente |

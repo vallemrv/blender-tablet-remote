@@ -127,6 +127,13 @@ boceto. Es un solver acotado a estas restricciones, no el motor completo de
 FreeCAD. No anuncia un estado «totalmente restringido» ni restricciones que no
 pueda evaluar. Los rectángulos siguen alineados a los ejes de su plano.
 
+### Copiar un croquis a otro plano
+
+En la pila, el menú del croquis ofrece **Copiar a otro plano paralelo**. La copia
+conserva figuras y reglas en un plano que sigue al original, desplazado por su
+normal (10 pasos al crearla). Con la copia seleccionada, **Separación Z** en la
+bandeja la sube o baja (negativo = al otro lado). Es la base para unir dos croquis.
+
 ## Bandeja de cotas
 
 El círculo muestra **Radio** mientras se dibuja y después de soltar. Editarlo modifica

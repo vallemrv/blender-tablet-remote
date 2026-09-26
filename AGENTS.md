@@ -680,6 +680,10 @@ no quedan archivos o referencias temporales.
 - Planos ofrece Superior/Frontal/Lateral, una cara y Separación como controles básicos.
   Crear croquis crea plano y boceto en un undo. Inclinación/XYZ son ajustes opcionales;
   Planos existentes permite reutilizar y colocar los guardados con la misma interfaz.
+- «Copiar a otro plano paralelo» (menú del croquis) crea con un undo un plano implícito
+  referido al croquis fuente (traslación `[0,0,z]`) y una copia con IDs nuevos y reglas
+  remapeadas. Sigue al fuente; su «Separación Z» se edita en la bandeja 3D al
+  seleccionarla y borrar la copia retira su plano. El fuente no se borra mientras exista.
 - Seleccionar todo/Deseleccionar todo comparten el rail de Deshacer/Rehacer, también
   en CAD 3D. En edición seleccionan figuras del croquis; en 3D el croquis elegido.
   Extruir/Vaciar aceptan `sketch_id` para todos sus contornos: exteriores como volumen,

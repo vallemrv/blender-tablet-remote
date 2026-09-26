@@ -1151,6 +1151,38 @@ def sketch_delete(payload):
     return runtime.status()
 
 
+@command('cad.sketch.copy')
+def sketch_copy(payload):
+    """Copy a sketch onto a parallel plane `offset` metres along its normal.
+
+    The plane references the source sketch, so the copy follows it and its
+    separation remains editable (cad.plane.set translation Z). IDs are new.
+    """
+    offset=model.number(payload.get('offset',0))
+    def change(doc):
+        source=model.find(doc,'sketches',payload.get('sketch_id'))
+        _require_reachable(doc,source['id'])
+        plane=dict(id=model.uid('plane'),name='Plano de '+source['name'],base='XY',implicit=True,
+                   reference_sketch_id=source['id'],translation=[0.,0.,offset],rotation=[0.,0.,0.])
+        model.validate_plane(plane); doc['planes'].append(plane)
+        ids={e['id']:model.uid('entity') for e in source['entities']}
+        entities=[dict(copy.deepcopy(e),id=ids[e['id']]) for e in source['entities']]
+        constraints=[]
+        for c in source.get('constraints',[]):
+            clone=copy.deepcopy(c); clone['id']=model.uid('constraint')
+            clone['refs']=[dict(r,id=ids.get(r['id'],r['id'])) for r in c['refs']]
+            constraints.append(clone)
+        sketch=dict(id=model.uid('sketch'),name=source['name']+' (copia)',plane=source['plane'],offset=0,plane_id=plane['id'],
+                    entities=entities,constraints=constraints,visible=True,order=model.next_order(doc),body_id=source.get('body_id'))
+        doc['sketches'].append(sketch)
+        bar=runtime.bar(doc)
+        if bar: model.insert_after(doc,sketch,bar)
+        model.resolve_supports(doc)
+        runtime.selection=dict(kind='SKETCH',id=sketch['id'])
+    yield from runtime.transaction_steps(payload,change,'CAD copiar croquis a otro plano')
+    return runtime.status()
+
+
 @command('cad.body.create')
 def body_create(payload):
     def change(doc):

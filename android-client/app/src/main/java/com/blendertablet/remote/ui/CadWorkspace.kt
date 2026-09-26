@@ -226,6 +226,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                         CadNodeAction("Seleccionar croquis completo", sketch.profiles.isNotEmpty()) {
                                             vm.cadTool(null); command("cad.select", "kind" to "SKETCH", "id" to sketch.id)
                                         },
+                                        CadNodeAction("Copiar a otro plano paralelo") {
+                                            vm.cadTool(null); command("cad.sketch.copy", "sketch_id" to sketch.id, "offset" to cad.step * 10)
+                                        },
                                         CadNodeAction(if (sketch.visible) "Ocultar boceto" else "Mostrar boceto") {
                                             command("cad.sketch.visibility", "sketch_id" to sketch.id, "visible" to !sketch.visible)
                                         },
@@ -284,6 +287,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     val validDrafts = drafts.values.all { it != null }
     val entity = cad.selectedEntity?.takeUnless { (cad.sessionActive && !livePreview) || pendingDimension != null || editingConstraint != null || cad.surface.mode != "PROFILE" }
     val feature = cad.selectedFeature?.takeUnless { cad.sessionActive || editing || cad.surface.mode != "PROFILE" }
+    // A sketch on a saved plane moves along its normal from the 3D tray.
+    val offsetPlane = if (editing || feature != null || cad.sessionActive) null
+        else selectedSketch?.planeId?.let { id -> cad.planes.firstOrNull { it.id == id } }
     fun acceptValues() {
         if (!connected || !validDrafts || livePreview) return
         focusManager.clearFocus()
@@ -313,6 +319,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             }
             entity != null && drafts.isNotEmpty() -> command("cad.entity.set", "entity_id" to entity.id, "values" to drafts.toMap())
             feature != null && drafts["depth"] != null -> command("cad.feature.set", "feature_id" to feature.id, "depth" to drafts["depth"])
+            offsetPlane != null && drafts["offset"] != null -> command("cad.plane.set", "plane_id" to offsetPlane.id,
+                "translation" to offsetPlane.translation.take(2) + drafts["offset"]!!)
         }
     }
     fun discardValues() {
@@ -326,7 +334,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
         else -> drafts.isNotEmpty()
     }
     val parameterScroll = rememberScrollState()
-    val hasValues = depthPreview || finishPreview || pendingDimension != null || editingConstraint != null || entity != null || feature != null
+    val hasValues = depthPreview || finishPreview || pendingDimension != null || editingConstraint != null || entity != null || feature != null || offsetPlane != null
     FloatingPanel(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { onTrayHeight(it.height) }.padding(Metrics.EdgeMargin)) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(cad.error ?: when {
@@ -493,6 +501,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             Text("${feature.edgeCount} aristas", color = Ink.Muted, fontSize = 12.sp)
                             CadAction("VISIBLE", if (feature.enabled) "Ocultar" else "Mostrar", selected = feature.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled) }
                             CadAction("DELETE", "Borrar operación", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
+                        } else if (offsetPlane != null) {
+                            CadDimension("Separación Z", drafts["offset"] ?: offsetPlane.translation.getOrElse(2) { 0.0 }, unit, offsetPlane.id,
+                                step = cad.step, enabled = connected, onDone = ::acceptValues) { drafts["offset"] = it }
                         } else feature?.let { selected ->
                             if (selected.type == "CUT" || selected.type == "EXTRUDE") {
                                 PillButton("Una dirección", selected = selected.extent != "BOTH", enabled = connected) {
