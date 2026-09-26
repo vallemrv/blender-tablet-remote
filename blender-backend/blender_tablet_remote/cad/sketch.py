@@ -16,7 +16,7 @@ CONSTRAINTS = ('COINCIDENT', 'HORIZONTAL', 'VERTICAL', 'PARALLEL', 'PERPENDICULA
 
 def handles(e):
     typ = e['type']
-    if typ == 'ORIGIN': return {'POINT': (0., 0.)}
+    if typ in ('ORIGIN', 'POINT'): return {'POINT': (e.get('x',0.), e.get('y',0.))}
     if typ == 'LINE':
         return {'START': (e['x'],e['y']), 'END': (e['x2'],e['y2'])}
     if typ in ('RECTANGLE', 'NGON'):
@@ -201,7 +201,10 @@ def solve(sketch, goals=(), *, drag=False):
     validate_constraints(sketch)
     work = copy.deepcopy(sketch)
     work['_rounding_links']=rounding_links(work)
-    layout = [(e,k) for e in work['entities'] for k in model.FIELDS[e['type']]]
+    # Fully fixed drawings (projected references, FIX of the whole figure) are
+    # constants: they never count towards the parameter limit.
+    fixed = {c['refs'][0]['id'] for c in work.get('constraints',[]) if c['type']=='FIX' and 'values' in c}
+    layout = [(e,k) for e in work['entities'] if e['id'] not in fixed for k in model.FIELDS[e['type']]]
     if len(layout)>300:
         raise CommandError('Este solver admite hasta 300 parámetros por boceto',code='cad_solver_limit')
     scale = max([abs(e[k]) for e,k in layout if k not in model.ANGULAR]+[.001])
@@ -236,7 +239,7 @@ def solve(sketch, goals=(), *, drag=False):
         evaluate(values)
         return np.array(columns).T
     r=evaluate(x)
-    for _ in range(60):
+    for _ in range(60 if layout else 0):
         if not len(r) or np.max(np.abs(r))<1e-8: break
         j=jacobian(x,r)
         step=np.linalg.lstsq(j,-r,rcond=1e-9)[0]
@@ -278,7 +281,7 @@ def weld_points(sketch, refs):
     refs=[dict(id=i,part=p) for i,p in keys]
     for ref in refs:
         e=get_entity(sketch,ref)
-        allowed={'LINE':('START','END'),'ARC':('START','END'),'RECTANGLE':('P0','P1','P2','P3'),'ORIGIN':('POINT',),
+        allowed={'LINE':('START','END'),'ARC':('START','END'),'RECTANGLE':('P0','P1','P2','P3'),'ORIGIN':('POINT',),'POINT':('POINT',),
                  'NGON':tuple(p for p in handles(e) if p!='CENTER') if e['type']=='NGON' else ()}
         if ref['part'] not in allowed.get(e['type'],()):
             raise BadPayload('Soldar requiere extremos de líneas/arcos o esquinas, no figuras completas')
@@ -332,7 +335,7 @@ def move_goals(sketch, refs, dx, dy):
         elif e['type']=='RECTANGLE' and part.startswith('EDGE'):
             index=int(part[4:]); roles=['P'+str(index),'P'+str((index+1)%4)]
         else:
-            roles=list(points) if e['type'] in ('LINE','RECTANGLE') else ['CENTER']
+            roles=list(points) if e['type'] in ('LINE','RECTANGLE','POINT') else ['CENTER']
         for role in roles:
             key=(e['id'],role)
             if key in seen: continue
@@ -602,3 +605,80 @@ def remove_fillet(sketch, arc):
     sketch['constraints']=[c for c in sketch.get('constraints',[]) if not any(r['id']==arc['id'] for r in c['refs'])]
     sketch['constraints'].append(dict(id=model.uid('constraint'),type='COINCIDENT',refs=sides))
     solve(sketch)
+
+
+def chain_segments(segments, tol):
+    """Join 2D segments into polylines; returns (points, closed) pairs."""
+    key=lambda p:(round(p[0]/tol),round(p[1]/tol))
+    links={}
+    for a,b in segments:
+        if math.dist(a,b)<tol: continue
+        links.setdefault(key(a),[]).append((a,b)); links.setdefault(key(b),[]).append((b,a))
+    used=set(); chains=[]
+    def walk(start):
+        points=[start[0],start[1]]; used.add(frozenset((key(start[0]),key(start[1]))))
+        while True:
+            options=[s for s in links[key(points[-1])] if frozenset((key(s[0]),key(s[1]))) not in used]
+            if len(options)!=1 or len(links[key(points[-1])])>2: return points
+            used.add(frozenset((key(options[0][0]),key(options[0][1])))); points.append(options[0][1])
+    ends=[k for k,v in links.items() if len(v)!=2]
+    for k in ends+list(links):
+        for segment in links[k]:
+            if frozenset((key(segment[0]),key(segment[1]))) in used: continue
+            points=walk(segment)
+            closed=len(points)>3 and key(points[0])==key(points[-1])
+            chains.append((points[:-1] if closed else points,closed))
+    return chains
+
+
+def _circle(a, b, c):
+    ax,ay=a; bx,by=b; cx,cy=c
+    d=2*(ax*(by-cy)+bx*(cy-ay)+cx*(ay-by))
+    if abs(d)<1e-24: return None
+    ux=((ax*ax+ay*ay)*(by-cy)+(bx*bx+by*by)*(cy-ay)+(cx*cx+cy*cy)*(ay-by))/d
+    uy=((ax*ax+ay*ay)*(cx-bx)+(bx*bx+by*by)*(ax-cx)+(cx*cx+cy*cy)*(bx-ax))/d
+    return (ux,uy),math.dist((ux,uy),a)
+
+
+def fit_polyline(points, closed, tol):
+    """Straight runs become LINEs, co-circular runs ARCs, a whole round loop a CIRCLE.
+
+    Tessellated solids arrive as many short segments; fitting them keeps a
+    projection light and gives Onshape-like references (centers to snap to).
+    """
+    def on_line(run):
+        a,b=np.array(run[0]),np.array(run[-1]); d=b-a; length=np.linalg.norm(d)
+        if length<tol: return False
+        return all(abs(d[0]*(p[1]-a[1])-d[1]*(p[0]-a[0]))/length<=tol for p in run[1:-1])
+    def round_run(run, fit):
+        # Tessellation steps are small; polygon corners (a rectangle's, on its
+        # circumcircle) are not an arc.
+        return fit is not None and all(abs(math.dist(fit[0],p)-fit[1])<=tol for p in run) and \
+            all(math.dist(a,b)<=2*fit[1]*math.sin(math.radians(12.5)) for a,b in zip(run,run[1:]))
+    def on_arc(run):
+        fit=_circle(run[0],run[len(run)//2],run[-1])
+        if fit is None and len(run)>3: fit=_circle(run[0],run[1],run[-1])
+        return fit if round_run(run,fit) else None
+    if closed and len(points)>=8:
+        fit=_circle(points[0],points[len(points)//3],points[2*len(points)//3])
+        if round_run(points+[points[0]],fit):
+            return [dict(type='CIRCLE',x=fit[0][0],y=fit[0][1],diameter=2*fit[1])]
+    path=list(points)+([points[0]] if closed else [])
+    result=[]; i=0
+    while i<len(path)-1:
+        j=i+1
+        while j+1<len(path) and on_line(path[i:j+2]): j+=1
+        k=i+2
+        arc=None
+        while k<len(path) and on_arc(path[i:k+1]): arc=on_arc(path[i:k+1]); k+=1
+        k-=1
+        if arc and k-i>=3 and k>j:
+            (cx,cy),r=arc
+            a0=math.degrees(math.atan2(path[i][1]-cy,path[i][0]-cx)); a1=math.degrees(math.atan2(path[k][1]-cy,path[k][0]-cx))
+            am=math.degrees(math.atan2(path[(i+k)//2][1]-cy,path[(i+k)//2][0]-cx))
+            sweep=(a1-a0)%360.
+            if (am-a0)%360.>sweep: sweep-=360.
+            if .01<=abs(sweep)<360: result.append(dict(type='ARC',x=cx,y=cy,radius=r,start=a0,sweep=sweep)); i=k; continue
+        a,b=path[i],path[j]
+        result.append(dict(type='LINE',x=a[0],y=a[1],x2=b[0],y2=b[1])); i=j
+    return result

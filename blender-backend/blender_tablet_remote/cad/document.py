@@ -8,14 +8,16 @@ from ..errors import BadPayload, CommandError
 VERSION = 1
 KEY = 'btr_cad_document'
 PLANES = ('XY', 'XZ', 'YZ')
-TYPES = ('LINE', 'RECTANGLE', 'CIRCLE', 'ARC', 'NGON', 'SLOT', 'GEAR')
+TYPES = ('LINE', 'RECTANGLE', 'CIRCLE', 'ARC', 'NGON', 'SLOT', 'GEAR', 'POINT')
 # NGON is a regular polygon: its across-flats size (inscribed diameter, the
 # wrench size of a nut) and the rotation of its first vertex are solver
 # parameters; `sides` is a discrete property, never solved.
 FIELDS = {'LINE': ('x','y','x2','y2'), 'RECTANGLE': ('x','y','width','height'),
           'CIRCLE': ('x','y','diameter'), 'ARC': ('x','y','radius','start','sweep'),
           'NGON': ('x','y','flats','angle'),
-          'SLOT': ('x','y','length','width','angle'), 'GEAR': ('x','y','module','angle')}
+          'SLOT': ('x','y','length','width','angle'), 'GEAR': ('x','y','module','angle'),
+          'POINT': ('x','y')}
+# POINT only comes from projecting a solid vertex: a fixed reference to snap and dimension to.
 # SLOT is a straight slot: two semicircles of diameter `width` whose centers lie
 # `length` apart, joined by two tangent lines; (x,y) is its middle point.
 # GEAR is an involute spur gear: `module` is its size (pitch diameter = module ×
@@ -298,6 +300,8 @@ def outline(e):
                  y + e['radius']*math.sin(math.radians(e['start']+e['sweep']*i/count))) for i in range(count+1)]
     if e['type'] == 'LINE':
         return [(x, y), (e['x2'], e['y2'])]
+    if e['type'] == 'POINT':
+        return [(x, y)]
     if e['type'] == 'NGON':
         r = circumradius(e)
         return [(x + r*math.cos(math.radians(e['angle'])+i*math.tau/e['sides']),

@@ -193,7 +193,7 @@ STANDARD_MODULES = tuple(m/1000 for m in (.1,.2,.25,.3,.4,.5,.6,.8,1,1.25,1.5,2,
 @command('cad.entity.begin')
 def entity_begin(payload):
     typ = str(payload.get('type','')).upper()
-    if typ not in model.TYPES:
+    if typ not in model.TYPES or typ == 'POINT':   # points only come from projection
         raise BadPayload('Tipo de entidad CAD no compatible')
     sketch = model.find(runtime.doc(),'sketches',runtime.active_sketch_id)
     # Drawing follows the same aids as editing: an existing point attracts the
@@ -1379,7 +1379,7 @@ def project_reference(payload):
     from mathutils import Vector
     runtime.surface.validate()
     items=copy.deepcopy(runtime.surface.items)
-    if not items or any(i['kind']=='VERTEX' for i in items): raise BadPayload('Selecciona una arista o cara para proyectarla')
+    if not items: raise BadPayload('Selecciona un punto, una arista o una cara para proyectarla')
     def change(doc):
         sketch=model.find(doc,'sketches',runtime.active_sketch_id); frame=model.frame(sketch)
         scale=bpy.context.scene.unit_settings.scale_length; origin=Vector(frame['origin'])
@@ -1387,30 +1387,27 @@ def project_reference(payload):
             offset=Vector(point)*scale-origin
             return (offset.dot(Vector(frame['x'])),offset.dot(Vector(frame['y'])))
         def add(entity):
+            entity=dict(entity,id=model.uid('entity'),construction=True,reference=True)
             sketch['entities'].append(entity)
             created.append(entity['id'])
             sketch.setdefault('constraints',[]).append(dict(id=model.uid('constraint'),type='FIX',
                 refs=[dict(id=entity['id'],part='BODY')],values={k:entity[k] for k in model.FIELDS[entity['type']]}))
-        created=[]; seen=set()
+        created=[]; seen=set(); segments=[]
         for item in items:
-            groups=[item['segments']] if item['kind']=='EDGE' else [item['segments']]
-            for segments in groups:
-                local=[project(p) for p in item.get('points') or [q for segment in segments for q in segment]]
-                center=sum((Vector(p) for p in local),Vector((0,0)))/max(len(local),1)
-                radii=[(Vector(p)-center).length for p in local]
-                mean=sum(radii)/max(len(radii),1)
-                if len(local)>=8 and mean>1e-6 and max(abs(r-mean) for r in radii)<mean*.02:
-                    add(dict(id=model.uid('entity'),type='CIRCLE',x=center.x,y=center.y,diameter=mean*2,
-                             construction=True,reference=True))
-                    continue
-                for a,b in segments:
-                    a,b=project(a),project(b)
-                    if math.dist(a,b)<1e-7: continue
-                    identity=tuple(sorted(tuple(round(v,10) for v in p) for p in (a,b)))
-                    if identity in seen: continue
-                    seen.add(identity)
-                    add(dict(id=model.uid('entity'),type='LINE',x=a[0],y=a[1],x2=b[0],y2=b[1],
-                             construction=True,reference=True))
+            if item['kind']=='VERTEX':
+                for p in item['points']: add(dict(type='POINT',x=project(p)[0],y=project(p)[1]))
+                continue
+            for a,b in item['segments']:
+                a,b=project(a),project(b)
+                identity=tuple(sorted(tuple(round(v,10) for v in p) for p in (a,b)))
+                if identity not in seen: seen.add(identity); segments.append((a,b))
+        if segments:
+            coords=[c for segment in segments for p in segment for c in [p]]
+            size=math.dist((min(p[0] for p in coords),min(p[1] for p in coords)),(max(p[0] for p in coords),max(p[1] for p in coords)))
+            tol=max(size*1e-5,1e-7)
+            # Straight runs, arcs and round loops, not one line per tessellated segment.
+            for points,closed in geometry.chain_segments(segments,tol):
+                for shape in geometry.fit_polyline(points,closed,tol): add(shape)
         if not created: raise BadPayload('La referencia se proyecta como un punto; elige otra arista')
         geometry.solve(sketch)
     yield from runtime.transaction_steps(payload,change,'CAD proyectar referencia fija')

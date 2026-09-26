@@ -667,9 +667,12 @@ no quedan archivos o referencias temporales.
   caras horizontales), nunca una arista teselada: un rectángulo sale recto en pantalla. Las caras superiores CAD conservan soporte asociativo; otras
   caras guardan su marco. Las selecciones del sólido son transitorias y se invalidan
   al cambiar geometría o transformación; no persisten índices de la malla evaluada.
-- En un boceto, Proyectar está en el rail: cualquier arista, aunque esté a otra
-  altura, se copia al plano del croquis como construcción fija. Un contorno
-  circular llega como círculo. FIX y un undo. Permite acotar desde esos elementos;
+- En un boceto, Proyectar está en el rail: cualquier punto, arista o cara, aunque esté
+  a otra altura, se copia al plano del croquis como construcción fija. Los tramos se
+  encadenan y ajustan: rectos → LINE, cocirculares con paso teselado pequeño → ARC,
+  un lazo redondo → CIRCLE (con centro); un vértice → `POINT` (solo por proyección).
+  FIX y un undo. Las figuras con FIX completo son constantes y no cuentan en el límite
+  de 300 parámetros del solver. Permite acotar desde esos elementos;
   es una copia fija, no promete asociación topológica con cualquier cara/arista.
   Medir desde sólido se abre desde Planos y bocetos durante la edición; no ocupa
   permanentemente la bandeja de cotas del croquis.

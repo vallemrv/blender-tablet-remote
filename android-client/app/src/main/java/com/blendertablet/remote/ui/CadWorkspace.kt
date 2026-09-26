@@ -110,10 +110,10 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             }
             if (capabilities.sketchEditing) CadAction("FILLET", "Redondear esquinas seleccionadas", selected = pendingDimension == "FILLET",
                 enabled = !cad.sessionActive && cad.selection.any { it.id != "ORIGIN" }) { pendingDimension = "FILLET" }
-            if (capabilities.sketchEditing) CadAction("PROJECT", "Proyectar arista al plano del croquis",
-                selected = cad.surface.mode == "EDGE", enabled = !cad.sessionActive) {
-                if (cad.surface.mode == "EDGE" && cad.surface.selection.any { it.kind == "EDGE" || it.kind == "FACE" }) command("cad.reference.project")
-                else vm.cadSurfaceMode(if (cad.surface.mode == "EDGE") "PROFILE" else "EDGE")
+            if (capabilities.sketchEditing) CadAction("PROJECT", "Proyectar punto, arista o cara al plano del croquis",
+                selected = cad.surface.mode != "PROFILE", enabled = !cad.sessionActive) {
+                if (cad.surface.mode != "PROFILE" && cad.surface.selection.isNotEmpty()) command("cad.reference.project")
+                else vm.cadSurfaceMode(if (cad.surface.mode != "PROFILE") "PROFILE" else "EDGE")
             }
         } else {
             RailDivider()
@@ -372,7 +372,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 dragPreview -> "Medidas en vivo · suelta para fijar una medida con su candado"
                 drawPreview -> "Medidas en vivo · Incremento redondea al paso y los puntos existentes atraen · suelta para editar las medidas"
                 cad.sessionActive && cad.operation == "POLYGON" -> "Polígono: traza o toca cada vértice · cierra tocando el primer punto o con Cerrar · dos dedos descarta"
-                editing && cad.surface.mode == "EDGE" -> "Toca cualquier arista, aunque esté a otra altura · Proyectar la copia al plano del croquis"
+                editing && cad.surface.mode != "PROFILE" -> "Toca puntos, aristas o caras (Puntos/Aristas/Caras junto al selector) · Proyectar las copia al croquis: tramos rectos como líneas, curvas como arcos y círculos con su centro"
                 cad.surface.mode == "FACE" -> if (cad.surface.selection.size > 1) "Dos referencias para medir · quita una cara seleccionada para crear el boceto" else "Toca una cara: se resalta en el vídeo · Boceto en cara usa exactamente esa selección"
                 cad.surface.mode != "PROFILE" -> "Toca hasta dos referencias para medir · durante el boceto puedes proyectarlas para acotar desde ellas"
                 state.cadTool == "ARC" -> "Arrastra centro → inicio del arco · al soltar, arrastra el rombo del extremo para variar el ángulo"
@@ -710,7 +710,7 @@ private fun cadGearSummary(gear: CadEntity, unit: LengthUnit): String {
 private fun lengthFactor(unit: LengthUnit) = when (unit) { LengthUnit.MILLIMETERS -> 1000.0; LengthUnit.CENTIMETERS -> 100.0; LengthUnit.METERS -> 1.0 }
 
 internal fun cadLabel(type: String) = when (type) {
-    "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "SLOT" -> "Ranura"; "GEAR" -> "Engranaje"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
+    "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "SLOT" -> "Ranura"; "GEAR" -> "Engranaje"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "POINT" -> "Punto"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
     "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad (tamaño del primero)"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
     "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; else -> type
@@ -919,7 +919,7 @@ private fun CadSurfaceControls(cad: CadState, unit: LengthUnit, enabled: Boolean
         CadAction("FILLET", "Redondear aristas", enabled = enabled) { vm.cadCommand("cad.finish.begin", mapOf("operation" to "FILLET")) }
         CadAction("CHAMFER", "Chaflán en aristas", enabled = enabled) { vm.cadCommand("cad.finish.begin", mapOf("operation" to "CHAMFER")) }
     }
-    if (cad.activeSketchId != null && cad.surface.selection.isNotEmpty() && cad.surface.selection.none { it.kind == "VERTEX" }) {
+    if (cad.activeSketchId != null && cad.surface.selection.isNotEmpty()) {
         PillButton("Proyectar al plano", enabled = enabled) { vm.cadCommand("cad.reference.project") }
     }
     val factor = when (unit) { LengthUnit.MILLIMETERS -> 1000.0; LengthUnit.CENTIMETERS -> 100.0; LengthUnit.METERS -> 1.0 }

@@ -558,7 +558,7 @@ class CadRuntime:
                                 intent='ANGLE' if selected and e['type']=='ARC' and role=='END' and sketch_geometry.fillet_sides(sketch,e) is None else 'POINT',
                                 selected=any(ref['id']==e['id'] and ref.get('part')==role for ref in refs)))
                 selected_parts=[r.get('part','BODY') for r in refs if r['id']==e['id']]
-                result.append(dict(id=e['id'],points=points,closed=e['type'] not in ('LINE','ARC'),
+                result.append(dict(id=e['id'],points=points,closed=e['type'] not in ('LINE','ARC','POINT'),
                                    selected=selected,handles=handle_points,selected_parts=selected_parts,construction=e.get('construction',False)))
             if sketch['id']==self.active_sketch_id:
                 labels={'COINCIDENT':'●','HORIZONTAL':'H','VERTICAL':'V','PARALLEL':'∥',

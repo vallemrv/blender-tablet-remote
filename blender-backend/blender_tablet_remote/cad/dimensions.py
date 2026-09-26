@@ -83,7 +83,7 @@ def factor(entity, field):
 
 def bindings(sketch, entity):
     fields={'RECTANGLE':('width','height'),'CIRCLE':('diameter',),'ARC':('radius',),'LINE':('length',),'NGON':('flats',),
-            'SLOT':('length','width'),'GEAR':('module',)}[entity['type']]
+            'SLOT':('length','width'),'GEAR':('module',),'POINT':()}[entity['type']]
     root=groups(sketch)
     result={}
     for field in fields:
@@ -149,7 +149,7 @@ def describe(sketch, entity):
             'NGON':[('flats','Entre caras' if entity.get('sides',6)%2==0 else 'Ø inscrito','RADIUS','BODY',.5)],
             'SLOT':[('width','Ancho','RADIUS','BODY',.5),('length','Entre centros','DISTANCE','AXIS',1.)],
             # Module is governed by the pitch radius: module × teeth / 2.
-            'GEAR':[('module','Módulo','RADIUS','BODY',None)]}[typ]
+            'GEAR':[('module','Módulo','RADIUS','BODY',None)],'POINT':[]}[typ]
     if typ=='RECTANGLE' and is_square(sketch,entity): fields=fields[:1]
     return [dict(field=field,label=label,constraint_type=kind,value_factor=scale if scale is not None else factor(entity,field),
                  refs=[dict(id=entity['id'],part=part)],constraint_ids=bound['diameter' if typ=='CIRCLE' else field])

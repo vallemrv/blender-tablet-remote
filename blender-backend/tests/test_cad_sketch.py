@@ -42,6 +42,38 @@ class SketchTests(CadTests):
         self.assertAlmostEqual(circle['y'],.02,places=5)
         self.assertAlmostEqual(circle['diameter'],.02,places=5)
 
+    def project(self, **item):
+        with patch.object(runtime.surface, 'validate'):
+            runtime.surface.mode=item['kind']
+            runtime.surface.items=[dict(dict(id='r',object='Base',feature_id=None,planar=True,segments=[],points=[]),**item)]
+            cad.project_reference(OWNER)
+        return [e for e in runtime.doc()['sketches'][-1]['entities'] if e.get('reference')]
+
+    def test_projection_fits_a_rounded_contour_into_lines_and_arcs(self):
+        points=[]
+        for cx,cy,start in ((.03,.02,0),(-.03,.02,90),(-.03,-.02,180),(.03,-.02,270)):   # 8 mm corners, 32 steps
+            points.extend([cx+.008*math.cos(math.radians(start+90*i/32)),cy+.008*math.sin(math.radians(start+90*i/32)),0] for i in range(33))
+        segments=[[points[i],points[(i+1)%len(points)]] for i in range(len(points))]
+        shapes=self.project(kind='EDGE',segments=segments,points=points)
+        self.assertEqual(sorted(e['type'] for e in shapes),['ARC']*4+['LINE']*4)
+        for arc in (e for e in shapes if e['type']=='ARC'):
+            self.assertAlmostEqual(arc['radius'],.008,places=6); self.assertAlmostEqual(abs(arc['sweep']),90,places=3)
+
+    def test_projection_of_a_dense_outline_does_not_hit_the_solver_limit(self):
+        zigzag=[[.001*i,.002*(i%2),0] for i in range(201)]
+        shapes=self.project(kind='EDGE',segments=[[zigzag[i],zigzag[i+1]] for i in range(200)],points=zigzag)
+        self.assertEqual(len(shapes),200)
+        self.draw('CIRCLE',(.1,.1),(.11,.1))   # the sketch still solves and draws
+
+    def test_projected_vertex_is_a_point_to_center_a_circle_on(self):
+        (point,)=self.project(kind='VERTEX',points=[[.012,.007,0]])
+        self.assertEqual(point['type'],'POINT')
+        self.assertAlmostEqual(point['x'],.012,places=7); self.assertAlmostEqual(point['y'],.007,places=7)
+        circle=self.draw('CIRCLE',(0,0),(.005,0))
+        cad.constraint_add(dict(type='COINCIDENT',refs=[dict(id=circle,part='CENTER'),dict(id=point['id'],part='POINT')],**OWNER))
+        _,e=model.entity(runtime.doc(),circle)
+        self.assertAlmostEqual(e['x'],.012,places=7); self.assertAlmostEqual(e['y'],.007,places=7)
+
     def test_symmetric_extrude_grows_equally_both_sides_of_the_sketch(self):
         rectangle=self.rect()
         cad.extrude_begin(dict(profile_id='profile_'+rectangle, depth=.02, extent='BOTH', **OWNER))
