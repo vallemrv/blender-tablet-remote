@@ -37,7 +37,8 @@ actualiza las operaciones dependientes y registra un paso de undo.
   arrastrar un vértice solo lo gira. Sirve para tuercas y alojamientos de tuerca.
 - Ranura: arrastrar del centro de un extremo al del otro. Sus medidas son **Ancho**
   (diámetro de los extremos) y **Entre centros**; arrastrar un centro de extremo deja
-  fijo el otro. Sirve para agujeros alargados y ajustes regulables.
+  fijo el otro y el punto sobre un lado recto ensancha o estrecha la ranura (con la
+  ranura sin seleccionar entera; seleccionada, el arrastre la mueve completa). Sirve para agujeros alargados y ajustes regulables.
 - Engranaje recto de evolvente: arrastrar centro → círculo primitivo (20 dientes por
   defecto). Su medida es el **Módulo** (Ø primitivo = módulo × dientes; paso = π·módulo);
   con Incremento se elige el módulo normalizado más cercano. Dientes (6–150) y ángulo de

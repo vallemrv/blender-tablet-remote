@@ -23,7 +23,10 @@ def handles(e):
         corners = {'P'+str(i): p for i, p in enumerate(model.outline(e))}
         return {'CENTER': (e['x'], e['y']), **corners} if typ == 'NGON' else corners
     if typ == 'SLOT':
-        return {'CENTER': (e['x'],e['y']), **dict(zip(('START','END'),slot_centers(e)))}
+        # SIDE sits on one straight side: dragging it widens or narrows the slot.
+        a=math.radians(e['angle']); half=e['width']/2
+        return {'CENTER': (e['x'],e['y']), **dict(zip(('START','END'),slot_centers(e))),
+                'SIDE': (e['x']-math.sin(a)*half,e['y']+math.cos(a)*half)}
     if typ == 'GEAR':
         return {'CENTER': (e['x'],e['y'])}
     if typ == 'ARC':
@@ -319,6 +322,9 @@ def move_goals(sketch, refs, dx, dy):
             if e['type']=='NGON' and single_handle and part!='CENTER':
                 # A vertex resizes and turns the polygon around its fixed center.
                 goals.append(dict(id=e['id'],part='CENTER',point=np.array(points['CENTER']),hard=True))
+            if e['type']=='SLOT' and single_handle and part=='SIDE':
+                # Only the width follows: both cap centers stay where they are.
+                goals.extend(dict(id=e['id'],part=role,point=np.array(points[role]),hard=True) for role in ('START','END'))
             if e['type']=='SLOT' and single_handle and part in ('START','END'):
                 # One end center moves; the other stays, so length and direction follow.
                 other='END' if part=='START' else 'START'

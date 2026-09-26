@@ -418,7 +418,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   inscrito (`value_factor` 0,5). Cambiar lados conserva la medida y se rechaza si hay
   reglas sobre esquinas/lados. Dibujar redondea Entre caras al paso.
 - `SLOT` guarda centro, `length` entre centros, `width` y `angle`; sus puntos son
-  `CENTER/START/END` y `AXIS` es su eje para DISTANCE. Ancho es un RADIUS (0,5).
+  `CENTER/START/END/SIDE` y `AXIS` es su eje para DISTANCE. Ancho es un RADIUS (0,5).
+  Arrastrar `SIDE` (sobre un lado recto) solo cambia el ancho: los centros quedan fijos.
   `GEAR` es un engranaje recto de evolvente con `module` y `angle` resolubles y
   `teeth` (6–150)/`pressure` (14,5/20/25°) discretos; su RADIUS es el primitivo
   (`value_factor` = dientes/2). Cambiar dientes conserva el módulo; con Incremento,

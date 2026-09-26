@@ -33,6 +33,20 @@ class CursorTests(CadTests):
         with patch.object(cad,'_pick',side_effect=AssertionError('release pick')),patch.object(runtime,'point',side_effect=AssertionError('release raycast')):
             cad.drag_end(OWNER)
 
+    def test_slot_side_handle_changes_only_its_width(self):
+        with patch.object(cad,'_endpoint',return_value=None):
+            slot=self.draw_unsnapped('SLOT',(0,0),(.02,0))
+        _,before=model.entity(runtime.doc(),slot)
+        side=geometry.handles(before)['SIDE']
+        cad._set_selection([])   # a selected whole slot would move as a group
+        self.assertAlmostEqual(side[1],before['width']/2,places=12)
+        self.begin(ref(slot,'SIDE'),point=side)
+        self.update((side[0]+.003,.005))   # sliding along the axis does not stretch it
+        cad.drag_end(OWNER)
+        _,after=model.entity(runtime.doc(),slot)
+        self.assertAlmostEqual(after['width'],.010,places=7)
+        for key in ('x','y','length','angle'): self.assertAlmostEqual(after[key],before[key],places=7)
+
     def test_taps_toggle_multiple_elements_without_geometry_or_undo(self):
         a=self.draw('LINE',(0,0),(.04,0)); b=self.draw('LINE',(0,.02),(.04,.02))
         cad._set_selection([]); baseline=model.dumps(runtime.doc())

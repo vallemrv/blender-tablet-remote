@@ -378,7 +378,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 state.cadTool == "ARC" -> "Arrastra centro → inicio del arco · al soltar, arrastra el rombo del extremo para variar el ángulo"
                 entity?.type == "ARC" && !entity.isFillet -> "Arrastra el rombo del extremo para variar el ángulo; centro, radio e inicio permanecen fijos"
                 state.cadTool == "NGON" -> "Polígono regular: arrastra del centro a un vértice · elige los lados antes o después · Entre caras es la llave de la tuerca"
-                state.cadTool == "SLOT" -> "Ranura: arrastra del centro de un extremo al del otro · después ajusta Ancho y Entre centros"
+                state.cadTool == "SLOT" -> "Ranura: arrastra del centro de un extremo al del otro · el punto del lado cambia el ancho · o escribe Ancho y Entre centros"
                 state.cadTool == "GEAR" -> "Engranaje: arrastra del centro al círculo primitivo · Incremento elige un módulo normalizado · dientes antes o después"
                 state.cadTool != null -> "${cadLabel(state.cadTool!!)} · arrastra para dibujar · dos dedos navegan"
                 entity?.type == "GEAR" -> cadGearSummary(entity, unit)
