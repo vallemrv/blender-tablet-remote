@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 import bpy
 import numpy as np
+from mathutils import Vector
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from test_cad import CadTests, OWNER, volume
@@ -238,8 +239,12 @@ class FeedbackTests(CadTests):
     def test_sketch_navigation_locked_and_dimensions_projected(self):
         e=self.draw('LINE',(0,0),(.04,0)); self.refs((e,'BODY')); self.rule('DISTANCE',value=.04)
         runtime.focus(runtime.doc()['sketches'][0]); rotation=camera.rotation.copy()
-        view.orbit_delta(.1,.2); view.roll_delta(.3); view.axis({'axis':'FRONT'}); view.perspective({'mode':'PERSP'})
+        view.orbit_delta(.1,.2); view.axis({'axis':'FRONT'}); view.perspective({'mode':'PERSP'})
         self.assertEqual(camera.rotation,rotation); self.assertEqual(camera.perspective,'ORTHO')
+        view.roll_delta(.3)
+        self.assertNotEqual(camera.rotation,rotation); self.assertEqual(camera.perspective,'ORTHO')
+        forward=camera.rotation@Vector((0,0,-1))
+        self.assertGreater(abs(forward.dot(Vector(model.frame(runtime.doc()['sketches'][0])['normal']))),.99)
         overlay=runtime.overlay(runtime.doc())
         self.assertTrue(any(item['id']=='ORIGIN' for item in overlay))
         self.assertTrue(any(item.get('kind')=='DIMENSION' and item.get('label') for item in overlay))

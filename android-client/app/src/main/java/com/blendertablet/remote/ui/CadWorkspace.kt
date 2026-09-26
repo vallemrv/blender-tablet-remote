@@ -13,7 +13,9 @@ import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.North
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
@@ -97,6 +99,11 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             }
             if (capabilities.sketchEditing) CadAction("FILLET", "Redondear esquinas seleccionadas", selected = pendingDimension == "FILLET",
                 enabled = !cad.sessionActive && cad.selection.any { it.id != "ORIGIN" }) { pendingDimension = "FILLET" }
+            if (capabilities.sketchEditing) CadAction("PROJECT", "Proyectar arista al plano del croquis",
+                selected = cad.surface.mode == "EDGE", enabled = !cad.sessionActive) {
+                if (cad.surface.mode == "EDGE" && cad.surface.selection.any { it.kind == "EDGE" || it.kind == "FACE" }) command("cad.reference.project")
+                else vm.cadSurfaceMode(if (cad.surface.mode == "EDGE") "PROFILE" else "EDGE")
+            }
         } else {
             RailDivider()
             capabilities.planes.forEach { plane ->
@@ -104,6 +111,14 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             }
             if (capabilities.sketchEditing) CadAction("SKETCH_FACE", "Crear croquis en la cara seleccionada",
                 enabled = connected && !cad.sessionActive && cad.surface.canSketch) { command("cad.sketch.on_face") }
+            RailDivider()
+            val solidEdges = cad.surface.selection.any { it.kind == "EDGE" }
+            CadAction("FILLET", "Redondear aristas del sólido", enabled = connected && !cad.sessionActive) {
+                if (solidEdges) command("cad.finish.begin", "operation" to "FILLET") else vm.cadSurfaceMode("EDGE")
+            }
+            CadAction("CHAMFER", "Chaflán en aristas del sólido", enabled = connected && !cad.sessionActive) {
+                if (solidEdges) command("cad.finish.begin", "operation" to "CHAMFER") else vm.cadSurfaceMode("EDGE")
+            }
             RailDivider()
             capabilities.features.forEach { operation ->
                 CadAction(operation, cadLabel(operation), selected = depthPreview && cad.operation == operation,
@@ -115,14 +130,17 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
         Modifier.align(Alignment.CenterEnd).padding(end = Metrics.EdgeMargin, top = 142.dp, bottom = 180.dp)
             .heightIn(max = availableHeight)
     ) {
-        capabilities.constraints.forEach { type ->
-            CadAction(type, cadLabel(type), enabled = connected && !cad.sessionActive && cadConstraintEnabled(cad, type),
-                selected = pendingDimension == type) {
-                if (type in listOf("DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS")) {
-                    val existing = cad.dimensionOptions[type]?.constraintId?.let { id -> cad.activeSketch?.constraints?.firstOrNull { it.id == id } }
-                    if (existing != null) { editingConstraint = existing; pendingDimension = null }
-                    else { pendingDimension = type; editingConstraint = null }
-                } else command("cad.constraint.add", "type" to type)
+        cadConstraintGroups(capabilities.constraints).forEachIndexed { index, group ->
+            if (index > 0) RailDivider()
+            group.forEach { type ->
+                CadAction(type, cadLabel(type), enabled = connected && !cad.sessionActive && cadConstraintEnabled(cad, type),
+                    selected = pendingDimension == type) {
+                    if (type in listOf("DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS")) {
+                        val existing = cad.dimensionOptions[type]?.constraintId?.let { id -> cad.activeSketch?.constraints?.firstOrNull { it.id == id } }
+                        if (existing != null) { editingConstraint = existing; pendingDimension = null }
+                        else { pendingDimension = type; editingConstraint = null }
+                    } else command("cad.constraint.add", "type" to type)
+                }
             }
         }
     }
@@ -316,13 +334,14 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 pendingDimension == "FILLET" -> "Redondeo: varias esquinas, el rectángulo entero o líneas unidas · un radio para todas · tras el primero, toca otra esquina"
                 drafts.isNotEmpty() && !depthPreview -> "Medidas pendientes · ✓ aplica los cambios · × descarta"
                 depthPreview -> if (cad.operation == "EXTRUDE")
-                    "Extrusión · desliza en el sentido del plano: arriba/abajo o izquierda/derecha · el botón elige el lado · suelta para asentar"
+                    "Extrusión · Simetría crece a los dos lados del croquis · si no, desliza en el sentido del plano · suelta para asentar"
                 else "${cadLabel(cad.operation)} · desliza en el sentido del vaciado" +
                     " · una dirección o las dos · dos dedos navegan" + if (cad.transparent) " · transparencia automática" else ""
                 finishPreview -> "${cadLabel(cad.operation)} · desliza arriba/abajo o escribe el ancho · ✓ lo añade a la pila"
                 dragPreview -> "Medidas en vivo · suelta para fijar una medida con su candado"
                 drawPreview -> "Medidas en vivo · Incremento redondea al paso y los puntos existentes atraen · suelta para editar las medidas"
                 cad.sessionActive && cad.operation == "POLYGON" -> "Polígono: traza o toca cada vértice · cierra tocando el primer punto o con Cerrar · dos dedos descarta"
+                editing && cad.surface.mode == "EDGE" -> "Toca cualquier arista, aunque esté a otra altura · Proyectar la copia al plano del croquis"
                 cad.surface.mode == "FACE" -> if (cad.surface.selection.size > 1) "Dos referencias para medir · quita una cara seleccionada para crear el boceto" else "Toca una cara: se resalta en el vídeo · Boceto en cara usa exactamente esa selección"
                 cad.surface.mode != "PROFILE" -> "Toca hasta dos referencias para medir · durante el boceto puedes proyectarlas para acotar desde ellas"
                 state.cadTool == "ARC" -> "Arrastra centro → inicio del arco · al soltar, arrastra el rombo del extremo para variar el ángulo"
@@ -333,7 +352,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                     "Cuadrado: una cota controla ambos lados; editar Lado actualiza esa misma cota"
                     else "Cuadrado: Igualdad une sus lados; Fijar medida añade una cota de tamaño"
                 entity?.isFillet == true -> "Redondeo: cambia su radio · su papelera en Figuras recupera la esquina"
-                editing -> "Cursor: toca para seleccionar o quitar · arrastra para mover el grupo · Cotas y reglas permite editar o quitar medidas"
+                editing -> "Cursor: toca para seleccionar o quitar · dos dedos giran la vista y se queda · Girar 90° y Enderezar la colocan"
                 !editing && cad.rollbackId != null -> "Vista del pasado: ${cad.history.firstOrNull { it.id == cad.rollbackId }?.name.orEmpty()} · toca un nodo para ver el modelo en ese momento · Final restaura la pila completa"
                 cad.selectionKind == "SKETCH" -> "${selectedSketch?.name.orEmpty()} completo · Extruir crea volumen y conserva los contornos interiores como huecos"
                 selectedSketch != null -> "${selectedSketch.name} · perfil seleccionado · Seleccionar todo elige el croquis completo para extruir"
@@ -421,15 +440,13 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             RoundAction(AppIcons.cad("CANCEL"), "Descartar polígono", Ink.Bad, { vm.cadCommand("cad.session.cancel") })
                         }
                         if (depthPreview) {
-                            if (cad.operation == "CUT") {
-                                PillButton("Una dirección", selected = cad.extent != "BOTH", enabled = connected) {
-                                    command("cad.extrude.update", "extent" to "ONE")
-                                }
-                                PillButton("Dos direcciones", selected = cad.extent == "BOTH", enabled = connected) {
-                                    command("cad.extrude.update", "extent" to "BOTH")
-                                }
+                            PillButton("Una dirección", selected = cad.extent != "BOTH", enabled = connected) {
+                                command("cad.extrude.update", "extent" to "ONE")
                             }
-                            if (cad.operation == "EXTRUDE" && cad.positiveDirection.isNotEmpty()) {
+                            PillButton(if (cad.operation == "EXTRUDE") "Simetría" else "Dos direcciones", selected = cad.extent == "BOTH", enabled = connected) {
+                                command("cad.extrude.update", "extent" to "BOTH")
+                            }
+                            if (cad.operation == "EXTRUDE" && cad.extent != "BOTH" && cad.positiveDirection.isNotEmpty()) {
                                 val magnitude = kotlin.math.abs(cad.depth).coerceAtLeast(cad.step)
                                 PillButton(cad.positiveDirection, selected = cad.depth >= 0, enabled = connected) {
                                     command("cad.extrude.update", "depth" to magnitude)
@@ -460,11 +477,11 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             CadAction("VISIBLE", if (feature.enabled) "Ocultar" else "Mostrar", selected = feature.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled) }
                             CadAction("DELETE", "Borrar operación", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
                         } else feature?.let { selected ->
-                            if (selected.type == "CUT") {
+                            if (selected.type == "CUT" || selected.type == "EXTRUDE") {
                                 PillButton("Una dirección", selected = selected.extent != "BOTH", enabled = connected) {
                                     command("cad.feature.set", "feature_id" to selected.id, "extent" to "ONE")
                                 }
-                                PillButton("Dos direcciones", selected = selected.extent == "BOTH", enabled = connected) {
+                                PillButton(if (selected.type == "EXTRUDE") "Simetría" else "Dos direcciones", selected = selected.extent == "BOTH", enabled = connected) {
                                     command("cad.feature.set", "feature_id" to selected.id, "extent" to "BOTH")
                                 }
                             }
@@ -536,10 +553,10 @@ fun CadTopActions(state: AppUiState, vm: MainViewModel) {
     fun command(name: String, vararg values: Pair<String, Any?>) { if (connected) vm.cadCommand(name, mapOf(*values)) }
     IconAction(Icons.Default.Layers, "Planos y bocetos", enabled = connected && !cad.sessionActive) { planesOpen = true }
     if (editing) {
-        IconAction(AppIcons.cad("PLANE_" + (cad.activeSketch?.plane ?: "XY")), "Volver al plano del boceto",
-            enabled = connected && !cad.sessionActive) {
-            command("cad.sketch.activate", "sketch_id" to cad.activeSketchId)
-        }
+        IconAction(Icons.AutoMirrored.Filled.RotateRight, "Girar la vista 90° sobre el plano",
+            enabled = connected && !cad.sessionActive) { command("cad.view.roll", "degrees" to 90) }
+        IconAction(Icons.Default.North, "Enderezar: de frente y sin girar",
+            enabled = connected && !cad.sessionActive) { command("cad.view.align") }
         IconAction(AppIcons.cad("FINISH"), "Finalizar boceto", enabled = connected && !cad.sessionActive) {
             vm.cadTool(null); command("cad.sketch.finish")
         }
@@ -595,8 +612,20 @@ internal fun cadConstraintEnabled(cad: CadState, type: String): Boolean {
     }
 }
 
+/** Rail de restricciones por intención: posición, orientación, relación y cotas; lo no agrupado va al final. */
+internal fun cadConstraintGroups(available: List<String>): List<List<String>> {
+    val groups = listOf(
+        listOf("COINCIDENT", "MIDPOINT", "FIX"),
+        listOf("HORIZONTAL", "VERTICAL", "PARALLEL", "PERPENDICULAR", "TANGENT"),
+        listOf("EQUAL", "SYMMETRIC", "SYMMETRIC_LINE"),
+        listOf("DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS"),
+    )
+    val rest = available.filter { type -> groups.none { type in it } }
+    return (groups.map { group -> group.filter { it in available } } + listOf(rest)).filter { it.isNotEmpty() }
+}
+
 internal fun cadLabel(type: String) = when (type) {
-    "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"
+    "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
     "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad (tamaño del primero)"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
     "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; else -> type
@@ -806,7 +835,7 @@ private fun CadSurfaceControls(cad: CadState, unit: LengthUnit, enabled: Boolean
         CadAction("CHAMFER", "Chaflán en aristas", enabled = enabled) { vm.cadCommand("cad.finish.begin", mapOf("operation" to "CHAMFER")) }
     }
     if (cad.activeSketchId != null && cad.surface.selection.isNotEmpty() && cad.surface.selection.none { it.kind == "VERTEX" }) {
-        PillButton("Proyectar referencia fija", enabled = enabled) { vm.cadCommand("cad.reference.project") }
+        PillButton("Proyectar al plano", enabled = enabled) { vm.cadCommand("cad.reference.project") }
     }
     val factor = when (unit) { LengthUnit.MILLIMETERS -> 1000.0; LengthUnit.CENTIMETERS -> 100.0; LengthUnit.METERS -> 1.0 }
     cad.surface.measurements.forEach { measurement ->

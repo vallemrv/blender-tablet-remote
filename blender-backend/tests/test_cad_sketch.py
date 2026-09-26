@@ -17,6 +17,55 @@ from test_cad import CadTests, OWNER, volume
 
 
 class SketchTests(CadTests):
+    def test_an_edge_below_the_sketch_projects_onto_that_plane(self):
+        cad.sketch_create(dict(plane='XY', offset=.015, **OWNER))
+        with patch.object(runtime.surface, 'validate'):
+            runtime.surface.mode='EDGE'
+            runtime.surface.items=[dict(id='e',kind='EDGE',object='Base',feature_id=None,planar=True,segments=[[[0,0,0],[.04,0,0]]],points=[[0,0,0],[.04,0,0]])]
+            cad.project_reference(OWNER)
+        line=runtime.doc()['sketches'][-1]['entities'][0]
+        self.assertTrue(line['construction'] and line['reference'])
+        self.assertAlmostEqual(line['x'],0,places=6)
+        self.assertAlmostEqual(line['x2'],.04,places=6)
+        self.assertAlmostEqual(line['y'],0,places=6)
+        self.assertEqual(runtime.surface.mode,'PROFILE')
+        angles=[i*math.tau/16 for i in range(16)]
+        points=[[.02+.01*math.cos(a), .02+.01*math.sin(a), 0] for a in angles]
+        cad.sketch_create(dict(plane='XY', offset=.015, **OWNER))
+        with patch.object(runtime.surface, 'validate'):
+            runtime.surface.mode='EDGE'
+            runtime.surface.items=[dict(id='c',kind='EDGE',object='Base',feature_id=None,planar=True,points=points,segments=[[points[i], points[(i+1)%16]] for i in range(16)])]
+            cad.project_reference(OWNER)
+        circle=runtime.doc()['sketches'][-1]['entities'][0]
+        self.assertEqual(circle['type'],'CIRCLE')
+        self.assertAlmostEqual(circle['x'],.02,places=5)
+        self.assertAlmostEqual(circle['y'],.02,places=5)
+        self.assertAlmostEqual(circle['diameter'],.02,places=5)
+
+    def test_symmetric_extrude_grows_equally_both_sides_of_the_sketch(self):
+        rectangle=self.rect()
+        cad.extrude_begin(dict(profile_id='profile_'+rectangle, depth=.02, extent='BOTH', **OWNER))
+        self.assertEqual(runtime.session['extent'],'BOTH')
+        cad.confirm(OWNER)
+        obj=self.obj()
+        zs=[(obj.matrix_world@v.co).z for v in obj.data.vertices]
+        self.assertAlmostEqual(min(zs),-.02,places=5)
+        self.assertAlmostEqual(max(zs),.02,places=5)
+        self.assertAlmostEqual(volume(obj),.08*.045*.04,places=6)
+        self.assertEqual(model.find(runtime.doc(),'features',obj[FEATURE_KEY])['extent'],'BOTH')
+
+    def test_sketch_view_stands_upright_on_a_horizontal_plane(self):
+        from mathutils import Vector
+        from blender_tablet_remote.camera import camera
+        self.rect()
+        sketch=runtime.doc()['sketches'][0]
+        runtime.focus(sketch)
+        forward=camera.rotation@Vector((0,0,-1))
+        up=camera.rotation@Vector((0,1,0))
+        self.assertGreater(forward.dot(Vector((0,0,-1))),.99)
+        self.assertGreater(up.dot(Vector((0,1,0))),.99)
+        self.assertEqual(camera.perspective,'ORTHO')
+
     def test_rounding_all_rectangle_corners_at_once_and_one_by_one_share_a_radius(self):
         from blender_tablet_remote.cad import dimensions
         def arcs(): return [e for e in runtime.doc()['sketches'][0]['entities'] if e['type']=='ARC']

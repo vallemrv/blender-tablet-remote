@@ -67,3 +67,37 @@ La prueba antigua
 también en `da8de6c`: su preparación crea dos rectángulos coincidentes y el kernel
 rechaza ese perfil. Se comprobó por separado en ambas versiones; no se incluye
 en las 36 pruebas de ventana. El código de esa prueba se conserva sin cambios.
+
+## Primera selección de caras, aristas y puntos
+
+La agrupación de contornos suaves repetía un recorrido global después de unir
+cada par de segmentos y copiaba el contorno creciente. En la misma placa compacta
+de cuatro agujeros provocaba 1.035.397 comprobaciones de esquinas antes de guardar
+el grafo en caché. Esto explica la pausa inicial y la fluidez de los toques siguientes.
+
+Se sustituyó ese recorrido por uniones de conjuntos con compresión de caminos,
+calculando una vez la elegibilidad de cada segmento y creando los grupos finales
+una sola vez. No modifica la teselación, los radios táctiles ni las referencias
+seleccionables; conserva las esquinas y los grupos de aristas rectas.
+
+Comparación local con la agrupación de `120671b`, usando exactamente la misma
+geometría compacta y verificando que ambas producen las mismas regiones:
+
+| Preparación del grafo de selección | Antes | Después |
+| --- | ---: | ---: |
+| Primera selección, sin caché | 4.632 ms | 20,8 ms |
+| Selección posterior, con caché | 1,35 ms | 1,31 ms |
+| Comprobaciones de esquinas en la primera selección | 1.035.397 | 1.036 |
+
+Los tiempos no incluyen red ni presentación del fotograma. La primera medición
+anterior es una ejecución; la nueva es la mediana de cinco. Los contadores se
+obtuvieron por separado con el profiler. La reducción permite resolver esta
+incidencia de forma silenciosa, sin añadir un indicador de carga ni trasladar
+el mismo coste a cada extrusión. `tools/benchmark_cad.py` publica ahora también
+`selection_cold_ms` y `selection_warm_ms`.
+
+Las regresiones cubren la placa con cuatro agujeros, cilindros de 128/512 segmentos,
+esquinas con aristas rectas divididas y reutilización del grafo entre los tres modos.
+Pasan las 22 pruebas específicas ejecutadas con Blender en ventana, incluidas las
+selecciones con Bisel/Subdivisión, la oclusión, las medidas y el resaltado GPU.
+El ZIP del complemento se ha recompilado y validado; el contrato de red no cambia.

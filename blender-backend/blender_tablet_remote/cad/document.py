@@ -121,10 +121,9 @@ def loads(raw):
             elif abs(depth) < 1e-7:
                 raise ValueError('invalid feature')
             feature['depth'] = depth
-            if feature['type'] == 'CUT':
-                feature.setdefault('extent', 'ONE')
-                if feature['extent'] not in ('ONE', 'BOTH'):
-                    raise ValueError('invalid cut extent')
+            feature.setdefault('extent', 'ONE')
+            if feature['extent'] not in ('ONE', 'BOTH'):
+                raise ValueError('invalid feature extent')
             if feature['type'] == 'CUT' and feature.get('target_id') not in seen_features:
                 raise ValueError('invalid cut dependency')
             seen_features.add(feature['id'])

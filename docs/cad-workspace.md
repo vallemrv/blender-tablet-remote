@@ -56,8 +56,10 @@ actualiza las operaciones dependientes y registra un paso de undo.
   Tras el primer redondeo el rectángulo pasa a ser líneas: tocar otra esquina sigue
   funcionando. Recorta los lados e inserta arcos con coincidencias y tangencias; todos
   los de una misma vez comparten el radio (editar uno cambia todos).
-- Al editar, la vista queda perpendicular al plano; el manejador de órbita desplaza
-  la vista y dos dedos permiten pan/zoom sin inclinar el boceto. Con la pila cerrada,
+- Al editar, la vista queda perpendicular al plano y de pie respecto al mundo, aunque
+  la cara no tenga un arriba propio (un círculo). Dos dedos giran esa vista y se queda;
+  **Girar 90°** y **Enderezar** hacen lo mismo a saltos. El manejador de órbita desplaza
+  la vista y dos dedos permiten pan/zoom sin dejar el plano. Con la pila cerrada,
   el círculo de navegación de la derecha (el mismo de Mover/Rotar/Escalar) gira la
   cámara en perspectiva para ver cómo queda el dibujo sobre la pieza; al soltarlo
   vuelve a la vista ortográfica del plano. En Extruir/Vaciar orbita la preview.
@@ -224,10 +226,11 @@ y orienta la vista al plano. Una cara superior CAD sigue a su operación soporte
 una cara arbitraria conserva el marco capturado. Si el sólido cambia antes de
 confirmar, la selección se invalida y hay que volver a elegirla.
 
-Durante un boceto, **Planos y bocetos → Medir desde sólido** permite elegir las
-referencias 3D sin mover su geometría. No aparece permanentemente en la bandeja de
-propiedades. **Proyectar referencia fija** las copia como construcción fija
-en el plano del boceto; vuelve al cursor y usa esos puntos/aristas para acotar.
+Durante un boceto, el rail tiene **Proyectar**. Toca cualquier arista del sólido,
+aunque esté en otra altura: se copia al plano del croquis como construcción fija.
+Un contorno circular llega como círculo. También sigue en **Planos y bocetos →
+Medir desde sólido**. No aparece permanentemente en la bandeja de
+propiedades. **Proyectar al plano** vuelve al cursor y usa esos puntos/aristas para acotar.
 La referencia no entra en la extrusión ni cambia las piezas originales. Es una
 copia fija, no un enlace topológico dinámico a cualquier arista del sólido.
 

@@ -588,35 +588,44 @@ def _straight_boundary(points, incident, edge_regions, edge):
 def _merge_smooth_contours(points, incident, edge_regions):
     """Join tessellated samples of one CAD contour without swallowing straight edges."""
     limit = -math.cos(math.radians(25))
-    changed = True
-    while changed:
-        changed = False
-        sealed = {id(region) for region in edge_regions.values() if len(region) > 1 and _straight_boundary(points, incident, edge_regions, min(region))}
-        for edge, region in list(edge_regions.items()):
-            if id(region) in sealed or _straight_boundary(points, incident, edge_regions, edge):
-                continue
-            for vertex in edge:
-                direction = _outgoing(points, edge, vertex)
-                if direction is None:
+    # Corner eligibility depends only on the fixed geometry, not on the unions.
+    # Previously each union restarted a full scan and copied the growing contour.
+    boundary = {edge: _straight_boundary(points, incident, edge_regions, edge)
+                for edge in edge_regions}
+    regions = {id(region): region for region in edge_regions.values()}
+    sealed = {key for key, region in regions.items() if len(region) > 1 and boundary[min(region)]}
+    parent = {key: key for key in regions}
+    size = {key: len(region) for key, region in regions.items()}
+
+    def root(key):
+        while parent[key] != key:
+            parent[key] = parent[parent[key]]
+            key = parent[key]
+        return key
+
+    eligible = {edge for edge, region in edge_regions.items()
+                if not boundary[edge] and id(region) not in sealed}
+    for vertex, edges in incident.items():
+        directions = [(edge, _outgoing(points, edge, vertex)) for edge in edges if edge in eligible]
+        for index, (edge, direction) in enumerate(directions):
+            for other, outgoing in directions[index + 1:]:
+                if direction is None or outgoing is None or direction.dot(outgoing) > limit:
                     continue
-                for other in incident.get(vertex, ()):
-                    if other == edge or other not in edge_regions:
-                        continue
-                    other_region = edge_regions[other]
-                    if other_region is region or id(other_region) in sealed or _straight_boundary(points, incident, edge_regions, other):
-                        continue
-                    outgoing = _outgoing(points, other, vertex)
-                    if outgoing is None or direction.dot(outgoing) > limit:
-                        continue
-                    merged = region | other_region
-                    for item in merged:
-                        edge_regions[item] = merged
-                    changed = True
-                    break
-                if changed:
-                    break
-            if changed:
-                break
+                a, b = root(id(edge_regions[edge])), root(id(edge_regions[other]))
+                if a == b:
+                    continue
+                if size[a] < size[b]:
+                    a, b = b, a
+                parent[b] = a
+                size[a] += size[b]
+
+    groups = {}
+    for key, region in regions.items():
+        groups.setdefault(root(key), set()).update(region)
+    for edges in groups.values():
+        region = frozenset(edges)
+        for edge in edges:
+            edge_regions[edge] = region
 
 
 def _cad_corners(edge_regions):
@@ -780,6 +789,8 @@ def query_cad_surface(payload, kind):
         if not isinstance(index,int) or not 0<=index<len(graph[2]): return None
         selected=(obj,index)
     else:
+        from ..cad.runtime import runtime as cad_runtime
+        through = bool(cad_runtime.active_sketch_id and kind=='EDGE')
         candidates=[]; depsgraph=bpy.context.evaluated_depsgraph_get()
         for obj in bpy.context.view_layer.objects:
             if obj.type!='MESH' or not obj.visible_get(viewport=viewport): continue
@@ -815,7 +826,7 @@ def query_cad_surface(payload, kind):
                     origin,direction=camera.ray(*screen,rv3d)
                     depth=(position-origin).dot(direction)
                     if depth<=0 or design_tree.ray_cast(origin,direction,max(0.,depth-max(1e-6,depth*1e-5)))[0] is not None: continue
-                if not _visible(position,screen,depsgraph,rv3d,{obj.name} if design_tree is not None else set(),viewport): continue
+                if not through and not _visible(position,screen,depsgraph,rv3d,{obj.name} if design_tree is not None else set(),viewport): continue
                 candidates.append(dict(id=obj.name+':'+str(source),distance=distance,object=obj.name,source=source))
         chosen=choose_sticky_candidate(candidates,None,.028)
         if chosen is None: return None

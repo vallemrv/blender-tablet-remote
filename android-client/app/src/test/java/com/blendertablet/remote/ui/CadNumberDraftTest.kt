@@ -41,6 +41,24 @@ class CadNumberDraftTest {
         assertEquals(1e-7, length.nudge(.0001, 1000.0, .001, -1, 1e-7, 10000.0)!!, 0.0)
     }
 
+    @Test fun expressionsUseDisplayUnitsAndOperatorsApplyToTheCurrentValue() {
+        val draft = CadNumberDraft()
+        draft.text = "10+5"
+        assertEquals(.015, draft.read(.02, 1000.0, -10000.0, 10000.0)!!, 1e-12)
+        draft.text = "+5"
+        assertEquals(.025, draft.read(.02, 1000.0, 1e-7, 10000.0)!!, 1e-12)
+        draft.text = "*2"
+        assertEquals(.04, draft.read(.02, 1000.0, 1e-7, 10000.0)!!, 1e-12)
+        draft.text = "/2"
+        assertEquals(.01, draft.read(.02, 1000.0, 1e-7, 10000.0)!!, 1e-12)
+        draft.text = "2x3"
+        assertEquals(.006, draft.read(.02, 1000.0, 1e-7, 10000.0)!!, 1e-12)
+        draft.text = "-15"
+        assertEquals(-.015, draft.read(.02, 1000.0, -10000.0, 10000.0)!!, 1e-12)
+        draft.text = "10/0"
+        assertNull(draft.read(.02, 1000.0, -10000.0, 10000.0))
+    }
+
     @Test fun anglesUseDegreesAndUnitChangesDoNotRescaleThePendingWireValue() {
         val draft = CadNumberDraft()
         assertEquals(91.0, draft.nudge(90.0, 1.0, 1.0, 1, -359.99, 359.99)!!, 0.0)

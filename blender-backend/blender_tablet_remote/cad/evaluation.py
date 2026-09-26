@@ -56,7 +56,7 @@ class Evaluator:
             sketch,entity=model.profile(doc,feature['profile_id'])
             cut=feature['type']=='CUT'
             depth=model.number(feature['depth'], positive=cut)
-            extent=feature.get('extent','ONE') if cut else 'ONE'
+            extent=feature.get('extent','ONE')
             if extent not in ('ONE','BOTH'): extent='ONE'
             if cut and feature.get('target_id') not in solids:
                 raise CommandError('Activa el sólido destino antes del vaciado',code='cad_dependency')

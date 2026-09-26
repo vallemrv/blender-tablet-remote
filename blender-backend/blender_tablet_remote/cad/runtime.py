@@ -294,7 +294,7 @@ class CadRuntime:
         sketch, entity = model.profile(doc, feature['profile_id'])
         depth = feature['depth']
         cut = feature['type'] == 'CUT'
-        extent = feature.get('extent', 'ONE') if cut else 'ONE'
+        extent = feature.get('extent', 'ONE')
         cache = session['extrusion_cache']
         signed = -depth if cut else depth
         vertices, faces = cache.extrude(sketch, entity, signed, symmetric=extent == 'BOTH')
@@ -488,8 +488,13 @@ class CadRuntime:
         found = find_view3d()
         if found:
             camera.sync_from_region(found[3])
-        normal = Vector(model.frame(sketch)['normal'])
-        up = Vector(model.frame(sketch)['y'])
+        normal = Vector(model.frame(sketch)['normal']).normalized()
+        # A circle face has no natural up: keep the plane face-on and stand the
+        # view on world Z, or world Y when the plane itself is horizontal.
+        up = Vector((0, 0, 1))
+        if abs(normal.dot(up)) > 0.9:
+            up = Vector((0, 1, 0))
+        up = (up - normal * up.dot(normal)).normalized()
         from mathutils import Matrix
         right = up.cross(normal)
         camera.rotation = Matrix((right,up,normal)).transposed().to_quaternion()
@@ -625,7 +630,7 @@ class CadRuntime:
                                      depth=session.get('depth') if session else None,
                                      width=session.get('width') if session else None,
                                      segments=session.get('segments') if session else None,
-                                      extent=session.get('extent','ONE') if session and session.get('operation')=='CUT' else None,
+                                       extent=session.get('extent','ONE') if session and session.get('operation') in ('CUT','EXTRUDE') else None,
                                       positive_label=labels[0] if labels else None,
                                       negative_label=labels[1] if labels else None,
                                       transparent=bool(session and session['operation']=='CUT'),

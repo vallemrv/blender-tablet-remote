@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.sp
 import com.blendertablet.remote.model.EditCatalogParameter
 import com.blendertablet.remote.model.LengthUnit
 import com.blendertablet.remote.model.TransformMode
+import com.blendertablet.remote.model.NumericExpression
 import com.blendertablet.remote.model.ValueParser
 import java.util.Locale
 import kotlin.math.round
@@ -74,10 +75,11 @@ fun SchemaToolParameters(
                         value = draft ?: String.format(Locale.ROOT, "%.3f", value * conversion).trimEnd('0').trimEnd('.'),
                         onValueChange = { draft = it },
                         onDone = {
-                            val text = draft.orEmpty().trim().replace(',', '.')
-                            val scalar = text.toDoubleOrNull()
+                            val text = draft.orEmpty()
+                            val shown = value * conversion
+                            val scalar = NumericExpression.evaluate(text, shown)
                             val parsed = if (scalar != null) scalar / conversion else if (length)
-                                ValueParser.parse(text, TransformMode.MOVE)?.div(unitScaleLength) else null
+                                ValueParser.parse(text, TransformMode.MOVE, shown)?.div(unitScaleLength) else null
                             parsed?.let(::set)
                         },
                         modifier = Modifier.width(64.dp),

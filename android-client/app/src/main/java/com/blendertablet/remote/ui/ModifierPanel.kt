@@ -56,6 +56,7 @@ import com.blendertablet.remote.model.BlenderState
 import com.blendertablet.remote.model.LengthUnit
 import com.blendertablet.remote.model.ModifierDefault
 import com.blendertablet.remote.model.ModifierParameterDescriptor
+import com.blendertablet.remote.model.NumericExpression
 import com.blendertablet.remote.model.ModifierState
 import com.blendertablet.remote.model.ObjectChoiceFilter
 import java.math.BigDecimal
@@ -372,7 +373,7 @@ private fun EditableModifierScalar(
     val suffix = when (spec.unit) { "LENGTH" -> state.sceneScale.lengthUnit.short; "ANGLE" -> "°"; else -> "" }
     var draft by remember(state.activeObject, item.name, spec.name, factor) { mutableStateOf<String?>(null) }
     val focus = LocalFocusManager.current
-    val typed = draft?.let { parseModifierScalar(it, spec, factor) }
+    val typed = draft?.let { parseModifierScalar(it, spec, factor, current) }
     fun commit() {
         val number = typed ?: return
         set(number)
@@ -410,9 +411,9 @@ internal fun modifierScalarFactor(spec: ModifierParameterDescriptor, state: Blen
         LengthUnit.METERS -> 1.0
     } else 1.0
 
-internal fun parseModifierScalar(text: String, spec: ModifierParameterDescriptor, factor: Double): Number? {
+internal fun parseModifierScalar(text: String, spec: ModifierParameterDescriptor, factor: Double, current: Double = 0.0): Number? {
     if (!factor.isFinite() || factor <= 0.0) return null
-    val value = text.trim().replace(',', '.').toDoubleOrNull()?.div(factor) ?: return null
+    val value = NumericExpression.evaluate(text, current * factor)?.div(factor) ?: return null
     if (!value.isFinite() || value < (spec.min ?: -Double.MAX_VALUE) || value > (spec.max ?: Double.MAX_VALUE)) return null
     return if (spec.type == "int") {
         if (value % 1.0 != 0.0 || value < Int.MIN_VALUE || value > Int.MAX_VALUE) null else value.toInt()

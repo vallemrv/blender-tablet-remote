@@ -44,6 +44,7 @@ import com.blendertablet.remote.model.ToolSession
 import com.blendertablet.remote.model.SnapType
 import com.blendertablet.remote.model.moveValueForDisplay
 import com.blendertablet.remote.model.transformStepUnit
+import com.blendertablet.remote.model.NumericExpression
 import com.blendertablet.remote.model.ValueParser
 import com.blendertablet.remote.model.TransformMode
 import kotlin.math.roundToInt
@@ -566,7 +567,7 @@ private fun PositionStepper(session: ToolSession, onParameter: (String, Any?) ->
         else onParameter("factor", bounded / 50.0 - 1.0)
         text = null
     }
-    fun commit() { text?.trim()?.replace(',', '.')?.toDoubleOrNull()?.let(::send) }
+    fun commit() { text?.let { NumericExpression.evaluate(it, value) }?.let(::send) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(if (metric) "Desde centro" else "Posición", color = Ink.Faint, fontSize = 11.sp)
         StepperButton("−") { send(value - 1.0) }
@@ -618,9 +619,12 @@ private fun ParamStepper(
 
     fun readDraft(): Double? {
         val input = text ?: return shownValue
-        val withUnit = if (lengthUnit != null && input.trim().replace(',', '.').toDoubleOrNull() != null)
-            "$input ${lengthUnit.short}" else input
-        val parsed = ValueParser.parse(withUnit, spec.mode) ?: return null
+        val display = if (lengthUnit != null)
+            moveValueForDisplay(shownValue, lengthUnit.transformStepUnit(), unitScaleLength) else shownValue
+        val trimmed = input.trim()
+        val withUnit = if (lengthUnit != null && trimmed.lastOrNull()?.isLetter() != true)
+            "$trimmed ${lengthUnit.short}" else input
+        val parsed = ValueParser.parse(withUnit, spec.mode, display) ?: return null
         val wire = if (spec.mode == TransformMode.MOVE) parsed / unitScaleLength else parsed
         return clampParam(wire, spec.isInt, spec.min, spec.max)
     }

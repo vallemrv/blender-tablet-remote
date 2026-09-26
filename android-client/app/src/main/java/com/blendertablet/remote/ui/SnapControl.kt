@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
+import com.blendertablet.remote.model.NumericExpression
 import com.blendertablet.remote.model.TransformStepUnit
 import com.blendertablet.remote.model.LengthUnit
 import com.blendertablet.remote.model.transformStepUnit
@@ -141,7 +142,7 @@ internal fun DistanceSnapStepInput(
     val displayed = moveValueForDisplay(pendingStep ?: step, unit, unitScaleLength)
     fun readStep(): Double? {
         if (text == null) return pendingStep ?: step
-        val number = text?.trim()?.replace(',', '.')?.toDoubleOrNull()
+        val number = text?.let { NumericExpression.evaluate(it, displayed) }
             ?.takeIf { it.isFinite() && it > 0.0 } ?: return null
         return moveValueInBlenderUnits(number, unit, unitScaleLength)
     }
@@ -199,7 +200,7 @@ internal fun tweakSnapOptions(announced: List<SnapType>, motion: TweakMotion): L
 internal fun ScaleStepInput(value: Double, unit: TransformStepUnit, onChange: (Double) -> Unit) {
     var text by remember(value, unit) { mutableStateOf("${formatScaleStep(value)} ${unit.label}") }
     fun commit() {
-        text.replace(',', '.').trim().removeSuffix(unit.label).trim().toDoubleOrNull()
+        NumericExpression.evaluate(text.trim().removeSuffix(unit.label), value)
             ?.takeIf { it.isFinite() && it > 0.0 }?.let {
                 text = "${formatScaleStep(it)} ${unit.label}"
                 onChange(it)

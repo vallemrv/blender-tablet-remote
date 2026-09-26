@@ -561,7 +561,7 @@ def extrude_begin(payload):
     _require_reachable(doc,sketch['id'])
     operation=str(payload.get('operation','EXTRUDE')).upper()
     if operation not in ('EXTRUDE','CUT'): raise BadPayload('Operación CAD no compatible')
-    extent=_extent(payload.get('extent','ONE')) if operation=='CUT' else 'ONE'
+    extent=_extent(payload.get('extent','ONE'))
     target=None
     if operation=='CUT':
         target=model.find(doc,'features',payload.get('target_id'))
@@ -572,7 +572,7 @@ def extrude_begin(payload):
     session['extrusion_cache'] = ExtrusionPreviewCache()
     feature = dict(id=model.uid('feature'),name=('Vaciado ' if operation=='CUT' else 'Extrusión ')+str(len(doc['features'])+1),
                    type=operation,order=model.next_order(doc),sketch_id=sketch['id'],profile_id='profile_'+e['id'],depth=depth,enabled=True,body_id=target['body_id'] if target else sketch['body_id'])
-    if operation=='CUT': feature['extent']=extent
+    feature['extent']=extent
     if target: feature['target_id']=target['id']
     preview = copy.deepcopy(session['baseline'])
     preview['features'].append(feature)
@@ -593,8 +593,8 @@ def extrude_update(payload):
     session = runtime.require(payload)
     if session['operation'] not in ('EXTRUDE','CUT'):
         raise CommandError('La sesión no es una extrusión',code='wrong_tool')
-    if 'extent' in payload and session['operation']!='CUT':
-        raise BadPayload('Solo el vaciado elige una dirección o dos')
+    if 'extent' in payload and session['operation'] not in ('EXTRUDE','CUT'):
+        raise BadPayload('Solo extruir o vaciar eligen una dirección o dos')
     extent=_extent(payload['extent']) if 'extent' in payload else session.get('extent','ONE')
     stylus = 'gesture_u' in payload or 'gesture_v' in payload
     settle = bool(payload.get('settle'))
@@ -604,7 +604,9 @@ def extrude_update(payload):
     preview = copy.deepcopy(session['preview'])
     feature=model.find(preview,'features',session['feature_id'])
     feature['depth'] = depth
-    if feature['type']=='CUT': feature['extent']=extent
+    feature['extent']=extent
+    if feature['type']=='EXTRUDE' and extent=='BOTH':
+        feature['depth']=abs(feature['depth'])
     if stylus and not settle:
         previous = dict(preview=session['preview'], depth=session['depth'], extent=session.get('extent', 'ONE'))
         session.update(preview=preview,depth=depth,extent=extent)
@@ -730,8 +732,8 @@ def feature_set(payload):
             if feature['type'] in model.FINISHES: raise BadPayload('Un redondeo se edita por su ancho')
             feature['depth'] = _depth_value(dict(operation=feature['type'], depth=feature['depth'], preview=doc), dict(depth=payload['depth']))
         if 'extent' in payload:
-            if feature['type']!='CUT':
-                raise BadPayload('Solo el vaciado elige una dirección o dos')
+            if feature['type'] not in ('EXTRUDE','CUT'):
+                raise BadPayload('Solo extruir o vaciar eligen una dirección o dos')
             feature['extent']=_extent(payload['extent'])
         if 'enabled' in payload:
             if not isinstance(payload['enabled'],bool):
@@ -1241,28 +1243,55 @@ def project_reference(payload):
         def project(point):
             offset=Vector(point)*scale-origin
             return (offset.dot(Vector(frame['x'])),offset.dot(Vector(frame['y'])))
-        segments=[]
-        for item in items:
-            if item['kind']=='EDGE':
-                a,b=map(Vector,item['segments'][0]); direction=(b-a).normalized()
-                points=sorted(item['points'],key=lambda p:Vector(p).dot(direction))
-                segments.append((points[0],points[-1]))
-            else: segments.extend(item['segments'])
-        unique=set(); created=[]
-        for a,b in segments:
-            a,b=project(a),project(b)
-            if math.dist(a,b)<1e-7: continue
-            identity=tuple(sorted(tuple(round(v,10) for v in p) for p in (a,b)))
-            if identity in unique: continue
-            unique.add(identity)
-            entity=dict(id=model.uid('entity'),type='LINE',x=a[0],y=a[1],x2=b[0],y2=b[1],construction=True,reference=True)
-            sketch['entities'].append(entity); created.append(entity['id'])
+        def add(entity):
+            sketch['entities'].append(entity)
+            created.append(entity['id'])
             sketch.setdefault('constraints',[]).append(dict(id=model.uid('constraint'),type='FIX',
-                refs=[dict(id=entity['id'],part='BODY')],values={k:entity[k] for k in model.FIELDS['LINE']}))
+                refs=[dict(id=entity['id'],part='BODY')],values={k:entity[k] for k in model.FIELDS[entity['type']]}))
+        created=[]; seen=set()
+        for item in items:
+            groups=[item['segments']] if item['kind']=='EDGE' else [item['segments']]
+            for segments in groups:
+                local=[project(p) for p in item.get('points') or [q for segment in segments for q in segment]]
+                center=sum((Vector(p) for p in local),Vector((0,0)))/max(len(local),1)
+                radii=[(Vector(p)-center).length for p in local]
+                mean=sum(radii)/max(len(radii),1)
+                if len(local)>=8 and mean>1e-6 and max(abs(r-mean) for r in radii)<mean*.02:
+                    add(dict(id=model.uid('entity'),type='CIRCLE',x=center.x,y=center.y,diameter=mean*2,
+                             construction=True,reference=True))
+                    continue
+                for a,b in segments:
+                    a,b=project(a),project(b)
+                    if math.dist(a,b)<1e-7: continue
+                    identity=tuple(sorted(tuple(round(v,10) for v in p) for p in (a,b)))
+                    if identity in seen: continue
+                    seen.add(identity)
+                    add(dict(id=model.uid('entity'),type='LINE',x=a[0],y=a[1],x2=b[0],y2=b[1],
+                             construction=True,reference=True))
         if not created: raise BadPayload('La referencia se proyecta como un punto; elige otra arista')
         geometry.solve(sketch)
     yield from runtime.transaction_steps(payload,change,'CAD proyectar referencia fija')
     runtime.surface.clear(); runtime.surface.mode='PROFILE'; runtime.selection=None
+    return runtime.status()
+
+
+@command('cad.view.roll')
+def view_roll(payload):
+    """Spin the sketch view around its plane normal. Drawing stays on the plane."""
+    runtime.require_workspace()
+    if not runtime.active_sketch_id:
+        raise BadPayload('Abre un boceto para girar su vista')
+    from .view import roll_delta
+    roll_delta(math.radians(model.number(payload.get('degrees', 90))))
+    return runtime.status()
+
+
+@command('cad.view.align')
+def view_align(payload):
+    """Look straight at the sketch, with world up on screen. No document change."""
+    runtime.require_workspace()
+    sketch = model.find(runtime.doc(), 'sketches', runtime.active_sketch_id)
+    runtime.focus(sketch)
     return runtime.status()
 
 

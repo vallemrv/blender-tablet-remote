@@ -1464,7 +1464,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.polygon.close` | `{}` | Cierra la cadena con el segmento final y confirma; con menos de tres vértices responde error y conserva la sesión |
 | `cad.entity.set` | `{entity_id,values:{width?,height?,diameter?,radius?,start?,sweep?,length?,flats?,angle?,sides?,x?,y?,x2?,y2?}}` | Edita dimensiones y reconstruye dependientes |
 | `cad.entity.delete` | `{entity_id}` o `{}` | Borra una figura completa o la selección de puntos/aristas/figuras en un undo; protege perfiles usados |
-| `cad.extrude.begin` | `{profile_id?,sketch_id?,depth,operation:"EXTRUDE\\|CUT",target_id?,extent?}` | Un perfil o el croquis completo; contornos exteriores como volumen e interiores como huecos. CUT exige destino. `extent` es `ONE` (defecto) o `BOTH` |
+| `cad.extrude.begin` | `{profile_id?,sketch_id?,depth,operation:"EXTRUDE\\|CUT",target_id?,extent?}` | Un perfil o el croquis completo; contornos exteriores como volumen e interiores como huecos. CUT exige destino. `extent` es `ONE` (defecto) o `BOTH`; en EXTRUDE, `BOTH` es simetría a los dos lados del croquis |
 | `cad.finish.begin` | `{operation:"FILLET\|CHAMFER",width?,segments?}` | Redondea/achaflana las aristas seleccionadas del sólido (`surface` en EDGE, un mismo cuerpo) como nuevo nodo de la pila; preview reversible |
 | `cad.finish.update` | `{width}` o `{gesture,baseline_width}` o `{segments}` | Ancho exacto o delta vertical (un paso por 4 % de altura); segmentos 1–16, chaflán siempre 1. Confirmar/cancelar con `cad.session.*`; el estado de sesión publica `width` y `segments` |
 | `cad.extrude.update` | `{depth}` o `{gesture,baseline_depth}` o `{gesture_u,gesture_v,baseline_depth}` o `{settle}` o `{extent}` | Cota exacta, también negativa en EXTRUDE (sentido contrario a la normal del plano). El gesto de lápiz sigue esa normal en pantalla y no rehace el booleano; `settle` al soltar asienta el sólido. En CUT, `extent` cambia una o dos direcciones sin confirmar |
@@ -1666,8 +1666,10 @@ Los documentos anteriores se normalizan a un cuerpo inicial al leerlos.
 `active_body_id`, `construction` y `show_scene` son estado del workspace.
 
 Mientras `active_sketch_id` esté activo, la cámara remota permanece ortogonal al
-boceto: orbit se traduce a pan, roll/vistas de eje no cambian orientación y la
-perspectiva permanece ORTHO. Zoom/pan siguen funcionando y no escriben en `rv3d`.
+boceto: orbit se traduce a pan y las vistas de eje no cambian orientación. El
+roll de dos dedos y `cad.view.roll` giran esa vista sobre la normal y se quedan;
+`cad.view.align` la endereza con el mundo arriba. La perspectiva permanece ORTHO.
+Zoom/pan siguen funcionando y no escriben en `rv3d`.
 
 Al entrar en CAD se conserva la edición del boceto activo si existe; en caso
 contrario se encuadra el resultado en 3D, sin activar la edición. Repetir CAD mientras ya está abierto conserva
@@ -1931,8 +1933,8 @@ Si la geometría cambia, las referencias se invalidan antes de crear un boceto.
 CAD se vincula a su operación; otras caras conservan un marco capturado. Los planos
 implícitos sin otros usuarios se retiran al borrar su boceto.
 
-`cad.reference.project` transforma los segmentos elegidos a coordenadas locales
-del plano y crea entidades LINE `construction:true,reference:true` con FIX.
+`cad.reference.project` deja caer las aristas elegidas sobre el plano del boceto
+activo, aunque estén a otra altura, y crea LINE o CIRCLE `construction:true,reference:true` con FIX.
 Se descartan proyecciones degeneradas y se respeta el límite del solver. Es una
 copia estática que permite cotas contra geometría existente, no asociación BREP.
 

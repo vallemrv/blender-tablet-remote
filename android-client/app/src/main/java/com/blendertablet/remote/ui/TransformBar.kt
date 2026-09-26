@@ -55,6 +55,7 @@ import com.blendertablet.remote.model.TransformStepUnit
 import com.blendertablet.remote.model.moveValueForDisplay
 import com.blendertablet.remote.model.moveValueInBlenderUnits
 import com.blendertablet.remote.model.ValueMode
+import com.blendertablet.remote.model.NumericExpression
 import com.blendertablet.remote.model.ValueParser
 import com.blendertablet.remote.model.stepsFor
 import com.blendertablet.remote.model.scaleAxisStep
@@ -294,7 +295,7 @@ private fun MoveStepInput(
     var text by remember(value) { mutableStateOf(format(value, 3)) }
     var expanded by remember { mutableStateOf(false) }
     fun commit(raw: String = text) {
-        raw.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0.0 }?.let { onChange(it, unit) }
+        NumericExpression.evaluate(raw, value)?.takeIf { it > 0.0 }?.let { onChange(it, unit) }
     }
     PillButton("−", repeatOnHold = true) { onChange((value - 1.0).coerceAtLeast(0.001), unit) }
     CompactNumericField(
@@ -430,8 +431,9 @@ private fun ParametricAxisInputs(
                         session.mode == TransformMode.SCALE -> ValueParser.parseScaleDimension(
                             text, scaleUnit, unitScaleLength,
                             session.baseDimensions.getOrElse(index) { 0.0 },
+                            displayed,
                         )
-                        else -> ValueParser.parse(text, session.mode)
+                        else -> ValueParser.parse(text, session.mode, displayed)
                     }
                     parsed?.let {
                         send(when (session.mode) {
@@ -467,14 +469,14 @@ internal fun ProportionalRadiusInput(
     }
     val shown = pending ?: radius
     val displayed = moveValueForDisplay(shown, unit.transformStepUnit(), unitScaleLength)
-    fun readDraft(): Double? = if (text == null) shown else ProportionalRadius.parse(text!!, unit, unitScaleLength)
+    fun readDraft(): Double? = if (text == null) shown else ProportionalRadius.parse(text!!, unit, unitScaleLength, shown)
     fun send(value: Double) {
         pending = if (abs(value-radius) <= tolerance) null else value
         text = null
         onRadius(value)
     }
     fun commit() {
-        if (text != null) ProportionalRadius.parse(text!!, unit, unitScaleLength)?.let(::send)
+        if (text != null) ProportionalRadius.parse(text!!, unit, unitScaleLength, shown)?.let(::send)
     }
     fun adjust(direction: Int) {
         val current = readDraft() ?: return

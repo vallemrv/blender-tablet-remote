@@ -2,11 +2,16 @@ package com.blendertablet.remote.model
 
 /** El radio viaja en unidades Blender; los controles muestran la unidad del preset. */
 object ProportionalRadius {
-    fun parse(text: String, unit: LengthUnit, scaleLength: Double): Double? {
+    fun parse(text: String, unit: LengthUnit, scaleLength: Double, current: Double? = null): Double? {
         if (scaleLength <= 0.0 || !scaleLength.isFinite()) return null
-        val input = text.trim().replace(',', '.')
-        val withUnit = if (input.toDoubleOrNull() != null) "$input ${unit.short}" else input
-        return ValueParser.parseMove(withUnit)?.div(scaleLength)?.takeIf { it.isFinite() && it > 0.0 }
+        val input = text.trim()
+        val hasUnit = input.lastOrNull()?.isLetter() == true
+        val display = current?.let { moveValueForDisplay(it, unit.transformStepUnit(), scaleLength) }
+        val withUnit = if (hasUnit) input else {
+            val number = NumericExpression.evaluate(input, display) ?: return null
+            "$number ${unit.short}"
+        }
+        return ValueParser.parseMove(withUnit, display)?.div(scaleLength)?.takeIf { it.isFinite() && it > 0.0 }
     }
 
     fun step(radius: Double, direction: Int, stepMeters: Double, scaleLength: Double): Double =

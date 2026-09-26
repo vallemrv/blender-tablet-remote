@@ -395,7 +395,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   permite incluirla como destino durante esa sesión.
 - CAD tiene un rail de geometría y otro de restricciones solo durante el boceto;
   sus iconos vectoriales distintos se resuelven mediante `AppIcons.cad`. Object/Edit
-  conservan sus raíles. La selección múltiple y el arrastre operan sobre IDs y roles
+  conservan sus raíles. El rail de restricciones se agrupa con separadores:
+  posición, orientación, relación y cotas. La selección múltiple y el arrastre operan sobre IDs y roles
   de puntos/aristas, nunca sobre índices de la malla evaluada.
 - Las restricciones CAD se persisten y resuelven al editar o mover. Un conflicto
   no modifica el documento; el arrastre se proyecta a la libertad permitida. Un
@@ -443,6 +444,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - El resaltado CAD conserva lotes de GPU en coordenadas 3D; la cámara solo cambia
   su matriz de proyección. Las medidas y la adyacencia se reutilizan mientras la firma
   de geometría/topología/transformación/unidades siga igual. No se retienen referencias RNA.
+- En CAD 3D, el rail ofrece Redondear y Chaflán de las aristas del sólido. Sin
+  aristas elegidas, el botón pasa a Aristas para tocarlas; con selección abre la
+  preview. Extruir admite Simetría: la profundidad crece a los dos lados del croquis.
 - Extruir/Vaciar CAD siguen la normal del plano en pantalla: arriba/abajo o
   izquierda/derecha, y también el sentido contrario. El lápiz mueve un prisma
   ligero; el booleano se asienta al soltar. Incremento redondea ese asiento; las
@@ -510,8 +514,9 @@ no quedan archivos o referencias temporales.
 
 ## Pulido de feedback (septiembre 2026)
 
-- CAD bloquea orientación y proyección durante el boceto; orbit desplaza la vista,
-  pan/zoom siguen activos. En el boceto y en Extruir/Vaciar aparece el círculo de
+- CAD bloquea órbita libre y proyección durante el boceto; orbit desplaza la vista,
+  pan/zoom siguen activos. El giro de dos dedos y Girar 90° rotan la vista sobre el
+  plano y se quedan; Enderezar la deja de frente, con el mundo arriba. En el boceto y en Extruir/Vaciar aparece el círculo de
   navegación de las transformaciones. En el boceto, sostenerlo orbita en perspectiva
   como vistazo y soltarlo restaura la vista ortográfica del plano; se aparta del rail
   de restricciones y se oculta mientras la pila CAD está abierta. El origen reservado `ORIGIN/POINT` es fijo y seleccionable.
@@ -645,12 +650,17 @@ no quedan archivos o referencias temporales.
 - En un sólido CAD, Caras/Aristas/Puntos siguen la figura de diseño, no la
   teselación: un círculo extruido tiene dos contornos y ninguna muestra de malla
   como arista o punto. Un cubo conserva seis caras, doce aristas y ocho puntos.
+- La primera selección CAD agrupa contornos suaves mediante uniones de conjuntos:
+  calcula una vez qué segmentos terminan en esquinas y materializa cada grupo al
+  final. No reinicia un recorrido global ni copia el contorno creciente por cada
+  unión. Conserva las aristas rectas y reutiliza el grafo entre Caras/Aristas/Puntos.
 - Boceto en cara consume la cara resaltada sin repetir raycast y crea plano+boceto
   en un solo undo. Las caras superiores CAD conservan soporte asociativo; otras
   caras guardan su marco. Las selecciones del sólido son transitorias y se invalidan
   al cambiar geometría o transformación; no persisten índices de la malla evaluada.
-- En un boceto, Proyectar referencia fija copia los contornos seleccionados a
-  construcción en su plano, con FIX y un undo. Permite acotar desde esos elementos;
+- En un boceto, Proyectar está en el rail: cualquier arista, aunque esté a otra
+  altura, se copia al plano del croquis como construcción fija. Un contorno
+  circular llega como círculo. FIX y un undo. Permite acotar desde esos elementos;
   es una copia fija, no promete asociación topológica con cualquier cara/arista.
   Medir desde sólido se abre desde Planos y bocetos durante la edición; no ocupa
   permanentemente la bandeja de cotas del croquis.
@@ -679,8 +689,10 @@ no quedan archivos o referencias temporales.
   creación de bocetos/operaciones.
   La pila ocupa el sitio del inspector de modificadores: icono cerrado bajo el
   selector de modos y flecha de vuelta en su cabecera. El contexto CAD —Planos,
-  Vista 3D, Volver al plano, Finalizar/Editar boceto— son iconos en la fila de
-  Deshacer/Rehacer, sin franja propia bajo el menú.
+  Vista 3D, Girar 90°, Enderezar, Finalizar/Editar boceto— son iconos en la fila de
+  Deshacer/Rehacer, sin franja propia bajo el menú. Dentro del boceto no existe
+  «Volver al plano»: Enderezar ya deja la vista de frente con el mundo arriba y
+  volver al cursor desde Medir/Proyectar se hace con sus propios botones del rail.
   Los bocetos consumidos se ocultan por defecto; el ojo conserva una elección
   explícita de visibilidad. Las caras seleccionadas nunca aparecen en captura limpia.
 

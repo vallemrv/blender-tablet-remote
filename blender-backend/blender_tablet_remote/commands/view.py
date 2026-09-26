@@ -92,7 +92,9 @@ def roll_delta(angle: float) -> None:
     -> escena horaria.
     """
     _region_view()
-    if not _sketch_locked(): camera.roll(-angle)
+    camera.roll(-angle)
+    if _sketch_locked():
+        camera.perspective = 'ORTHO'
 
 
 def _view_state() -> dict:
