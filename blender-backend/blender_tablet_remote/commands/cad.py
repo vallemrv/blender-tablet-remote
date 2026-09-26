@@ -98,8 +98,8 @@ def _new_sketch(doc,payload):
     support_id=payload.get('support_id')
     if support_id:
         feature=model.find(doc,'features',support_id)
-        if feature['type'] in model.FINISHES:
-            raise BadPayload('Un redondeo no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
+        if feature['type'] in model.FINISHES + ('LOFT',):
+            raise BadPayload('Un redondeo o solevado no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
         source,_=model.profile(doc,feature['profile_id'])
         plane_local=source['plane']
         offset=source.get('offset',0)+(feature['depth'] if feature['type']=='EXTRUDE' else 0)
@@ -491,8 +491,9 @@ def entity_delete(payload):
         if not refs: raise BadPayload('Selecciona dibujos, puntos o aristas; el origen no se borra')
         geometry.delete_selected(sketch,refs)
         for feature in doc['features']:
-            if feature['sketch_id']==sketch['id']:
-                try: model.profile(doc,feature['profile_id'])
+            for sketch_key,profile_key in (('sketch_id','profile_id'),('to_sketch_id','to_profile_id')):
+                if feature.get(sketch_key)!=sketch['id']: continue
+                try: model.profile(doc,feature[profile_key])
                 except CommandError as exc:
                     raise CommandError('El borrado abriría un perfil utilizado; elimina primero su operación CAD',code='cad_dependency') from exc
     yield from runtime.transaction_steps(payload,change,'CAD borrar selección')
@@ -609,6 +610,39 @@ def extrude_begin(payload):
     session.update(feature_id=feature['id'],preview=preview,candidate=feature['id'],depth=depth,extent=extent,at_bar=bool(bar))
     runtime.selection = dict(kind='FEATURE',id=feature['id'])
     runtime.solid_view()
+    return runtime.status()
+
+
+def _loft_profile(doc, payload, prefix):
+    sketch_id=payload.get(prefix+'_sketch_id')
+    identifier='profile_'+str(sketch_id) if sketch_id else payload.get(prefix+'_profile_id')
+    sketch,e=model.profile(doc,identifier)
+    _require_reachable(doc,sketch['id'])
+    if e['type']=='SKETCH':
+        closed=model.closed_entities(sketch)
+        if len(closed)!=1: raise BadPayload(sketch['name']+' tiene varios contornos; elige uno de sus perfiles')
+        e=closed[0]
+    return sketch,'profile_'+e['id']
+
+
+@command('cad.loft.create')
+def loft_create(payload):
+    """Solid transition between one closed contour of each of two sketches; one undo."""
+    def change(doc):
+        first,source=_loft_profile(doc,payload,'from'); second,target=_loft_profile(doc,payload,'to')
+        if first['id']==second['id']: raise BadPayload('Elige perfiles de dos croquis distintos')
+        feature=dict(id=model.uid('feature'),name='Solevado '+str(len(doc['features'])+1),type='LOFT',order=model.next_order(doc),
+                     sketch_id=first['id'],profile_id=source,to_sketch_id=second['id'],to_profile_id=target,
+                     enabled=True,body_id=first['body_id'])
+        doc['features'].append(feature)
+        bar=runtime.bar(doc)
+        if bar:
+            model.insert_after(doc,feature,bar)
+            runtime.rollback_id=feature['id']  # a node inserted at the bar becomes the viewed state
+        created.append(feature['id'])
+    created=[]
+    yield from runtime.transaction_steps(payload,change,'CAD solevado')
+    runtime.selection=dict(kind='FEATURE',id=created[0])
     return runtime.status()
 
 
@@ -753,7 +787,7 @@ def feature_set(payload):
             if 'segments' in payload: feature['segments']=payload['segments']
             model.validate_finish(feature)
         if 'depth' in payload:
-            if feature['type'] in model.FINISHES: raise BadPayload('Un redondeo se edita por su ancho')
+            if feature['type'] not in ('EXTRUDE','CUT'): raise BadPayload('Esta operación no tiene profundidad')
             feature['depth'] = _depth_value(dict(operation=feature['type'], depth=feature['depth'], preview=doc), dict(depth=payload['depth']))
         if 'extent' in payload:
             if feature['type'] not in ('EXTRUDE','CUT'):
@@ -1093,9 +1127,10 @@ def fillet(payload):
         replacement=next((p for p in current if set(created)&set(p.get('members',[]))),None)
         remaining={'profile_'+p['id'] for p in current}
         for f in doc['features']:
-            if f['sketch_id']==sketch['id'] and f['profile_id'] in previous-remaining:
-                if replacement is None: raise BadPayload('El redondeo debe conservar cerrado el perfil de la operación')
-                f['profile_id']='profile_'+replacement['id']
+            for sketch_key,profile_key in (('sketch_id','profile_id'),('to_sketch_id','to_profile_id')):
+                if f.get(sketch_key)==sketch['id'] and f[profile_key] in previous-remaining:
+                    if replacement is None: raise BadPayload('El redondeo debe conservar cerrado el perfil de la operación')
+                    f[profile_key]='profile_'+replacement['id']
     yield from runtime.transaction_steps(payload,change,'CAD redondear esquina')
     _set_selection([dict(kind='ENTITY',id=identifier,part='BODY') for identifier in created])
     return runtime.status()
@@ -1109,12 +1144,13 @@ def fillet_remove(payload):
         geometry.remove_fillet(sketch,arc)
         new_profiles=model.closed_entities(sketch)
         for feature in doc['features']:
-            before=next((p for p in old_profiles if 'profile_'+p['id']==feature['profile_id'] and arc['id'] in p.get('members',[])),None)
-            if before:
-                members=set(before['members'])-{arc['id']}
-                after=next((p for p in new_profiles if set(p.get('members',[]))==members),None)
-                if after is None: raise BadPayload('No se puede cerrar el perfil al quitar este redondeo')
-                feature['profile_id']='profile_'+after['id']
+            for key in ('profile_id','to_profile_id'):
+                before=next((p for p in old_profiles if 'profile_'+p['id']==feature.get(key) and arc['id'] in p.get('members',[])),None)
+                if before:
+                    members=set(before['members'])-{arc['id']}
+                    after=next((p for p in new_profiles if set(p.get('members',[]))==members),None)
+                    if after is None: raise BadPayload('No se puede cerrar el perfil al quitar este redondeo')
+                    feature[key]='profile_'+after['id']
     yield from runtime.transaction_steps(payload,change,'CAD quitar redondeo')
     runtime.selection=None
     return runtime.status()
@@ -1137,7 +1173,7 @@ def sketch_delete(payload):
     identifier=payload.get('sketch_id')
     def change(doc):
         _require_reachable(doc,identifier)
-        if any(f['sketch_id']==identifier for f in doc['features']) or any(p.get('reference_sketch_id')==identifier for p in doc.get('planes',[])):
+        if any(identifier in (f['sketch_id'],f.get('to_sketch_id')) for f in doc['features']) or any(p.get('reference_sketch_id')==identifier for p in doc.get('planes',[])):
             raise CommandError('Elimina primero las operaciones del boceto',code='cad_dependency')
         removed=model.find(doc,'sketches',identifier)
         doc['sketches'].remove(removed)
@@ -1266,7 +1302,7 @@ def sketch_on_face(payload):
                    translation=[0,0,0],rotation=[0,0,0],face_frame=frame)
         feature=next((f for f in doc['features'] if f['id']==source['feature_id']),None)
         candidates=[node for node in reversed(model.history(doc)) if node['kind']=='FEATURE' and node['enabled'] and
-                    node['type'] not in model.FINISHES and
+                    node['type'] in ('EXTRUDE','CUT') and
                     feature and node['body_id']==feature['body_id'] and node['id'] in _reachable_ids(doc)]
         for support in candidates:
             source_sketch=model.find(doc,'sketches',support['sketch_id']); base=model.frame(source_sketch)

@@ -320,3 +320,79 @@ def finish_edges(solid, edges, width, segments):
         return [tuple(v.co) for v in bm.verts], [tuple(v.index for v in f.verts) for f in bm.faces]
     finally:
         bm.free()
+
+
+def _ring_parameters(ring):
+    lengths = [(Vector(b)-Vector(a)).length for a, b in zip(ring, ring[1:]+ring[:1])]
+    total = sum(lengths)
+    result, run = [], 0.
+    for length in lengths:
+        result.append(run/total); run += length
+    return result, lengths, total
+
+
+def _ring_at(ring, lengths, total, t):
+    target = (t % 1.)*total
+    for i, length in enumerate(lengths):
+        if target <= length or i == len(lengths)-1:
+            a, b = Vector(ring[i]), Vector(ring[(i+1) % len(ring)])
+            return a.lerp(b, min(1., target/length) if length > 0 else 0.)
+        target -= length
+
+
+def loft(sketch_a, source_a, sketch_b, source_b):
+    """Join two closed outer contours on different planes with ruled walls.
+
+    Each ring keeps its own corners: both are sampled at the union of their
+    normalized perimeter parameters. The start of the second ring is the vertex
+    that best matches the first one around their centroids (least twist).
+    """
+    from mathutils.geometry import tessellate_polygon
+    rings = []
+    for sketch, source in ((sketch_a, source_a), (sketch_b, source_b)):
+        if len(region(sketch, source)) != 1:
+            raise CommandError('El solevado une contornos exteriores sin huecos', code='cad_profile_invalid')
+        rings.append([Vector(world(sketch, *p)) for p in outline(source)])
+    a, b = rings
+    def newell(ring):
+        n = Vector((0., 0., 0.))
+        for p, q in zip(ring, ring[1:]+ring[:1]):
+            n += Vector((p.y*q.z-p.z*q.y, p.z*q.x-p.x*q.z, p.x*q.y-p.y*q.x))
+        return n
+    ca, cb = sum(a, Vector())/len(a), sum(b, Vector())/len(b)
+    axis = newell(a).normalized()
+    if abs((cb-ca).dot(axis)) < 1e-7 and abs((cb-ca).dot(newell(b).normalized())) < 1e-7:
+        raise CommandError('Los dos croquis están en el mismo plano; separa uno de ellos', code='cad_profile_invalid')
+    if newell(b).dot(newell(a)) < 0: b.reverse()
+    def local(ring, center):
+        return [(p-center)-axis*(p-center).dot(axis) for p in ring]
+    la, lb = local(a, ca), local(b, cb)
+    ta, lengths_a, total_a = _ring_parameters(a)
+    probes = [_ring_at(la, lengths_a, total_a, i/64) for i in range(64)]
+    tb0, lengths_b, total_b = _ring_parameters(b)
+    candidates = range(len(b)) if len(b) <= 512 else range(0, len(b), len(b)//512+1)
+    def cost(start):
+        return sum((_ring_at(lb, lengths_b, total_b, tb0[start]+i/64)-p).length_squared for i, p in enumerate(probes))
+    start = min(candidates, key=cost)
+    b = b[start:]+b[:start]
+    tb, lengths_b, total_b = _ring_parameters(b)
+    params = sorted(set(round(t, 12) for t in ta+tb))
+    ring_a = [_ring_at(a, lengths_a, total_a, t) for t in params]
+    ring_b = [_ring_at(b, lengths_b, total_b, t) for t in params]
+    n = len(params)
+    side = 1. if (cb-ca).dot(axis) > 0 else -1.
+    vertices = [tuple(p) for p in ring_a+ring_b]
+    faces = [(i, (i+1) % n, (i+1) % n+n, i+n) if side > 0 else (i+n, (i+1) % n+n, (i+1) % n, i) for i in range(n)]
+    for ring, offset, flip in ((ring_a, 0, True), (ring_b, n, False)):
+        for tri in tessellate_polygon([[p.copy() for p in ring]]):
+            tri = tuple(i+offset for i in tri)
+            # Orient every cap triangle along the loft axis before the global check.
+            p, q, r = (Vector(vertices[i]) for i in tri)
+            if ((q-p).cross(r-p).dot(axis)*side > 0) == flip: tri = tuple(reversed(tri))
+            faces.append(tri)
+    volume = sum(Vector(vertices[f[0]]).dot(Vector(vertices[f[i]]).cross(Vector(vertices[f[i+1]])))
+                 for f in faces for i in range(1, len(f)-1))
+    if abs(volume) < 1e-18:
+        raise CommandError('El solevado no encierra volumen', code='cad_profile_invalid')
+    if volume < 0: faces = [tuple(reversed(f)) for f in faces]
+    return vertices, faces

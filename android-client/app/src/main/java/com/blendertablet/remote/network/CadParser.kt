@@ -14,7 +14,7 @@ object CadParser {
         j.optString("length_unit") != "METERS") CadCapabilities() else CadCapabilities(2,
         strings(j.optJSONArray("planes")).filter { it in listOf("XY", "XZ", "YZ") },
         strings(j.optJSONArray("entities")).filter { it in listOf("LINE", "RECTANGLE", "CIRCLE", "ARC", "NGON", "SLOT", "GEAR", "POLYGON") },
-        strings(j.optJSONArray("features")).filter { it in listOf("EXTRUDE", "CUT") },
+        strings(j.optJSONArray("features")).filter { it in listOf("EXTRUDE", "CUT", "LOFT") },
         strings(j.optJSONArray("constraints")).filter { it in listOf("COINCIDENT", "HORIZONTAL", "VERTICAL", "PARALLEL", "PERPENDICULAR", "TANGENT", "EQUAL", "DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "FIX", "MIDPOINT", "SYMMETRIC", "SYMMETRIC_LINE") },
         j.optBoolean("sketch_editing"))
     fun state(j: JSONObject?): CadState {

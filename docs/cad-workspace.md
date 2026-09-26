@@ -134,6 +134,14 @@ conserva figuras y reglas en un plano que sigue al original, desplazado por su
 normal (10 pasos al crearla). Con la copia seleccionada, **Separación Z** en la
 bandeja la sube o baja (negativo = al otro lado). Es la base para unir dos croquis.
 
+### Solevado entre dos croquis
+
+Selecciona un perfil (o un croquis de un solo contorno), pulsa **Solevado** en el
+rail 3D y toca el perfil del otro croquis (o elígelo en la pila). Se crea un sólido
+de transición con paredes rectas entre ambos: círculo → cuadrado, rectángulo grande →
+pequeño, etc. Los contornos no pueden tener huecos. Cambiar la Separación Z o las
+medidas de cualquiera de los dos croquis actualiza el solevado.
+
 ## Bandeja de cotas
 
 El círculo muestra **Radio** mientras se dibuja y después de soltar. Editarlo modifica

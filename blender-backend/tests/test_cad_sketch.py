@@ -177,6 +177,41 @@ class SketchTests(CadTests):
         cad.sketch_delete(dict(sketch_id=copy_['id'],**OWNER))
         self.assertEqual(runtime.doc()['planes'],[])
 
+    def test_loft_joins_two_parallel_sketches_into_one_solid_and_one_undo(self):
+        rect=self.rect()
+        source=runtime.doc()['sketches'][0]
+        cad.sketch_copy(dict(sketch_id=source['id'],offset=.03,**OWNER))
+        copy_=runtime.doc()['sketches'][1]
+        cad.loft_create(dict(from_sketch_id=source['id'],to_sketch_id=copy_['id'],**OWNER))
+        self.assertAlmostEqual(volume(self.obj()),.08*.045*.03,places=10)
+        feature=runtime.doc()['features'][0]
+        self.assertEqual((feature['type'],feature['to_sketch_id']),('LOFT',copy_['id']))
+        # Halving the top turns the prism into a frustum: h/3·(A1+A2+√(A1·A2)).
+        top=copy_['entities'][0]['id']
+        cad.entity_set(dict(entity_id=top,values={'width':.04,'height':.0225},**OWNER))
+        a1,a2=.08*.045,.04*.0225
+        self.assertAlmostEqual(volume(self.obj()),.03/3*(a1+a2+math.sqrt(a1*a2)),places=10)
+        with self.assertRaises(CommandError): cad.sketch_delete(dict(sketch_id=copy_['id'],**OWNER))
+        self.assertFalse(model.sketch_visible(runtime.doc(),runtime.doc()['sketches'][1]))
+
+    def test_loft_from_a_circle_to_a_square_and_rejects_coplanar_sketches(self):
+        circle=self.draw('CIRCLE',(0,0),(.02,0))
+        source=runtime.doc()['sketches'][0]
+        cad.sketch_copy(dict(sketch_id=source['id'],offset=.05,**OWNER))
+        copy_=runtime.doc()['sketches'][1]
+        with self.assertRaises(CommandError):
+            cad.loft_create(dict(from_sketch_id=source['id'],to_sketch_id=source['id'],**OWNER))
+        cad.sketch_activate(dict(sketch_id=copy_['id'],**OWNER))
+        cad.entity_delete(dict(entity_id=copy_['entities'][0]['id'],**OWNER))
+        self.draw('RECTANGLE',(-.015,-.015),(.015,.015))
+        cad.sketch_finish(OWNER)
+        cad.loft_create(dict(from_sketch_id=source['id'],to_sketch_id=copy_['id'],**OWNER))
+        v=volume(self.obj())
+        self.assertTrue(.03**2*.05 < v < math.pi*.02**2*.05)
+        with self.assertRaises(CommandError):  # coplanar: rejected, the document keeps its separation
+            cad.plane_set(dict(plane_id=copy_['plane_id'],translation=[0,0,0],**OWNER))
+        self.assertEqual(model.find(runtime.doc(),'planes',copy_['plane_id'])['translation'],[0.,0.,.05])
+
     def test_drawing_uses_increment_grid_point_snap_and_drops_collapsed_figures(self):
         def entity(identifier):
             return next(e for s in runtime.doc()['sketches'] for e in s['entities'] if e['id']==identifier)

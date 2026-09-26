@@ -1,6 +1,6 @@
 """CAD evaluation on plain snapshots; run by the auxiliary Blender main thread."""
 from . import document as model
-from .kernel import kernel, ExtrusionPreviewCache, finish_edges
+from .kernel import kernel, ExtrusionPreviewCache, finish_edges, loft
 from ..errors import CommandError
 
 
@@ -13,9 +13,10 @@ def geometry_key(doc, limit, scale):
             feature = dict(node)
             feature.pop('name', None)
             features.append(feature)
-            if node.get('profile_id'):
-                sketch, _ = model.profile(doc, node['profile_id'])
-                sketches[sketch['id']] = dict(frame=model.frame(sketch), entities=sketch['entities'])
+            for key in ('profile_id', 'to_profile_id'):
+                if node.get(key):
+                    sketch, _ = model.profile(doc, node[key])
+                    sketches[sketch['id']] = dict(frame=model.frame(sketch), entities=sketch['entities'])
         if node['id'] == limit:
             break
     return model.dumps(dict(id=doc['id'], features=features, sketches=sketches, scale=scale))
@@ -48,6 +49,20 @@ class Evaluator:
                 cached=self._solids.get(identifier)
                 if cached is None or cached[0]!=model.dumps(signature):
                     cached=(model.dumps(signature),finish_edges(solids[previous],feature['edges'],feature['width'],feature.get('segments',1)))
+                    self._solids[identifier]=cached
+                solids[identifier]=cached[1]
+                keys[identifier]=hashlib.blake2b(repr(signature).encode(),digest_size=16).hexdigest()
+                tips[body]=identifier
+                continue
+            if feature['type']=='LOFT':
+                first,source=model.profile(doc,feature['profile_id']); second,target=model.profile(doc,feature['to_profile_id'])
+                signature=(doc['id'],'LOFT',feature['profile_id'],feature['to_profile_id'],
+                           model.dumps([dict(frame=model.frame(s),entities=s['entities']) for s in (first,second)]),keys.get(previous))
+                cached=self._solids.get(identifier)
+                if cached is None or cached[0]!=model.dumps(signature):
+                    operand=loft(first,source,second,target)
+                    if previous: operand=kernel.union(solids[previous],operand)
+                    cached=(model.dumps(signature),operand)
                     self._solids[identifier]=cached
                 solids[identifier]=cached[1]
                 keys[identifier]=hashlib.blake2b(repr(signature).encode(),digest_size=16).hexdigest()

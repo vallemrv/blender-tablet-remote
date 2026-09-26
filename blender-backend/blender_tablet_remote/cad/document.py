@@ -143,6 +143,16 @@ def loads(raw):
                 validate_finish(feature)
                 seen_features.add(feature['id'])
                 continue
+            if feature.get('type') == 'LOFT':
+                first, _ = profile(doc, feature['profile_id'])
+                second, _ = profile(doc, feature.get('to_profile_id'))
+                feature.setdefault('body_id', first['body_id'])
+                find(doc,'bodies',feature['body_id'])
+                if first['id'] != feature['sketch_id'] or second['id'] != feature.get('to_sketch_id') or \
+                        first['id'] == second['id'] or not isinstance(feature['enabled'], bool):
+                    raise ValueError('invalid loft')
+                seen_features.add(feature['id'])
+                continue
             sketch, _ = profile(doc, feature['profile_id'])
             feature.setdefault('body_id',sketch['body_id'])
             find(doc,'bodies',feature['body_id'])
@@ -356,8 +366,8 @@ def resolve_supports(doc):
         visiting.remove(item['id']); resolved.add(item['id'])
     def supported(feature_id):
         f=find(doc,'features',feature_id)
-        if f['type'] in FINISHES:
-            raise BadPayload('Un redondeo no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
+        if f['type'] in FINISHES + ('LOFT',):
+            raise BadPayload('Un redondeo o solevado no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
         source=find(doc,'sketches',f['sketch_id']); resolve(source)
         result=copy.deepcopy(frame(source))
         depth=f['depth'] if f['type']=='EXTRUDE' else 0
@@ -398,7 +408,7 @@ def resolve_supports(doc):
 
 def sketch_visible(doc, sketch):
     return bool(sketch.get('visible',True) and (sketch.get('visibility_explicit',False) or
-        not any(f['sketch_id']==sketch['id'] and f['enabled'] for f in doc['features'])))
+        not any(sketch['id'] in (f['sketch_id'],f.get('to_sketch_id')) and f['enabled'] for f in doc['features'])))
 
 
 def history(doc):

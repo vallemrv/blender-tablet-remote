@@ -1411,7 +1411,7 @@ de banda y configuración de latencia interactiva.
 ## CAD paramétrico — versión 2 extendida: sketch y vaciado
 
 `features.cad` anuncia `version:2`, `planes:[XY,XZ,YZ]`,
-`entities:[LINE,RECTANGLE,CIRCLE,ARC,NGON,SLOT,GEAR,POLYGON]`, `features:[EXTRUDE,CUT]` (más FILLET/CHAMFER en la pila vía `cad.finish.*`),
+`entities:[LINE,RECTANGLE,CIRCLE,ARC,NGON,SLOT,GEAR,POLYGON]`, `features:[EXTRUDE,CUT,LOFT]` (más FILLET/CHAMFER en la pila vía `cad.finish.*`),
 `sketch_editing:true`, `fillet:true`, `length_unit:METERS` y `constraints` con
 `COINCIDENT,HORIZONTAL,VERTICAL,PARALLEL,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,DISTANCE_X,DISTANCE_Y,RADIUS,FIX,MIDPOINT,SYMMETRIC,SYMMETRIC_LINE`.
 También anuncia `construction`, `datum_planes`, `bodies`, `origin`, `mesh_copy`,
@@ -1485,6 +1485,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.fillet` | `{radius}` | Redondea cada esquina de la selección (rectángulo entero, varias esquinas, extremos de línea o líneas unidas) con un radio compartido; conserva restricciones y operaciones dependientes |
 | `cad.fillet.remove` | `{entity_id}` | Quita un redondeo, extiende los lados hasta la esquina y remapea el perfil usado por sólidos, con un undo |
 | `cad.sketch.delete` | `{sketch_id}` | Elimina un boceto sin operaciones dependientes |
+| `cad.loft.create` | `{from_profile_id\|from_sketch_id,to_profile_id\|to_sketch_id}` | Solevado `LOFT`: une un contorno exterior sin huecos de cada croquis (un croquis debe tener un único contorno) con paredes regladas, unido al cuerpo del primero; un undo. Planos coincidentes se rechazan |
 | `cad.sketch.copy` | `{sketch_id,offset}` | Copia el croquis a un plano implícito paralelo, `offset` metros por su normal; un undo y selecciona la copia (`SKETCH`). La separación se edita con `cad.plane.set` (`translation[2]`) |
 | `cad.sketch.visibility` | `{sketch_id,visible}` | Muestra/oculta el overlay; el boceto activo siempre se ve |
 | `cad.entity.construction` | `{construction}` | Cambia las figuras seleccionadas a auxiliares o perfiles; rechaza romper una operación dependiente |

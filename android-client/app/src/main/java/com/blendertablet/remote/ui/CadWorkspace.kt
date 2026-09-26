@@ -46,6 +46,17 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     val historyScroll = rememberScrollState()
     var unit by remember(state.blender.sceneScale.lengthUnit) { mutableStateOf(state.blender.sceneScale.lengthUnit) }
     var pendingDimension by remember(cad.activeSketchId, cad.selection) { mutableStateOf<String?>(null) }
+    // Solevado: the first profile/sketch waits for a second selection from another sketch.
+    var loftFrom by remember(cad.activeSketchId) { mutableStateOf<Pair<String, String>?>(null) }
+    LaunchedEffect(cad.selectionKind, cad.selectionId) {
+        val from = loftFrom ?: return@LaunchedEffect
+        val kind = cad.selectionKind; val id = cad.selectionId
+        if (kind !in listOf("PROFILE", "SKETCH") || id == null || (kind to id) == from) return@LaunchedEffect
+        loftFrom = null
+        vm.cadCommand("cad.loft.create", mapOf(
+            (if (from.first == "SKETCH") "from_sketch_id" else "from_profile_id") to from.second,
+            (if (kind == "SKETCH") "to_sketch_id" else "to_profile_id") to id))
+    }
     var editingConstraint by remember(cad.activeSketchId) { mutableStateOf<CadConstraint?>(null) }
     LaunchedEffect(cad.revision) {
         editingConstraint?.let { selected -> editingConstraint = cad.sketches.flatMap { it.constraints }.firstOrNull { it.id == selected.id } }
@@ -120,7 +131,11 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 if (solidEdges) command("cad.finish.begin", "operation" to "CHAMFER") else vm.cadSurfaceMode("EDGE")
             }
             RailDivider()
-            capabilities.features.forEach { operation ->
+            if ("LOFT" in capabilities.features) CadAction("LOFT", "Solevado: une este perfil con el de otro croquis", selected = loftFrom != null,
+                enabled = connected && !cad.sessionActive && (loftFrom != null || cad.selectionKind in listOf("PROFILE", "SKETCH"))) {
+                loftFrom = if (loftFrom != null) null else cad.selectionKind!! to cad.selectionId!!
+            }
+            capabilities.features.filter { it != "LOFT" }.forEach { operation ->
                 CadAction(operation, cadLabel(operation), selected = depthPreview && cad.operation == operation,
                     enabled = connected && !cad.sessionActive && cad.selectionKind in listOf("PROFILE", "SKETCH") && (operation != "CUT" || target != null)) { beginFeature(operation) }
             }
@@ -339,6 +354,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(cad.error ?: when {
                 !connected -> "Reconectando · recuperando el documento de Blender"
+                loftFrom != null -> "Solevado: toca el perfil del otro croquis (o elígelo en la pila) · vuelve a pulsar Solevado para cancelar"
+                feature?.type == "LOFT" -> "${feature.name} · une ${cad.sketches.firstOrNull { it.id == feature.sketchId }?.name.orEmpty()} con otro croquis · mover su plano lo actualiza"
                 pendingDimension == "FILLET" -> "Redondeo: varias esquinas, el rectángulo entero o líneas unidas · un radio para todas · tras el primero, toca otra esquina"
                 drafts.isNotEmpty() && !depthPreview -> "Medidas pendientes · ✓ aplica los cambios · × descarta"
                 depthPreview -> if (cad.operation == "EXTRUDE")
@@ -499,6 +516,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                 command("cad.feature.set", "feature_id" to feature.id, "segments" to it)
                             }
                             Text("${feature.edgeCount} aristas", color = Ink.Muted, fontSize = 12.sp)
+                            CadAction("VISIBLE", if (feature.enabled) "Ocultar" else "Mostrar", selected = feature.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled) }
+                            CadAction("DELETE", "Borrar operación", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
+                        } else if (feature?.type == "LOFT") {
                             CadAction("VISIBLE", if (feature.enabled) "Ocultar" else "Mostrar", selected = feature.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled) }
                             CadAction("DELETE", "Borrar operación", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
                         } else if (offsetPlane != null) {
@@ -666,7 +686,7 @@ internal fun cadLabel(type: String) = when (type) {
     "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "SLOT" -> "Ranura"; "GEAR" -> "Engranaje"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
     "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad (tamaño del primero)"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
-    "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; else -> type
+    "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; else -> type
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
