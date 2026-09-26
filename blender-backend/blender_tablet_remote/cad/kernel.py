@@ -396,3 +396,65 @@ def loft(sketch_a, source_a, sketch_b, source_b):
         raise CommandError('El solevado no encierra volumen', code='cad_profile_invalid')
     if volume < 0: faces = [tuple(reversed(f)) for f in faces]
     return vertices, faces
+
+
+def helix_axis(sketch, axis):
+    """Axis point and direction in the sketch's local 2D frame: 'X', 'Y' or a line id."""
+    if axis in ('X', 'Y', None):
+        return (0., 0.), ((1., 0.) if axis == 'X' else (0., 1.))
+    line = next((e for e in sketch['entities'] if e['id'] == axis and e['type'] == 'LINE'), None)
+    if line is None:
+        raise CommandError('El eje del barrido helicoidal ya no existe en el croquis', code='cad_reference_missing')
+    dx, dy = line['x2']-line['x'], line['y2']-line['y']
+    length = (dx*dx+dy*dy)**.5
+    return (line['x'], line['y']), (dx/length, dy/length)
+
+
+def helix(sketch, source, axis, pitch, turns, hand='RIGHT'):
+    """Sweep a closed contour around an in-plane axis while it advances `pitch` per turn."""
+    import math
+    from mathutils.geometry import tessellate_polygon
+    if len(region(sketch, source)) != 1:
+        raise CommandError('El barrido helicoidal usa un contorno sin huecos', code='cad_profile_invalid')
+    ring = outline(source)
+    (ax, ay), (dx, dy) = helix_axis(sketch, axis)
+    heights = [(x-ax)*dx+(y-ay)*dy for x, y in ring]
+    radial = [-(x-ax)*dy+(y-ay)*dx for x, y in ring]   # signed distance to the axis
+    if min(radial) <= 1e-9 and max(radial) >= -1e-9:
+        raise CommandError('El perfil toca o cruza el eje; sepáralo del eje para barrerlo', code='cad_profile_invalid')
+    if pitch <= max(heights)-min(heights)+1e-9:
+        raise CommandError('El paso debe superar la altura del perfil a lo largo del eje, o las vueltas se solapan', code='cad_profile_invalid')
+    basis = frame(sketch)
+    o, fx, fy, fn = (Vector(basis[k]) for k in ('origin', 'x', 'y', 'normal'))
+    origin = o+fx*ax+fy*ay
+    d = (fx*dx+fy*dy).normalized()
+    side = 1. if radial[0] > 0 else -1.
+    u = (fx*-dy+fy*dx)*side                                  # from the axis toward the profile
+    turn = 1. if hand == 'RIGHT' else -1.
+    w = d.cross(u)*turn
+    steps = max(8, math.ceil(turns*48))
+    n = len(ring)
+    vertices = []
+    for k in range(steps+1):
+        theta = math.tau*turns*k/steps
+        c, s = math.cos(theta), math.sin(theta)
+        for h, r in zip(heights, radial):
+            vertices.append(tuple(origin+d*(h+pitch*turns*k/steps)+(u*c+w*s)*abs(r)))
+    # Moving direction along the sketch normal decides which side faces outward.
+    sigma = 1. if w.dot(fn) > 0 else -1.
+    faces = []
+    for k in range(steps):
+        a, b = k*n, (k+1)*n
+        for i in range(n):
+            quad = (a+i, a+(i+1) % n, b+(i+1) % n, b+i)
+            faces.append(quad if sigma > 0 else tuple(reversed(quad)))
+    for tri in tessellate_polygon([[Vector((x, y, 0.)) for x, y in ring]]):
+        (x0, y0), (x1, y1), (x2, y2) = (ring[i] for i in tri)
+        if (x1-x0)*(y2-y0)-(y1-y0)*(x2-x0) < 0: tri = tuple(reversed(tri))   # CCW about the sketch normal
+        faces.append(tuple(reversed(tri)) if sigma > 0 else tuple(tri))
+        end = tuple(i+steps*n for i in tri)
+        faces.append(end if sigma > 0 else tuple(reversed(end)))
+    volume = sum(Vector(vertices[f[0]]).dot(Vector(vertices[f[i]]).cross(Vector(vertices[f[i+1]])))
+                 for f in faces for i in range(1, len(f)-1))
+    if volume < 0: faces = [tuple(reversed(f)) for f in faces]
+    return vertices, faces

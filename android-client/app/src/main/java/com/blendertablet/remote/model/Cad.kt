@@ -24,7 +24,9 @@ data class CadFeature(val id: String, val name: String, val sketchId: String,
     val profileId: String, val depth: Double, val enabled: Boolean,
     val type: String = "EXTRUDE", val targetId: String? = null, val bodyId: String = "", val extent: String = "ONE",
     /** Redondeo/Chaflán (`FILLET`/`CHAMFER`): ancho, segmentos y aristas elegidas. */
-    val width: Double = 0.0, val segments: Int = 1, val edgeCount: Int = 0) {
+    val width: Double = 0.0, val segments: Int = 1, val edgeCount: Int = 0,
+    /** Barrido helicoidal (`HELIX`): paso por vuelta, vueltas, sentido y eje del croquis (X, Y o una línea). */
+    val pitch: Double = 0.0, val turns: Double = 0.0, val hand: String = "RIGHT", val axis: String = "Y") {
     val isFinish get() = type in listOf("FILLET", "CHAMFER")
 }
 data class CadHandle(val part: String, val point: Pair<Float, Float>, val selected: Boolean, val intent: String = "POINT")

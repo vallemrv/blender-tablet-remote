@@ -14,7 +14,7 @@ object CadParser {
         j.optString("length_unit") != "METERS") CadCapabilities() else CadCapabilities(2,
         strings(j.optJSONArray("planes")).filter { it in listOf("XY", "XZ", "YZ") },
         strings(j.optJSONArray("entities")).filter { it in listOf("LINE", "RECTANGLE", "CIRCLE", "ARC", "NGON", "SLOT", "GEAR", "POLYGON") },
-        strings(j.optJSONArray("features")).filter { it in listOf("EXTRUDE", "CUT", "LOFT") },
+        strings(j.optJSONArray("features")).filter { it in listOf("EXTRUDE", "CUT", "LOFT", "HELIX") },
         strings(j.optJSONArray("constraints")).filter { it in listOf("COINCIDENT", "HORIZONTAL", "VERTICAL", "PARALLEL", "PERPENDICULAR", "TANGENT", "EQUAL", "DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "FIX", "MIDPOINT", "SYMMETRIC", "SYMMETRIC_LINE") },
         j.optBoolean("sketch_editing"))
     fun state(j: JSONObject?): CadState {
@@ -50,7 +50,8 @@ object CadParser {
             features = objects(document?.optJSONArray("features")).map { CadFeature(it.optString("id"), it.optString("name", "Extrusión"),
                 it.id("sketch_id").orEmpty(), it.id("profile_id").orEmpty(), it.optDouble("depth", 0.02), it.optBoolean("enabled", true), it.optString("type", "EXTRUDE"), it.id("target_id"), it.optString("body_id"),
                 if (it.optString("extent") == "BOTH") "BOTH" else "ONE", it.optDouble("width", 0.0), it.optInt("segments", 1),
-                it.optJSONArray("edges")?.length() ?: 0) },
+                it.optJSONArray("edges")?.length() ?: 0, it.optDouble("pitch", 0.0), it.optDouble("turns", 0.0),
+                it.optString("hand", "RIGHT"), it.optString("axis", "Y")) },
             activeSketchId = j.id("active_sketch_id"), selectionKind = selection?.id("kind"), selectionId = selection?.id("id"),
             sessionActive = session?.optBoolean("active") == true, sessionId = session?.id("id"), canConfirm = session?.optBoolean("can_confirm", true) == true,
             canClose = session?.optBoolean("can_close") == true, operation = session?.optString("operation").orEmpty(),

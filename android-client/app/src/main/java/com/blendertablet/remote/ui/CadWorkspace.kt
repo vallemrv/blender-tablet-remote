@@ -135,7 +135,11 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 enabled = connected && !cad.sessionActive && (loftFrom != null || cad.selectionKind in listOf("PROFILE", "SKETCH"))) {
                 loftFrom = if (loftFrom != null) null else cad.selectionKind!! to cad.selectionId!!
             }
-            capabilities.features.filter { it != "LOFT" }.forEach { operation ->
+            if ("HELIX" in capabilities.features) CadAction("HELIX", "Barrido helicoidal del perfil alrededor de un eje del croquis",
+                enabled = connected && !cad.sessionActive && cad.selectionKind in listOf("PROFILE", "SKETCH")) {
+                command("cad.helix.create", (if (cad.selectionKind == "SKETCH") "sketch_id" else "profile_id") to cad.selectionId)
+            }
+            capabilities.features.filter { it !in listOf("LOFT", "HELIX") }.forEach { operation ->
                 CadAction(operation, cadLabel(operation), selected = depthPreview && cad.operation == operation,
                     enabled = connected && !cad.sessionActive && cad.selectionKind in listOf("PROFILE", "SKETCH") && (operation != "CUT" || target != null)) { beginFeature(operation) }
             }
@@ -333,6 +337,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 editingConstraint = null
             }
             entity != null && drafts.isNotEmpty() -> command("cad.entity.set", "entity_id" to entity.id, "values" to drafts.toMap())
+            feature?.type == "HELIX" && drafts["pitch"] != null -> command("cad.feature.set", "feature_id" to feature.id, "pitch" to drafts["pitch"])
             feature != null && drafts["depth"] != null -> command("cad.feature.set", "feature_id" to feature.id, "depth" to drafts["depth"])
             offsetPlane != null && drafts["offset"] != null -> command("cad.plane.set", "plane_id" to offsetPlane.id,
                 "translation" to offsetPlane.translation.take(2) + drafts["offset"]!!)
@@ -355,6 +360,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             Text(cad.error ?: when {
                 !connected -> "Reconectando · recuperando el documento de Blender"
                 loftFrom != null -> "Solevado: toca el perfil del otro croquis (o elígelo en la pila) · vuelve a pulsar Solevado para cancelar"
+                feature?.type == "HELIX" -> "${feature.name} · altura ${formatToolDistance(feature.pitch * feature.turns * lengthFactor(unit), 2)} ${unit.short} · el paso debe superar la altura del perfil · el eje es X, Y o una línea del croquis"
                 feature?.type == "LOFT" -> "${feature.name} · une ${cad.sketches.firstOrNull { it.id == feature.sketchId }?.name.orEmpty()} con otro croquis · mover su plano lo actualiza"
                 pendingDimension == "FILLET" -> "Redondeo: varias esquinas, el rectángulo entero o líneas unidas · un radio para todas · tras el primero, toca otra esquina"
                 drafts.isNotEmpty() && !depthPreview -> "Medidas pendientes · ✓ aplica los cambios · × descarta"
@@ -516,6 +522,25 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                 command("cad.feature.set", "feature_id" to feature.id, "segments" to it)
                             }
                             Text("${feature.edgeCount} aristas", color = Ink.Muted, fontSize = 12.sp)
+                            CadAction("VISIBLE", if (feature.enabled) "Ocultar" else "Mostrar", selected = feature.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled) }
+                            CadAction("DELETE", "Borrar operación", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
+                        } else if (feature?.type == "HELIX") {
+                            CadDimension("Paso", drafts["pitch"] ?: feature.pitch, unit, feature.id + "pitch",
+                                step = cad.step, minimum = .0000001, enabled = connected, onDone = ::acceptValues) { drafts["pitch"] = it }
+                            CadCountControl("Vueltas", kotlin.math.round(feature.turns).toInt().coerceAtLeast(1), 1..200, connected && drafts.isEmpty()) {
+                                command("cad.feature.set", "feature_id" to feature.id, "turns" to it)
+                            }
+                            listOf("RIGHT" to "Derecha", "LEFT" to "Izquierda").forEach { (hand, label) ->
+                                PillButton(label, selected = feature.hand == hand, enabled = connected && drafts.isEmpty()) {
+                                    command("cad.feature.set", "feature_id" to feature.id, "hand" to hand)
+                                }
+                            }
+                            val lines = cad.sketches.firstOrNull { it.id == feature.sketchId }?.entities.orEmpty().filter { it.type == "LINE" && it.construction }
+                            (listOf("Y" to "Eje Y", "X" to "Eje X") + lines.mapIndexed { i, line -> line.id to "Eje línea ${i + 1}" }).forEach { (axis, label) ->
+                                PillButton(label, selected = feature.axis == axis, enabled = connected && drafts.isEmpty()) {
+                                    command("cad.feature.set", "feature_id" to feature.id, "axis" to axis)
+                                }
+                            }
                             CadAction("VISIBLE", if (feature.enabled) "Ocultar" else "Mostrar", selected = feature.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled) }
                             CadAction("DELETE", "Borrar operación", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
                         } else if (feature?.type == "LOFT") {
@@ -682,11 +707,13 @@ private fun cadGearSummary(gear: CadEntity, unit: LengthUnit): String {
         "engrana con otro del mismo módulo y ángulo de presión"
 }
 
+private fun lengthFactor(unit: LengthUnit) = when (unit) { LengthUnit.MILLIMETERS -> 1000.0; LengthUnit.CENTIMETERS -> 100.0; LengthUnit.METERS -> 1.0 }
+
 internal fun cadLabel(type: String) = when (type) {
     "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "SLOT" -> "Ranura"; "GEAR" -> "Engranaje"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
     "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad (tamaño del primero)"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
-    "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; else -> type
+    "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; else -> type
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

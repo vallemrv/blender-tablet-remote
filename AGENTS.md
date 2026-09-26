@@ -691,6 +691,12 @@ no quedan archivos o referencias temporales.
   inicio del segundo minimiza la torsión. Consume ambos croquis, que no se borran
   mientras exista; no sirve de apoyo de bocetos. Android: seleccionar perfil →
   Solevado → tocar el del otro croquis. Planos coincidentes se rechazan sin cambios.
+- Barrido helicoidal (`HELIX`) guarda `sketch_id/profile_id`, `axis` (`X`/`Y` del
+  croquis por su origen o id de una línea del mismo croquis), `pitch` (m por vuelta),
+  `turns` y `hand`. Gira el contorno alrededor del eje avanzando el paso (48 pasos por
+  vuelta) y se suma al cuerpo. Rechaza perfiles que toquen/crucen el eje y pasos
+  menores o iguales que la altura axial del perfil (vueltas solapadas). Crear elige
+  el primer eje Y/X no cruzado; la línea de eje no se borra mientras la use.
 - Seleccionar todo/Deseleccionar todo comparten el rail de Deshacer/Rehacer, también
   en CAD 3D. En edición seleccionan figuras del croquis; en 3D el croquis elegido.
   Extruir/Vaciar aceptan `sketch_id` para todos sus contornos: exteriores como volumen,

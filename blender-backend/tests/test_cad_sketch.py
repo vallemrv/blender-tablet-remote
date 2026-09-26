@@ -212,6 +212,42 @@ class SketchTests(CadTests):
             cad.plane_set(dict(plane_id=copy_['plane_id'],translation=[0,0,0],**OWNER))
         self.assertEqual(model.find(runtime.doc(),'planes',copy_['plane_id'])['translation'],[0.,0.,.05])
 
+    def test_helical_sweep_follows_pappus_and_keeps_its_parameters_editable(self):
+        rect=self.draw('RECTANGLE',(.010,.001),(.014,.003))   # 4×2 mm, 12 mm from the Y axis
+        sketch=runtime.doc()['sketches'][0]
+        cad.sketch_finish(OWNER)
+        cad.helix_create(dict(profile_id='profile_'+rect,pitch=.003,turns=2,**OWNER))
+        feature=runtime.doc()['features'][0]
+        self.assertEqual((feature['type'],feature['axis'],feature['hand']),('HELIX','Y','RIGHT'))
+        expected=.004*.002*math.tau*.012*2   # Pappus: area · centroid path per turn · turns
+        self.assertAlmostEqual(volume(self.obj()),expected,delta=expected*.005)
+        cad.feature_set(dict(feature_id=feature['id'],turns=3,hand='LEFT',**OWNER))
+        self.assertAlmostEqual(volume(self.obj()),expected*1.5,delta=expected*.01)
+        with self.assertRaises(CommandError):   # adjacent turns would overlap
+            cad.feature_set(dict(feature_id=feature['id'],pitch=.0015,**OWNER))
+        self.assertEqual(runtime.doc()['features'][0]['pitch'],.003)
+
+    def test_helical_thread_unites_with_a_rod_along_the_same_axis(self):
+        cad.sketch_finish(OWNER)
+        cad.sketch_create(dict(plane='XZ',**OWNER))   # normal −Y: the rod follows the thread axis
+        rod=self.draw('CIRCLE',(0,0),(.010,0))
+        cad.sketch_finish(OWNER)
+        status=cad.extrude_begin(dict(profile_id='profile_'+rod,depth=.03,extent='BOTH',**OWNER)); cad.confirm(OWNER)
+        core=volume(self.obj())
+        thread_sketch=runtime.doc()['sketches'][0]['id']
+        cad.sketch_activate(dict(sketch_id=thread_sketch,**OWNER))
+        tooth=self.draw('RECTANGLE',(.009,.001),(.011,.002))
+        cad.sketch_finish(OWNER)
+        cad.helix_create(dict(profile_id='profile_'+tooth,pitch=.002,turns=5,**OWNER))
+        self.assertGreater(volume(self.obj()),core)   # one manifold solid, rod plus thread
+
+    def test_helical_sweep_rejects_a_profile_crossing_both_sketch_axes(self):
+        rect=self.draw('RECTANGLE',(-.005,-.001),(.005,.001))
+        cad.sketch_finish(OWNER)
+        with self.assertRaises(CommandError):
+            cad.helix_create(dict(profile_id='profile_'+rect,**OWNER))
+        self.assertEqual(runtime.doc()['features'],[])
+
     def test_drawing_uses_increment_grid_point_snap_and_drops_collapsed_figures(self):
         def entity(identifier):
             return next(e for s in runtime.doc()['sketches'] for e in s['entities'] if e['id']==identifier)

@@ -24,6 +24,21 @@ ANGULAR = ('start','sweep','angle')  # degrees, independent of the sketch size
 # Edge finishes act on a body's solid: no sketch or profile, only design edges
 # stored as their segments in metres (never mesh indices). Chamfer is one segment.
 FINISHES = ('FILLET', 'CHAMFER')
+HANDS = ('RIGHT', 'LEFT')
+
+
+def validate_helix(feature):
+    """Helical sweep: `pitch` metres per turn, `turns`, hand and an in-sketch axis."""
+    feature['pitch'] = number(feature.get('pitch'), positive=True)
+    feature['turns'] = number(feature.get('turns'), positive=True)
+    if feature['turns'] > 200:
+        raise BadPayload('El barrido helicoidal admite hasta 200 vueltas')
+    if feature.setdefault('hand', 'RIGHT') not in HANDS:
+        raise BadPayload('Sentido: RIGHT o LEFT')
+    axis = feature.setdefault('axis', 'Y')
+    if not isinstance(axis, str) or not axis:
+        raise BadPayload('Eje no válido')
+    return feature
 
 
 def validate_finish(feature):
@@ -151,6 +166,15 @@ def loads(raw):
                 if first['id'] != feature['sketch_id'] or second['id'] != feature.get('to_sketch_id') or \
                         first['id'] == second['id'] or not isinstance(feature['enabled'], bool):
                     raise ValueError('invalid loft')
+                seen_features.add(feature['id'])
+                continue
+            if feature.get('type') == 'HELIX':
+                sketch, _ = profile(doc, feature['profile_id'])
+                feature.setdefault('body_id', sketch['body_id'])
+                find(doc,'bodies',feature['body_id'])
+                if sketch['id'] != feature['sketch_id'] or not isinstance(feature['enabled'], bool):
+                    raise ValueError('invalid helix')
+                validate_helix(feature)
                 seen_features.add(feature['id'])
                 continue
             sketch, _ = profile(doc, feature['profile_id'])
@@ -366,7 +390,7 @@ def resolve_supports(doc):
         visiting.remove(item['id']); resolved.add(item['id'])
     def supported(feature_id):
         f=find(doc,'features',feature_id)
-        if f['type'] in FINISHES + ('LOFT',):
+        if f['type'] in FINISHES + ('LOFT','HELIX'):
             raise BadPayload('Un redondeo o solevado no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
         source=find(doc,'sketches',f['sketch_id']); resolve(source)
         result=copy.deepcopy(frame(source))

@@ -142,6 +142,16 @@ de transición con paredes rectas entre ambos: círculo → cuadrado, rectángul
 pequeño, etc. Los contornos no pueden tener huecos. Cambiar la Separación Z o las
 medidas de cualquiera de los dos croquis actualiza el solevado.
 
+### Barrido helicoidal (roscas y muelles)
+
+Dibuja el perfil del filete (o la sección del muelle) apartado del eje: por defecto
+el eje es la Y del croquis que pasa por su origen (o la X si el perfil cruza la Y).
+Con el perfil seleccionado, pulsa **Barrido helicoidal** en el rail 3D. En la bandeja:
+**Paso** (avance por vuelta; debe superar la altura del perfil), **Vueltas**,
+**Derecha/Izquierda** y el **eje** (Y, X o una línea de construcción del croquis).
+Para una rosca, extruye además el núcleo cilíndrico a lo largo del mismo eje (croquis
+en el plano perpendicular) y el filete se une a él.
+
 ## Bandeja de cotas
 
 El círculo muestra **Radio** mientras se dibuja y después de soltar. Editarlo modifica

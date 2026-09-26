@@ -98,7 +98,7 @@ def _new_sketch(doc,payload):
     support_id=payload.get('support_id')
     if support_id:
         feature=model.find(doc,'features',support_id)
-        if feature['type'] in model.FINISHES + ('LOFT',):
+        if feature['type'] in model.FINISHES + ('LOFT','HELIX'):
             raise BadPayload('Un redondeo o solevado no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
         source,_=model.profile(doc,feature['profile_id'])
         plane_local=source['plane']
@@ -496,6 +496,9 @@ def entity_delete(payload):
                 try: model.profile(doc,feature[profile_key])
                 except CommandError as exc:
                     raise CommandError('El borrado abriría un perfil utilizado; elimina primero su operación CAD',code='cad_dependency') from exc
+            if feature.get('type')=='HELIX' and feature['sketch_id']==sketch['id'] and feature['axis'] not in ('X','Y') and \
+                    not any(e['id']==feature['axis'] for e in sketch['entities']):
+                raise CommandError('Esa línea es el eje de un barrido helicoidal; cambia antes su eje',code='cad_dependency')
     yield from runtime.transaction_steps(payload,change,'CAD borrar selección')
     runtime.selection=None
     return runtime.status()
@@ -646,6 +649,49 @@ def loft_create(payload):
     return runtime.status()
 
 
+def _helix_axis(sketch, axis):
+    if axis in ('X','Y'): return axis
+    if not any(e['id']==axis and e['type']=='LINE' for e in sketch['entities']):
+        raise BadPayload('El eje debe ser X, Y o una línea del mismo croquis')
+    return axis
+
+
+@command('cad.helix.create')
+def helix_create(payload):
+    """Helical sweep of one closed contour around an axis of its sketch; one undo."""
+    from ..cad.kernel import helix_axis
+    def change(doc):
+        sketch,identifier=_loft_profile(doc,dict(from_sketch_id=payload.get('sketch_id'),from_profile_id=payload.get('profile_id')),'from')
+        _,source=model.profile(doc,identifier)
+        ring=model.outline(source)
+        axis=payload.get('axis')
+        if axis is None:
+            # The first sketch axis the profile does not cross, so a fresh sweep works.
+            def clear(name):
+                (ax,ay),(dx,dy)=helix_axis(sketch,name)
+                side=[-(x-ax)*dy+(y-ay)*dx for x,y in ring]
+                return min(side)>1e-9 or max(side)<-1e-9
+            axis=next((name for name in ('Y','X') if clear(name)),'Y')
+        axis=_helix_axis(sketch,axis)
+        (ax,ay),(dx,dy)=helix_axis(sketch,axis)
+        heights=[(x-ax)*dx+(y-ay)*dy for x,y in ring]
+        span=max(heights)-min(heights)
+        pitch=payload.get('pitch') or max(span*1.25,span+runtime.step)
+        feature=model.validate_helix(dict(id=model.uid('feature'),name='Barrido helicoidal '+str(len(doc['features'])+1),type='HELIX',
+            order=model.next_order(doc),sketch_id=sketch['id'],profile_id=identifier,enabled=True,body_id=sketch['body_id'],
+            axis=axis,pitch=pitch,turns=payload.get('turns',5),hand=payload.get('hand','RIGHT')))
+        doc['features'].append(feature)
+        bar=runtime.bar(doc)
+        if bar:
+            model.insert_after(doc,feature,bar)
+            runtime.rollback_id=feature['id']
+        created.append(feature['id'])
+    created=[]
+    yield from runtime.transaction_steps(payload,change,'CAD barrido helicoidal')
+    runtime.selection=dict(kind='FEATURE',id=created[0])
+    return runtime.status()
+
+
 @command('cad.extrude.update')
 def extrude_update(payload):
     session = runtime.require(payload)
@@ -786,6 +832,11 @@ def feature_set(payload):
             if 'width' in payload: feature['width']=payload['width']
             if 'segments' in payload: feature['segments']=payload['segments']
             model.validate_finish(feature)
+        if feature['type']=='HELIX':
+            for key in ('pitch','turns','hand'):
+                if key in payload: feature[key]=payload[key]
+            if 'axis' in payload: feature['axis']=_helix_axis(model.find(doc,'sketches',feature['sketch_id']),payload['axis'])
+            model.validate_helix(feature)
         if 'depth' in payload:
             if feature['type'] not in ('EXTRUDE','CUT'): raise BadPayload('Esta operación no tiene profundidad')
             feature['depth'] = _depth_value(dict(operation=feature['type'], depth=feature['depth'], preview=doc), dict(depth=payload['depth']))
