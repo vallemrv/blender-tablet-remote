@@ -488,12 +488,12 @@ class CadRuntime:
         found = find_view3d()
         if found:
             camera.sync_from_region(found[3])
-        normal = Vector(model.frame(sketch)['normal']).normalized()
-        # A circle face has no natural up: keep the plane face-on and stand the
-        # view on world Z, or world Y when the plane itself is horizontal.
-        up = Vector((0, 0, 1))
-        if abs(normal.dot(up)) > 0.9:
-            up = Vector((0, 1, 0))
+        basis = model.frame(sketch)
+        normal = Vector(basis['normal']).normalized()
+        # Face-on with the sketch's own Y up: its X/Y axes are the screen's, so
+        # rectangles are drawn square to the view even on a rotated face plane.
+        # Standard planes and new face sketches already have world-upright axes.
+        up = Vector(basis['y'])
         up = (up - normal * up.dot(normal)).normalized()
         from mathutils import Matrix
         right = up.cross(normal)
