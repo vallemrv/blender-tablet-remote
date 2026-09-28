@@ -384,6 +384,51 @@ class SketchTests(CadTests):
         with self.assertRaises(CommandError): self.rule('PERPENDICULAR')
         self.assertEqual(raw,bpy.context.scene[model.KEY])
 
+    def test_collinear_keeps_fixed_reference_and_independent_length(self):
+        a=self.draw('LINE',(0,0),(.04,.03))
+        self.select_refs((a,'BODY')); self.rule('FIX')
+        original=copy.deepcopy(model.entity(runtime.doc(),a)[1])
+        b=self.draw('LINE',(.01,.02),(.07,.025))
+        self.select_refs((b,'BODY')); self.rule('DISTANCE',value=.08)
+        self.select_refs((a,'BODY'),(b,'BODY'))
+        with patch('blender_tablet_remote.cad.runtime.undo_push') as undo:
+            self.rule('COLLINEAR')
+            undo.assert_called_once()
+        self.select_refs((b,'BODY')); self.rule('DISTANCE',value=.10)
+        restored=model.loads(bpy.context.scene[model.KEY])
+        sketch,child=model.entity(restored,b)
+        self.assertEqual(model.entity(restored,a)[1],original)
+        self.assertAlmostEqual(math.dist(*geometry.line(sketch,dict(id=b))),.10,places=7)
+        for x,y in geometry.line(sketch,dict(id=b)):
+            self.assertAlmostEqual(.8*y-.6*x,0,places=8)
+        self.assertTrue(any(c['type']=='COLLINEAR' for c in sketch['constraints']))
+        geometry.solve(sketch,geometry.move_goals(sketch,[dict(id=b,part='BODY')],.02,.01),drag=True)
+        for x,y in geometry.line(sketch,dict(id=b)):
+            self.assertAlmostEqual(.8*y-.6*x,0,places=8)
+        self.assertAlmostEqual(math.dist(*geometry.line(sketch,dict(id=b))),.10,places=7)
+        self.assertEqual(model.find(sketch,'entities',a),original)
+
+    def test_collinear_accepts_reversed_and_disjoint_lines_and_rectangle_side(self):
+        rectangle=self.rect()
+        self.select_refs((rectangle,'BODY')); self.rule('FIX')
+        b=self.draw('LINE',(.12,.02),(.10,.01))
+        # The fixed mother may be second. The other segment is outside its extent.
+        self.select_refs((b,'BODY'),(rectangle,'EDGE0')); self.rule('COLLINEAR')
+        sketch,child=model.entity(runtime.doc(),b)
+        self.assertAlmostEqual(child['y'],0,places=8)
+        self.assertAlmostEqual(child['y2'],0,places=8)
+        self.assertGreater(min(child['x'],child['x2']),.08)
+
+    def test_collinear_conflict_with_fixed_parallel_lines_is_atomic(self):
+        a=self.draw('LINE',(0,0),(.04,0))
+        b=self.draw('LINE',(.01,.02),(.07,.02))
+        self.select_refs((a,'BODY'),(b,'BODY')); self.rule('FIX')
+        raw=bpy.context.scene[model.KEY]
+        with patch('blender_tablet_remote.cad.runtime.undo_push') as undo:
+            with self.assertRaises(CommandError): self.rule('COLLINEAR')
+            undo.assert_not_called()
+        self.assertEqual(bpy.context.scene[model.KEY],raw)
+
     def test_fillet_trims_corner_and_chain_extrudes(self):
         ids=[self.draw('LINE',a,b) for a,b in [((0,0),(.08,0)),((.08,0),(.08,.04)),((.08,.04),(0,.04)),((0,.04),(0,0))]]
         self.select_refs((ids[0],'BODY'),(ids[1],'BODY'))

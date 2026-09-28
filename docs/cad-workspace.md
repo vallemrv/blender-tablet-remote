@@ -76,7 +76,7 @@ actualiza las operaciones dependientes y registra un paso de undo.
   consume la última preview válida, sin repetir el sondeo.
 
 Restricciones disponibles: coincidencia entre puntos, horizontal, vertical,
-paralela, perpendicular, tangencia entre línea y círculo/arco, igualdad de
+paralela, colineal, perpendicular, tangencia entre línea y círculo/arco, igualdad de
 longitudes o radios, distancia diagonal/horizontal/vertical, radio, punto medio, simetría respecto al
 último de tres puntos, simetría respecto a una línea (eje) y fijación estricta de
 la selección. El origen (0,0) se puede seleccionar tocándolo en la vista y usar
@@ -87,6 +87,12 @@ línea/lado y elige **Distancia diagonal**, **Distancia horizontal** o **Distanc
 vertical** en el rail de restricciones. Horizontal y vertical miden la separación
 absoluta sobre los ejes del croquis y admiten cero; cada cota se conserva y edita
 independientemente. El valor inicial es la medida actual.
+
+**Colineal (misma recta)** usa dos líneas o lados rectos del mismo boceto.
+Mantiene ambos sobre la misma recta, aunque tengan distinta longitud o no se
+solapen. Puedes acotar cada longitud y deslizar sus extremos sobre esa recta.
+Si la línea madre debe permanecer inmóvil, fíjala antes; las referencias
+proyectadas ya están fijas. No obliga a que coincidan los extremos.
 
 **Simetría** usa tres puntos, en este orden: primer punto, segundo punto y centro.
 Para dos círculos, puedes seleccionar sus centros y después el origen. Si eliges

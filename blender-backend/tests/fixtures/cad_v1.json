@@ -23,6 +23,7 @@
       "HORIZONTAL",
       "VERTICAL",
       "PARALLEL",
+      "COLLINEAR",
       "PERPENDICULAR",
       "TANGENT",
       "EQUAL",

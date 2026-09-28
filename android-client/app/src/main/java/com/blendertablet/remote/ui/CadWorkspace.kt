@@ -677,6 +677,7 @@ internal fun cadConstraintEnabled(cad: CadState, type: String): Boolean {
         "SYMMETRIC_LINE" -> refs.size == 3 && point(0) && point(1) && line(2)
         "HORIZONTAL", "VERTICAL" -> refs.size == 1 && lines
         "PARALLEL", "PERPENDICULAR" -> refs.size == 2 && lines
+        "COLLINEAR" -> refs.size == 2 && refs.distinct().size == 2 && lines
         "EQUAL" -> if (curves) refs.map { it.id }.distinct().size >= 2 else refs.size >= 2 && lines
         "DISTANCE", "DISTANCE_X", "DISTANCE_Y" -> (refs.size == 1 && lines) || (refs.size == 2 && points)
         "RADIUS" -> refs.size == 1 && curves
@@ -689,7 +690,7 @@ internal fun cadConstraintEnabled(cad: CadState, type: String): Boolean {
 internal fun cadConstraintGroups(available: List<String>): List<List<String>> {
     val groups = listOf(
         listOf("COINCIDENT", "MIDPOINT", "FIX"),
-        listOf("HORIZONTAL", "VERTICAL", "PARALLEL", "PERPENDICULAR", "TANGENT"),
+        listOf("HORIZONTAL", "VERTICAL", "PARALLEL", "COLLINEAR", "PERPENDICULAR", "TANGENT"),
         listOf("EQUAL", "SYMMETRIC", "SYMMETRIC_LINE"),
         listOf("DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS"),
     )
@@ -710,6 +711,7 @@ private fun cadGearSummary(gear: CadEntity, unit: LengthUnit): String {
 private fun lengthFactor(unit: LengthUnit) = when (unit) { LengthUnit.MILLIMETERS -> 1000.0; LengthUnit.CENTIMETERS -> 100.0; LengthUnit.METERS -> 1.0 }
 
 internal fun cadLabel(type: String) = when (type) {
+    "COLLINEAR" -> "Colineal (misma recta)"
     "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "SLOT" -> "Ranura"; "GEAR" -> "Engranaje"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "POINT" -> "Punto"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
     "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad (tamaño del primero)"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"

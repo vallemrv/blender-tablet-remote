@@ -9,7 +9,7 @@ import numpy as np
 from . import document as model
 from ..errors import BadPayload, CommandError
 
-CONSTRAINTS = ('COINCIDENT', 'HORIZONTAL', 'VERTICAL', 'PARALLEL', 'PERPENDICULAR',
+CONSTRAINTS = ('COINCIDENT', 'HORIZONTAL', 'VERTICAL', 'PARALLEL', 'COLLINEAR', 'PERPENDICULAR',
                'TANGENT', 'EQUAL', 'DISTANCE', 'DISTANCE_X', 'DISTANCE_Y', 'RADIUS', 'FIX', 'MIDPOINT',
                'SYMMETRIC', 'SYMMETRIC_LINE')
 
@@ -155,6 +155,12 @@ def residual(sketch, c, scale):
     if typ == 'VERTICAL':
         return [d[0]/scale]
     c0,c1 = line(sketch,refs[1]); other = c1-c0
+    if typ == 'COLLINEAR':
+        # Both endpoints lie on the same infinite line; their longitudinal
+        # positions and the two lengths remain independent.
+        length = max(np.linalg.norm(d), 1e-12)
+        normal = np.array([-d[1], d[0]]) / length
+        return [np.dot(c0-a,normal)/scale, np.dot(c1-a,normal)/scale]
     denom = max(np.linalg.norm(d)*np.linalg.norm(other),1e-20)
     return [(d[0]*other[1]-d[1]*other[0])/denom if typ=='PARALLEL' else np.dot(d,other)/denom]
 

@@ -1413,7 +1413,10 @@ de banda y configuración de latencia interactiva.
 `features.cad` anuncia `version:2`, `planes:[XY,XZ,YZ]`,
 `entities:[LINE,RECTANGLE,CIRCLE,ARC,NGON,SLOT,GEAR,POLYGON]`, `features:[EXTRUDE,CUT,LOFT,HELIX]` (más FILLET/CHAMFER en la pila vía `cad.finish.*`),
 `sketch_editing:true`, `fillet:true`, `length_unit:METERS` y `constraints` con
-`COINCIDENT,HORIZONTAL,VERTICAL,PARALLEL,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,DISTANCE_X,DISTANCE_Y,RADIUS,FIX,MIDPOINT,SYMMETRIC,SYMMETRIC_LINE`.
+`COINCIDENT,HORIZONTAL,VERTICAL,PARALLEL,COLLINEAR,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,DISTANCE_X,DISTANCE_Y,RADIUS,FIX,MIDPOINT,SYMMETRIC,SYMMETRIC_LINE`.
+`COLLINEAR` usa dos referencias de línea/lado del mismo croquis: ambos segmentos
+pertenecen a la misma recta infinita, con longitudes y posiciones longitudinales
+independientes. No une extremos ni fija la referencia; respeta FIX y las cotas.
 También anuncia `construction`, `datum_planes`, `bodies`, `origin`, `mesh_copy`,
 `smart_cursor`, `selection_delete`, `editable_dimensions`, `fillet_remove`,
 `solid_selection`, `face_sketch`, `project_reference` y `history_order`.

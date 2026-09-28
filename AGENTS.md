@@ -403,6 +403,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   toque sin cambios no crea undo. El redondeo recorta dos líneas conectadas y
   añade un arco con coincidencias, tangencias y radio. Las uniones de línea usan
   la política pegajosa común de `commands/snap.py`.
+- Colineal (`COLLINEAR`) mantiene dos líneas/lados del croquis sobre la misma
+  recta, con longitudes y deslizamiento independientes, sin unir extremos.
+  Respeta cotas y referencias fijas; no fija automáticamente ninguna línea.
 - Las cotas CAD distinguen distancia diagonal, horizontal y vertical (`DISTANCE`,
   `DISTANCE_X`, `DISTANCE_Y`). Las dos últimas miden la separación absoluta en los
   ejes del croquis, admiten cero y conservan cantidades independientes. Pueden usar

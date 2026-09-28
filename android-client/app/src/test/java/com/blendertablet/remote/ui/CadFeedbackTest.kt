@@ -26,6 +26,16 @@ class CadFeedbackTest {
         assertFalse(cadConstraintEnabled(state(origin),"FIX"))
         assertTrue(cadConstraintEnabled(state(CadSelection("line","START"),CadSelection("rect","P0")),"FIX"))
     }
+    @Test fun collinearRequiresTwoDifferentLinesOrSides() {
+        val line = CadSelection("line", "BODY")
+        val side = CadSelection("rect", "EDGE0")
+        assertTrue(cadConstraintEnabled(state(line, side), "COLLINEAR"))
+        assertTrue(cadConstraintEnabled(state(side, line), "COLLINEAR"))
+        assertFalse(cadConstraintEnabled(state(line), "COLLINEAR"))
+        assertFalse(cadConstraintEnabled(state(line, line), "COLLINEAR"))
+        assertFalse(cadConstraintEnabled(state(line, CadSelection("rect", "P0")), "COLLINEAR"))
+        assertFalse(cadConstraintEnabled(state(line, CadSelection("rect", "BODY")), "COLLINEAR"))
+    }
     @Test fun contextualPanelIncludesOnlyAssociatedPointsOrEdges() {
         assertTrue(cadRefsTouch(CadSelection("rect","P0"),CadSelection("rect","EDGE0")))
         assertTrue(cadRefsTouch(CadSelection("rect","P0"),CadSelection("rect","EDGE3")))
