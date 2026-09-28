@@ -551,6 +551,8 @@ no quedan archivos o referencias temporales.
   de tres vértices el cierre se ignora o responde error sin perder la sesión.
   Cancelar o dos dedos descarta la cadena completa; otra herramienta la abandona
   sin persistir nada. En construcción no genera perfil y selecciona el último tramo.
+  Al soltar cada lado publica inmediatamente la cadena consolidada y `can_close`:
+  dos lados (tres vértices) habilitan Cerrar y producen un triángulo sin otro trazo.
 - Los cuerpos son piezas independientes con un historial de croquis/operaciones. Los planos guardados
   admiten desplazamiento métrico y giro local XYZ en grados, con referencias a
   boceto/cara superior. Una cara arbitraria guarda su marco capturado, sin índices

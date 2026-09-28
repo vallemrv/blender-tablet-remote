@@ -22,6 +22,22 @@ class PolygonTests(CadTests):
             cad.polygon_update(dict(u=.5,v=.5,**OWNER))
         return cad.polygon_segment(dict(u=.5,v=.5,**OWNER))
 
+    def test_two_sides_enable_close_immediately_without_a_third_stroke(self):
+        first=self.stroke((0,0),(.08,0))
+        self.assertFalse(first['session']['can_close'])
+        second=self.stroke((.08,0),(.04,.04))
+        self.assertTrue(second['session']['can_close'])
+        visible=second['document']['sketches'][0]['entities']
+        self.assertEqual(len(visible),2)
+        self.assertEqual(visible[-1]['id'],second['selection']['id'])
+        with patch.object(runtime,'point',side_effect=AssertionError('Close must not probe another point')):
+            closed=cad.polygon_close(OWNER)
+        self.assertFalse(closed['session']['active'])
+        sides=closed['document']['sketches'][0]['entities']
+        self.assertEqual(len(sides),3)
+        self.assertEqual((sides[-1]['x'],sides[-1]['y']),(.04,.04))
+        self.assertEqual((sides[-1]['x2'],sides[-1]['y2']),(0,0))
+
     def test_close_builds_joined_profile_and_single_undo(self):
         self.stroke((0,0),(.08,0))
         self.stroke((.08,0),(.08,.045))

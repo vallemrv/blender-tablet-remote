@@ -395,6 +395,7 @@ def polygon_segment(payload):
     session=runtime.require(payload)
     if session['operation']!='POLYGON': raise CommandError('La sesión no es un polígono',code='wrong_tool')
     doc,sketch=_polygon_state(session,None)
+    session['preview']=doc
     current=session.get('provisional')
     anchor=session.get('anchor')
     if current is None:
@@ -428,6 +429,9 @@ def polygon_segment(payload):
         yield from _polygon_confirm(session,doc)
         return runtime.status()
     session['points'].append(current)
+    # Publish the released side and its new vertex now: the close button must
+    # become available after two sides, without waiting for another stroke.
+    session['preview'],_=_polygon_state(session,None)
     _set_selection([dict(kind='ENTITY',id=segment['id'],part='BODY')])
     return runtime.status()
 
