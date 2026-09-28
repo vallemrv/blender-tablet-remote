@@ -138,7 +138,7 @@ class FeedbackTests(CadTests):
         cad.sketch_activate(dict(sketch_id=first_sketch,**OWNER))
         self.assertEqual(runtime.active_sketch_id,first_sketch)
 
-    def test_editable_quad_extrusions_keep_manifold_boundaries_and_volume(self):
+    def test_editable_extrusions_keep_manifold_boundaries_and_volume(self):
         self.extrude(self.rect())
         self.assertEqual(len(self.obj().data.polygons),6)
         self.assertTrue(all(len(p.vertices)==4 for p in self.obj().data.polygons))
@@ -147,27 +147,25 @@ class FeedbackTests(CadTests):
         e=self.draw('CIRCLE',(.2,0),(.22,0)); f=self.extrude(e)
         obj=next(o for o in runtime.objects(runtime.doc()) if o[FEATURE_KEY]==f)
         from blender_tablet_remote.cad.runtime import mesh_copy
+        count=len(obj.data.polygons)
         obj=mesh_copy(obj)
-        self.assertTrue(all(len(p.vertices)==4 for p in obj.data.polygons))
+        self.assertLessEqual(len(obj.data.polygons),count)
         self.assertAlmostEqual(volume(obj),math.pi*.02**2*.02,delta=2e-8)
 
-    def test_editable_circle_caps_and_holed_faces_use_pole_free_quad_patches(self):
+    def test_editable_circle_caps_and_holed_faces_remain_compact(self):
         from blender_tablet_remote.cad.runtime import mesh_copy
-        def valences(obj):
-            counts={}
-            for edge in obj.data.edges:
-                for v in edge.vertices: counts[v]=counts.get(v,0)+1
-            return counts
         outer=self.rect(); self.draw('CIRCLE',(.02,.02),(.025,.02))
         self.extrude(outer)
-        obj=mesh_copy(self.obj())
-        self.assertTrue(all(len(p.vertices)==4 for p in obj.data.polygons))
-        self.assertLessEqual(max(valences(obj).values()),4)  # Frame patches, no fan around the hole.
+        source=self.obj(); obj=mesh_copy(source)
+        self.assertLessEqual(len(obj.data.vertices),len(source.data.vertices))
+        self.assertLessEqual(len(obj.data.polygons),len(source.data.polygons))
+        self.assertAlmostEqual(volume(obj),volume(source),places=10)
         cad.body_create(OWNER)
         cad.sketch_create(dict(plane='XY',**OWNER))
         f=self.extrude(self.draw('CIRCLE',(.2,0),(.22,0)))
         obj=mesh_copy(next(o for o in runtime.objects(runtime.doc()) if o[FEATURE_KEY]==f))
-        self.assertLessEqual(max(valences(obj).values()),4)  # Grid cap without a central pole.
+        caps=[p for p in obj.data.polygons if abs(p.normal.z)>.99]
+        self.assertEqual(len(caps),2)  # Flat caps need no internal grid or central fan.
         self.assertAlmostEqual(volume(obj),math.pi*.02**2*.02,delta=2e-8)
 
     def test_holes_and_repeated_pockets_remain_compact_without_exponential_growth(self):

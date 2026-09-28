@@ -9,11 +9,58 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from test_cad import CadTests, OWNER
 from blender_tablet_remote.cad import document as model
-from blender_tablet_remote.cad.runtime import runtime, FEATURE_KEY, DOC_KEY, BODY_KEY, COPY_SOURCE_KEY
+from blender_tablet_remote.cad.runtime import runtime, mesh_copy, FEATURE_KEY, DOC_KEY, BODY_KEY, COPY_SOURCE_KEY
 from blender_tablet_remote.commands import cad, objects, mode, mesh, modifiers
 
 
 class MeshCopyTests(CadTests):
+    def test_duplicate_boolean_seam_is_cleaned_without_changing_source(self):
+        from test_cad import volume
+        for size in (.0001, .1, 100.):
+            # A cube with a zero-length segment shared by its two adjacent faces.
+            vertices=[(0,0,0),(size,0,0),(size,size,0),(0,size,0),
+                      (0,0,size),(size,0,size),(size,size,size),(0,size,size),(0,0,0)]
+            faces=[(0,3,2,1,8),(4,5,6,7),(0,8,1,5,4),(1,2,6,5),(2,3,7,6),(3,0,4,7)]
+            data=bpy.data.meshes.new('Boolean seam');data.from_pydata(vertices,[],faces);data.update()
+            source=bpy.data.objects.new('Boolean seam',data)
+            source_before=([tuple(v.co) for v in data.vertices],[tuple(p.vertices) for p in data.polygons])
+            result=mesh_copy(source)
+            self.assertEqual(len(result.data.vertices),8)
+            self.assertEqual(len(result.data.polygons),6)
+            self.assertAlmostEqual(volume(result)/size**3,1.,places=6)
+            self.assertEqual(source_before,([tuple(v.co) for v in data.vertices],[tuple(p.vertices) for p in data.polygons]))
+            # A real bevel changes the volume, instead of collapsing onto the bad seam.
+            bpy.context.scene.collection.objects.link(result)
+            modifier=result.modifiers.new('Bisel','BEVEL');modifier.width=size*.05;modifier.segments=3
+            evaluated=result.evaluated_get(bpy.context.evaluated_depsgraph_get())
+            mesh=evaluated.to_mesh();bm=bmesh.new()
+            try:
+                bm.from_mesh(mesh)
+                self.assertTrue(all(e.is_manifold for e in bm.edges))
+                self.assertTrue(all(f.calc_area()>0 for f in bm.faces))
+                self.assertLess(bm.calc_volume(),volume(result)*.999)
+            finally:
+                bm.free();evaluated.to_mesh_clear()
+
+    def test_mesh_copy_keeps_material_boundaries_and_uvs(self):
+        self.extrude(self.rect());source=self.obj()
+        for name in ('Base','Top'): source.data.materials.append(bpy.data.materials.new(name))
+        for face in source.data.polygons: face.material_index=int(face.center.z>0)
+        layer=source.data.uv_layers.new(name='UVMap')
+        for index,loop in enumerate(layer.data):loop.uv=(index/100,index/200)
+        expected=[tuple(loop.uv) for loop in layer.data]
+        result=mesh_copy(source)
+        self.assertEqual(list(result.data.materials),list(source.data.materials))
+        self.assertEqual([f.material_index for f in result.data.polygons],[f.material_index for f in source.data.polygons])
+        self.assertEqual([tuple(loop.uv) for loop in result.data.uv_layers['UVMap'].data],expected)
+
+    def test_failed_cleanup_leaves_no_orphan_copy_and_keeps_source(self):
+        source,_=self.body();counts=(len(bpy.data.objects),len(bpy.data.meshes))
+        with patch('blender_tablet_remote.cad.runtime.clean_mesh',side_effect=RuntimeError('Invalid copy')):
+            with self.assertRaises(RuntimeError): mesh_copy(source)
+        self.assertEqual((len(bpy.data.objects),len(bpy.data.meshes)),counts)
+        self.assertFalse(source.hide_get())
+
     def body(self):
         feature=self.extrude(self.rect())
         obj=self.obj();bpy.context.view_layer.objects.active=obj;obj.select_set(True)

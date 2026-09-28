@@ -7,7 +7,7 @@ from mathutils import Vector
 from . import document as model
 from .kernel import world, ExtrusionPreviewCache
 from .jobs import Calculation, blocking
-from .quad_layout import quad_mesh
+from .editable_mesh import clean_mesh
 from . import sketch as sketch_geometry
 from ..errors import BadPayload, CommandError
 from ..bpy_utils import find_view3d, undo_push
@@ -25,14 +25,10 @@ def mesh_copy(obj):
     copy=obj.copy()
     owned_mesh = None
     try:
-        vertices, faces = quad_mesh([tuple(v.co) for v in obj.data.vertices],
-                                    [tuple(p.vertices) for p in obj.data.polygons])
-        owned_mesh = bpy.data.meshes.new(obj.data.name + ' · editable')
+        owned_mesh = obj.data.copy()
+        owned_mesh.name = obj.data.name + ' · editable'
         copy.data = owned_mesh
-        copy.data.from_pydata(vertices, [], faces)
-        for material in obj.data.materials:
-            copy.data.materials.append(material)
-        copy.data.update()
+        clean_mesh(owned_mesh)
         copy.name=obj.name+' · malla'
         for key in (FEATURE_KEY,DOC_KEY,BODY_KEY,COPY_SOURCE_KEY):
             if key in copy: del copy[key]

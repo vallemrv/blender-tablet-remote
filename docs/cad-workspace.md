@@ -400,16 +400,15 @@ Usa el bisel nativo de Blender sobre el sólido; no es un fillet B-rep.
   Segmentos. Son operaciones nativas sobre la copia; no añaden un fillet de sólido
   al historial paramétrico CAD.
 - Durante CAD se muestra la malla compacta del kernel y se reutiliza su topología
-  al variar profundidad. La retícula densa se genera solo al crear una copia editable.
-  Esa copia se ordena por caras de diseño: cada cara plana sin hueco es
-  una rejilla de quads (un círculo queda como rejilla, sin polo central) y una cara
-  con un agujero forma un marco de cuatro rejillas que crecen desde el agujero hacia
-  el borde. Las caras vecinas comparten sus divisiones: los loops recorren la pieza
-  sin T-junctions ni triángulos, listos para Edit, Bisel o Subdivisión.
-- Todavía sin rejilla ordenada: caras con varios agujeros y contornos cóncavos
-  (forma de L). Esas caras usan quads con puntos medios compartidos, conservando
-  frontera, volumen y conectividad. La evaluación booleana conserva operandos
-  compactos; la copia editable no se realimenta a cortes posteriores.
+  al variar profundidad. La copia editable conserva esa superficie y limpia
+  coincidencias numéricas, elementos degenerados y divisiones casi coplanares.
+  Mantiene los contornos curvos, huecos, materiales y costuras; no fuerza una
+  retícula de cuadriláteros. Las caras planas pueden ser n-gons y las que tienen
+  huecos conservan los conectores necesarios. La copia se valida como sólido
+  cerrado con volumen conservado antes de entregarse; un fallo deja el original intacto.
+  Los biseles siguen limitados por los detalles estrechos y el solapamiento;
+  Subdivisión puede requerir topología específica. La copia no se realimenta
+  a cortes posteriores ni modifica el documento CAD.
 - El overlay se proyecta en Blender y se dibuja en el rectángulo del vídeo Android.
   Sus píxeles no se guardan como geometría. El control y el vídeo tienen canales
   separados, por lo que puede existir un pequeño desfase durante la navegación.

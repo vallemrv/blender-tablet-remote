@@ -176,55 +176,6 @@ class BlenderNativeKernel(CadKernel):
         return vertices, polygons
 
 
-def tidy_mesh(vertices, faces):
-    """Finish faces the quad layout could not structure as connected quads.
-
-    Shared edge midpoints avoid T-junctions. Concave patches are triangulated
-    before splitting so their face centers cannot escape the surface. Boolean
-    evaluation keeps its compact kernel result.
-    """
-    if all(len(face)==4 for face in faces): return vertices,faces
-    import bmesh
-    bm=bmesh.new()
-    try:
-        verts=[bm.verts.new(v) for v in vertices]
-        for face in faces: bm.faces.new([verts[i] for i in face])
-        bm.normal_update()
-        def concave_faces():
-            result=[]
-            for face in bm.faces:
-                points=[v.co for v in face.verts]
-                turns=[(b-a).cross(c-b).dot(face.normal) for a,b,c in zip(points,points[1:]+points[:1],points[2:]+points[:2])]
-                if len(points)>3 and any(t < -1e-20 for t in turns): result.append(face)
-            return result
-        concave=concave_faces()
-        if concave: bmesh.ops.triangulate(bm,faces=concave)
-        triangles=[f for f in bm.faces if len(f.verts)==3]
-        if triangles:
-            bmesh.ops.join_triangles(bm,faces=triangles,angle_face_threshold=1e-7,angle_shape_threshold=3.14159)
-        bm.normal_update()
-        concave=concave_faces()
-        if concave: bmesh.ops.triangulate(bm,faces=concave)
-        bm.verts.index_update()
-        vertices=[tuple(v.co) for v in bm.verts]
-        polygons=[tuple(v.index for v in f.verts) for f in bm.faces]
-        if all(len(f)==4 for f in polygons): return vertices,polygons
-        # Split the entire connected boundary consistently, including adjoining
-        # quads; splitting only triangles would leave cracks at shared edges.
-        midpoints={}; result=[]
-        for face in polygons:
-            center=tuple(sum(vertices[i][axis] for i in face)/len(face) for axis in range(3))
-            center_id=len(vertices); vertices.append(tuple(center))
-            mids=[]
-            for a,b in zip(face,face[1:]+face[:1]):
-                edge=tuple(sorted((a,b)))
-                if edge not in midpoints:
-                    midpoints[edge]=len(vertices); vertices.append(tuple((vertices[a][axis]+vertices[b][axis])*.5 for axis in range(3)))
-                mids.append(midpoints[edge])
-            result.extend((v,mids[i],center_id,mids[i-1]) for i,v in enumerate(face))
-        return vertices,result
-    finally: bm.free()
-
 
 kernel = BlenderNativeKernel()
 

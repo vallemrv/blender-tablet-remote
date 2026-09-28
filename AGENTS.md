@@ -562,24 +562,22 @@ no quedan archivos o referencias temporales.
   evaluados persistentes; su adquisición pasa por `commands/snap.py`.
 - `cad.convert` crea una copia de malla y sale a Object con ella seleccionada;
   conserva el original, el documento y todos los dependientes. No elimina histórico.
-- CAD presenta y mueve la malla compacta del kernel. La retícula de cuadriláteros
-  se genera únicamente al crear una copia editable, también al duplicar una pieza CAD.
-  La copia se ordena por cara plana de diseño (`cad/quad_layout.py`):
-  sin hueco es un parche de cuatro lados; con un hueco, un marco de cuatro parches.
-  Se rellenan por interpolación de Coons, sin polo central en círculos. Los lados
-  opuestos tienen igual subdivisión: las polilíneas teseladas son fijas y las aristas
-  rectas y conectores son libres, resueltas en toda la pieza sin T-junctions. Las
-  caras sin disposición válida (varios huecos, contornos cóncavos) caen en los parches
-  con puntos medios compartidos. Los operandos booleanos conservan su malla compacta:
-  nunca se realimenta la copia editable a operaciones posteriores.
+- CAD presenta y mueve la malla compacta del kernel. La copia editable conserva
+  esa superficie sin forzar cuadriláteros ni añadir una retícula. `cad/editable_mesh.py`
+  suelda coincidencias numéricas con tolerancia relativa al tamaño, elimina
+  degenerados y disuelve divisiones casi coplanares, respetando contornos curvos,
+  huecos, materiales y costuras. Valida cierre, caras/aristas no nulas y volumen;
+  un error descarta la copia sin tocar el original. La limpieza ocurre solo al
+  exportar/duplicar: nunca se realimenta a la pila CAD. Una malla compacta no
+  garantiza biseles de cualquier ancho ni topología regular para Subdivisión.
 - Los comandos CAD suspenden su respuesta durante la evaluación y se reanudan
   desde el pump. Un proceso Blender persistente calcula booleanos, redondeos y
   el solver de arrastre sobre snapshots; vídeo y navegación siguen atendidos.
   Cada resultado valida escena, documento, unidades y generación de cancelación.
   Cancelar/guardar/desconectar descarta el trabajo y restaura la evaluación baseline;
   cargar/deshacer invalida las cachés. Los ficheros privados y el proceso se retiran
-  al cerrar; un error del worker no publica geometría ni crea undo. La retícula
-  editable y la materialización final siguen usando el hilo principal del host.
+  al cerrar; un error del worker no publica geometría ni crea undo. La limpieza
+  de la copia editable y la materialización final usan el hilo principal del host.
 - Materiales conserva tinte y acabado al cambiar de preset salvo valores explícitos.
   Óxido/Suciedad/Arañazos configuran el pincel de detalle sin sustituir la base.
   La pintura indexa muestras visibles por teselas y reutiliza atlas/profundidad

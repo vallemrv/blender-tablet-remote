@@ -130,10 +130,10 @@ class AsyncCadTests(CadTests):
             cad.cancel(OWNER)
         self.assertAlmostEqual(volume(self.obj()), before)
 
-    def test_compact_preview_defers_quad_layout_until_editable_copy(self):
+    def test_compact_preview_defers_copy_cleanup_until_export(self):
         outer = self.rect()
         self.draw('CIRCLE', (.02, .02), (.025, .02))
-        with patch('blender_tablet_remote.cad.runtime.quad_mesh', side_effect=AssertionError('Dense preview')):
+        with patch('blender_tablet_remote.cad.runtime.clean_mesh', side_effect=AssertionError('Copy cleanup in preview')):
             feature = self.extrude(outer, confirm=False)
             mesh_count = len(bpy.data.meshes)
             for depth in (.03, .04, .05):
@@ -143,8 +143,7 @@ class AsyncCadTests(CadTests):
         obj = self.obj()
         compact_count = len(obj.data.polygons)
         editable = mesh_copy(obj)
-        self.assertTrue(all(len(p.vertices) == 4 for p in editable.data.polygons))
-        self.assertGreater(len(editable.data.polygons), compact_count)
+        self.assertLessEqual(len(editable.data.polygons), compact_count)
         self.assertAlmostEqual(volume(editable), volume(obj), places=8)
         self.assertEqual(len(obj.data.polygons), compact_count)
 
