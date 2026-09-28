@@ -36,6 +36,17 @@ class CadFeedbackTest {
         assertFalse(cadConstraintEnabled(state(line, CadSelection("rect", "P0")), "COLLINEAR"))
         assertFalse(cadConstraintEnabled(state(line, CadSelection("rect", "BODY")), "COLLINEAR"))
     }
+    @Test fun polygonSidesAllowHorizontalAndVerticalButWholePolygonDoesNot() {
+        val polygon = CadEntity("polygon", "NGON", mapOf("sides" to 6.0))
+        val cad = CadState(activeSketchId = "s", sketches = listOf(
+            CadSketch("s", "Boceto", "XY", sketch.entities + polygon, emptyList())))
+        for (type in listOf("HORIZONTAL", "VERTICAL")) {
+            assertTrue(cadConstraintEnabled(cad.copy(selection = listOf(CadSelection("line", "BODY"))), type))
+            assertTrue(cadConstraintEnabled(cad.copy(selection = listOf(CadSelection("polygon", "EDGE4"))), type))
+            assertFalse(cadConstraintEnabled(cad.copy(selection = listOf(CadSelection("polygon", "P4"))), type))
+            assertFalse(cadConstraintEnabled(cad.copy(selection = listOf(CadSelection("polygon", "BODY"))), type))
+        }
+    }
     @Test fun contextualPanelIncludesOnlyAssociatedPointsOrEdges() {
         assertTrue(cadRefsTouch(CadSelection("rect","P0"),CadSelection("rect","EDGE0")))
         assertTrue(cadRefsTouch(CadSelection("rect","P0"),CadSelection("rect","EDGE3")))

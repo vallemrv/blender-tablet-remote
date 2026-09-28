@@ -553,6 +553,9 @@ no quedan archivos o referencias temporales.
   sin persistir nada. En construcción no genera perfil y selecciona el último tramo.
   Al soltar cada lado publica inmediatamente la cadena consolidada y `can_close`:
   dos lados (tres vértices) habilitan Cerrar y producen un triángulo sin otro trazo.
+  Tocar un lado tras cerrar sustituye la selección del perfil por la del elemento;
+  nunca mezcla PROFILE con ENTITY al editar. Los lados del polígono regular NGON
+  cuentan como líneas para habilitar restricciones, incluidas Horizontal y Vertical.
 - Los cuerpos son piezas independientes con un historial de croquis/operaciones. Los planos guardados
   admiten desplazamiento métrico y giro local XYZ en grados, con referencias a
   boceto/cara superior. Una cara arbitraria guarda su marco capturado, sin índices

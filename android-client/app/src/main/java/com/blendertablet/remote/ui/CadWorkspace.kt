@@ -665,7 +665,7 @@ internal fun cadConstraintEnabled(cad: CadState, type: String): Boolean {
     if (refs.isEmpty()) return false
     val entities = refs.map { ref -> if (ref.id == "ORIGIN") CadEntity("ORIGIN", "ORIGIN", emptyMap()) else cad.activeSketch?.entities?.firstOrNull { it.id == ref.id } ?: return false }
     fun point(i: Int) = refs[i].part in listOf("START", "END", "CENTER", "RIM", "P0", "P1", "P2", "P3", "POINT")
-    fun line(i: Int) = (entities[i].type == "LINE" && refs[i].part == "BODY") || (entities[i].type == "RECTANGLE" && refs[i].part.startsWith("EDGE"))
+    fun line(i: Int) = (entities[i].type == "LINE" && refs[i].part == "BODY") || (entities[i].type in listOf("RECTANGLE", "NGON") && refs[i].part.startsWith("EDGE"))
     val points = refs.indices.all(::point)
     val lines = refs.indices.all(::line)
     val curves = entities.all { it.type in listOf("CIRCLE", "ARC") }

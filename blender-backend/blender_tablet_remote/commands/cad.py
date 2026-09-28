@@ -958,6 +958,9 @@ def _covers(selected, hit):
 
 def _toggle_refs(refs, hit):
     if hit is None: return []
+    # A finished polygon keeps its profile selected for extrusion. Picking a
+    # sketch side enters element selection; the profile is not another element.
+    if hit.get('kind')=='ENTITY': refs=[r for r in refs if r.get('kind')=='ENTITY']
     if any(_covers(r,hit) for r in refs):
         return [r for r in refs if not _covers(r,hit)]
     return [r for r in refs if not _covers(hit,r)]+[hit]

@@ -7,7 +7,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from test_cad import CadTests, OWNER, volume
 from unittest.mock import patch
-from blender_tablet_remote.cad import document as model
+from blender_tablet_remote.cad import document as model, sketch as geometry
 from blender_tablet_remote.cad.runtime import runtime
 from blender_tablet_remote.commands import cad, history
 from blender_tablet_remote.errors import BadPayload, CommandError
@@ -62,6 +62,44 @@ class PolygonTests(CadTests):
         last=sketch['entities'][-1]
         self.assertAlmostEqual(last['x2'],.01); self.assertAlmostEqual(last['y2'],.01)
         self.assertEqual(len(model.profiles(sketch)),1)
+
+    def test_tapping_a_closed_polygon_side_selects_only_that_side_for_constraints(self):
+        self.stroke((0,0),(.08,.01))
+        self.stroke((.08,.01),(.07,.06))
+        closed=cad.polygon_close(OWNER)
+        self.assertEqual(closed['selection']['kind'],'PROFILE')
+        sides=runtime.doc()['sketches'][0]['entities']
+        for index,typ,axis in ((0,'HORIZONTAL','y'),(1,'VERTICAL','x')):
+            if index: cad.select_all(dict(action='DESELECT',**OWNER))
+            hit=dict(kind='ENTITY',id=sides[index]['id'],part='BODY')
+            baseline=model.dumps(runtime.doc())
+            with patch.object(cad,'_pick',return_value=hit),patch.object(runtime,'point',return_value=(.04,.02)):
+                cad.drag_begin(dict(u=.5,v=.5,**OWNER))
+            with patch('blender_tablet_remote.cad.runtime.undo_push') as undo:
+                status=cad.drag_end(OWNER)
+                undo.assert_not_called()
+            self.assertEqual(status['selection']['items'],[hit])
+            self.assertEqual(model.dumps(runtime.doc()),baseline)
+            with patch('blender_tablet_remote.cad.runtime.undo_push') as undo:
+                cad.constraint_add(dict(type=typ,**OWNER))
+                undo.assert_called_once()
+            sketch=runtime.doc()['sketches'][0]
+            side=model.find(sketch,'entities',hit['id'])
+            self.assertAlmostEqual(side[axis],side[axis+'2'],places=8)
+            self.assertEqual(len(model.profiles(sketch)),1)
+
+    def test_regular_polygon_side_accepts_horizontal_and_vertical(self):
+        for typ,axis in (('HORIZONTAL',1),('VERTICAL',0)):
+            cad.sketch_create(dict(plane='XY',**OWNER))
+            identifier=self.draw('NGON',(0,0),(.04,.01))
+            hit=dict(kind='ENTITY',id=identifier,part='EDGE4')
+            cad._set_selection([hit])
+            cad.constraint_add(dict(type=typ,**OWNER))
+            sketch,polygon=model.entity(runtime.doc(),identifier)
+            a,b=geometry.line(sketch,hit)
+            self.assertAlmostEqual(a[axis],b[axis],places=8)
+            self.assertEqual(polygon['sides'],6)
+            self.assertEqual(len(model.profiles(sketch)),1)
 
     def test_tapping_the_first_vertex_closes_automatically(self):
         self.stroke((0,0),(.08,0))
