@@ -5,6 +5,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadParserTest {
+    @Test fun pointOnLineIsDiscoveredAndItsPointAndLineRolesArePreserved() {
+        val capabilities = CadParser.capabilities(JSONObject("""{"version":2,"length_unit":"METERS","planes":["XY"],
+            "constraints":["POINT_ON_LINE","FUTURE"]}"""))
+        assertEquals(listOf("POINT_ON_LINE"), capabilities.constraints)
+        val state = CadParser.state(JSONObject("""{"version":1,"active_sketch_id":"s","document":{"sketches":[
+            {"id":"s","name":"Boceto","plane":"XY","constraints":[{"id":"r","type":"POINT_ON_LINE",
+            "refs":[{"id":"p","part":"END"},{"id":"l","part":"BODY"}]}]}]}}"""))
+        val rule = state.activeSketch!!.constraints.single()
+        assertEquals("POINT_ON_LINE", rule.type)
+        assertEquals(listOf("END", "BODY"), rule.refs.map { it.part })
+    }
+
     @Test fun linkedOffsetAndMirrorKeepTheirParametersAndCapabilities() {
         val capability = CadParser.capabilities(JSONObject("""{"version":2,"length_unit":"METERS","planes":["XY"],
             "offset_entities":["SLOT","CIRCLE","RECTANGLE"],"feature_mirror":true,"features":["EXTRUDE","CUT","MIRROR"]}"""))

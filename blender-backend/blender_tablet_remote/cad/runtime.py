@@ -557,7 +557,7 @@ class CadRuntime:
                 result.append(dict(id=e['id'],points=points,closed=e['type'] not in ('LINE','ARC','POINT'),
                                    selected=selected,handles=handle_points,selected_parts=selected_parts,construction=e.get('construction',False)))
             if sketch['id']==self.active_sketch_id:
-                labels={'COINCIDENT':'●','HORIZONTAL':'H','VERTICAL':'V','PARALLEL':'∥','COLLINEAR':'Col',
+                labels={'COINCIDENT':'●','POINT_ON_LINE':'P∈L','HORIZONTAL':'H','VERTICAL':'V','PARALLEL':'∥','COLLINEAR':'Col',
                         'PERPENDICULAR':'⊥','TANGENT':'T','EQUAL':'=','FIX':'Fijo','MIDPOINT':'½',
                         'SYMMETRIC':'Sim','SYMMETRIC_LINE':'Sim⟋','OFFSET':'Grosor'}
                 unit=bpy.context.scene.unit_settings.length_unit

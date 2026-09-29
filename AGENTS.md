@@ -406,6 +406,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Colineal (`COLLINEAR`) mantiene dos líneas/lados del croquis sobre la misma
   recta, con longitudes y deslizamiento independientes, sin unir extremos.
   Respeta cotas y referencias fijas; no fija automáticamente ninguna línea.
+- Punto sobre recta (`POINT_ON_LINE`) usa un punto y una línea/lado recto de otra
+  figura, seleccionados en cualquier orden; admite también el eje de una ranura.
+  Solo restringe la distancia perpendicular: el punto desliza por la recta y su
+  prolongación. Respeta FIX/cotas sin fijar automáticamente la guía. Rechaza
+  puntos sobre su propia figura, dos puntos, dos líneas o una guía curva.
 - Las cotas CAD distinguen distancia diagonal, horizontal y vertical (`DISTANCE`,
   `DISTANCE_X`, `DISTANCE_Y`). Las dos últimas miden la separación absoluta en los
   ejes del croquis, admiten cero y conservan cantidades independientes. Pueden usar

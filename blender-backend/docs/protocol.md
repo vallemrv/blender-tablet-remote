@@ -1413,7 +1413,12 @@ de banda y configuración de latencia interactiva.
 `features.cad` anuncia `version:2`, `planes:[XY,XZ,YZ]`,
 `entities:[LINE,RECTANGLE,CIRCLE,ARC,NGON,SLOT,GEAR,POLYGON]`, `features:[EXTRUDE,CUT,LOFT,HELIX,MIRROR]` (más FILLET/CHAMFER en la pila vía `cad.finish.*`),
 `sketch_editing:true`, `fillet:true`, `length_unit:METERS` y `constraints` con
-`COINCIDENT,HORIZONTAL,VERTICAL,PARALLEL,COLLINEAR,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,DISTANCE_X,DISTANCE_Y,RADIUS,FIX,MIDPOINT,SYMMETRIC,SYMMETRIC_LINE`.
+`COINCIDENT,POINT_ON_LINE,HORIZONTAL,VERTICAL,PARALLEL,COLLINEAR,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,DISTANCE_X,DISTANCE_Y,RADIUS,FIX,MIDPOINT,SYMMETRIC,SYMMETRIC_LINE`.
+`POINT_ON_LINE` recibe dos referencias de figuras distintas del mismo croquis:
+un punto y una recta (`LINE/BODY`, `RECTANGLE|NGON/EDGEi` o `SLOT/AXIS`). Acepta
+cualquier orden de selección y persiste `refs:[punto,recta]`. Su único residual
+es la distancia perpendicular firmada; no limita la posición al segmento visible
+ni fija la guía. Usa `cad.constraint.add/delete` y el solver/undo comunes.
 `COLLINEAR` usa dos referencias de línea/lado del mismo croquis: ambos segmentos
 pertenecen a la misma recta infinita, con longitudes y posiciones longitudinales
 independientes. No une extremos ni fija la referencia; respeta FIX y las cotas.

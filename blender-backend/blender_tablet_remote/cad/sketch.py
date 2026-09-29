@@ -9,7 +9,7 @@ import numpy as np
 from . import document as model
 from ..errors import BadPayload, CommandError
 
-CONSTRAINTS = ('COINCIDENT', 'HORIZONTAL', 'VERTICAL', 'PARALLEL', 'COLLINEAR', 'PERPENDICULAR',
+CONSTRAINTS = ('COINCIDENT', 'POINT_ON_LINE', 'HORIZONTAL', 'VERTICAL', 'PARALLEL', 'COLLINEAR', 'PERPENDICULAR',
                'TANGENT', 'EQUAL', 'DISTANCE', 'DISTANCE_X', 'DISTANCE_Y', 'RADIUS', 'FIX', 'MIDPOINT',
                'SYMMETRIC', 'SYMMETRIC_LINE', 'OFFSET')
 
@@ -68,6 +68,23 @@ def line(sketch, ref):
     return np.array((e['x'],e['y'])), np.array((e['x2'],e['y2']))
 
 
+def point_line_refs(sketch, refs):
+    """Canonical point/straight-edge pair, independent of touch order."""
+    if len(refs) != 2 or refs[0]['id'] == refs[1]['id']:
+        raise BadPayload('Selecciona un punto y una recta de otra figura')
+    for point_ref, line_ref in (refs, refs[::-1]):
+        p = get_entity(sketch, point_ref)
+        e = get_entity(sketch, line_ref)
+        part = line_ref.get('part', 'BODY')
+        straight = ((e['type'] == 'LINE' and part == 'BODY') or
+                    (e['type'] in ('RECTANGLE', 'NGON') and part.startswith('EDGE') and part[4:].isdigit()) or
+                    (e['type'] == 'SLOT' and part == 'AXIS'))
+        if point_ref.get('part') in handles(p) and straight:
+            line(sketch, line_ref)  # Validate the side index as well as its role.
+            return [point_ref, line_ref]
+    raise BadPayload('Selecciona un punto y una línea, lado recto o eje de ranura')
+
+
 def rounding_links(sketch):
     links={}
     for arc in sketch['entities']:
@@ -104,6 +121,17 @@ def radius(sketch, ref):
 
 def residual(sketch, c, scale):
     typ, refs = c['type'], c['refs']
+    if typ == 'POINT_ON_LINE':
+        point_ref, line_ref = point_line_refs(sketch, refs)
+        p = point(sketch, point_ref)
+        a, b = line(sketch, line_ref)
+        d = b-a
+        length = np.linalg.norm(d)
+        if length < 1e-12:
+            raise BadPayload('La recta necesita dos puntos distintos')
+        # Signed perpendicular distance only; position along the infinite line
+        # remains free, including beyond the visible segment's endpoints.
+        return [(d[0]*(p[1]-a[1])-d[1]*(p[0]-a[0]))/(length*scale)]
     if typ == 'OFFSET':
         from .offset import shape, distance
         expected = shape(get_entity(sketch, refs[0]), distance(c))

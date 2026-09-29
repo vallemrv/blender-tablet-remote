@@ -746,6 +746,7 @@ internal fun cadConstraintEnabled(cad: CadState, type: String): Boolean {
     return when (type) {
         "FIX" -> refs.none { it.id == "ORIGIN" }
         "COINCIDENT" -> refs.size == 2 && points
+        "POINT_ON_LINE" -> cadPointOnLineEnabled(refs, entities)
         "MIDPOINT" -> refs.size == 2 && ((point(0) && line(1)) || (line(0) && point(1)))
         "SYMMETRIC" -> refs.size == 3 && points
         "SYMMETRIC_LINE" -> refs.size == 3 && point(0) && point(1) && line(2)
@@ -760,10 +761,38 @@ internal fun cadConstraintEnabled(cad: CadState, type: String): Boolean {
     }
 }
 
+private fun cadPointOnLineEnabled(refs: List<CadSelection>, entities: List<CadEntity>): Boolean {
+    if (refs.size != 2 || refs[0].id == refs[1].id) return false
+    fun corner(part: String, prefix: String, count: Int): Boolean = part.startsWith(prefix) &&
+        (part.removePrefix(prefix).toIntOrNull()?.let { it in 0 until count } == true)
+    fun point(i: Int): Boolean {
+        val part = refs[i].part
+        return when (entities[i].type) {
+            "ORIGIN", "POINT" -> part == "POINT"
+            "LINE" -> part in listOf("START", "END")
+            "CIRCLE" -> part in listOf("CENTER", "RIM")
+            "ARC" -> part in listOf("CENTER", "START", "END")
+            "RECTANGLE" -> corner(part, "P", 4)
+            "NGON" -> part == "CENTER" || corner(part, "P", entities[i].values["sides"]?.toInt() ?: 6)
+            "SLOT" -> part in listOf("CENTER", "START", "END", "SIDE")
+            "GEAR" -> part == "CENTER"
+            else -> false
+        }
+    }
+    fun line(i: Int): Boolean = when (entities[i].type) {
+        "LINE" -> refs[i].part == "BODY"
+        "RECTANGLE" -> corner(refs[i].part, "EDGE", 4)
+        "NGON" -> corner(refs[i].part, "EDGE", entities[i].values["sides"]?.toInt() ?: 6)
+        "SLOT" -> refs[i].part == "AXIS"
+        else -> false
+    }
+    return (point(0) && line(1)) || (line(0) && point(1))
+}
+
 /** Rail de restricciones por intención: posición, orientación, relación y cotas; lo no agrupado va al final. */
 internal fun cadConstraintGroups(available: List<String>): List<List<String>> {
     val groups = listOf(
-        listOf("COINCIDENT", "MIDPOINT", "FIX"),
+        listOf("COINCIDENT", "POINT_ON_LINE", "MIDPOINT", "FIX"),
         listOf("HORIZONTAL", "VERTICAL", "PARALLEL", "COLLINEAR", "PERPENDICULAR", "TANGENT"),
         listOf("EQUAL", "SYMMETRIC", "SYMMETRIC_LINE"),
         listOf("DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS"),
@@ -785,6 +814,7 @@ private fun cadGearSummary(gear: CadEntity, unit: LengthUnit): String {
 private fun lengthFactor(unit: LengthUnit) = when (unit) { LengthUnit.MILLIMETERS -> 1000.0; LengthUnit.CENTIMETERS -> 100.0; LengthUnit.METERS -> 1.0 }
 
 internal fun cadLabel(type: String) = when (type) {
+    "POINT_ON_LINE" -> "Punto sobre recta"
     "OFFSET" -> "Desfase por grosor"
     "MIRROR" -> "Simetría de operación"
     "COLLINEAR" -> "Colineal (misma recta)"

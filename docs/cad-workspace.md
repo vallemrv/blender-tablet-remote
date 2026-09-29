@@ -82,6 +82,14 @@ longitudes o radios, distancia diagonal/horizontal/vertical, radio, punto medio,
 la selección. El origen (0,0) se puede seleccionar tocándolo en la vista y usar
 como referencia fija.
 
+**Punto sobre recta** mantiene un punto sobre una línea y permite deslizarlo a
+lo largo de ella. Selecciona un punto (extremo, esquina, centro u origen) y una
+línea o lado recto de otra figura, en cualquier orden, y pulsa Punto sobre recta
+en el grupo de posición del rail. También admite el eje de una ranura.
+El punto puede sobrepasar los extremos del segmento: la relación usa su recta
+completa. Para mantener la guía inmóvil, fíjala o acótala antes. La relación se
+conserva al arrastrar y guardar; un conflicto con otras cotas rechaza el cambio.
+
 Para una cota, selecciona dos puntos (también centros de círculos u origen) o una
 línea/lado y elige **Distancia diagonal**, **Distancia horizontal** o **Distancia
 vertical** en el rail de restricciones. Horizontal y vertical miden la separación

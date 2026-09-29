@@ -31,6 +31,7 @@
     ],
     "constraints": [
       "COINCIDENT",
+      "POINT_ON_LINE",
       "HORIZONTAL",
       "VERTICAL",
       "PARALLEL",

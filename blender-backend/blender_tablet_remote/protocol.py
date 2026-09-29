@@ -404,7 +404,7 @@ FEATURES = {
     "cad": {"version": 2, "planes": ["XY", "XZ", "YZ"],
             "offset_entities": ["SLOT", "CIRCLE", "RECTANGLE"], "feature_mirror": True,
             "entities": ["LINE", "RECTANGLE", "CIRCLE", "ARC", "NGON", "SLOT", "GEAR", "POLYGON"], "features": ["EXTRUDE", "CUT", "LOFT", "HELIX", "MIRROR"],
-            "constraints": ["COINCIDENT", "HORIZONTAL", "VERTICAL", "PARALLEL", "COLLINEAR", "PERPENDICULAR",
+            "constraints": ["COINCIDENT", "POINT_ON_LINE", "HORIZONTAL", "VERTICAL", "PARALLEL", "COLLINEAR", "PERPENDICULAR",
                             "TANGENT", "EQUAL", "DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "FIX", "MIDPOINT",
                             "SYMMETRIC", "SYMMETRIC_LINE"],
             "sketch_editing": True, "solid_selection": True, "face_sketch": True, "project_reference": True, "history_order": True, "editable_dimensions": True, "fillet_remove": True, "smart_cursor": True, "selection_delete": True, "fillet": True, "construction": True, "datum_planes": True,

@@ -5,6 +5,28 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadFeedbackTest {
+    @Test fun pointOnLineRequiresOnePointAndAnotherStraightReferenceInEitherOrder() {
+        val entities = listOf(CadEntity("a", "LINE", emptyMap()), CadEntity("b", "LINE", emptyMap()),
+            CadEntity("c", "CIRCLE", emptyMap()), CadEntity("n", "NGON", mapOf("sides" to 8.0)),
+            CadEntity("slot", "SLOT", emptyMap()))
+        val base = CadState(activeSketchId = "s", sketches = listOf(CadSketch("s", "Boceto", "XY", entities, emptyList())))
+        fun enabled(vararg refs: CadSelection) = cadConstraintEnabled(base.copy(selection = refs.toList()), "POINT_ON_LINE")
+        val endpoint = CadSelection("a", "END"); val line = CadSelection("b", "BODY")
+        assertTrue(enabled(endpoint, line)); assertTrue(enabled(line, endpoint))
+        assertTrue(enabled(CadSelection("c", "CENTER"), line))
+        assertTrue(enabled(CadSelection("ORIGIN", "POINT"), line))
+        assertTrue(enabled(CadSelection("n", "P7"), line))
+        assertTrue(enabled(endpoint, CadSelection("n", "EDGE7")))
+        assertTrue(enabled(endpoint, CadSelection("slot", "AXIS")))
+        assertFalse(enabled(endpoint)); assertFalse(enabled(endpoint, CadSelection("a", "BODY")))
+        assertFalse(enabled(endpoint, CadSelection("b", "END")))
+        assertFalse(enabled(CadSelection("a", "BODY"), line))
+        assertFalse(enabled(endpoint, CadSelection("c", "BODY")))
+        assertFalse(enabled(endpoint, CadSelection("n", "EDGE8")))
+        assertFalse(enabled(CadSelection("n", "P8"), line))
+        assertTrue(cadConstraintGroups(listOf("COINCIDENT", "POINT_ON_LINE", "MIDPOINT")).single().contains("POINT_ON_LINE"))
+    }
+
     @Test fun slotRadiusAndWidthUseTheSameDimension() {
         val measure = CadMeasure("radius", "Radio extremos", "RADIUS", 1.0,
             listOf(CadSelection("slot", "BODY")), listOf("r"))

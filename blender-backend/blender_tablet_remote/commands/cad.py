@@ -1197,6 +1197,7 @@ def constraint_add(payload):
         if not isinstance(source,list) or not all(isinstance(r,dict) and isinstance(r.get('id'),str) and isinstance(r.get('part','BODY'),str) for r in source):
             raise BadPayload('Referencias de cota inválidas')
         refs=[dict(id=r['id'],part=r.get('part','BODY')) for r in source]
+        if typ=='POINT_ON_LINE': refs=geometry.point_line_refs(sketch,refs)
         c=dict(id=model.uid('constraint'),type=typ,refs=refs)
         if typ in dimensions.NUMERIC: c['value']=model.number(payload.get('value'),positive=typ in ('DISTANCE','RADIUS'))
         if typ=='EQUAL':
