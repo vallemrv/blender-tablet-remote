@@ -5,6 +5,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadFeedbackTest {
+    @Test fun slotRadiusAndWidthUseTheSameDimension() {
+        val measure = CadMeasure("radius", "Radio extremos", "RADIUS", 1.0,
+            listOf(CadSelection("slot", "BODY")), listOf("r"))
+        val slot = CadEntity("slot", "SLOT", mapOf("radius" to .015, "width" to .030), dimensions = listOf(measure))
+        assertEquals("radius", cadDisplayMeasures(slot, false).single().field)
+        val width = cadDisplayMeasures(slot, true).single()
+        assertEquals("width", width.field)
+        assertEquals(.015, slot.values[width.field]!! * width.valueFactor, 1e-12)
+        assertEquals(measure.constraintIds, width.constraintIds)
+        val cad = CadState(activeSketchId = "s", sketches = listOf(CadSketch("s", "Boceto", "XY", listOf(slot), emptyList())),
+            selection = listOf(CadSelection("slot", "BODY")))
+        assertTrue(cadConstraintEnabled(cad, "RADIUS"))
+    }
+
     @Test fun equalityAcceptsSeveralDifferentCirclesAndDistanceAxesUsePoints() {
         val circles = (1..3).map { CadEntity("c$it", "CIRCLE", emptyMap()) }
         val cad = CadState(activeSketchId = "s", sketches = listOf(CadSketch("s", "Boceto", "XY", circles, emptyList())),

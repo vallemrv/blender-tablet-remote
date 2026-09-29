@@ -2,6 +2,7 @@
 from . import document as model
 from .kernel import kernel, ExtrusionPreviewCache, finish_edges, loft, helix
 from ..errors import CommandError
+from . import mirror
 
 
 def geometry_key(doc, limit, scale):
@@ -38,7 +39,7 @@ class Evaluator:
         extrusion_cache=self._extrusion_cache
         tips={}; solids={}; keys={}
         for feature in sequence:
-            if feature['kind']!='FEATURE' or not feature['enabled']: continue
+            if feature['kind']!='FEATURE' or not mirror.active(doc,feature): continue
             identifier=feature['id']; body=feature['body_id']
             previous=tips.get(body)
             if feature['type'] in model.FINISHES:
@@ -83,7 +84,7 @@ class Evaluator:
                 tips[body]=identifier
                 continue
             sketch,entity=model.profile(doc,feature['profile_id'])
-            cut=feature['type']=='CUT'
+            cut=feature.get('operation',feature['type'])=='CUT'
             depth=model.number(feature['depth'], positive=cut)
             extent=feature.get('extent','ONE')
             if extent not in ('ONE','BOTH'): extent='ONE'
@@ -91,10 +92,11 @@ class Evaluator:
                 raise CommandError('Activa el sólido destino antes del vaciado',code='cad_dependency')
             signature=(doc['id'],feature['profile_id'],feature['type'],depth,extent,
                        model.dumps(dict(frame=model.frame(sketch),entities=sketch['entities'])),
-                       keys.get(previous))
+                       keys.get(previous),feature.get('mirror'))
             cached=self._solids.get(identifier)
             if cached is None or cached[0]!=model.dumps(signature):
                 operand=extrusion_cache.extrude(sketch,entity,depth,symmetric=True) if extent=='BOTH' else extrusion_cache.extrude(sketch,entity,-depth if cut else depth)
+                if feature.get('mirror'): operand=mirror.solid(operand,feature['mirror'])
                 if previous:
                     operand=kernel.cut(solids[previous],operand) if cut else kernel.union(solids[previous],operand)
                 elif cut:

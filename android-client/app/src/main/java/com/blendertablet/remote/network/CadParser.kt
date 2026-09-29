@@ -14,9 +14,9 @@ object CadParser {
         j.optString("length_unit") != "METERS") CadCapabilities() else CadCapabilities(2,
         strings(j.optJSONArray("planes")).filter { it in listOf("XY", "XZ", "YZ") },
         strings(j.optJSONArray("entities")).filter { it in listOf("LINE", "RECTANGLE", "CIRCLE", "ARC", "NGON", "SLOT", "GEAR", "POLYGON") },
-        strings(j.optJSONArray("features")).filter { it in listOf("EXTRUDE", "CUT", "LOFT", "HELIX") },
+        strings(j.optJSONArray("features")).filter { it in listOf("EXTRUDE", "CUT", "LOFT", "HELIX", "MIRROR") },
         strings(j.optJSONArray("constraints")).filter { it in listOf("COINCIDENT", "HORIZONTAL", "VERTICAL", "PARALLEL", "PERPENDICULAR", "TANGENT", "EQUAL", "DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "FIX", "MIDPOINT", "SYMMETRIC", "SYMMETRIC_LINE") },
-        j.optBoolean("sketch_editing"))
+        j.optBoolean("sketch_editing"), strings(j.optJSONArray("offset_entities")), j.optBoolean("feature_mirror"))
     fun state(j: JSONObject?): CadState {
         if (j == null || j.optInt("version") != 1) return CadState()
         val document = j.optJSONObject("document")
@@ -35,12 +35,12 @@ object CadParser {
                 CadSketch(sketch.optString("id"), sketch.optString("name", "Boceto"), sketch.optString("plane", "XY"),
                     objects(sketch.optJSONArray("entities")).map { entity ->
                         CadEntity(entity.optString("id"), entity.optString("type"),
-                            listOf("x", "y", "width", "height", "diameter", "x2", "y2", "radius", "start", "sweep", "length", "flats", "angle", "sides", "module", "teeth", "pressure").mapNotNull { key ->
+                            listOf("x", "y", "width", "height", "diameter", "x2", "y2", "radius", "start", "sweep", "length", "flats", "angle", "sides", "module", "teeth", "pressure", "offset").mapNotNull { key ->
                                 entity.optDouble(key).takeIf { it.isFinite() }?.let { key to it }
                             }.toMap(), entity.optBoolean("construction"),
                             objects(entity.optJSONArray("dimensions")).map { d -> CadMeasure(d.optString("field"),d.optString("label"),d.optString("constraint_type"),
                                 d.optDouble("value_factor",1.0), objects(d.optJSONArray("refs")).map { CadSelection(it.optString("id"),it.optString("part","BODY")) },
-                                strings(d.optJSONArray("constraint_ids"))) }, entity.optBoolean("is_fillet"),entity.optBoolean("is_square"),entity.optBoolean("reference"))
+                                strings(d.optJSONArray("constraint_ids")), d.optBoolean("lockable", true)) }, entity.optBoolean("is_fillet"),entity.optBoolean("is_square"),entity.optBoolean("reference"))
                     }, objects(sketch.optJSONArray("profiles")).map { CadProfile(it.optString("id"), it.optString("entity_id"), it.optString("label", "Perfil")) },
                     objects(sketch.optJSONArray("constraints")).map { c -> CadConstraint(c.optString("id"), c.optString("type"),
                         c.optDouble("value").takeIf { it.isFinite() }, objects(c.optJSONArray("refs")).map { it.optString("id") },
@@ -51,7 +51,9 @@ object CadParser {
                 it.id("sketch_id").orEmpty(), it.id("profile_id").orEmpty(), it.optDouble("depth", 0.02), it.optBoolean("enabled", true), it.optString("type", "EXTRUDE"), it.id("target_id"), it.optString("body_id"),
                 if (it.optString("extent") == "BOTH") "BOTH" else "ONE", it.optDouble("width", 0.0), it.optInt("segments", 1),
                 it.optJSONArray("edges")?.length() ?: 0, it.optDouble("pitch", 0.0), it.optDouble("turns", 0.0),
-                it.optString("hand", "RIGHT"), it.optString("axis", "Y")) },
+                it.optString("hand", "RIGHT"), it.optString("axis", "Y"),
+                it.optJSONObject("mirror")?.id("source_id"), it.optJSONObject("mirror")?.optString("plane", "XZ") ?: "XZ",
+                it.optJSONObject("mirror")?.optDouble("offset", 0.0) ?: 0.0) },
             activeSketchId = j.id("active_sketch_id"), selectionKind = selection?.id("kind"), selectionId = selection?.id("id"),
             sessionActive = session?.optBoolean("active") == true, sessionId = session?.id("id"), canConfirm = session?.optBoolean("can_confirm", true) == true,
             canClose = session?.optBoolean("can_close") == true, operation = session?.optString("operation").orEmpty(),

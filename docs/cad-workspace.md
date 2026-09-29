@@ -105,6 +105,31 @@ cualquier diagonal según la orientación de esa línea — no hace falta elegir
 tipo distinto para cada caso. Si el eje no debe moverse al arrastrar, fíjalo
 antes, igual que con la simetría por punto.
 
+**Ranura: Radio/Ancho.** El selector muestra el radio de los extremos o el ancho
+total de la misma ranura. Para R15 escribe Radio = 15 mm (equivale a Ancho = 30 mm).
+Entre centros sigue siendo la distancia recta entre los dos centros, no la longitud
+total exterior; la longitud total es Entre centros + Ancho.
+
+**Desfase por grosor.** En Figuras, abre ⋮ de una ranura, círculo o rectángulo y
+elige Desfase por grosor. En la bandeja selecciona Hacia dentro/Hacia fuera, escribe
+Grosor y confirma. La nueva figura queda vinculada a la fuente. En una ranura
+comparte los centros de los extremos y el ángulo; cambia su ancho en dos veces
+el grosor. Una ranura interior de 15 mm y grosor exterior de 7,5 mm crea otra de
+30 mm. Para extruir el anillo elige el perfil exterior o el croquis completo;
+el interior queda como hueco. Seleccionar el derivado permite editar solo Grosor.
+Quitar su regla de desfase desvincula la figura y conserva su forma. No admite
+todavía polígonos irregulares ni cadenas generales de líneas y arcos.
+
+**Simetría de operación.** En la pila, abre ⋮ de una Extrusión o Vaciado y elige
+Simetría de operación. La bandeja permite escoger XY/XZ/YZ y la posición del plano
+en la unidad activa. Al confirmar aparece un nodo vinculado: cambiar el perfil o
+la profundidad de la fuente actualiza también su simétrico. El plano se refiere
+a los ejes del documento CAD; posición cero pasa por su origen.
+Para repetir un saliente perforado, refleja la extrusión y su vaciado: cada uno
+repite su propio volumen añadido/restado, sin copiar la base completa. La simetría
+se puede desactivar o borrar sin quitar la fuente. El botón Operación fuente
+permite editar sus parámetros; profundidad/dirección se heredan y no se duplican.
+
 **Igualdad** admite dos o más círculos/arcos o líneas/lados del mismo croquis.
 Selecciona primero la figura cuyo tamaño quieres conservar, luego las demás y
 pulsa Igualdad. Más tarde, editar el tamaño de una actualiza el grupo. Si otras

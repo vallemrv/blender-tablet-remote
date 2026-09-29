@@ -559,7 +559,7 @@ class CadRuntime:
             if sketch['id']==self.active_sketch_id:
                 labels={'COINCIDENT':'●','HORIZONTAL':'H','VERTICAL':'V','PARALLEL':'∥','COLLINEAR':'Col',
                         'PERPENDICULAR':'⊥','TANGENT':'T','EQUAL':'=','FIX':'Fijo','MIDPOINT':'½',
-                        'SYMMETRIC':'Sim','SYMMETRIC_LINE':'Sim⟋'}
+                        'SYMMETRIC':'Sim','SYMMETRIC_LINE':'Sim⟋','OFFSET':'Grosor'}
                 unit=bpy.context.scene.unit_settings.length_unit
                 factor,suffix={'MILLIMETERS':(1000,'mm'),'CENTIMETERS':(100,'cm')}.get(unit,(1,'m'))
                 for index,c in enumerate(sketch.get('constraints',[])):

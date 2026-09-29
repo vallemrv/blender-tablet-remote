@@ -160,7 +160,7 @@ class SketchTests(CadTests):
         self.assertAlmostEqual(e['width'],.006,places=9)
         self.assertAlmostEqual(next(c for c in sketch['constraints'] if c['type']=='DISTANCE')['value'],.030,places=9)
         described=model.public(runtime.doc())['sketches'][0]['entities'][0]['dimensions']
-        self.assertEqual([(d['field'],d['value_factor']) for d in described],[('width',.5),('length',1.)])
+        self.assertEqual([(d['field'],d['value_factor']) for d in described],[('radius',1.),('length',1.)])
         self.extrude(identifier,.005)
         expected=(.030*.006+math.pi*.003**2)*.005
         self.assertAlmostEqual(volume(self.obj()),expected,delta=expected*.005)

@@ -5,6 +5,27 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadParserTest {
+    @Test fun linkedOffsetAndMirrorKeepTheirParametersAndCapabilities() {
+        val capability = CadParser.capabilities(JSONObject("""{"version":2,"length_unit":"METERS","planes":["XY"],
+            "offset_entities":["SLOT","CIRCLE","RECTANGLE"],"feature_mirror":true,"features":["EXTRUDE","CUT","MIRROR"]}"""))
+        assertTrue(capability.featureMirror)
+        assertTrue("SLOT" in capability.offsetEntities)
+        assertTrue("MIRROR" in capability.features)
+        val state = CadParser.state(JSONObject("""{"version":1,"workspace":true,"active_sketch_id":"s","document":{
+            "sketches":[{"id":"s","name":"Boceto","plane":"XY","entities":[{"id":"slot","type":"SLOT",
+                "radius":0.015,"width":0.03,"offset":0.0075,"dimensions":[{"field":"offset","label":"Grosor",
+                "constraint_type":"OFFSET","value_factor":1,"lockable":false,"refs":[],"constraint_ids":["o"]}]}]}],
+            "features":[{"id":"m","name":"Simetría","type":"MIRROR","sketch_id":"s","enabled":true,
+                "mirror":{"source_id":"f","plane":"YZ","offset":0.02}}]}}"""))
+        val entity = state.activeSketch!!.entities.single()
+        assertEquals(.0075, entity.values["offset"]!!, 1e-12)
+        assertFalse(entity.dimensions.single().lockable)
+        assertTrue(state.features.single().isMirror)
+        assertEquals("f", state.features.single().mirrorSourceId)
+        assertEquals("YZ", state.features.single().mirrorPlane)
+        assertEquals(.02, state.features.single().mirrorOffset, 1e-12)
+    }
+
     @Test fun directionalDistancesAreAdvertisedAndZeroRemainsEditable() {
         val capabilities = CadParser.capabilities(JSONObject("""{"version":2,"length_unit":"METERS","planes":["XY"],
             "constraints":["DISTANCE","DISTANCE_X","DISTANCE_Y"]}"""))

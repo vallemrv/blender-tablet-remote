@@ -1411,7 +1411,7 @@ de banda y configuración de latencia interactiva.
 ## CAD paramétrico — versión 2 extendida: sketch y vaciado
 
 `features.cad` anuncia `version:2`, `planes:[XY,XZ,YZ]`,
-`entities:[LINE,RECTANGLE,CIRCLE,ARC,NGON,SLOT,GEAR,POLYGON]`, `features:[EXTRUDE,CUT,LOFT,HELIX]` (más FILLET/CHAMFER en la pila vía `cad.finish.*`),
+`entities:[LINE,RECTANGLE,CIRCLE,ARC,NGON,SLOT,GEAR,POLYGON]`, `features:[EXTRUDE,CUT,LOFT,HELIX,MIRROR]` (más FILLET/CHAMFER en la pila vía `cad.finish.*`),
 `sketch_editing:true`, `fillet:true`, `length_unit:METERS` y `constraints` con
 `COINCIDENT,HORIZONTAL,VERTICAL,PARALLEL,COLLINEAR,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,DISTANCE_X,DISTANCE_Y,RADIUS,FIX,MIDPOINT,SYMMETRIC,SYMMETRIC_LINE`.
 `COLLINEAR` usa dos referencias de línea/lado del mismo croquis: ambos segmentos
@@ -1421,6 +1421,29 @@ También anuncia `construction`, `datum_planes`, `bodies`, `origin`, `mesh_copy`
 `smart_cursor`, `selection_delete`, `editable_dimensions`, `fillet_remove`,
 `solid_selection`, `face_sketch`, `project_reference` y `history_order`.
 Las extensiones se negocian por capabilities; se instala el APK junto con el ZIP.
+`offset_entities:[SLOT,CIRCLE,RECTANGLE]` y `feature_mirror:true` habilitan las
+acciones contextuales nuevas. `SLOT.radius` público = `width/2`; `cad.entity.set`
+acepta `radius` o `width`, actualizando la misma cota RADIUS. El esquema `dimensions`
+puede anunciar `lockable:false` para un campo editable sin candado independiente.
+
+`cad.entity.offset {entity_id,thickness,side:OUTWARD|INWARD}` crea una figura del
+mismo croquis y una regla persistente interna `OFFSET {refs:[fuente,derivada],value,side}`.
+`value` es grosor positivo en metros. Las referencias son BODY; no se permite más
+de un padre ni ciclos. El solver mantiene la separación normal constante; la
+derivada publica `offset` y una medida Grosor. `cad.entity.set {values:{offset}}`
+o `cad.constraint.set` editan el grosor manteniendo la fuente. Un fallo conserva el
+documento y el historial. No se anuncia OFFSET como restricción genérica del rail.
+
+`cad.feature.mirror {feature_id,plane:XY|XZ|YZ,offset:0}` crea un nodo `type:MIRROR`
+con `mirror:{source_id,plane,offset}` y `operation:EXTRUDE|CUT`. Plane/offset se
+editan con `cad.feature.set`; el resto se hereda del original (perfil, profundidad,
+extent). Refleja el operando antes de unir/restar sobre el resultado acumulado.
+Fuente y espejo pertenecen al mismo cuerpo; la fuente debe ser anterior, estar
+activa al crear y no ser otra simetría. Su desactivación oculta ambos resultados.
+La fuente con dependientes no se puede borrar. MIRROR tiene un tipo propio para
+que complementos antiguos lo rechacen en vez de evaluarlo como otra extrusión.
+Las magnitudes y planos usan los metros/ejes del documento CAD; las matrices de
+colocación del objeto Blender siguen aplicándose al resultado completo.
 `mode.set {mode:CAD}` activa el espacio CAD (Blender permanece en Object).
 OBJECT/EDIT salen de CAD y cancelan cualquier preview. Los objetos evaluados CAD
 requieren `cad.convert` antes de Edit. El documento JSON versionado vive en la

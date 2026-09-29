@@ -140,6 +140,11 @@ def solve_dimension(sketch, constraint):
 
 
 def describe(sketch, entity):
+    from .offset import rule_for
+    rule = rule_for(sketch, entity['id'])
+    if rule:
+        return [dict(field='offset', label='Grosor', constraint_type='OFFSET',
+                     value_factor=1., refs=rule['refs'], constraint_ids=[rule['id']], lockable=False)]
     bound=bindings(sketch,entity); typ=entity['type']
     fields={'RECTANGLE':[('width','Lado' if is_square(sketch,entity) else 'Ancho','DISTANCE','EDGE0',1.),('height','Alto','DISTANCE','EDGE1',1.)],
             'CIRCLE':[('radius','Radio','RADIUS','BODY',1.)],
@@ -147,12 +152,12 @@ def describe(sketch, entity):
             'LINE':[('length','Lado completo' if any((entity['id'],role) in geometry.rounding_links(sketch) for role in ('START','END')) else 'Longitud','DISTANCE','BODY',1.)],
             # Its dimension is an inscribed RADIUS constraint, shown as the full size.
             'NGON':[('flats','Entre caras' if entity.get('sides',6)%2==0 else 'Ø inscrito','RADIUS','BODY',.5)],
-            'SLOT':[('width','Ancho','RADIUS','BODY',.5),('length','Entre centros','DISTANCE','AXIS',1.)],
+            'SLOT':[('radius','Radio extremos','RADIUS','BODY',1.),('length','Entre centros','DISTANCE','AXIS',1.)],
             # Module is governed by the pitch radius: module × teeth / 2.
             'GEAR':[('module','Módulo','RADIUS','BODY',None)],'POINT':[]}[typ]
     if typ=='RECTANGLE' and is_square(sketch,entity): fields=fields[:1]
     return [dict(field=field,label=label,constraint_type=kind,value_factor=scale if scale is not None else factor(entity,field),
-                 refs=[dict(id=entity['id'],part=part)],constraint_ids=bound['diameter' if typ=='CIRCLE' else field])
+                 refs=[dict(id=entity['id'],part=part)],constraint_ids=bound['diameter' if typ=='CIRCLE' else 'width' if typ=='SLOT' and field=='radius' else field])
             for field,label,kind,part,scale in fields]
 
 

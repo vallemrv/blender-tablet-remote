@@ -6,17 +6,28 @@
       "XZ",
       "YZ"
     ],
+    "offset_entities": [
+      "SLOT",
+      "CIRCLE",
+      "RECTANGLE"
+    ],
+    "feature_mirror": true,
     "entities": [
       "LINE",
       "RECTANGLE",
-      "SQUARE",
       "CIRCLE",
       "ARC",
+      "NGON",
+      "SLOT",
+      "GEAR",
       "POLYGON"
     ],
     "features": [
       "EXTRUDE",
-      "CUT"
+      "CUT",
+      "LOFT",
+      "HELIX",
+      "MIRROR"
     ],
     "constraints": [
       "COINCIDENT",
@@ -319,6 +330,22 @@
     {
       "command": "cad.polygon.close",
       "payload": {}
+    },
+    {
+      "command": "cad.entity.offset",
+      "payload": {
+        "entity_id": "entity_fixture",
+        "thickness": 0.005,
+        "side": "OUTWARD"
+      }
+    },
+    {
+      "command": "cad.feature.mirror",
+      "payload": {
+        "feature_id": "feature_fixture",
+        "plane": "XZ",
+        "offset": 0.0
+      }
     }
   ],
   "state": {

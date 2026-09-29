@@ -35,9 +35,11 @@ def _sides(e):
 def surfaces(doc, body_id, scale):
     """Analytic surfaces in Blender units: ('PLANE', normal, offset) or ('CYLINDER', point, axis, radius)."""
     result = []
+    from . import mirror
     for feature in doc['features']:
-        if feature.get('body_id') != body_id or not feature['enabled'] or feature['type'] not in ('EXTRUDE', 'CUT'):
+        if feature.get('body_id') != body_id or not mirror.active(doc,feature) or feature['type'] not in ('EXTRUDE', 'CUT', 'MIRROR'):
             continue
+        first_surface=len(result)
         try:
             sketch, _ = model.profile(doc, feature['profile_id'])
         except Exception:
@@ -46,7 +48,7 @@ def surfaces(doc, body_id, scale):
         origin, fx, fy, fn = (Vector(f[k]) for k in ('origin', 'x', 'y', 'normal'))
         depth = feature['depth']
         levels = ((-abs(depth), abs(depth)) if feature.get('extent') == 'BOTH'
-                  else (0., -depth if feature['type'] == 'CUT' else depth))
+                  else (0., -depth if feature.get('operation',feature['type']) == 'CUT' else depth))
         for z in levels:
             result.append(('PLANE', fn.copy(), (origin+fn*z).dot(fn)/scale))
         def world(p):
@@ -64,6 +66,17 @@ def surfaces(doc, body_id, scale):
                 result.append(('PLANE', normal, a.dot(normal)/scale))
             for center, radius in arcs:
                 result.append(('CYLINDER', world(center)/scale, fn.copy(), radius/scale))
+        if feature.get('mirror'):
+            spec=feature['mirror'];reflected=[]
+            for surface in result[first_surface:]:
+                if surface[0]=='PLANE':
+                    normal=Vector(mirror.point(surface[1],spec,direction=True))
+                    origin=Vector(mirror.point(surface[1]*surface[2],spec,scale=scale))
+                    reflected.append(('PLANE',normal,origin.dot(normal)))
+                else:
+                    reflected.append(('CYLINDER',Vector(mirror.point(surface[1],spec,scale=scale)),
+                                      Vector(mirror.point(surface[2],spec,direction=True)),surface[3]))
+            result[first_surface:]=reflected
     return result
 
 

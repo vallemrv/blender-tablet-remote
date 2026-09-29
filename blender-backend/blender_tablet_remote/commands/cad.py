@@ -98,6 +98,7 @@ def _new_sketch(doc,payload):
     support_id=payload.get('support_id')
     if support_id:
         feature=model.find(doc,'features',support_id)
+        if feature.get('mirror'): raise BadPayload('Usa Boceto en cara sobre el resultado de la simetría')
         if feature['type'] in model.FINISHES + ('LOFT','HELIX'):
             raise BadPayload('Un redondeo o solevado no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
         source,_=model.profile(doc,feature['profile_id'])
@@ -283,8 +284,15 @@ def entity_set(payload):
         raise BadPayload('Faltan las dimensiones')
     def change(doc):
         sketch, e = model.entity(doc,payload.get('entity_id'))
+        from ..cad.offset import rule_for, set_value
+        offset_rule=rule_for(sketch,e['id'])
+        if offset_rule:
+            if set(changes)!={'offset'}: raise BadPayload('Edita solo el grosor del contorno vinculado')
+            set_value(sketch,offset_rule,changes['offset'])
+            return
         allowed = set(model.FIELDS[e['type']]) | ({'length'} if e['type']=='LINE' else set())
         if e['type']=='CIRCLE': allowed.add('radius')
+        if e['type']=='SLOT': allowed.add('radius')
         if e['type']=='NGON': allowed.add('sides')
         if e['type']=='GEAR': allowed.update(('teeth','pressure'))
         if not set(changes)<=allowed:
@@ -299,6 +307,11 @@ def entity_set(payload):
             e['sides']=changes['sides']; model.validate_entity(e)
             if any(r['id']==e['id'] and r.get('part','').startswith(('P','EDGE')) for c in sketch.get('constraints',[]) for r in c['refs']):
                 raise BadPayload('Quita antes las reglas de sus esquinas o lados para cambiar el número de lados')
+        if e['type']=='SLOT' and 'radius' in values:
+            width=2*model.number(values.pop('radius'),positive=True)
+            if 'width' in values and not math.isclose(values['width'],width,rel_tol=1e-9,abs_tol=1e-12):
+                raise BadPayload('Radio y ancho deben describir la misma ranura')
+            values['width']=width
         if e['type']=='CIRCLE' and 'radius' in values:
             diameter=2*model.number(values.pop('radius'),positive=True)
             if 'diameter' in values and not math.isclose(values['diameter'],diameter,rel_tol=1e-9,abs_tol=1e-12):
@@ -319,6 +332,28 @@ def entity_construction(payload):
         if not refs: raise BadPayload('Selecciona geometría del boceto')
         for ref in refs: geometry.get_entity(sketch,ref)['construction']=value
     return (yield from runtime.transaction_steps(payload,change,'CAD geometría de construcción'))
+
+
+@command('cad.entity.offset')
+def entity_offset(payload):
+    created=[]
+    def change(doc):
+        from ..cad import offset
+        sketch=model.find(doc,'sketches',runtime.active_sketch_id)
+        source=model.find(sketch,'entities',payload.get('entity_id'))
+        rule=dict(id=model.uid('constraint'),type='OFFSET',value=model.number(payload.get('thickness'),positive=True),
+                  side=payload.get('side','OUTWARD'),refs=[])
+        entity=offset.shape(source,offset.distance(rule))
+        entity={k:v for k,v in entity.items() if k in model.FIELDS[source['type']] or k=='type'}
+        entity.update(id=model.uid('entity'),construction=False)
+        model.validate_entity(entity)
+        rule['refs']=[dict(id=source['id'],part='BODY'),dict(id=entity['id'],part='BODY')]
+        sketch['entities'].append(entity);sketch['constraints'].append(rule)
+        geometry.solve(sketch)
+        created.append(entity['id'])
+    yield from runtime.transaction_steps(payload,change,'CAD desfase de contorno')
+    _set_selection([dict(kind='ENTITY',id=created[0],part='BODY')])
+    return runtime.status()
 
 
 def _preview_endpoint(payload, preview, previous=None):
@@ -493,6 +528,10 @@ def entity_delete(payload):
             sketch=model.find(doc,'sketches',runtime.active_sketch_id)
             refs=[r for r in selection if r.get('kind')=='ENTITY' and r['id']!='ORIGIN']
         if not refs: raise BadPayload('Selecciona dibujos, puntos o aristas; el origen no se borra')
+        removed={r['id'] for r in refs}
+        if any(c['type']=='OFFSET' and c['refs'][0]['id'] in removed and c['refs'][1]['id'] not in removed
+               for c in sketch.get('constraints',[])):
+            raise CommandError('El contorno tiene un desfase dependiente; elimina primero su desfase',code='cad_dependency')
         geometry.delete_selected(sketch,refs)
         for feature in doc['features']:
             for sketch_key,profile_key in (('sketch_id','profile_id'),('to_sketch_id','to_profile_id')):
@@ -832,6 +871,12 @@ def feature_set(payload):
     def change(doc):
         feature = model.find(doc,'features',payload.get('feature_id'))
         _require_reachable(doc,feature['id'])
+        if feature.get('mirror'):
+            if 'depth' in payload or 'extent' in payload:
+                raise BadPayload('La simetría hereda la profundidad de su operación fuente')
+            for key in ('plane','offset'):
+                if key in payload: feature['mirror'][key]=payload[key]
+            model.resolve_supports(doc)
         if feature['type'] in model.FINISHES:
             if 'width' in payload: feature['width']=payload['width']
             if 'segments' in payload: feature['segments']=payload['segments']
@@ -853,6 +898,33 @@ def feature_set(payload):
                 raise BadPayload('enabled debe ser booleano')
             feature['enabled'] = payload['enabled']
     return (yield from runtime.transaction_steps(payload,change,'CAD editar extrusión'))
+
+
+@command('cad.feature.mirror')
+def feature_mirror(payload):
+    created=[];old_bar=runtime.rollback_id
+    def change(doc):
+        source=model.find(doc,'features',payload.get('feature_id'))
+        _require_reachable(doc,source['id'])
+        if source['type'] not in ('EXTRUDE','CUT') or source.get('mirror'):
+            raise BadPayload('Selecciona una extrusión o vaciado original')
+        if not source['enabled']: raise BadPayload('Activa la operación antes de crear su simetría')
+        feature=copy.deepcopy(source)
+        feature.update(id=model.uid('feature'),name='Simetría de '+source['name'],type='MIRROR',operation=source['type'],order=model.next_order(doc),
+                       mirror=dict(source_id=source['id'],plane=payload.get('plane','XZ'),offset=payload.get('offset',0.)))
+        doc['features'].append(feature)
+        bar=runtime.bar(doc)
+        if bar:
+            model.insert_after(doc,feature,bar);runtime.rollback_id=feature['id']
+        model.resolve_supports(doc);created.append(feature['id'])
+    try:
+        yield from runtime.transaction_steps(payload,change,'CAD simetría de operación')
+    except BaseException:
+        runtime.rollback_id=old_bar
+        raise
+    runtime.selection=dict(kind='FEATURE',id=created[0])
+    _activate_feature(runtime.doc(),created[0])
+    return runtime.status()
 
 
 @command('cad.feature.delete')
@@ -901,6 +973,8 @@ def convert(payload):
 
 
 def _require_no_dependents(doc, identifier):
+    if any(f.get('mirror',{}).get('source_id')==identifier for f in doc['features']):
+        raise CommandError('La operación tiene una simetría dependiente',code='cad_dependency')
     if any(f.get('target_id')==identifier for f in doc['features']) or any(s.get('support_id')==identifier for s in doc['sketches']) or any(p.get('support_id')==identifier for p in doc.get('planes',[])):
         raise CommandError('El sólido tiene bocetos o vaciados dependientes',code='cad_dependency')
 
@@ -1219,6 +1293,10 @@ def constraint_set(payload):
     def change(doc):
         sketch=model.find(doc,'sketches',payload.get('sketch_id') or runtime.active_sketch_id)
         c=model.find(sketch,'constraints',payload.get('constraint_id'))
+        if c['type']=='OFFSET':
+            from ..cad.offset import set_value
+            set_value(sketch,c,payload.get('value'))
+            return
         if c['type'] not in dimensions.NUMERIC: raise BadPayload('Esta restricción no tiene una cota editable')
         updated=dict(c,value=model.number(payload.get('value'),positive=c['type'] in ('RADIUS','DISTANCE')))
         c=dimensions.put(sketch,updated)
@@ -1359,7 +1437,7 @@ def sketch_on_face(payload):
         plane=dict(id=model.uid('plane'),name='Cara de '+source['object'],base='XY',implicit=True,
                    translation=[0,0,0],rotation=[0,0,0],face_frame=frame)
         feature=next((f for f in doc['features'] if f['id']==source['feature_id']),None)
-        candidates=[node for node in reversed(model.history(doc)) if node['kind']=='FEATURE' and node['enabled'] and
+        candidates=[node for node in reversed(model.history(doc)) if node['kind']=='FEATURE' and node['enabled'] and not node.get('mirror') and
                     node['type'] in ('EXTRUDE','CUT') and
                     feature and node['body_id']==feature['body_id'] and node['id'] in _reachable_ids(doc)]
         for support in candidates:

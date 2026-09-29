@@ -42,6 +42,10 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     var constraintsVisible by rememberSaveable { mutableStateOf(false) }
     var constraintsSelectionOnly by rememberSaveable { mutableStateOf(true) }
     var showDiameter by rememberSaveable { mutableStateOf(false) }
+    var offsetSource by remember(cad.documentId, cad.activeSketchId) { mutableStateOf<CadEntity?>(null) }
+    var offsetSide by remember { mutableStateOf("OUTWARD") }
+    var mirrorSource by remember(cad.documentId, cad.activeSketchId) { mutableStateOf<CadFeature?>(null) }
+    var mirrorPlane by remember { mutableStateOf("XZ") }
     var renamingSketch by remember(cad.documentId) { mutableStateOf<CadSketch?>(null) }
     val historyScroll = rememberScrollState()
     var unit by remember(state.blender.sceneScale.lengthUnit) { mutableStateOf(state.blender.sceneScale.lengthUnit) }
@@ -139,7 +143,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 enabled = connected && !cad.sessionActive && cad.selectionKind in listOf("PROFILE", "SKETCH")) {
                 command("cad.helix.create", (if (cad.selectionKind == "SKETCH") "sketch_id" else "profile_id") to cad.selectionId)
             }
-            capabilities.features.filter { it !in listOf("LOFT", "HELIX") }.forEach { operation ->
+            capabilities.features.filter { it in listOf("EXTRUDE", "CUT") }.forEach { operation ->
                 CadAction(operation, cadLabel(operation), selected = depthPreview && cad.operation == operation,
                     enabled = connected && !cad.sessionActive && cad.selectionKind in listOf("PROFILE", "SKETCH") && (operation != "CUT" || target != null)) { beginFeature(operation) }
             }
@@ -212,6 +216,18 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             CadAction("DELETE", if (drawing.isFillet) "Quitar redondeo" else "Borrar figura", enabled = connected && !cad.sessionActive) {
                                 command(if (drawing.isFillet) "cad.fillet.remove" else "cad.entity.delete", "entity_id" to drawing.id)
                             }
+                            if (drawing.type in capabilities.offsetEntities) {
+                                var menu by remember(drawing.id) { mutableStateOf(false) }
+                                Box {
+                                    IconAction(Icons.Default.MoreVert, "Acciones del contorno", enabled = connected && !cad.sessionActive) { menu = true }
+                                    DropdownMenu(menu, { menu = false }) {
+                                        DropdownMenuItem(text = { Text("Desfase por grosor") }, onClick = {
+                                            menu = false; vm.cadTool(null); offsetSource = drawing; offsetSide = "OUTWARD"
+                                            pendingDimension = null; editingConstraint = null
+                                        })
+                                    }
+                                }
+                            }
                         }
                     } else (if (contextual && constraintsSelectionOnly) contextualConstraints else cad.activeSketch?.constraints.orEmpty()).forEach { c ->
                         CadConstraintRow(c, cad.activeSketch!!, unit, !cad.sessionActive,
@@ -267,6 +283,11 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                             vm.cadTool(null); command("cad.select", "kind" to "FEATURE", "id" to feature.id)
                                         },
                                         if (!feature.isFinish) CadNodeAction("Editar ${cad.sketches.firstOrNull { it.id == feature.sketchId }?.name ?: "boceto fuente"}") { editSketch(feature.sketchId) } else null,
+                                        if (capabilities.featureMirror && feature.type in listOf("EXTRUDE", "CUT") && !feature.isMirror)
+                                            CadNodeAction("Simetría de operación", feature.enabled && !dimmed) {
+                                                vm.cadTool(null); mirrorSource = feature; mirrorPlane = "XZ"
+                                                pendingDimension = null; editingConstraint = null
+                                            } else null,
                                         CadNodeAction(if (feature.enabled) "Desactivar" else "Activar") {
                                             command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled)
                                         },
@@ -300,12 +321,12 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     }
     val focusManager = LocalFocusManager.current
     val editScope = listOf(cad.documentId, cad.activeSketchId, cad.selection, cad.selectionId,
-        cad.sessionId, cad.revision, state.cadTool, pendingDimension, editingConstraint?.id)
+        cad.sessionId, cad.revision, state.cadTool, pendingDimension, editingConstraint?.id, offsetSource?.id, mirrorSource?.id)
     var resetInputs by remember(editScope) { mutableIntStateOf(0) }
     val drafts = remember(editScope, resetInputs) { mutableStateMapOf<String, Double?>() }
     val validDrafts = drafts.values.all { it != null }
-    val entity = cad.selectedEntity?.takeUnless { (cad.sessionActive && !livePreview) || pendingDimension != null || editingConstraint != null || cad.surface.mode != "PROFILE" }
-    val feature = cad.selectedFeature?.takeUnless { cad.sessionActive || editing || cad.surface.mode != "PROFILE" }
+    val entity = cad.selectedEntity?.takeUnless { (cad.sessionActive && !livePreview) || pendingDimension != null || editingConstraint != null || offsetSource != null || cad.surface.mode != "PROFILE" }
+    val feature = cad.selectedFeature?.takeUnless { cad.sessionActive || editing || mirrorSource != null || cad.surface.mode != "PROFILE" }
     // A sketch on a saved plane moves along its normal from the 3D tray.
     val offsetPlane = if (editing || feature != null || cad.sessionActive) null
         else selectedSketch?.planeId?.let { id -> cad.planes.firstOrNull { it.id == id } }
@@ -320,6 +341,16 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             finishPreview -> {
                 drafts["width"]?.let { command("cad.finish.update", "width" to it) }
                 if (cad.canConfirm) command("cad.session.confirm")
+            }
+            offsetSource != null -> {
+                command("cad.entity.offset", "entity_id" to offsetSource!!.id,
+                    "thickness" to (drafts["thickness"] ?: cad.step), "side" to offsetSide)
+                offsetSource = null
+            }
+            mirrorSource != null -> {
+                command("cad.feature.mirror", "feature_id" to mirrorSource!!.id,
+                    "plane" to mirrorPlane, "offset" to (drafts["mirror_offset"] ?: 0.0))
+                mirrorSource = null
             }
             feature?.isFinish == true && drafts["width"] != null -> command("cad.feature.set", "feature_id" to feature.id, "width" to drafts["width"])
             pendingDimension != null -> {
@@ -337,6 +368,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 editingConstraint = null
             }
             entity != null && drafts.isNotEmpty() -> command("cad.entity.set", "entity_id" to entity.id, "values" to drafts.toMap())
+            feature?.isMirror == true && drafts["mirror_offset"] != null -> command("cad.feature.set", "feature_id" to feature.id, "offset" to drafts["mirror_offset"])
             feature?.type == "HELIX" && drafts["pitch"] != null -> command("cad.feature.set", "feature_id" to feature.id, "pitch" to drafts["pitch"])
             feature != null && drafts["depth"] != null -> command("cad.feature.set", "feature_id" to feature.id, "depth" to drafts["depth"])
             offsetPlane != null && drafts["offset"] != null -> command("cad.plane.set", "plane_id" to offsetPlane.id,
@@ -346,19 +378,23 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     fun discardValues() {
         focusManager.clearFocus()
         if (depthPreview || finishPreview) command("cad.session.cancel")
-        pendingDimension = null; editingConstraint = null; resetInputs++
+        pendingDimension = null; editingConstraint = null; offsetSource = null; mirrorSource = null; resetInputs++
     }
     val canAccept = connected && validDrafts && when {
         depthPreview || finishPreview -> cad.canConfirm
         pendingDimension != null -> true
+        offsetSource != null || mirrorSource != null -> true
         else -> drafts.isNotEmpty()
     }
     val parameterScroll = rememberScrollState()
-    val hasValues = depthPreview || finishPreview || pendingDimension != null || editingConstraint != null || entity != null || feature != null || offsetPlane != null
+    val hasValues = depthPreview || finishPreview || pendingDimension != null || editingConstraint != null || entity != null || feature != null || offsetPlane != null || offsetSource != null || mirrorSource != null
     FloatingPanel(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { onTrayHeight(it.height) }.padding(Metrics.EdgeMargin)) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(cad.error ?: when {
                 !connected -> "Reconectando · recuperando el documento de Blender"
+                offsetSource != null -> "Desfase vinculado: elige dentro o fuera y escribe el grosor · ✓ crea el contorno"
+                mirrorSource != null -> "Simetría de ${mirrorSource!!.name}: elige el plano y su posición · ✓ crea la operación vinculada"
+                feature?.isMirror == true -> "${feature.name} · perfil y profundidad siguen a la operación fuente"
                 loftFrom != null -> "Solevado: toca el perfil del otro croquis (o elígelo en la pila) · vuelve a pulsar Solevado para cancelar"
                 feature?.type == "HELIX" -> "${feature.name} · altura ${formatToolDistance(feature.pitch * feature.turns * lengthFactor(unit), 2)} ${unit.short} · el paso debe superar la altura del perfil · el eje es X, Y o una línea del croquis"
                 feature?.type == "LOFT" -> "${feature.name} · une ${cad.sketches.firstOrNull { it.id == feature.sketchId }?.name.orEmpty()} con otro croquis · mover su plano lo actualiza"
@@ -378,7 +414,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 state.cadTool == "ARC" -> "Arrastra centro → inicio del arco · al soltar, arrastra el rombo del extremo para variar el ángulo"
                 entity?.type == "ARC" && !entity.isFillet -> "Arrastra el rombo del extremo para variar el ángulo; centro, radio e inicio permanecen fijos"
                 state.cadTool == "NGON" -> "Polígono regular: arrastra del centro a un vértice · elige los lados antes o después · Entre caras es la llave de la tuerca"
-                state.cadTool == "SLOT" -> "Ranura: arrastra del centro de un extremo al del otro · el punto del lado cambia el ancho · o escribe Ancho y Entre centros"
+                state.cadTool == "SLOT" -> "Ranura: arrastra entre los centros de los extremos · Radio es la mitad del Ancho · Entre centros conserva la longitud recta"
                 state.cadTool == "GEAR" -> "Engranaje: arrastra del centro al círculo primitivo · Incremento elige un módulo normalizado · dientes antes o después"
                 state.cadTool != null -> "${cadLabel(state.cadTool!!)} · arrastra para dibujar · dos dedos navegan"
                 entity?.type == "GEAR" -> cadGearSummary(entity, unit)
@@ -403,6 +439,18 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                 { command("cad.settings", "increment" to (it == SnapType.INCREMENT)) })
                         }
                         CadSnapStepInput(cad.step, unit, { unit = it }) { command("cad.settings", "step" to it) }
+                        offsetSource?.let { source ->
+                            listOf("OUTWARD" to "Hacia fuera", "INWARD" to "Hacia dentro").forEach { (side, label) ->
+                                PillButton(label, selected = offsetSide == side, enabled = connected) { offsetSide = side }
+                            }
+                            CadDimension("Grosor", drafts["thickness"] ?: cad.step, unit, source.id + "offset",
+                                step = cad.step, minimum = .0000001, enabled = connected, onDone = ::acceptValues) { drafts["thickness"] = it }
+                        }
+                        mirrorSource?.let { source ->
+                            CadMirrorPlaneSelector(mirrorPlane, connected) { mirrorPlane = it }
+                            CadDimension("Posición del plano", drafts["mirror_offset"] ?: 0.0, unit, source.id + "mirror",
+                                step = cad.step, minimum = -10000.0, enabled = connected, onDone = ::acceptValues) { drafts["mirror_offset"] = it }
+                        }
                         editingConstraint?.let { constraint ->
                             PillButton("Quitar cota", enabled = connected) {
                                 command("cad.constraint.delete", "constraint_id" to constraint.id,
@@ -442,16 +490,14 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                     command("cad.entity.set", "entity_id" to selected.id, "values" to mapOf("sides" to it))
                                 }
                             }
-                            if (selected.type == "CIRCLE") {
+                            if (selected.type in listOf("CIRCLE", "SLOT") && selected.dimensions.any { it.field == "radius" }) {
                                 PillButton("Radio", selected = !showDiameter, enabled = drafts.isEmpty()) { showDiameter = false }
-                                PillButton("Diámetro", selected = showDiameter, enabled = drafts.isEmpty()) { showDiameter = true }
+                                PillButton(if (selected.type == "SLOT") "Ancho" else "Diámetro", selected = showDiameter, enabled = drafts.isEmpty()) { showDiameter = true }
                             }
                             // Solo medidas: la posición se fija con candados y cotas a otros
                             // puntos (origen, esquinas, centros), no escribiendo coordenadas.
                             val coordinates = if (selected.type == "ARC" && !selected.isFillet) listOf("sweep" to "Ángulo") else emptyList()
-                            val measures = selected.dimensions.map {
-                                if (selected.type == "CIRCLE" && showDiameter && it.field == "radius") it.copy(field = "diameter", label = "Diámetro", valueFactor = .5) else it
-                            }
+                            val measures = cadDisplayMeasures(selected, showDiameter)
                             val fields = measures.map { it.field to it.label } + coordinates
                             fields.forEach { (field, label) ->
                                 val measure = measures.firstOrNull { it.field == field }
@@ -464,7 +510,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                         minimum = if (measure != null) .0000001 else -10000.0,
                                         maximum = if (field == "sweep") 359.99 else 10000.0,
                                         onDone = ::acceptValues) { drafts[field] = it?.takeIf { value -> field != "sweep" || kotlin.math.abs(value) in .01..359.99 } }
-                                    if (measure != null) CadAction("FIX", (if (bound) "Quitar cota: " else "Fijar medida: ") + label,
+                                    if (measure != null && measure.lockable) CadAction("FIX", (if (bound) "Quitar cota: " else "Fijar medida: ") + label,
                                         selected = bound, enabled = connected && !livePreview && drafts.isEmpty()) {
                                         if (bound) command("cad.constraint.delete", "constraint_id" to measure.constraintIds.first())
                                         else command("cad.constraint.add", "type" to measure.constraintType,
@@ -515,6 +561,19 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             if (cad.operation == "FILLET") CadCountControl("Segmentos", cad.segments, 1..16, connected) {
                                 command("cad.finish.update", "segments" to it)
                             }
+                        } else if (feature?.isMirror == true) {
+                            CadMirrorPlaneSelector(feature.mirrorPlane, connected && drafts.isEmpty()) {
+                                command("cad.feature.set", "feature_id" to feature.id, "plane" to it)
+                            }
+                            CadDimension("Posición del plano", drafts["mirror_offset"] ?: feature.mirrorOffset, unit, feature.id,
+                                step = cad.step, minimum = -10000.0, enabled = connected, onDone = ::acceptValues) { drafts["mirror_offset"] = it }
+                            PillButton("Operación fuente", enabled = connected) {
+                                command("cad.select", "kind" to "FEATURE", "id" to feature.mirrorSourceId)
+                            }
+                            CadAction("VISIBLE", if (feature.enabled) "Desactivar simetría" else "Activar simetría", selected = feature.enabled, enabled = connected) {
+                                command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled)
+                            }
+                            CadAction("DELETE", "Borrar simetría", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
                         } else if (feature?.isFinish == true) {
                             CadDimension("Ancho", drafts["width"] ?: feature.width, unit, feature.id,
                                 step = cad.step, minimum = .0000001, enabled = connected, onDone = ::acceptValues) { drafts["width"] = it }
@@ -660,6 +719,21 @@ internal fun cadRefsTouch(a: CadSelection, b: CadSelection): Boolean {
     return roles(a).intersect(roles(b)).isNotEmpty()
 }
 
+internal fun cadDisplayMeasures(entity: CadEntity, fullWidth: Boolean): List<CadMeasure> = entity.dimensions.map {
+    if (fullWidth && it.field == "radius") when (entity.type) {
+        "CIRCLE" -> it.copy(field = "diameter", label = "Diámetro", valueFactor = .5)
+        "SLOT" -> it.copy(field = "width", label = "Ancho", valueFactor = .5)
+        else -> it
+    } else it
+}
+
+@Composable
+private fun CadMirrorPlaneSelector(selected: String, enabled: Boolean, onSelect: (String) -> Unit) {
+    listOf("XY" to "XY · horizontal", "XZ" to "XZ · frontal", "YZ" to "YZ · lateral").forEach { (plane, label) ->
+        PillButton(label, selected = plane == selected, enabled = enabled) { onSelect(plane) }
+    }
+}
+
 internal fun cadConstraintEnabled(cad: CadState, type: String): Boolean {
     val refs = cad.selection
     if (refs.isEmpty()) return false
@@ -680,7 +754,7 @@ internal fun cadConstraintEnabled(cad: CadState, type: String): Boolean {
         "COLLINEAR" -> refs.size == 2 && refs.distinct().size == 2 && lines
         "EQUAL" -> if (curves) refs.map { it.id }.distinct().size >= 2 else refs.size >= 2 && lines
         "DISTANCE", "DISTANCE_X", "DISTANCE_Y" -> (refs.size == 1 && lines) || (refs.size == 2 && points)
-        "RADIUS" -> refs.size == 1 && curves
+        "RADIUS" -> refs.size == 1 && entities[0].type in listOf("CIRCLE", "ARC", "SLOT")
         "TANGENT" -> refs.size == 2 && entities.any { it.type == "LINE" } && entities.any { it.type in listOf("CIRCLE", "ARC") }
         else -> false
     }
@@ -711,6 +785,8 @@ private fun cadGearSummary(gear: CadEntity, unit: LengthUnit): String {
 private fun lengthFactor(unit: LengthUnit) = when (unit) { LengthUnit.MILLIMETERS -> 1000.0; LengthUnit.CENTIMETERS -> 100.0; LengthUnit.METERS -> 1.0 }
 
 internal fun cadLabel(type: String) = when (type) {
+    "OFFSET" -> "Desfase por grosor"
+    "MIRROR" -> "Simetría de operación"
     "COLLINEAR" -> "Colineal (misma recta)"
     "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "SLOT" -> "Ranura"; "GEAR" -> "Engranaje"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "POINT" -> "Punto"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"

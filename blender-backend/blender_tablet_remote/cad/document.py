@@ -182,10 +182,10 @@ def loads(raw):
             sketch, _ = profile(doc, feature['profile_id'])
             feature.setdefault('body_id',sketch['body_id'])
             find(doc,'bodies',feature['body_id'])
-            if feature['type'] not in ('EXTRUDE', 'CUT') or sketch['id'] != feature['sketch_id'] or not isinstance(feature['enabled'], bool):
+            if feature['type'] not in ('EXTRUDE', 'CUT', 'MIRROR') or sketch['id'] != feature['sketch_id'] or not isinstance(feature['enabled'], bool):
                 raise ValueError('invalid feature')
             depth = number(feature['depth'])
-            if feature['type'] == 'CUT':
+            if feature.get('operation',feature['type']) == 'CUT':
                 if depth < 1e-7:
                     raise ValueError('invalid feature')
             elif abs(depth) < 1e-7:
@@ -194,7 +194,7 @@ def loads(raw):
             feature.setdefault('extent', 'ONE')
             if feature['extent'] not in ('ONE', 'BOTH'):
                 raise ValueError('invalid feature extent')
-            if feature['type'] == 'CUT' and feature.get('target_id') not in seen_features:
+            if feature.get('operation',feature['type']) == 'CUT' and feature.get('target_id') not in seen_features:
                 raise ValueError('invalid cut dependency')
             seen_features.add(feature['id'])
         for index,node in enumerate(history(doc),1):
@@ -386,6 +386,8 @@ def validate_plane(plane):
 def resolve_supports(doc):
     """Resolve datum planes and associative top faces without evaluated mesh IDs."""
     import numpy as np
+    from .mirror import resolve as resolve_mirrors
+    resolve_mirrors(doc)
     visiting=set(); resolved=set()
     def enter(item):
         if item['id'] in visiting: raise BadPayload('Dependencia circular entre planos y bocetos')
@@ -394,6 +396,7 @@ def resolve_supports(doc):
         visiting.remove(item['id']); resolved.add(item['id'])
     def supported(feature_id):
         f=find(doc,'features',feature_id)
+        if f.get('mirror'): raise BadPayload('Usa Boceto en cara sobre el resultado de la simetría')
         if f['type'] in FINISHES + ('LOFT','HELIX'):
             raise BadPayload('Un redondeo o solevado no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
         source=find(doc,'sketches',f['sketch_id']); resolve(source)
@@ -485,6 +488,12 @@ def public(doc):
         sketch['constraints']=dimensions.visible_constraints(sketch)
         for e in sketch['entities']:
             if e['type']=='CIRCLE': e['radius']=e['diameter']/2
+            if e['type']=='SLOT': e['radius']=e['width']/2
+            from .offset import rule_for
+            offset_rule=rule_for(sketch,e['id'])
+            if offset_rule:
+                e['offset']=offset_rule['value']
+                e['offset_side']=offset_rule['side']
             e['dimensions']=dimensions.describe(sketch,e)
             e['is_square']=dimensions.is_square(sketch,e)
             e['is_fillet']=geometry.fillet_sides(sketch,e) is not None

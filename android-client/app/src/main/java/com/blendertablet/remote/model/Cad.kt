@@ -8,11 +8,13 @@ data class CadCapabilities(
     val features: List<String> = emptyList(),
     val constraints: List<String> = emptyList(),
     val sketchEditing: Boolean = false,
+    val offsetEntities: List<String> = emptyList(),
+    val featureMirror: Boolean = false,
 ) { val available get() = version == 2 && planes.isNotEmpty() }
 data class CadEntity(val id: String, val type: String, val values: Map<String, Double>, val construction: Boolean = false,
     val dimensions: List<CadMeasure> = emptyList(), val isFillet: Boolean = false, val isSquare: Boolean = false, val reference: Boolean = false)
 data class CadMeasure(val field: String, val label: String, val constraintType: String,
-    val valueFactor: Double, val refs: List<CadSelection>, val constraintIds: List<String>)
+    val valueFactor: Double, val refs: List<CadSelection>, val constraintIds: List<String>, val lockable: Boolean = true)
 data class CadDimensionOption(val value: Double, val constraintId: String?)
 data class CadProfile(val id: String, val entityId: String, val label: String)
 data class CadSketch(val id: String, val name: String, val plane: String,
@@ -26,8 +28,10 @@ data class CadFeature(val id: String, val name: String, val sketchId: String,
     /** Redondeo/Chaflán (`FILLET`/`CHAMFER`): ancho, segmentos y aristas elegidas. */
     val width: Double = 0.0, val segments: Int = 1, val edgeCount: Int = 0,
     /** Barrido helicoidal (`HELIX`): paso por vuelta, vueltas, sentido y eje del croquis (X, Y o una línea). */
-    val pitch: Double = 0.0, val turns: Double = 0.0, val hand: String = "RIGHT", val axis: String = "Y") {
+    val pitch: Double = 0.0, val turns: Double = 0.0, val hand: String = "RIGHT", val axis: String = "Y",
+    val mirrorSourceId: String? = null, val mirrorPlane: String = "XZ", val mirrorOffset: Double = 0.0) {
     val isFinish get() = type in listOf("FILLET", "CHAMFER")
+    val isMirror get() = mirrorSourceId != null
 }
 data class CadHandle(val part: String, val point: Pair<Float, Float>, val selected: Boolean, val intent: String = "POINT")
 data class CadOverlay(val id: String, val points: List<Pair<Float, Float>>, val closed: Boolean, val selected: Boolean,

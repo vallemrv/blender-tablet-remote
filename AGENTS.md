@@ -428,6 +428,24 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   (`value_factor` = dientes/2). Cambiar dientes conserva el módulo; con Incremento,
   dibujar elige el módulo ISO más cercano. Ninguno se somete al test O(n²) de
   autointersección.
+- Ranura ofrece Radio/Ancho como dos representaciones de la misma cota: R15 =
+  ancho 30 mm. El radio público deriva de `width/2`; editarlo actualiza esa medida.
+- Desfase por grosor (`cad.entity.offset`) crea un contorno vinculado de ranura,
+  círculo o rectángulo, hacia dentro/fuera. `OFFSET` conserva la relación entre
+  figuras del mismo croquis; en ranuras comparte centros, longitud recta y ángulo.
+  El contorno derivado muestra solo Grosor; editarlo mantiene inmóvil la fuente.
+  Un grosor que colapsa el contorno o contradice otra cota se rechaza atómicamente.
+  Quitar OFFSET desvincula sin borrar; borrar una fuente requiere retirar primero
+  sus derivados. No es un desfase genérico de cadenas de líneas/arcos.
+- Simetría de operación (`cad.feature.mirror`, nodo `MIRROR`) refleja el operando
+  de una Extrusión/Vaciado anterior del mismo cuerpo sobre XY/XZ/YZ del documento
+  CAD y una posición métrica. Conserva el croquis fuente y hereda su profundidad y
+  dirección; une/resta únicamente el operando reflejado, no todo el cuerpo acumulado.
+  La pila vuelve a evaluar los dependientes; fuente desactivada desactiva también
+  su resultado simétrico. Cada creación/edición es un undo. Se rechazan referencias
+  futuras, ciclos, otra simetría como fuente y el borrado de fuentes con dependientes.
+  La selección analítica refleja también sus superficies. No es el botón de
+  extrusión por ambos lados del plano ni el modificador Mirror de una copia de malla.
 - La bandeja de una figura CAD solo ofrece medidas (longitud, ancho/alto, radio,
   ángulo del arco), nunca coordenadas; la posición se fija con candados y cotas a
   otros puntos. No existe herramienta Cuadrado: es un rectángulo con Igualdad.

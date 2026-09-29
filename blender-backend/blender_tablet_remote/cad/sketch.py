@@ -11,7 +11,7 @@ from ..errors import BadPayload, CommandError
 
 CONSTRAINTS = ('COINCIDENT', 'HORIZONTAL', 'VERTICAL', 'PARALLEL', 'COLLINEAR', 'PERPENDICULAR',
                'TANGENT', 'EQUAL', 'DISTANCE', 'DISTANCE_X', 'DISTANCE_Y', 'RADIUS', 'FIX', 'MIDPOINT',
-               'SYMMETRIC', 'SYMMETRIC_LINE')
+               'SYMMETRIC', 'SYMMETRIC_LINE', 'OFFSET')
 
 
 def handles(e):
@@ -104,6 +104,14 @@ def radius(sketch, ref):
 
 def residual(sketch, c, scale):
     typ, refs = c['type'], c['refs']
+    if typ == 'OFFSET':
+        from .offset import shape, distance
+        expected = shape(get_entity(sketch, refs[0]), distance(c))
+        target = get_entity(sketch, refs[1])
+        if target['type'] != expected['type']:
+            raise BadPayload('Los contornos de desfase deben tener el mismo tipo')
+        return [(target[k]-expected[k])/(180. if k in model.ANGULAR else scale)
+                for k in model.FIELDS[target['type']]]
     if typ == 'FIX':
         e = get_entity(sketch, refs[0])
         if 'points' in c:
@@ -196,6 +204,8 @@ def validate_constraints(sketch):
                 raise BadPayload('Fijación inválida')
             for value in c['values'].values(): model.number(value)
         residual(sketch,c,1.)
+    from .offset import validate
+    validate(sketch)
 
 
 def solve(sketch, goals=(), *, drag=False):
