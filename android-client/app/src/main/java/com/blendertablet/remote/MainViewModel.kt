@@ -421,7 +421,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             GesturePhase.UPDATE -> if (cadStroke) {
                 when (cadGestureMode) {
                     "DEPTH" -> client.cadCommand("cad.extrude.update", mapOf(
-                        "gesture_u" to (u - cadPointerStartU), "gesture_v" to (v - cadPointerStartV), "baseline_depth" to cadDepthStart))
+                        "gesture_u" to (u - cadPointerStartU), "gesture_v" to (v - cadPointerStartV),
+                        "u" to u, "v" to v, "baseline_depth" to cadDepthStart))
                     "FINISH" -> client.cadCommand("cad.finish.update", mapOf("gesture" to (cadPointerStartV - v), "baseline_width" to cadDepthStart))
                     "DRAG" -> client.cadCommand("cad.drag.update", mapOf("u" to u, "v" to v))
                     "POLY" -> client.cadCommand("cad.polygon.update", mapOf("u" to u, "v" to v))

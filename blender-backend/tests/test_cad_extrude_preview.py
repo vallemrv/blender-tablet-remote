@@ -44,6 +44,27 @@ class ExtrudePreviewTests(CadTests):
         self.assertFalse(any(o.get(PRISM_KEY) for o in bpy.data.objects))
 
 
+    def test_pen_depth_follows_the_tip_one_to_one_and_increment_moves_whole_steps(self):
+        from types import SimpleNamespace
+        from mathutils import Vector
+        from blender_tablet_remote.camera import camera
+        rectangle = self.rect()
+        cad.extrude_begin(dict(profile_id='profile_'+rectangle, depth=.01, **OWNER))
+        # Front orthographic view: v grows downward, 1 unit of screen = 1 m of world.
+        ray = lambda u, v, rv3d: (Vector((u, -10., .5-v)), Vector((0., 1., 0.)))
+        view = (None, None, SimpleNamespace(width=100, height=100), object())
+        runtime.increment = False
+        with patch('blender_tablet_remote.bpy_utils.find_view3d', return_value=view), \
+             patch.object(camera, 'sync_from_region'), patch.object(camera, 'ray', side_effect=ray):
+            cad.extrude_update(dict(gesture_u=0, gesture_v=-.0237, u=.5, v=.4763, baseline_depth=.01, **OWNER))
+            self.assertAlmostEqual(runtime.session['depth'], .0337, places=8)
+            runtime.increment = True; runtime.step = .001
+            cad.extrude_update(dict(gesture_u=.2, gesture_v=-.0237, u=.7, v=.4763, baseline_depth=.01, **OWNER))
+            self.assertAlmostEqual(runtime.session['depth'], .034, places=9)   # sideways travel is ignored
+            cad.extrude_update(dict(gesture_u=0, gesture_v=.0042, u=.5, v=.5042, baseline_depth=.01, **OWNER))
+            self.assertAlmostEqual(runtime.session['depth'], .006, places=9)
+        cad.cancel(OWNER)
+
     def plate(self):
         outer = self.draw('RECTANGLE', (0, 0), (.27, .15))
         for x, y in ((.04, .03), (.04, .12), (.23, .03), (.23, .12)):

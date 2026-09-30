@@ -567,6 +567,44 @@ def direction_labels(normal):
     return positive, negative
 
 
+def _normal_travel(sketch, source, start, end):
+    """Metres along the sketch normal between two pen positions, or None if edge-on.
+
+    Each pen ray is intersected (closest point) with the normal line through the
+    profile's centre, so the depth stays under the tip at any zoom or perspective.
+    """
+    from ..bpy_utils import find_view3d
+    from ..camera import camera
+    from mathutils import Vector
+    found = find_view3d()
+    if found is None:
+        return None
+    rv3d = found[3]
+    camera.sync_from_region(rv3d)
+    scale = max(float(bpy.context.scene.unit_settings.scale_length), 1e-12)
+    basis = model.frame(sketch)
+    try:
+        ring = model.outline(source)
+        cx, cy = sum(p[0] for p in ring)/len(ring), sum(p[1] for p in ring)/len(ring)
+    except Exception:
+        cx = cy = 0.
+    anchor = Vector([basis['origin'][i]+cx*basis['x'][i]+cy*basis['y'][i] for i in range(3)]) / scale
+    normal = Vector(basis['normal']).normalized()
+    def parameter(u, v):
+        origin, direction = camera.ray(u, v, rv3d)
+        direction = direction.normalized()
+        b = normal.dot(direction)
+        denominator = 1. - b*b
+        if denominator < 1e-4:  # The normal points at the camera: no 1:1 reading.
+            return None
+        w = anchor - origin
+        return (b*direction.dot(w) - normal.dot(w)) / denominator
+    first, last = parameter(*start), parameter(*end)
+    if first is None or last is None:
+        return None
+    return (last - first) * scale
+
+
 def _screen_axis(sketch):
     """Unit screen direction of the sketch normal. v grows downward."""
     from ..bpy_utils import find_view3d
@@ -603,12 +641,21 @@ def _depth_value(session, payload):
         return depth
     if 'gesture_u' in payload or 'gesture_v' in payload or 'gesture' in payload:
         if 'gesture_u' in payload or 'gesture_v' in payload:
-            sketch, _ = model.profile(session['preview'], model.find(session['preview'], 'features', session['feature_id'])['profile_id'])
-            sx, sy = _screen_axis(sketch)
-            along = model.number(payload.get('gesture_u', 0)) * sx + model.number(payload.get('gesture_v', 0)) * sy
-            if cut:
-                along = -along
-            distance = along / .04 * runtime.step
+            sketch, source = model.profile(session['preview'], model.find(session['preview'], 'features', session['feature_id'])['profile_id'])
+            gu, gv = model.number(payload.get('gesture_u', 0)), model.number(payload.get('gesture_v', 0))
+            along = None
+            if 'u' in payload and 'v' in payload:
+                # The pen tip follows the profile's normal 1:1, also in perspective.
+                u, v = model.number(payload['u']), model.number(payload['v'])
+                along = _normal_travel(sketch, source, (u-gu, v-gv), (u, v))
+            if along is None:
+                sx, sy = _screen_axis(sketch)
+                along = (gu * sx + gv * sy) / .04 * runtime.step
+            distance = -along if cut else along
+            if runtime.increment:
+                # Whole steps while drawing: 1 mm of pen is 1 mm of depth, in 1 mm jumps.
+                base = model.number(payload.get('baseline_depth', session['depth']), positive=cut)
+                distance = round((base + distance) / runtime.step) * runtime.step - base
         else:
             distance = model.number(payload['gesture']) / .04 * runtime.step
             if runtime.increment:

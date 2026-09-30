@@ -503,7 +503,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   preview. Extruir admite Simetría: la profundidad crece a los dos lados del croquis.
 - Extruir/Vaciar CAD siguen la normal del plano en pantalla: arriba/abajo o
   izquierda/derecha, y también el sentido contrario. El lápiz mueve un prisma
-  ligero; el booleano se asienta al soltar. Incremento redondea ese asiento; las
+  ligero que sigue la punta 1:1 sobre la normal (rayo del lápiz contra la recta
+  normal por el centro del perfil); el booleano se asienta al soltar. Incremento
+  avanza por pasos enteros durante el trazo y redondea ese asiento; las
   cotas escritas son exactas. Vaciar crece a un lado del
   croquis (`ONE`) o a los dos (`BOTH`); la profundidad es la de cada lado.
   Vaciar consume su sólido

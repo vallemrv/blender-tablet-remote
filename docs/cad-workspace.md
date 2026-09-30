@@ -379,8 +379,10 @@ Referencia de organización: [lista de operaciones plegable de Onshape](https://
    separados forman una sola operación con la misma profundidad. También puedes
    elegir un perfil individual tocándolo en la vista. Las líneas abiertas deben cerrarse o
    marcarse como construcción; no se extruyen silenciosamente como si fueran sólidos.
-3. Deslizar arriba/abajo para cambiar profundidad: cada 4 % de altura recorre un
-   paso. Con Incremento avanza en saltos; sin snap conserva las fracciones.
+3. Deslizar a lo largo de la dirección de extrusión: la profundidad sigue a la
+   punta del lápiz 1:1 (1 mm de recorrido en la pieza = 1 mm). Con Incremento avanza
+   en saltos de un paso; sin snap conserva las fracciones. Si la dirección apunta a la
+   cámara, se usa la escala antigua (un paso por cada 4 % de altura).
    La bandeja permite editar el paso, la profundidad exacta y los botones −/+.
 4. Confirmar crea un undo; cancelar restaura el resultado anterior.
 5. Para vaciar desde arriba, seleccionar **Caras**, tocar la cara superior y pulsar
