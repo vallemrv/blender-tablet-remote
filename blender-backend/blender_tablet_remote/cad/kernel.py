@@ -181,7 +181,7 @@ kernel = BlenderNativeKernel()
 
 
 def cut_mesh(base, cutter, *, operation='DIFFERENCE'):
-    """Exact Blender boolean on temporary objects; no operators or scene residue."""
+    """Native manifold boolean on closed CAD operands; no scene residue."""
     import bpy
     import bmesh
     meshes, objects = [], []
@@ -192,7 +192,9 @@ def cut_mesh(base, cutter, *, operation='DIFFERENCE'):
             obj=bpy.data.objects.new(label,mesh); objects.append(obj)
             bpy.context.scene.collection.objects.link(obj)
         modifier=objects[0].modifiers.new('CAD difference','BOOLEAN')
-        modifier.operation=operation; modifier.solver='EXACT'; modifier.object=objects[1]
+        # CAD operands are closed solids. Manifold preserves that invariant when
+        # opposite cuts meet cap n-gons produced by previous unions/differences.
+        modifier.operation=operation; modifier.solver='MANIFOLD'; modifier.object=objects[1]
         bpy.context.view_layer.update()
         evaluated=objects[0].evaluated_get(bpy.context.evaluated_depsgraph_get())
         mesh=evaluated.to_mesh()

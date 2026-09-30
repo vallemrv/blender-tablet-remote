@@ -357,7 +357,9 @@ Referencia de organización: [lista de operaciones plegable de Onshape](https://
    restaura los ajustes de sombreado tras cada captura, incluso si falla el render.
    Confirmar/cancelar termina la transparencia automáticamente.
 
-Un vaciado es una diferencia booleana exacta de Blender sobre mallas evaluadas.
+Un vaciado es una diferencia booleana de Blender con el solver nativo Manifold
+sobre sólidos cerrados (Blender 4.5 o posterior). Los vaciados desde caras opuestas
+y sus simetrías usan el mismo cálculo y conservan las cotas del documento.
 Cada cuerpo publica un único objeto. Sus extrusiones se unen al resultado anterior
 y los vaciados restan de ese resultado; **Nuevo cuerpo** inicia otra pieza independiente.
 La pila conserva los pasos paramétricos y permite ver el cuerpo en cada momento.

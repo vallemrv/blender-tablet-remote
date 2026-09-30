@@ -121,7 +121,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   y se dibuja en el rectángulo del vídeo en Android; no persiste píxeles como geometría.
 - La vista CAD aísla temporalmente sus resultados y restaura la visibilidad previa
   al salir. Los `.blend` y estados de undo conservan la visibilidad de la escena.
-- El kernel CAD es nativo: extruye contornos simples y vacía con booleano de Blender.
+- El kernel CAD es nativo: extruye contornos simples y une/vacía sólidos cerrados
+  con el solver Manifold de Blender (mínimo 4.5). Evita que vaciados opuestos o
+  reflejados abran las tapas de booleanos anteriores. Conserva las validaciones
+  de cierre, volumen positivo y material retirado; no introduce otro kernel ni fallback.
   El solver NumPy resuelve las restricciones anunciadas, hasta 300 parámetros.
   No anuncia BREP, STEP, el solver completo de FreeCAD, Shell ni fillet de sólidos. La evaluación de
   OCP/CadQuery, build123d y FreeCAD vive en `docs/cad-kernel-evaluation.md`.

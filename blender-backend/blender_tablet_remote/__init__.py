@@ -1,6 +1,6 @@
 """Blender Tablet Remote — servidor WebSocket para controlar Blender desde una tablet.
 
-Instalable como extensión (Blender 4.2+) o como add-on clásico.
+Instalable como extensión (Blender 4.5+) o como add-on clásico.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ bl_info = {
     "name": "Blender Tablet Remote",
     "author": "blender_remoto",
     "version": VERSION,
-    "blender": (4, 2, 0),
+    "blender": (4, 5, 0),
     "location": "View3D > Sidebar > Remote",
     "description": "Servidor WebSocket para controlar Blender desde un cliente táctil Android",
     "category": "System",

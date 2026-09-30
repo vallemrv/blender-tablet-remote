@@ -4,6 +4,8 @@ Interfaz táctil Android para controlar Blender sin convertir la tablet en un
 escritorio remoto. Blender conserva el motor 3D; la app aporta vídeo, gestos y
 controles adaptados a dedo y stylus.
 
+Requiere Blender 4.5 o posterior; CAD utiliza su solver booleano nativo Manifold.
+
 ## Documentación
 
 - [`AGENTS.md`](AGENTS.md): arquitectura, invariantes y reglas de trabajo.
