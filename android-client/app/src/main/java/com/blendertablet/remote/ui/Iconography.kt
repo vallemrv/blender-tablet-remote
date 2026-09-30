@@ -174,9 +174,6 @@ object AppIcons {
         "SKETCH_FACE" to "M2,10 L11,5 L21,10 L12,16 Z M2,10 L2,18 L12,23 L21,18 L21,10 M12,16 L12,23 M10,12 L11,8 L18,1 L21,4 L14,11 Z",
         "PROJECT" to "M4,5 L14,9 M14,9 L11,7 M14,9 L12,12 M3,18 L21,18 M8,14 L8,18 M16,14 L16,18",
         "POLYGON" to "M3,17 L8,4 L15,7 L21,12 L13,20 Z M8,4 L8.7,6 M15,7 L14,9 M20,12 L18,13.5",
-        "PLANE_XY" to "M2,17 L9,8 L22,8 L15,17 Z M7,13 L17,13 M9,4 L9,7",
-        "PLANE_XZ" to "M3,20 L3,5 L20,5 L20,20 Z M3,20 L9,14 M9,14 L17,14 M9,14 L9,8",
-        "PLANE_YZ" to "M7,3 L19,8 L19,22 L7,17 Z M10,16 L16,18 M10,16 L10,8",
         "SELECT" to "M5,3 L5,20 L10,15 L14,22 L17,20 L13,13 L21,13 Z",
     )
     private val cadVectors by lazy {
@@ -188,6 +185,37 @@ object AppIcons {
             ).build()
         }
     }
+    /**
+     * Sketch planes share one Blender-coloured axis triad (X red, Y green, Z blue,
+     * same orientation as Blender's default view); only the filled square changes,
+     * so each icon names its two axes by colour instead of an abstract parallelogram.
+     */
+    private val planeFaces = mapOf(
+        "PLANE_XY" to "M4,14 L11,18 L18,14 L11,10 Z",
+        "PLANE_XZ" to "M4,14 L11,18 L11,10 L4,6 Z",
+        "PLANE_YZ" to "M4,14 L11,10 L11,2 L4,6 Z",
+    )
+    private val planeNormals = mapOf("PLANE_XY" to 'Z', "PLANE_XZ" to 'Y', "PLANE_YZ" to 'X')
+    private val planeVectors by lazy {
+        val axes = mapOf('X' to ("M4,14 L15.3,20.5" to Color(0xFFFF5555)), 'Y' to ("M4,14 L15.3,7.5" to Color(0xFF8BDB3D)),
+            'Z' to ("M4,14 L4,1" to Color(0xFF4D8DFF)))
+        planeFaces.mapValues { (name, face) ->
+            ImageVector.Builder("CAD $name", 24.dp, 24.dp, 24f, 24f).apply {
+                fun axis(key: Char) = axes.getValue(key).let { (data, color) ->
+                    addPath(PathParser().parsePathString(data).toNodes(), stroke = SolidColor(color),
+                        strokeLineWidth = 1.9f, strokeLineCap = StrokeCap.Round)
+                }
+                // Normal axis behind the square (it may pass behind it), in-plane axes on top.
+                val normal = planeNormals.getValue(name)
+                axis(normal)
+                addPath(PathParser().parsePathString(face).toNodes(), fill = SolidColor(Color(0xFFC9CCD2)), fillAlpha = .6f,
+                    stroke = SolidColor(Color.White), strokeLineWidth = 1.2f, strokeLineJoin = StrokeJoin.Round)
+                "XYZ".filter { it != normal }.forEach(::axis)
+            }.build()
+        }
+    }
+    /** Icons whose colours carry meaning and must not be tinted. */
+    fun cadMulticolor(intent: String) = intent in planeFaces
     fun cad(intent: String): ImageVector = when (intent) {
         "VERTEX" -> Icons.Default.ScatterPlot
         "EDGE" -> Icons.Default.LinearScale
@@ -200,7 +228,7 @@ object AppIcons {
         "DELETE" -> Icons.Default.Delete
         "CONVERT" -> Icons.Default.ViewInAr
         "VISIBLE" -> Icons.Default.Visibility
-        else -> cadVectors[intent] ?: Fallback
+        else -> planeVectors[intent] ?: cadVectors[intent] ?: Fallback
     }
 
     /** Angular sketch handles use a diamond; ordinary point handles remain round. */

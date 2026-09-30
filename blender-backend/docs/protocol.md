@@ -1414,6 +1414,10 @@ de banda y configuración de latencia interactiva.
 `entities:[LINE,RECTANGLE,CIRCLE,ARC,NGON,SLOT,GEAR,POLYGON]`, `features:[EXTRUDE,CUT,LOFT,HELIX,MIRROR]` (más FILLET/CHAMFER en la pila vía `cad.finish.*`),
 `sketch_editing:true`, `fillet:true`, `length_unit:METERS` y `constraints` con
 `COINCIDENT,POINT_ON_LINE,HORIZONTAL,VERTICAL,PARALLEL,COLLINEAR,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,DISTANCE_X,DISTANCE_Y,RADIUS,FIX,MIDPOINT,SYMMETRIC,SYMMETRIC_LINE`.
+`cad.constraint.add` acepta una o varias referencias para `HORIZONTAL`/`VERTICAL`
+(`LINE/BODY` o `RECTANGLE|NGON/EDGEi`). Persiste una regla individual por referencia,
+sin duplicados, y resuelve el grupo en una transacción y un undo. Una referencia
+inválida o un conflicto rechaza la petición completa.
 `POINT_ON_LINE` recibe dos referencias de figuras distintas del mismo croquis:
 un punto y una recta (`LINE/BODY`, `RECTANGLE|NGON/EDGEi` o `SLOT/AXIS`). Acepta
 cualquier orden de selección y persiste `refs:[punto,recta]`. Su único residual
@@ -1528,7 +1532,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.surface.mode` | `{mode:"PROFILE\|FACE\|EDGE\|VERTEX"}` | Elige selección del boceto/perfiles o referencias del sólido, sin undo |
 | `cad.surface.select` | `{u,v}` | Alterna una referencia visible; en boceto acumula puntos/aristas/caras de distintos objetos para proyectarlos juntos y un miss conserva la selección; en 3D conserva dos para medir o varias aristas del mismo objeto para acabado |
 | `cad.surface.clear` | `{}` | Limpia las referencias transitorias |
-| `cad.sketch.on_face` | `{}` | Crea un boceto en la cara plana resaltada, sin repetir sondeo y con un undo |
+| `cad.sketch.on_face` | `{offset?}` | Crea un boceto en la cara plana resaltada, sin repetir sondeo y con un undo; `offset` (m) lo separa por la normal: positivo hacia fuera |
 | `cad.reference.project` | `{}` | Copia las referencias seleccionadas a construcción fija en el boceto activo |
 | `cad.view.solid` | `{}` | Sale del plano de boceto, restaura la vista 3D orbital y encuadra |
 

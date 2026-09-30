@@ -202,6 +202,19 @@ class FeedbackTests(CadTests):
         with self.assertRaises(CommandError): cad.sketch_on_face(OWNER)
         self.assertEqual(runtime.doc(),before)
 
+    def test_face_sketch_offset_moves_along_the_face_normal(self):
+        from blender_tablet_remote.commands import snap
+        bpy.ops.mesh.primitive_cube_add(location=(.1,.2,.3)); obj=bpy.context.object
+        cad.settings(dict(show_scene=True,**OWNER)); cad.surface_mode(dict(mode='FACE',**OWNER))
+        points=[[.11,.19,.29],[.11,.21,.29],[.11,.21,.31],[.11,.19,.31]]
+        hit=dict(id='face-side',kind='FACE',object=obj.name,feature_id=None,planar=True,normal=[1,0,0],center=[.11,.2,.3],
+                 points=points,segments=[[a,b] for a,b in zip(points,points[1:]+points[:1])],triangles=[points[:3],[points[0],points[2],points[3]]])
+        with patch.object(snap,'query_cad_surface',return_value=hit): cad.surface_select(dict(u=.5,v=.5,**OWNER))
+        cad.sketch_on_face(dict(offset=-.004,**OWNER))
+        plane=runtime.doc()['planes'][0]
+        self.assertTrue(np.allclose(plane['frame']['origin'],[.106,.2,.3]))
+        self.assertTrue(np.allclose(plane['frame']['normal'],[1,0,0]))
+
     def test_resume_restores_workspace_sketch_and_camera_without_preview(self):
         reconnect.clear(); key='test-resume-session-key-1234567890'
         reconnect.resume(dict(session_key=key,**OWNER))

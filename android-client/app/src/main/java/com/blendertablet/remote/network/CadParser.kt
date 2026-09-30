@@ -95,7 +95,8 @@ object CadParser {
             bodies = objects(document?.optJSONArray("bodies")).map { CadBody(it.optString("id"),it.optString("name")) },
             planes = objects(document?.optJSONArray("planes")).map { p -> CadPlane(p.optString("id"),p.optString("name"),
                 (0..2).map { p.optJSONArray("translation")?.optDouble(it,0.0) ?: 0.0 },
-                (0..2).map { p.optJSONArray("rotation")?.optDouble(it,0.0) ?: 0.0 }) },
+                (0..2).map { p.optJSONArray("rotation")?.optDouble(it,0.0) ?: 0.0 }, p.optString("base","XY"),
+                listOf("face_frame","support_id","reference_sketch_id").any { p.has(it) && !p.isNull(it) }) },
         )
     }
 }

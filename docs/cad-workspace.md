@@ -86,6 +86,11 @@ longitudes o radios, distancia diagonal/horizontal/vertical, radio, punto medio,
 la selección. El origen (0,0) se puede seleccionar tocándolo en la vista y usar
 como referencia fija.
 
+**Horizontal/Vertical** se aplica a todas las líneas o lados rectos seleccionados,
+también cuatro o más, con una sola pulsación. Cada arista conserva su propia regla;
+se confirman juntas con un único deshacer. Si alguna contradice una cota o fijación,
+se rechaza el conjunto sin cambios parciales. No alinea curvas ni puntos sueltos.
+
 **Punto sobre recta** mantiene un punto sobre una línea y permite deslizarlo a
 lo largo de ella. Selecciona un punto (extremo, esquina, centro u origen) y una
 línea o lado recto de otra figura, en cualquier orden, y pulsa Punto sobre recta
@@ -420,13 +425,17 @@ Usa el bisel nativo de Blender sobre el sólido; no es un fillet B-rep.
 - El redondeo es de sketch entre líneas conectadas o en esquinas de rectángulos. No es fillet de aristas
   del sólido. Vaciar quita un perfil por profundidad, a un lado del croquis o a los dos; no es una operación Shell
   de espesor automático sobre caras arbitrarias.
-- **Planos y bocetos** empieza por Superior/Frontal/Lateral o una cara y una medida
-  de **Separación**. **Crear croquis** crea su plano y lo abre en un solo paso.
-  **Inclinación y ajustes avanzados** despliega XYZ y el plano de otro croquis.
-  **Planos existentes → Colocar** ajusta la separación de un plano guardado.
-  Permite usar XY/XZ/YZ, el plano de otro boceto, una cara superior
-  asociativa o un plano guardado. Un plano nuevo admite desplazamiento XYZ en la
-  unidad elegida y rotación XYZ en grados, relativos al plano de referencia.
+- **Planos y bocetos** empieza por cuatro tarjetas: Superior (XY, suelo), Frontal
+  (XZ), Lateral (YZ) y Cara. Sus iconos, igual que los del rail, comparten un
+  trípode con los colores de Blender (X rojo, Y verde, Z azul) y rellenan el plano
+  elegido. Si hay una cara resaltada, Cara aparece preseleccionada; si no, la
+  tarjeta pide tocar una en el sólido y el diálogo se reabre después.
+  **Separación** (con −/+ del paso CAD) indica siempre su dirección: arriba (+Z),
+  delante (−Y), derecha (+X) o hacia fuera de la cara; negativo va al otro lado.
+  **Crear croquis** crea su plano y lo abre en un solo paso.
+  **Mover dentro del plano e inclinar** nombra los campos con los ejes del mundo
+  (p. ej. X/Z en Frontal) y permite partir del plano de otro croquis (ejes U/V/normal).
+  **Planos existentes → Colocar** ajusta la posición de un plano guardado.
   **Boceto en cara** consume la cara resaltada; **Ver objetos
   de la escena** permite elegir referencias externas. Esa referencia conserva su
   posición capturada, sin seguir cambios topológicos de una cara arbitraria.

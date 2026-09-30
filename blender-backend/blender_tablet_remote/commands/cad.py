@@ -1201,6 +1201,23 @@ def constraint_add(payload):
         if typ=='POINT_ON_LINE': refs=geometry.point_line_refs(sketch,refs)
         c=dict(id=model.uid('constraint'),type=typ,refs=refs)
         if typ in dimensions.NUMERIC: c['value']=model.number(payload.get('value'),positive=typ in ('DISTANCE','RADIUS'))
+        if typ in ('HORIZONTAL','VERTICAL'):
+            if not refs: raise BadPayload('Selecciona una o varias líneas o lados rectos')
+            existing={(rule['type'],r['id'],r.get('part','BODY'))
+                      for rule in sketch.get('constraints',[]) if rule['type'] in ('HORIZONTAL','VERTICAL')
+                      for r in rule['refs']}
+            for ref in refs:
+                entity=geometry.get_entity(sketch,ref);part=ref['part']
+                if not ((entity['type']=='LINE' and part=='BODY') or
+                        (entity['type'] in ('RECTANGLE','NGON') and part.startswith('EDGE') and part[4:].isdigit())):
+                    raise BadPayload('Horizontal/Vertical requiere líneas o lados rectos completos')
+                rule=dict(id=model.uid('constraint'),type=typ,refs=[ref])
+                geometry.validate_constraints(dict(sketch,constraints=[rule]))
+                key=(typ,ref['id'],part)
+                if key not in existing:
+                    sketch.setdefault('constraints',[]).append(rule);existing.add(key)
+            geometry.solve(sketch)
+            return
         if typ=='EQUAL':
             unique=[]; quantities=set()
             for ref in refs:
@@ -1434,10 +1451,12 @@ def surface_clear(payload):
 def sketch_on_face(payload):
     frame=runtime.surface.face_frame()  # The visible selection, never a second raycast.
     source=runtime.surface.items[0]
+    # Metres along the face normal: positive leaves the material, negative enters it.
+    offset=model.number(payload.get('offset',0))
     def change(doc):
         from mathutils import Vector
         plane=dict(id=model.uid('plane'),name='Cara de '+source['object'],base='XY',implicit=True,
-                   translation=[0,0,0],rotation=[0,0,0],face_frame=frame)
+                   translation=[0,0,offset],rotation=[0,0,0],face_frame=frame)
         feature=next((f for f in doc['features'] if f['id']==source['feature_id']),None)
         candidates=[node for node in reversed(model.history(doc)) if node['kind']=='FEATURE' and node['enabled'] and not node.get('mirror') and
                     node['type'] in ('EXTRUDE','CUT') and
@@ -1449,7 +1468,7 @@ def sketch_on_face(payload):
             delta=Vector(frame['origin'])-top
             if Vector(frame['normal']).dot(normal)>1-1e-6 and abs(delta.dot(normal))<1e-7:
                 plane.pop('face_frame'); plane['support_id']=support['id']
-                plane['translation']=[delta.dot(Vector(base['x'])),delta.dot(Vector(base['y'])),0.]
+                plane['translation']=[delta.dot(Vector(base['x'])),delta.dot(Vector(base['y'])),offset]
                 plane['rotation']=[0.,0.,math.degrees(math.atan2(Vector(frame['x']).dot(Vector(base['y'])),Vector(frame['x']).dot(Vector(base['x']))))]
                 break
         model.validate_plane(plane); doc['planes'].append(plane)

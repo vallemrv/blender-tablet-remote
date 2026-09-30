@@ -5,6 +5,36 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadFeedbackTest {
+    @Test fun planeAxesNameTheBackendFrameInWorldTerms() {
+        // base_frame: XY normal +Z, XZ normal −Y, YZ normal +X; local x/y map to these world axes.
+        assertEquals(listOf("X", "Y"), cadPlaneAxes("XY").inPlane)
+        assertEquals(listOf("X", "Z"), cadPlaneAxes("XZ").inPlane)
+        assertTrue(cadPlaneAxes("XZ").positive.contains("−Y"))
+        assertEquals(listOf("Y", "Z"), cadPlaneAxes("YZ").inPlane)
+        assertTrue(cadPlaneAxes("YZ").positive.contains("+X"))
+        assertEquals(listOf("U", "V"), cadPlaneAxes(null).inPlane)
+        assertEquals("Frontal (XZ)", cadPlaneLabel("XZ"))
+    }
+
+    @Test fun horizontalAndVerticalAcceptSeveralStraightEdges() {
+        val lines = (1..6).map { CadEntity("line$it", "LINE", emptyMap()) }
+        val rectangle = CadEntity("rect", "RECTANGLE", emptyMap())
+        val polygon = CadEntity("ngon", "NGON", mapOf("sides" to 6.0))
+        val circle = CadEntity("circle", "CIRCLE", emptyMap())
+        val cad = CadState(activeSketchId = "s", sketches = listOf(CadSketch("s", "Boceto", "XY",
+            lines + listOf(rectangle, polygon, circle), emptyList())))
+        for (type in listOf("HORIZONTAL", "VERTICAL")) {
+            for (count in 1..6) assertTrue(cadConstraintEnabled(cad.copy(selection =
+                lines.take(count).map { CadSelection(it.id, "BODY") }), type))
+            val sides = listOf(CadSelection("rect", "EDGE0"), CadSelection("rect", "EDGE2"),
+                CadSelection("ngon", "EDGE0"), CadSelection("ngon", "EDGE3"))
+            assertTrue(cadConstraintEnabled(cad.copy(selection = sides), type))
+            assertFalse(cadConstraintEnabled(cad, type))
+            assertFalse(cadConstraintEnabled(cad.copy(selection = sides + CadSelection("circle", "BODY")), type))
+            assertFalse(cadConstraintEnabled(cad.copy(selection = sides + CadSelection("line1", "END")), type))
+        }
+    }
+
     @Test fun sketchDimensionsDisappearOnExitAndCannotBelongToAnotherSketch() {
         val circle = CadEntity("circle", "CIRCLE", mapOf("radius" to .015))
         val sketch = CadSketch("s", "Boceto", "XY", listOf(circle), emptyList())

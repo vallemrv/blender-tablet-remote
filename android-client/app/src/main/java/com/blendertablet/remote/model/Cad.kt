@@ -38,7 +38,9 @@ data class CadOverlay(val id: String, val points: List<Pair<Float, Float>>, val 
     val handles: List<CadHandle> = emptyList(), val selectedParts: List<String> = emptyList(), val construction: Boolean = false,
     val label: String? = null, val labelPoint: Pair<Float, Float>? = null, val labelOffset: Float = 14f)
 data class CadBody(val id: String, val name: String)
-data class CadPlane(val id: String, val name: String, val translation: List<Double>, val rotation: List<Double>)
+/** [derived]: framed by a face, sketch or top-face support, so its axes are local, not world. */
+data class CadPlane(val id: String, val name: String, val translation: List<Double>, val rotation: List<Double>,
+    val base: String = "XY", val derived: Boolean = false)
 data class CadSurfaceItem(val id: String, val kind: String, val objectName: String, val featureId: String?, val planar: Boolean)
 data class CadMeasurement(val label: String, val value: Double, val unit: String)
 data class CadSurface(val mode: String = "PROFILE", val selection: List<CadSurfaceItem> = emptyList(),

@@ -415,6 +415,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Colineal (`COLLINEAR`) mantiene dos líneas/lados del croquis sobre la misma
   recta, con longitudes y deslizamiento independientes, sin unir extremos.
   Respeta cotas y referencias fijas; no fija automáticamente ninguna línea.
+- Horizontal/Vertical admite varias líneas o lados rectos seleccionados del boceto.
+  Una petición crea una regla por referencia sin duplicarlas, resuelve el conjunto
+  y registra un único undo. Un conflicto rechaza todo sin cambiar geometría ni cotas.
 - Punto sobre recta (`POINT_ON_LINE`) usa un punto y una línea/lado recto de otra
   figura, seleccionados en cualquier orden; admite también el eje de una ranura.
   Solo restringe la distancia perpendicular: el punto desliza por la recta y su
@@ -743,7 +746,11 @@ no quedan archivos o referencias temporales.
   para figuras o perfiles. El menú del croquis ofrece Renombrar y Seleccionar croquis
   completo; las figuras permanecen dentro de la edición. Tocar un nodo selecciona ese paso.
 - Planos ofrece Superior/Frontal/Lateral, una cara y Separación como controles básicos.
-  Crear croquis crea plano y boceto en un undo. Inclinación/XYZ son ajustes opcionales;
+  Los iconos de plano comparten un trípode con colores de Blender y rellenan el plano;
+  Separación nombra su dirección (+Z, −Y, +X o fuera de la cara) y también desplaza
+  el boceto en cara por su normal (`cad.sketch.on_face` `offset`).
+  Crear croquis crea plano y boceto en un undo. Mover/Inclinar son ajustes opcionales
+  con ejes del mundo (U/V/normal si el plano deriva de una cara u otro croquis);
   Planos existentes permite reutilizar y colocar los guardados con la misma interfaz.
 - «Copiar a otro plano paralelo» (menú del croquis) crea con un undo un plano implícito
   referido al croquis fuente (traslación `[0,0,z]`) y una copia con IDs nuevos y reglas

@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -109,7 +110,9 @@ fun IconAction(
             .then(if (enabled) Modifier.clickableNoRipple(onClick) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, description, Modifier.size(Metrics.IconSize), tint = content)
+        // Color.Unspecified keeps a multicolour icon's own colours; disabled only dims it.
+        if (tint == Color.Unspecified) Icon(icon, description, Modifier.size(Metrics.IconSize).alpha(if (enabled) 1f else .35f), tint = Color.Unspecified)
+        else Icon(icon, description, Modifier.size(Metrics.IconSize), tint = content)
     }
 }
 
