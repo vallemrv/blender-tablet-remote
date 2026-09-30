@@ -62,6 +62,23 @@ def query_reference_candidate(payload: dict, previous: dict | None = None) -> di
     return _query_geometric(payload, REFERENCE_THRESHOLDS, previous)
 
 
+def query_sketch_annotation(overlay, u, v, aspect, *, labels_only=True):
+    """Hit a dimension through its label box or its drawn lines, as Android shows them."""
+    candidates=[]
+    for item in overlay:
+        if item.get('kind')!='DIMENSION': continue  # Rules without a value are not selectable.
+        box=item.get('label_box');p=item.get('label_point')
+        if box and p and box[0]<=u<=box[2] and box[1]<=v<=box[3]:
+            candidates.append((0,math.hypot((u-p[0])*aspect,v-p[1]),0 if item.get('selected') else 1,item['id']))
+        if not labels_only:
+            for a,b in item.get('dimension_lines',[]):
+                dx,dy=(b[0]-a[0])*aspect,b[1]-a[1]
+                t=max(0,min(1,((u-a[0])*aspect*dx+(v-a[1])*dy)/max(dx*dx+dy*dy,1e-20)))
+                distance=math.hypot((u-a[0])*aspect-t*dx,v-a[1]-t*dy)
+                if distance<.009: candidates.append((1,distance,0 if item.get('selected') else 1,item['id']))
+    return dict(kind='CONSTRAINT',id=min(candidates)[3],part='LABEL') if candidates else None
+
+
 def query_edit_surface_candidate(obj, u, v, enabled=True, mode="AUTO", previous=None):
     """Ancla sobre la superficie editable viva, incluidas las caras de cortes previos."""
     found = find_view3d()

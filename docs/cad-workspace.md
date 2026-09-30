@@ -86,6 +86,19 @@ longitudes o radios, distancia diagonal/horizontal/vertical, radio, punto medio,
 la selección. El origen (0,0) se puede seleccionar tocándolo en la vista y usar
 como referencia fija.
 
+Toca directamente una **cota** del dibujo con el cursor para editarla: la bandeja
+muestra su valor y una papelera para quitarla. Se selecciona una cada vez; los
+puntos y las aristas conservan su selección múltiple. Las reglas sin valor
+(Horizontal, Tangente, Igualdad…) no se seleccionan en el dibujo: aparecen como
+marcas pequeñas junto a la geometría seleccionada y se quitan desde su lista.
+
+Las distancias llevan líneas auxiliares finas y flechas entre los extremos medidos;
+los radios señalan desde el centro al contorno del círculo o arco. El valor va en
+una píldora compacta. **Arrastra la cota para recolocarla**, sin cambiar su valor
+ni mover la geometría. La colocación se guarda en el boceto y se mantiene al girar
+o acercar la vista. Soltar confirma un único paso de deshacer; cancelar el gesto
+restaura su posición.
+
 **Horizontal/Vertical** se aplica a todas las líneas o lados rectos seleccionados,
 también cuatro o más, con una sola pulsación. Cada arista conserva su propia regla;
 se confirman juntas con un único deshacer. Si alguna contradice una cota o fijación,

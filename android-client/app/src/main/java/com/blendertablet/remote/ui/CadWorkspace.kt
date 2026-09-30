@@ -68,8 +68,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             (if (kind == "SKETCH") "to_sketch_id" else "to_profile_id") to id))
     }
     var editingConstraint by remember(cad.activeSketchId) { mutableStateOf<CadConstraint?>(null) }
-    LaunchedEffect(cad.revision) {
-        editingConstraint?.let { selected -> editingConstraint = cad.sketches.flatMap { it.constraints }.firstOrNull { it.id == selected.id } }
+    LaunchedEffect(cad.selectionKind, cad.selectionId, cad.revision) {
+        editingConstraint = cad.selectedConstraint
+        if (editingConstraint != null) pendingDimension = null
     }
     // Rollback bar position over the full stack; body filtering keeps the order.
     val barPos = cad.rollbackId?.let { id -> cad.history.indexOfFirst { it.id == id } }?.takeIf { it >= 0 }
@@ -174,7 +175,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
         }
     }
     val contextualConstraints = cad.activeSketch?.constraints.orEmpty().filter { c ->
-        cad.selection.any { selected ->
+        (cad.selectionKind == "CONSTRAINT" && cad.selectionId == c.id) || cad.selection.any { selected ->
             c.refs.any { ref -> cadRefsTouch(selected, ref) } ||
                 cad.activeSketch?.entities?.firstOrNull { it.id == selected.id }?.dimensions?.any { c.id in it.constraintIds } == true
         }
@@ -237,7 +238,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                         }
                     } else (if (contextual && constraintsSelectionOnly) contextualConstraints else cad.activeSketch?.constraints.orEmpty()).forEach { c ->
                         CadConstraintRow(c, cad.activeSketch!!, unit, !cad.sessionActive,
-                            { editingConstraint = c; pendingDimension = null },
+                            { command("cad.select", "kind" to "CONSTRAINT", "id" to c.id) },
                             { command("cad.constraint.delete", "constraint_id" to c.id) })
                     }
                 } else {
@@ -386,6 +387,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     fun discardValues() {
         focusManager.clearFocus()
         if (depthPreview || finishPreview) command("cad.session.cancel")
+        if (cad.selectionKind == "CONSTRAINT") command("cad.select_all", "action" to "DESELECT")
         pendingDimension = null; editingConstraint = null; offsetSource = null; mirrorSource = null; resetInputs++
     }
     val canAccept = connected && validDrafts && when {
@@ -403,6 +405,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 offsetSource != null -> "Desfase vinculado: elige dentro o fuera y escribe el grosor · ✓ crea el contorno"
                 mirrorSource != null -> "Simetría de ${mirrorSource!!.name}: elige el plano y su posición · ✓ crea la operación vinculada"
                 feature?.isMirror == true -> "${feature.name} · perfil y profundidad siguen a la operación fuente"
+                editingConstraint != null -> "${cadLabel(editingConstraint!!.type)} · escribe el valor · arrastra la cota para colocarla sin mover el dibujo"
                 loftFrom != null -> "Solevado: toca el perfil del otro croquis (o elígelo en la pila) · vuelve a pulsar Solevado para cancelar"
                 feature?.type == "HELIX" -> "${feature.name} · altura ${formatToolDistance(feature.pitch * feature.turns * lengthFactor(unit), 2)} ${unit.short} · el paso debe superar la altura del perfil · el eje es X, Y o una línea del croquis"
                 feature?.type == "LOFT" -> "${feature.name} · une ${cad.sketches.firstOrNull { it.id == feature.sketchId }?.name.orEmpty()} con otro croquis · mover su plano lo actualiza"
@@ -459,18 +462,21 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             CadDimension("Posición del plano", drafts["mirror_offset"] ?: 0.0, unit, source.id + "mirror",
                                 step = cad.step, minimum = -10000.0, enabled = connected, onDone = ::acceptValues) { drafts["mirror_offset"] = it }
                         }
-                        editingConstraint?.let { constraint ->
-                            PillButton("Quitar cota", enabled = connected) {
-                                command("cad.constraint.delete", "constraint_id" to constraint.id,
-                                    "sketch_id" to cad.sketches.firstOrNull { sketch -> sketch.constraints.any { it.id == constraint.id } }?.id)
-                                editingConstraint = null
-                            }
+                        editingConstraint?.takeIf { it.value != null }?.let { constraint ->
+                            // Cota seleccionada: su valor y, al lado, quitarla. Nada más.
                             val angle = constraint.type == "ANGLE"
-                            CadDimension(cadLabel(constraint.type), drafts["constraint"] ?: constraint.value ?: 0.0, unit, constraint.id,
-                                degrees = angle, step = if (angle) 1.0 else cad.step, enabled = connected,
-                                minimum = if (angle) .01 else if (constraint.type in listOf("DISTANCE_X", "DISTANCE_Y")) 0.0 else .0000001,
-                                maximum = if (angle) 359.99 else 10000.0,
-                                onDone = ::acceptValues) { drafts["constraint"] = it }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CadDimension(cadLabel(constraint.type), drafts["constraint"] ?: constraint.value!!, unit, constraint.id,
+                                    degrees = angle, step = if (angle) 1.0 else cad.step, enabled = connected, readOnly = livePreview,
+                                    minimum = if (angle) .01 else if (constraint.type in listOf("DISTANCE_X", "DISTANCE_Y")) 0.0 else .0000001,
+                                    maximum = if (angle) 359.99 else 10000.0,
+                                    onDone = ::acceptValues) { drafts["constraint"] = it }
+                                CadAction("DELETE", "Quitar cota · conserva el dibujo", enabled = connected && !cad.sessionActive) {
+                                    command("cad.constraint.delete", "constraint_id" to constraint.id,
+                                        "sketch_id" to cad.sketches.firstOrNull { sketch -> sketch.constraints.any { it.id == constraint.id } }?.id)
+                                    editingConstraint = null
+                                }
+                            }
                         }
                         pendingDimension?.let { type ->
                             CadDimension(if (type == "FILLET") "Radio" else cadLabel(type), drafts["constraint"] ?: cad.dimensionOptions[type]?.value ?: cad.step * 5, unit, type,

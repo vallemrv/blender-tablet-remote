@@ -1511,7 +1511,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.convert` | `{body_id}` o `{feature_id}` | Copia el cuerpo completo como malla independiente con sus modificadores, sale a Object y conserva el documento; el original queda oculto fuera de CAD |
 | `cad.settings` | `{step?,increment?,construction?,show_scene?}` | Paso métrico positivo y snap, sin undo ni cambio geométrico |
 | `cad.drag.begin` | `{u,v}` | Sondea y conserva selección previa; prepara arrastre del grupo si cubre el elemento, sin cambiar selección todavía |
-| `cad.drag.update` | `{u,v}` | Reconstruye y resuelve restricciones desde baseline |
+| `cad.drag.update` | `{u,v}` | Reconstruye y resuelve geometría desde baseline; sobre una cota solo mueve su rótulo en el plano, sin snap, solver ni evaluación del sólido |
 | `cad.drag.end` | `{}` | Sin UPDATE alterna el elemento sondeado en BEGIN; con arrastre confirma el último candidato. Nunca vuelve a sondear |
 | `cad.points.weld` | `{}` | Une los puntos seleccionados mediante coincidencias persistentes; conserva el último punto (el origen manda si está incluido), resuelve restricciones y crea un único undo |
 | `cad.select_all` | `{action:"SELECT\\|DESELECT",sketch_id?}` | En boceto selecciona figuras (también construcción, nunca origen). En 3D selecciona el croquis indicado como SKETCH. DESELECT limpia; sin undo |
@@ -1646,7 +1646,21 @@ SYMMETRIC recibe tres puntos, con el centro en último lugar. COINCIDENT admite 
 origen. SYMMETRIC_LINE recibe dos puntos y una línea/lado como eje, en ese orden.
 La construcción participa en las restricciones y queda fuera de perfiles.
 `overlay` anuncia `construction` para líneas discontinuas y `label`, `label_point`,
-`label_offset` para cotas/etiquetas; las entradas `kind:DIMENSION` no son seleccionables.
+`label_offset` para etiquetas de geometría. Las cotas (reglas con `value`) publican
+`kind:DIMENSION`, `label_point`, `label_box:[left,top,right,bottom]`,
+`dimension_lines:[[[u1,v1],[u2,v2]],...]` y `arrows:[[[u,v],[towards_u,towards_v]],...]`.
+Cada flecha tiene su punta en el primer punto y su base orientada hacia el segundo;
+todas las coordenadas son normalizadas respecto al vídeo. `label_box` es la zona
+táctil (mayor que la píldora que dibuja Android, centrada en `label_point`).
+Las reglas sin valor solo se publican como `kind:CONSTRAINT` con `label`/`label_point`
+cuando tocan una entidad seleccionada; no tienen caja ni se pueden seleccionar.
+`cad.select {kind:"CONSTRAINT",id}` o tocar una cota selecciona solo esa cota,
+incluso con `additive:true`; una regla sin valor responde `bad_payload`. Otra cota
+sustituye la selección; no se mezcla con entidades. El arrastre usa `cad.drag.*` y
+persiste `constraints[].label_position:[x,y]` en metros del boceto. Mover la etiqueta
+no cambia `value`, entidades ni restricciones geométricas. END confirma la última
+posición, con un undo; cancelar o desconectar restaura baseline/selección. Un toque
+sin arrastre no crea undo.
 Las medidas del overlay usan la unidad de escena. El panel Android filtra por IDs
 y roles compartidos con la selección, incluidos extremos de aristas.
 El solver admite 300 parámetros y resuelve el conjunto completo; una cota escrita

@@ -858,7 +858,8 @@ def confirm(payload):
     if session.get('at_bar'):
         # A node inserted at the bar becomes the viewed state immediately.
         runtime.rollback_id = session['feature_id']
-    yield from runtime.rebuild_steps(doc, limit=runtime.bar(doc), extrusion_cache=session.get('extrusion_cache'))
+    if not session.get('annotation_id'):
+        yield from runtime.rebuild_steps(doc, limit=runtime.bar(doc), extrusion_cache=session.get('extrusion_cache'))
     runtime.persist(doc, advance=True)
     runtime.session = None
     if session['operation'] in ('EXTRUDE','CUT'):
@@ -999,9 +1000,13 @@ def _pick(payload):
     from ..bpy_utils import find_view3d
     found=find_view3d()
     aspect=found[2].width/max(found[2].height,1) if found else 1.
+    from .snap import query_sketch_annotation
+    overlay=runtime.overlay(runtime.doc())
+    annotation=query_sketch_annotation(overlay,u,v,aspect)
+    if runtime.active_sketch_id and annotation: return annotation
     candidates=[]
-    for item in runtime.overlay(runtime.doc()):
-        if item.get('kind')=='DIMENSION': continue
+    for item in overlay:
+        if item.get('kind') in ('DIMENSION','CONSTRAINT'): continue
         ring=item['points']
         if runtime.active_sketch_id:
             for handle in item.get('handles',[]):
@@ -1021,7 +1026,8 @@ def _pick(payload):
                 _,e=model.entity(runtime.doc(),item['id'])
                 part='EDGE'+str(index) if e['type'] in ('RECTANGLE','NGON') else 'BODY'
                 candidates.append((1,distance,dict(kind='ENTITY',id=item['id'],part=part)))
-    return min(candidates,key=lambda c:c[:2])[2] if candidates else None
+    return min(candidates,key=lambda c:c[:2])[2] if candidates else (
+        query_sketch_annotation(overlay,u,v,aspect,labels_only=False) if runtime.active_sketch_id else None)
 
 
 def _set_selection(refs):
@@ -1042,6 +1048,7 @@ def _covers(selected, hit):
 
 def _toggle_refs(refs, hit):
     if hit is None: return []
+    if hit.get('kind')=='CONSTRAINT': return [hit]
     # A finished polygon keeps its profile selected for extrusion. Picking a
     # sketch side enters element selection; the profile is not another element.
     if hit.get('kind')=='ENTITY': refs=[r for r in refs if r.get('kind')=='ENTITY']
@@ -1083,6 +1090,11 @@ def select(payload):
         elif kind=='ENTITY':
             sketch,e=model.entity(doc,identifier)
             if sketch['id']!=runtime.active_sketch_id: raise BadPayload('Abre el boceto antes de seleccionar sus entidades')
+        elif kind=='CONSTRAINT':
+            sketch=model.find(doc,'sketches',runtime.active_sketch_id)
+            if model.find(sketch,'constraints',identifier).get('value') is None:
+                raise BadPayload('Solo las cotas se seleccionan; las reglas se gestionan en su lista')
+            ref['part']='LABEL'
         elif kind=='SKETCH':
             sketch=model.find(doc,'sketches',identifier)
             _require_reachable(doc,sketch['id'])
@@ -1136,6 +1148,12 @@ def drag_begin(payload):
     session=runtime.begin(payload,'DRAG')
     session.update(sketch_id=sketch['id'],refs=refs,start=start,hit=hit,
                    selection_before=selection_before,dragged=False)
+    if hit and hit['kind']=='CONSTRAINT':
+        from ..cad import annotations, dimensions
+        rules=dimensions.visible_constraints(sketch)
+        rule=model.find(sketch,'constraints',hit['id'])
+        index=next((i for i,c in enumerate(rules) if c['id']==rule['id']),0)
+        session.update(annotation_id=rule['id'],annotation_start=annotations.layout(sketch,rule,index)['label'],refs=[hit])
     # A tap toggles only on END; a second finger can still cancel without changing selection.
     return runtime.status()
 
@@ -1150,6 +1168,13 @@ def drag_update(payload):
     _set_selection(session['refs'])
     doc=copy.deepcopy(session['baseline']); sketch=model.find(doc,'sketches',session['sketch_id'])
     p=runtime.point(payload,sketch); dx,dy=[p[i]-session['start'][i] for i in (0,1)]
+    if session.get('annotation_id'):
+        rule=model.find(sketch,'constraints',session['annotation_id'])
+        position=[session['annotation_start'][0]+dx,session['annotation_start'][1]+dy]
+        rule['label_position']=[model.number(value) for value in position]
+        changed=math.hypot(dx,dy)>1e-10
+        session.update(preview=doc,candidate=rule['id'] if changed else None)
+        return runtime.status()
     if runtime.increment: dx,dy=[round(d/runtime.step)*runtime.step for d in (dx,dy)]
     try:
         if session['hit'].get('intent')=='ANGLE':

@@ -359,7 +359,7 @@ class CadRuntime:
             original = session['baseline']
             self.session = None
             if restore and self._scene == bpy.context.scene.as_pointer():
-                if session['operation']!='DRAG' or session.get('preview'): self.rebuild(original, limit=self.bar(original))
+                if not session.get('annotation_id') and (session['operation']!='DRAG' or session.get('preview')): self.rebuild(original, limit=self.bar(original))
             self.selection = copy.deepcopy(session.get('selection_before')) if session['operation']=='DRAG' and restore else None
         self._baseline_evaluation = {}
         self._evaluations = self._current_evaluation.copy()
@@ -541,9 +541,9 @@ class CadRuntime:
                     selected=any(r['id']=='ORIGIN' for r in refs)
                     result.append(dict(id='ORIGIN',points=[],closed=False,selected=selected,
                         handles=[dict(part='POINT',point=origin,selected=selected)],label='0,0',label_point=origin))
+            def project(p):
+                return camera.project(Vector(world(sketch,*p))/scale,found[3])
             for e in entries:
-                def project(p):
-                    return camera.project(Vector(world(sketch,*p))/scale,found[3])
                 points = [project(p) for p in model.outline(e)]
                 if any(p is None for p in points):
                     continue
@@ -561,31 +561,9 @@ class CadRuntime:
                 result.append(dict(id=e['id'],points=points,closed=e['type'] not in ('LINE','ARC','POINT'),
                                    selected=selected,handles=handle_points,selected_parts=selected_parts,construction=e.get('construction',False)))
             if sketch['id']==self.active_sketch_id:
-                labels={'COINCIDENT':'●','POINT_ON_LINE':'P∈L','HORIZONTAL':'H','VERTICAL':'V','PARALLEL':'∥','COLLINEAR':'Col',
-                        'PERPENDICULAR':'⊥','TANGENT':'T','EQUAL':'=','FIX':'Fijo','MIDPOINT':'½',
-                        'SYMMETRIC':'Sim','SYMMETRIC_LINE':'Sim⟋','OFFSET':'Grosor'}
-                unit=bpy.context.scene.unit_settings.length_unit
-                factor,suffix={'MILLIMETERS':(1000,'mm'),'CENTIMETERS':(100,'cm')}.get(unit,(1,'m'))
-                for index,c in enumerate(sketch.get('constraints',[])):
-                    anchors=[]
-                    for ref in c['refs']:
-                        entity=sketch_geometry.get_entity(sketch,ref)
-                        if ref.get('part') in sketch_geometry.handles(entity): anchors.append(tuple(sketch_geometry.point(sketch,ref)))
-                        elif entity['type'] in ('LINE','RECTANGLE'):
-                            if entity['type']=='RECTANGLE' and ref.get('part','BODY')=='BODY': anchors.extend(model.outline(entity))
-                            else: anchors.extend(tuple(p) for p in sketch_geometry.line(sketch,ref))
-                        else: anchors.append((entity['x'],entity['y']))
-                    if not anchors: continue
-                    anchor=tuple(sum(p[i] for p in anchors)/len(anchors) for i in (0,1))
-                    projected=project(anchor)
-                    if projected is None: continue
-                    label=labels.get(c['type'],c['type'])
-                    if c['type']=='ANGLE':
-                        label='∠ '+format(c['value'],'.6g')+'°'
-                    elif c.get('value') is not None:
-                        label={'RADIUS':'R ', 'DISTANCE_X':'H ', 'DISTANCE_Y':'V '}.get(c['type'],'')+format(c['value']*factor,'.6g')+' '+suffix
-                    result.append(dict(id=c['id'],kind='DIMENSION',points=[],closed=False,selected=False,
-                        label=label,label_point=projected,label_offset=14+(index%4)*15))
+                from . import annotations
+                result.extend(annotations.overlay(sketch,project,self.selection,
+                    bpy.context.scene.unit_settings.length_unit,found[2].width/max(found[2].height,1)))
         return result
 
     def cut_ghost(self):
@@ -645,6 +623,9 @@ class CadRuntime:
                 self.active_sketch_id = None
             if session and session.get('preview'):
                 doc = session['preview']
+            if (self.selection or {}).get('kind')=='CONSTRAINT':
+                active=next((s for s in doc['sketches'] if s['id']==self.active_sketch_id),None)
+                if active is None or not any(c['id']==self.selection['id'] for c in active['constraints']): self.selection=None
             if not any(b['id']==self.active_body_id for b in doc['bodies']): self.active_body_id=doc['bodies'][0]['id']
             from . import dimensions
             sketch=next((s for s in doc['sketches'] if s['id']==self.active_sketch_id),None)

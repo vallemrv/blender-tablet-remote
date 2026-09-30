@@ -36,7 +36,9 @@ data class CadFeature(val id: String, val name: String, val sketchId: String,
 data class CadHandle(val part: String, val point: Pair<Float, Float>, val selected: Boolean, val intent: String = "POINT")
 data class CadOverlay(val id: String, val points: List<Pair<Float, Float>>, val closed: Boolean, val selected: Boolean,
     val handles: List<CadHandle> = emptyList(), val selectedParts: List<String> = emptyList(), val construction: Boolean = false,
-    val label: String? = null, val labelPoint: Pair<Float, Float>? = null, val labelOffset: Float = 14f)
+    val label: String? = null, val labelPoint: Pair<Float, Float>? = null, val labelOffset: Float = 14f,
+    val kind: String = "ENTITY", val labelBox: List<Float> = emptyList(),
+    val dimensionLines: List<List<Pair<Float, Float>>> = emptyList(), val arrows: List<List<Pair<Float, Float>>> = emptyList())
 data class CadBody(val id: String, val name: String)
 /** [derived]: framed by a face, sketch or top-face support, so its axes are local, not world. */
 data class CadPlane(val id: String, val name: String, val translation: List<Double>, val rotation: List<Double>,
@@ -81,6 +83,7 @@ data class CadState(
     val rollbackId: String? = null,
 ) {
     val activeSketch get() = sketches.firstOrNull { it.id == activeSketchId }
+    val selectedConstraint get() = activeSketch?.constraints?.firstOrNull { selectionKind == "CONSTRAINT" && it.id == selectionId }
     val selectedEntity get() = activeSketch?.entities?.firstOrNull { selectionKind == "ENTITY" && it.id == selectionId }
     val selectedFeature get() = features.firstOrNull { (selectionKind == "FEATURE" && it.id == selectionId) || (selectionKind == "SURFACE" && it.id == surface.selection.lastOrNull()?.featureId) }
     /** Resolve the source document sketch, including profiles made from several entities. */

@@ -216,6 +216,11 @@ def validate_constraints(sketch):
         if c.get('type') not in CONSTRAINTS or not isinstance(c.get('id'),str) or c['id'] in ids:
             raise BadPayload('Restricción CAD no válida')
         ids.add(c['id'])
+        if 'label_position' in c:
+            position=c['label_position']
+            if not isinstance(position,list) or len(position)!=2:
+                raise BadPayload('La posición de la cota requiere dos coordenadas del boceto')
+            for value in position: model.number(value)
         refs = c.get('refs')
         typ = c['type']
         count = (3,) if typ in ('SYMMETRIC','SYMMETRIC_LINE') else (1,2) if typ in ('DISTANCE','DISTANCE_X','DISTANCE_Y') else (1,) if typ in ('FIX','HORIZONTAL','VERTICAL','RADIUS','ANGLE') else (2,)

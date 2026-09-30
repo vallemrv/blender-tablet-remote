@@ -412,6 +412,14 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   toque sin cambios no crea undo. El redondeo recorta dos líneas conectadas y
   añade un arco con coincidencias, tangencias y radio. Las uniones de línea usan
   la política pegajosa común de `commands/snap.py`.
+- En el boceto solo las cotas (reglas con valor) se tocan y arrastran, una cada vez
+  (`CONSTRAINT`); puntos/aristas siguen siendo multiselección. Las reglas sin valor
+  (H, V, ⊥, =…) son marcas discretas, no seleccionables, solo junto a la geometría
+  seleccionada; se gestionan desde su lista. Las cotas se dibujan como un plano:
+  líneas auxiliares finas, flechas esbeltas y el valor en una píldora de tamaño fijo;
+  la caja táctil del backend es mayor que la píldora. Arrastrar solo cambia
+  `label_position` en metros del croquis, sin solver ni evaluación del sólido. END
+  conserva la última preview y crea un undo; cancelar restaura y un toque no crea undo.
 - Colineal (`COLLINEAR`) mantiene dos líneas/lados del croquis sobre la misma
   recta, con longitudes y deslizamiento independientes, sin unir extremos.
   Respeta cotas y referencias fijas; no fija automáticamente ninguna línea.

@@ -1072,6 +1072,88 @@ private class GestureView(
         onShape(shapeTool, nx(shapeStartX), ny(shapeStartY), nx(shapeCurrentX), ny(shapeCurrentY))
     }
 
+    private val cadAnnotationPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+    }
+
+    /**
+     * Cota de boceto al estilo de un plano técnico: líneas auxiliares finas, flechas
+     * esbeltas y el valor en una píldora compacta de tamaño fijo. La caja táctil del
+     * backend es más grande que la píldora; se dibuja solo lo que se lee.
+     */
+    private fun drawCadAnnotation(canvas: Canvas, annotation: com.blendertablet.remote.model.CadOverlay) {
+        val density = resources.displayMetrics.density
+        val ink = if (annotation.selected) 0xffffb347.toInt() else 0xd9e8edf2.toInt()
+        val paint = cadAnnotationPaint
+        paint.color = ink
+        paint.style = android.graphics.Paint.Style.STROKE
+        paint.strokeWidth = 1.1f * density
+        annotation.dimensionLines.forEach { segment ->
+            if (segment.size == 2) canvas.drawLine(segment[0].first * width, segment[0].second * height,
+                segment[1].first * width, segment[1].second * height, paint)
+        }
+        paint.style = android.graphics.Paint.Style.FILL
+        annotation.arrows.forEach { arrow ->
+            if (arrow.size != 2) return@forEach
+            val x = arrow[0].first * width; val y = arrow[0].second * height
+            val dx = (arrow[1].first - arrow[0].first) * width
+            val dy = (arrow[1].second - arrow[0].second) * height
+            val length = hypot(dx, dy)
+            if (length < .01f) return@forEach
+            val size = minOf(9f * density, length * .4f)
+            val half = size * .28f
+            val ux = dx / length; val uy = dy / length
+            val path = android.graphics.Path().apply {
+                moveTo(x, y)
+                lineTo(x + ux * size - uy * half, y + uy * size + ux * half)
+                lineTo(x + ux * size + uy * half, y + uy * size - ux * half)
+                close()
+            }
+            canvas.drawPath(path, paint)
+        }
+        val label = annotation.label.orEmpty()
+        val (u, v) = annotation.labelPoint ?: return
+        paint.textSize = 12.5f * density
+        val textWidth = paint.measureText(label)
+        val padX = 7f * density; val padY = 4f * density
+        val metrics = paint.fontMetrics
+        val textHeight = metrics.descent - metrics.ascent
+        val cx = u * width; val cy = v * height
+        val rect = android.graphics.RectF(cx - textWidth / 2 - padX, cy - textHeight / 2 - padY,
+            cx + textWidth / 2 + padX, cy + textHeight / 2 + padY)
+        val corner = rect.height() / 2
+        paint.color = if (annotation.selected) 0xf2362a1a.toInt() else 0xe61a1d22.toInt()
+        canvas.drawRoundRect(rect, corner, corner, paint)
+        paint.style = android.graphics.Paint.Style.STROKE
+        paint.strokeWidth = (if (annotation.selected) 1.5f else .8f) * density
+        paint.color = if (annotation.selected) ink else 0x59e8edf2
+        canvas.drawRoundRect(rect, corner, corner, paint)
+        paint.style = android.graphics.Paint.Style.FILL
+        paint.color = ink
+        paint.textAlign = android.graphics.Paint.Align.CENTER
+        canvas.drawText(label, cx, cy - (metrics.ascent + metrics.descent) / 2, paint)
+        paint.textAlign = android.graphics.Paint.Align.LEFT
+    }
+
+    /** Marca discreta de una regla sin valor (H, V, ⊥…), solo junto a la geometría seleccionada. */
+    private fun drawCadRuleMark(canvas: Canvas, mark: com.blendertablet.remote.model.CadOverlay) {
+        val (u, v) = mark.labelPoint ?: return
+        val density = resources.displayMetrics.density
+        val paint = cadAnnotationPaint
+        paint.style = android.graphics.Paint.Style.FILL
+        paint.textSize = 10.5f * density
+        val label = mark.label.orEmpty()
+        val x = u * width + 9f * density; val y = v * height - mark.labelOffset * density
+        val w = paint.measureText(label)
+        val metrics = paint.fontMetrics
+        val rect = android.graphics.RectF(x - 3.5f * density, y + metrics.ascent - 1.5f * density,
+            x + w + 3.5f * density, y + metrics.descent + 1.5f * density)
+        paint.color = 0xcc1a1d22.toInt()
+        canvas.drawRoundRect(rect, 3f * density, 3f * density, paint)
+        paint.color = 0xff9ec3cc.toInt()
+        canvas.drawText(label, x, y, paint)
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (sculptEnabled && sculptCursorVisible) {
@@ -1085,6 +1167,8 @@ private class GestureView(
             canvas.drawCircle(sculptCursorX, sculptCursorY, radius, sculptCursorPaint)
         }
         cadOverlay.forEach { stroke ->
+            if (stroke.kind == "DIMENSION") { drawCadAnnotation(canvas, stroke); return@forEach }
+            if (stroke.kind == "CONSTRAINT") { drawCadRuleMark(canvas, stroke); return@forEach }
             cadPaint.color = if (stroke.selected && (stroke.selectedParts.isEmpty() || "BODY" in stroke.selectedParts)) 0xffffb347.toInt() else 0xff57dfe6.toInt()
             val path = android.graphics.Path()
             stroke.points.forEachIndexed { index, (u, v) ->

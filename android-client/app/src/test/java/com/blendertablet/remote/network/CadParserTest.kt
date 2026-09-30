@@ -5,6 +5,32 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadParserTest {
+    @Test fun dimensionSelectionCarriesArrowsAndAnIndividualConstraint() {
+        val state = CadParser.state(JSONObject("""{"version":1,"active_sketch_id":"s",
+            "selection":{"kind":"CONSTRAINT","id":"d","part":"LABEL","items":[{"kind":"CONSTRAINT","id":"d","part":"LABEL"}]},
+            "document":{"sketches":[{"id":"s","name":"Sketch","plane":"XY","constraints":[
+                {"id":"d","type":"DISTANCE","value":0.08,"refs":[{"id":"e","part":"BODY"}]}]}]},
+            "overlay":[{"id":"d","kind":"DIMENSION","selected":true,"label":"80 mm","label_point":[0.4,0.5],
+                "label_box":[0.3,0.48,0.5,0.52],"dimension_lines":[[[0.2,0.5],[0.6,0.5]]],
+                "arrows":[[[0.2,0.5],[0.6,0.5]],[[0.6,0.5],[0.2,0.5]]]}]}"""))
+        assertEquals("d", state.selectedConstraint!!.id)
+        assertNull(state.selectedEntity)
+        val overlay = state.overlay.single()
+        assertEquals("DIMENSION", overlay.kind)
+        assertTrue(overlay.selected)
+        assertEquals(4, overlay.labelBox.size)
+        assertEquals(listOf(.2f to .5f, .6f to .5f), overlay.dimensionLines.single())
+        assertEquals(2, overlay.arrows.size)
+        assertNull(state.copy(activeSketchId = null).selectedConstraint)
+    }
+
+    @Test fun malformedAnnotationSegmentsDoNotBecomeCanvasCoordinates() {
+        val state = CadParser.state(JSONObject("""{"version":1,"overlay":[{"id":"d","kind":"CONSTRAINT",
+            "label_box":[0,0,1],"dimension_lines":[[[0,0]],[[0,0],[1,1]],[[null,0],[1,1]]]}]}"""))
+        assertTrue(state.overlay.single().labelBox.isEmpty())
+        assertEquals(1, state.overlay.single().dimensionLines.size)
+    }
+
     @Test fun pointOnLineIsDiscoveredAndItsPointAndLineRolesArePreserved() {
         val capabilities = CadParser.capabilities(JSONObject("""{"version":2,"length_unit":"METERS","planes":["XY"],
             "constraints":["POINT_ON_LINE","FUTURE"]}"""))

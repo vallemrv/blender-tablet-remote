@@ -587,6 +587,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (cad.workspace) {
             if (cad.surface.mode != "PROFILE") { cadCommand("cad.surface.clear"); return }
             if (cad.activeSketchId != null) {
+                if (cad.selectionKind == "CONSTRAINT") {
+                    cadCommand("cad.constraint.delete", mapOf("constraint_id" to cad.selectionId)); return
+                }
                 val rounding = cad.selectedEntity?.takeIf { it.isFillet && cad.selection.map { ref -> ref.id }.distinct().size == 1 }
                 if (rounding != null) cadCommand("cad.fillet.remove", mapOf("entity_id" to rounding.id))
                 else cadCommand("cad.entity.delete")

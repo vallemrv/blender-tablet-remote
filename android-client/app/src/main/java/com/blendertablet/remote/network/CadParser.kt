@@ -5,6 +5,18 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 object CadParser {
+    private fun annotationSegments(values: org.json.JSONArray?): List<List<Pair<Float, Float>>> =
+        (0 until (values?.length() ?: 0)).mapNotNull segment@ { index ->
+            val segment = values?.optJSONArray(index) ?: return@segment null
+            if (segment.length() != 2) return@segment null
+            val points = (0..1).mapNotNull point@ { end ->
+                val point = segment.optJSONArray(end) ?: return@point null
+                val x = point.optDouble(0); val y = point.optDouble(1)
+                if (x.isFinite() && y.isFinite()) x.toFloat() to y.toFloat() else null
+            }
+            points.takeIf { it.size == 2 }
+        }
+
     private fun objects(a: JSONArray?) = if (a == null) emptyList() else
         (0 until a.length()).mapNotNull { a.optJSONObject(it) }
     private fun strings(a: JSONArray?) = if (a == null) emptyList() else
@@ -78,7 +90,11 @@ object CadParser {
                         val x=p.optDouble(0); val y=p.optDouble(1)
                         if (x.isFinite() && y.isFinite()) x.toFloat() to y.toFloat() else null
                     },
-                    item.optDouble("label_offset",14.0).toFloat())
+                    item.optDouble("label_offset",14.0).toFloat(), item.optString("kind", "ENTITY"),
+                    item.optJSONArray("label_box")?.let { box ->
+                        (0 until box.length()).map { box.optDouble(it).toFloat() }
+                            .takeIf { it.size == 4 && it.all(Float::isFinite) && it[2] > it[0] && it[3] > it[1] }
+                    }.orEmpty(), annotationSegments(item.optJSONArray("dimension_lines")), annotationSegments(item.optJSONArray("arrows")))
             }, error = j.id("error"),
             selection = objects(selection?.optJSONArray("items")).map { CadSelection(it.optString("id"), it.optString("part", "BODY")) },
             step = j.optDouble("step", .001).takeIf { it.isFinite() && it > 0 } ?: .001,

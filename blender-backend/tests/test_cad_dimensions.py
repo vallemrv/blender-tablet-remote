@@ -112,7 +112,7 @@ class DimensionTests(CadTests):
         geometry.solve(sketch,geometry.arc_angle_goals(e,(.1,.13),locked),drag=True)
         self.assertAlmostEqual(model.find(sketch,'entities',arc)['sweep'],locked,places=6)
         rule=next(c for c in sketch['constraints'] if c['type']=='ANGLE')
-        self.assertIn('∠',next(o['label'] for o in runtime.overlay(runtime.doc()) if o['id']==rule['id']))
+        self.assertTrue(next(o['label'] for o in runtime.overlay(runtime.doc()) if o['id']==rule['id']).endswith('°'))
         cad.constraint_set(dict(constraint_id=rule['id'],value=45,**OWNER))
         self.assertAlmostEqual(abs(model.entity(runtime.doc(),arc)[1]['sweep']),45.,places=6)
         with self.assertRaises(CommandError): cad.constraint_set(dict(constraint_id=rule['id'],value=400,**OWNER))
