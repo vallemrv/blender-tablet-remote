@@ -156,14 +156,12 @@ def sketch_finish(payload):
     active=runtime.active_sketch_id
     runtime.solid_view()
     doc=runtime.doc()
-    reachable=_reachable_ids(doc)
-    features=[f for f in doc['features'] if f['enabled'] and f.get('body_id')==runtime.active_body_id and f['id'] in reachable]
     sketch=next((s for s in doc['sketches'] if s['id']==active),None)
     profiles=model.profiles(sketch) if sketch else []
     if profiles and not any(f['sketch_id']==active for f in doc['features']):
         runtime.selection=(dict(kind='SKETCH',id=active) if len(profiles)>1 else dict(kind='PROFILE',id=profiles[0]['id']))
-    elif features:
-        runtime.selection=dict(kind='FEATURE',id=features[-1]['id']); _activate_feature(doc,features[-1]['id'])
+    # Leaving a used sketch must not open an unrelated operation's dimensions.
+    # Existing operations are inspected only after an explicit selection in 3D.
     else: runtime.selection=None
     return runtime.status()
 

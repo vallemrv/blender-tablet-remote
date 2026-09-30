@@ -134,6 +134,29 @@ class SurfaceTests(CadTests):
         self.assertEqual(state['selection']['id'],'profile_'+circle)
         self.assertIsNone(runtime.active_sketch_id)
 
+    def test_used_sketch_exit_does_not_reopen_last_feature_properties(self):
+        feature=self.extrude(self.rect())
+        sketch=runtime.doc()['sketches'][0]['id']
+        cad.sketch_activate(dict(sketch_id=sketch,**OWNER))
+        before=model.dumps(runtime.doc())
+        with patch('blender_tablet_remote.commands.cad.undo_push') as undo:
+            state=cad.sketch_finish(OWNER)
+            undo.assert_not_called()
+        self.assertIsNone(state['active_sketch_id'])
+        self.assertIsNone(state['selection'])
+        self.assertFalse(state['session']['active'])
+        self.assertEqual(model.dumps(runtime.doc()),before)
+        # Deliberately selecting the operation still exposes its editable depth.
+        state=cad.select(dict(kind='FEATURE',id=feature,**OWNER))
+        self.assertEqual(state['selection']['id'],feature)
+
+    def test_empty_sketch_exit_does_not_select_an_existing_operation(self):
+        self.extrude(self.rect())
+        cad.sketch_create(dict(plane='XY',**OWNER))
+        state=cad.sketch_finish(OWNER)
+        self.assertIsNone(state['selection'])
+        self.assertIsNone(state['active_sketch_id'])
+
     def test_measurements_use_scene_units_and_measure_only_announced_quantities(self):
         def edge(a,b): return dict(kind='EDGE',segments=[[a,b]],points=[a,b],triangles=[],planar=False)
         a=edge((0,0,0),(10,0,0)); b=edge((0,3,0),(10,3,0))

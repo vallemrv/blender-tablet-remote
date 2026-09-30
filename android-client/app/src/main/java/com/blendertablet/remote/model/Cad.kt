@@ -79,7 +79,7 @@ data class CadState(
     val rollbackId: String? = null,
 ) {
     val activeSketch get() = sketches.firstOrNull { it.id == activeSketchId }
-    val selectedEntity get() = sketches.flatMap { it.entities }.firstOrNull { selectionKind == "ENTITY" && it.id == selectionId }
+    val selectedEntity get() = activeSketch?.entities?.firstOrNull { selectionKind == "ENTITY" && it.id == selectionId }
     val selectedFeature get() = features.firstOrNull { (selectionKind == "FEATURE" && it.id == selectionId) || (selectionKind == "SURFACE" && it.id == surface.selection.lastOrNull()?.featureId) }
     /** Resolve the source document sketch, including profiles made from several entities. */
     val selectedSketch get() = sketches.firstOrNull { sketch ->

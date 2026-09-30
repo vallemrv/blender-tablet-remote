@@ -147,7 +147,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - No se mantienen caminos antiguo y nuevo para una misma función.
 - Las decisiones duraderas se resumen aquí; Git conserva el historial.
 - APK y ZIP se compilan desde el mismo estado cuando cambia el contrato entre ambos.
-- Las entregas Android se envían al usuario por Telegram cuando lo solicite.
+- Cada entrega Android incluye automáticamente el APK por Telegram, sin esperar
+  otra petición del usuario. Es una preferencia permanente indicada por el usuario.
 
 ## Criterio de diseño escalable
 
@@ -733,7 +734,11 @@ no quedan archivos o referencias temporales.
 - Finalizar boceto restaura una vista 3D orbital, con encuadre del resultado, sin
   escribir `rv3d`. Extruir/Vaciar muestran su preview en 3D. Si el croquis nuevo tiene
   varios perfiles se selecciona completo (`SKETCH`), no su última figura; un perfil
-  único conserva `PROFILE`. La pila muestra solo croquis y operaciones, sin filas
+  único conserva `PROFILE`. Al cerrar un boceto usado o vacío no se selecciona
+  automáticamente la última operación ni se abren sus propiedades. Las medidas
+  de figuras y los controles de dibujo solo se muestran dentro del boceto activo;
+  editar una operación en 3D requiere seleccionarla expresamente.
+  La pila muestra solo croquis y operaciones, sin filas
   para figuras o perfiles. El menú del croquis ofrece Renombrar y Seleccionar croquis
   completo; las figuras permanecen dentro de la edición. Tocar un nodo selecciona ese paso.
 - Planos ofrece Superior/Frontal/Lateral, una cara y Separación como controles básicos.

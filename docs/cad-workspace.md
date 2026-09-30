@@ -23,6 +23,10 @@ activa dibujo; volver al **Cursor** permite editar lo que ya existe.
 **Finalizar boceto**, siempre visible en la cabecera durante la edición, vuelve
 a los sólidos. Entrar/salir del boceto no crea undo; cambiar su geometría sí
 actualiza las operaciones dependientes y registra un paso de undo.
+Al salir se retiran las cotas de las figuras y las propiedades de dibujo. Si el
+boceto ya tiene operaciones, la bandeja no abre automáticamente la última: para
+editarla, selecciónala en la pila. Un boceto nuevo conserva su perfil o conjunto
+de perfiles seleccionado para poder extruirlo.
 
 - Dibujar una línea: arrastrar entre extremos. Acercarse a un extremo existente
   lo adquiere con la política táctil común y guarda una coincidencia persistente.

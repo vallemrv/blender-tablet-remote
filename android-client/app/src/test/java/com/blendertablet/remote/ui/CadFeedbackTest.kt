@@ -5,6 +5,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadFeedbackTest {
+    @Test fun sketchDimensionsDisappearOnExitAndCannotBelongToAnotherSketch() {
+        val circle = CadEntity("circle", "CIRCLE", mapOf("radius" to .015))
+        val sketch = CadSketch("s", "Boceto", "XY", listOf(circle), emptyList())
+        val other = CadSketch("other", "Otro", "XY", emptyList(), emptyList())
+        val editing = CadState(activeSketchId = "s", sketches = listOf(sketch, other),
+            selectionKind = "ENTITY", selectionId = "circle")
+        assertEquals(circle, editing.selectedEntity)
+        assertNull(editing.copy(activeSketchId = null).selectedEntity)
+        assertNull(editing.copy(activeSketchId = "other").selectedEntity)
+        assertNull(editing.copy(activeSketchId = null, selectionKind = "PROFILE",
+            selectionId = "profile_circle").selectedEntity)
+        assertEquals(circle, editing.copy(activeSketchId = "s").selectedEntity)
+    }
+
     @Test fun pointOnLineRequiresOnePointAndAnotherStraightReferenceInEitherOrder() {
         val entities = listOf(CadEntity("a", "LINE", emptyMap()), CadEntity("b", "LINE", emptyMap()),
             CadEntity("c", "CIRCLE", emptyMap()), CadEntity("n", "NGON", mapOf("sides" to 8.0)),

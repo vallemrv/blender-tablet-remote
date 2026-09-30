@@ -412,12 +412,12 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 editing && cad.surface.mode != "PROFILE" -> "Toca para añadir referencias; repite para quitarlas · puedes combinar Puntos/Aristas/Caras · Proyectar al plano copia toda la selección al croquis"
                 cad.surface.mode == "FACE" -> if (cad.surface.selection.size > 1) "Dos referencias para medir · quita una cara seleccionada para crear el boceto" else "Toca una cara: se resalta en el vídeo · Boceto en cara usa exactamente esa selección"
                 cad.surface.mode != "PROFILE" -> "Toca hasta dos referencias para medir · durante el boceto puedes proyectarlas para acotar desde ellas"
-                state.cadTool == "ARC" -> "Arrastra centro → inicio del arco · al soltar, arrastra el rombo del extremo para variar el ángulo"
+                editing && state.cadTool == "ARC" -> "Arrastra centro → inicio del arco · al soltar, arrastra el rombo del extremo para variar el ángulo"
                 entity?.type == "ARC" && !entity.isFillet -> "Arrastra el rombo del extremo para variar el ángulo; centro, radio e inicio permanecen fijos"
-                state.cadTool == "NGON" -> "Polígono regular: arrastra del centro a un vértice · elige los lados antes o después · Entre caras es la llave de la tuerca"
-                state.cadTool == "SLOT" -> "Ranura: arrastra entre los centros de los extremos · Radio es la mitad del Ancho · Entre centros conserva la longitud recta"
-                state.cadTool == "GEAR" -> "Engranaje: arrastra del centro al círculo primitivo · Incremento elige un módulo normalizado · dientes antes o después"
-                state.cadTool != null -> "${cadLabel(state.cadTool!!)} · arrastra para dibujar · dos dedos navegan"
+                editing && state.cadTool == "NGON" -> "Polígono regular: arrastra del centro a un vértice · elige los lados antes o después · Entre caras es la llave de la tuerca"
+                editing && state.cadTool == "SLOT" -> "Ranura: arrastra entre los centros de los extremos · Radio es la mitad del Ancho · Entre centros conserva la longitud recta"
+                editing && state.cadTool == "GEAR" -> "Engranaje: arrastra del centro al círculo primitivo · Incremento elige un módulo normalizado · dientes antes o después"
+                editing && state.cadTool != null -> "${cadLabel(state.cadTool!!)} · arrastra para dibujar · dos dedos navegan"
                 entity?.type == "GEAR" -> cadGearSummary(entity, unit)
                 entity?.isSquare == true -> if (entity.dimensions.any { it.constraintIds.isNotEmpty() })
                     "Cuadrado: una cota controla ambos lados; editar Lado actualiza esa misma cota"
@@ -467,10 +467,10 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                 step = cad.step, enabled = connected, minimum = if (type in listOf("DISTANCE_X", "DISTANCE_Y")) 0.0 else .0000001,
                                 onDone = ::acceptValues) { drafts["constraint"] = it }
                         }
-                        if (state.cadTool == "NGON" && entity == null) {
+                        if (editing && state.cadTool == "NGON" && entity == null) {
                             CadSidesControl(state.cadNgonSides, enabled = !cad.sessionActive) { vm.cadNgonSides(it) }
                         }
-                        if (state.cadTool == "GEAR" && entity == null) {
+                        if (editing && state.cadTool == "GEAR" && entity == null) {
                             CadCountControl("Dientes", state.cadGearTeeth, 6..150, enabled = !cad.sessionActive) { vm.cadGearTeeth(it) }
                         }
                         entity?.let { selected ->
