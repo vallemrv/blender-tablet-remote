@@ -24,7 +24,7 @@ from ..camera import camera
 from .encoder import VideoEncoder
 from .frames import FrameBuffer
 from .markers import draw_transform_markers
-from .cad_selection import draw_cad_selection
+from .cad_selection import draw_cad_cut, draw_cad_selection
 
 # Tras varios fallos seguidos dejamos de intentarlo: si no hay GPU o no hay VIEW_3D,
 # reintentar 30 veces por segundo solo llena la consola de trazas idénticas.
@@ -246,9 +246,8 @@ class ViewportCapture:
         # región solo se hereda la proyección.
         camera.sync_from_region(rv3d)
 
-        from ..cad.runtime import runtime as cad_runtime
         from ..materials.runtime import runtime as materials
-        with _multires_surface(), _sculpt_grid(space), offscreen.bind(), cad_runtime.preview_shading(space), materials.presentation(space, clean):
+        with _multires_surface(), _sculpt_grid(space), offscreen.bind(), materials.presentation(space, clean):
             fb = gpu.state.active_framebuffer_get()
             fb.clear(color=(0.0, 0.0, 0.0, 1.0), depth=1.0)
             if materials.needs_depth(camera.perspective_matrix(rv3d), width, height):
@@ -291,6 +290,7 @@ class ViewportCapture:
                 self._sculpt_depth = None
             if not clean and not materials.active:
                 draw_transform_markers(rv3d, width, height)
+                draw_cad_cut(rv3d, width, height)
                 draw_cad_selection(rv3d, width, height)
             buffer = fb.read_color(0, 0, width, height, 4, 0, "UBYTE")
 

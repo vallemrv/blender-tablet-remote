@@ -496,8 +496,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   cotas escritas son exactas. Vaciar crece a un lado del
   croquis (`ONE`) o a los dos (`BOTH`); la profundidad es la de cada lado.
   Vaciar consume su sólido
-  destino en el árbol y reconstruye desde los parámetros. La transparencia se
-  limita a GPUOffScreen mediante un contexto que restaura el sombreado siempre.
+  destino en el árbol y reconstruye desde los parámetros. Solo el volumen del
+  vaciado activo es translúcido: un fantasma dibujado en GPUOffScreen, sin rayos X
+  globales ni cambios de sombreado; el sólido y el resto de la escena siguen opacos.
   La sesión reutiliza la teselación local del perfil y sus huecos al variar profundidad;
   conserva operandos compactos para Vaciar y descarta la caché al cerrar. Android
   mantiene una petición CAD en vuelo y solo el último candidato absoluto pendiente

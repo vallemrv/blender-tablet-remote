@@ -56,3 +56,33 @@ def draw_cad_selection(rv3d, width, height):
                 gpu.matrix.load_projection_matrix(projection)
     finally:
         gpu.state.blend_set(saved[0]); gpu.state.depth_test_set(saved[1]); gpu.state.depth_mask_set(saved[2]); gpu.state.viewport_set(*saved[3])
+
+
+_cut_batches = {}
+
+
+def draw_cad_cut(rv3d, width, height):
+    """Translucent removed volume of the active cut, visible through the solid."""
+    from ..cad.runtime import runtime
+    ghost=runtime.cut_ghost()
+    if not ghost or not ghost['triangles']:
+        _cut_batches.clear()
+        return
+    fill=gpu.shader.from_builtin('UNIFORM_COLOR')
+    line=gpu.shader.from_builtin('POLYLINE_UNIFORM_COLOR')
+    if _cut_batches.get('ghost') is not ghost:
+        _cut_batches.clear()
+        _cut_batches.update(ghost=ghost, fill=batch_for_shader(fill,'TRIS',{'pos':ghost['triangles']}),
+                            line=batch_for_shader(line,'LINES',{'pos':ghost['segments']}) if ghost['segments'] else None)
+    saved=(gpu.state.blend_get(),gpu.state.depth_test_get(),gpu.state.depth_mask_get(),gpu.state.viewport_get())
+    try:
+        gpu.state.viewport_set(0,0,width,height)
+        gpu.state.blend_set('ALPHA'); gpu.state.depth_mask_set(False); gpu.state.depth_test_set('NONE')
+        with gpu.matrix.push_pop(),gpu.matrix.push_pop_projection():
+            gpu.matrix.load_identity(); gpu.matrix.load_projection_matrix(camera.perspective_matrix(rv3d))
+            fill.bind(); fill.uniform_float('color',(1.,.35,.2,.22)); _cut_batches['fill'].draw(fill)
+            if _cut_batches['line']:
+                line.bind(); line.uniform_float('viewportSize',(width,height))
+                line.uniform_float('lineWidth',2.); line.uniform_float('color',(1.,.45,.3,.9)); _cut_batches['line'].draw(line)
+    finally:
+        gpu.state.blend_set(saved[0]); gpu.state.depth_test_set(saved[1]); gpu.state.depth_mask_set(saved[2]); gpu.state.viewport_set(*saved[3])

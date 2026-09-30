@@ -1640,8 +1640,10 @@ recorre `gesture / 0.04 * step`; Incremento lo redondea a pasos enteros. La
 profundidad permanece positiva (mínimo 1e-7 m). CUT extruye en dirección negativa
 desde el plano del sketch y resta su volumen de `target_id`; al evaluar oculta el
 resultado previo consumido. No admite borrar soportes con dependientes; crear una copia de malla sí los conserva.
-La preview CUT anuncia `session.transparent:true`; solo la captura GPU usa rayos X
-al 35 %, restaurando el sombreado inmediatamente incluso si falla el render.
+La preview CUT anuncia `session.transparent:true`: la captura GPU dibuja solo el
+volumen retirado como un fantasma translúcido visible a través del sólido, que
+conserva su sombreado opaco. No usa rayos X ni modifica el sombreado del viewport;
+el lápiz no crea un prisma opaco para el vaciado.
 
 Los comandos de dimensión y feature son transacciones discretas con un undo. Una
 sesión conserva propietario; desconexión, undo/redo, cambio de archivo, cambio de

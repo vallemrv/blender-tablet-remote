@@ -362,9 +362,9 @@ Referencia de organización: [lista de operaciones plegable de Onshape](https://
 6. Seleccionar ese perfil, elegir el sólido **Destino** y pulsar **Vaciar**.
    La profundidad entra en dirección contraria a la normal del boceto. El lápiz,
    paso y botones funcionan como en Extruir. Puede atravesar toda la pieza.
-7. Durante el vaciado la captura GPU de la tablet activa transparencia al 35 %;
-   restaura los ajustes de sombreado tras cada captura, incluso si falla el render.
-   Confirmar/cancelar termina la transparencia automáticamente.
+7. Durante el vaciado solo el material retirado se ve translúcido, en rojo y con
+   sus aristas, a través de la pieza. El sólido y el resto de la escena conservan
+   su sombreado opaco. Confirmar/cancelar retira el fantasma automáticamente.
 
 Un vaciado es una diferencia booleana de Blender con el solver nativo Manifold
 sobre sólidos cerrados (Blender 4.5 o posterior). Los vaciados desde caras opuestas

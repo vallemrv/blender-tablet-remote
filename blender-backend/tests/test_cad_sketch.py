@@ -596,15 +596,22 @@ class SketchTests(CadTests):
         self.assertEqual(sketch['constraints'][0]['type'],'COINCIDENT')
         self.assertEqual(geometry.handles(sketch['entities'][0])['END'],geometry.handles(sketch['entities'][1])['START'])
 
-    def test_transparency_is_scoped_even_when_render_fails(self):
+    def test_cut_ghost_is_only_the_removed_volume_and_no_opaque_prism(self):
+        from blender_tablet_remote.cad.runtime import PRISM_KEY
         self.pocket()
-        shading=SimpleNamespace(type='MATERIAL',show_xray=False,xray_alpha=.5)
-        with self.assertRaises(RuntimeError):
-            with runtime.preview_shading(SimpleNamespace(shading=shading)):
-                self.assertTrue(shading.show_xray); self.assertEqual(shading.xray_alpha,.35)
-                raise RuntimeError('render failed')
-        self.assertEqual((shading.type,shading.show_xray,shading.xray_alpha),('MATERIAL',False,.5))
-
+        ghost=runtime.cut_ghost()
+        extents=sorted(max(p[i] for p in ghost['triangles'])-min(p[i] for p in ghost['triangles']) for i in range(3))
+        for got,expected in zip(extents,(.005,.015,.02)): self.assertAlmostEqual(got,expected,places=8)
+        self.assertEqual(len(ghost['segments']),24)   # twelve box edges, no cap diagonals
+        self.assertIs(runtime.cut_ghost(),ghost)
+        cad.extrude_update(dict(gesture_u=0,gesture_v=-.4,baseline_depth=.005,**OWNER))
+        self.assertFalse(any(o.get(PRISM_KEY) for o in bpy.data.objects))
+        deeper=runtime.cut_ghost()
+        self.assertIsNot(deeper,ghost)
+        self.assertNotAlmostEqual(runtime.session['depth'],.005,places=6)
+        self.assertAlmostEqual(max(p[2] for p in deeper['triangles'])-min(p[2] for p in deeper['triangles']),runtime.session['depth'],places=8)
+        cad.cancel(OWNER)
+        self.assertIsNone(runtime.cut_ghost())
 
 def run():
     suite=unittest.defaultTestLoader.loadTestsFromTestCase(SketchTests)

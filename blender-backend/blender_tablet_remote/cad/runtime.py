@@ -317,6 +317,10 @@ class CadRuntime:
                 pred_vertices, pred_faces = solid[1]
                 self._paint(body, [tuple(c / scale for c in v) for v in pred_vertices], pred_faces)
             session['fast'] = True
+        if cut:
+            # The removed volume is drawn as the translucent cut ghost, never as an
+            # opaque object hiding the solid it cuts.
+            return
         sign = -1 if signed < 0 else 1
         prism = next((o for o in bpy.data.objects if o.get(PRISM_KEY)), None)
         if prism is not None and session.get('fast_sign') != sign:
@@ -582,18 +586,53 @@ class CadRuntime:
                         label=label,label_point=projected,label_offset=14+(index%4)*15))
         return result
 
-    @contextmanager
-    def preview_shading(self, space):
-        shading=space.shading
-        if not (self.workspace and self.session and self.session['operation']=='CUT'):
-            yield
-            return
-        old=(shading.type,shading.show_xray,shading.xray_alpha)
+    def cut_ghost(self):
+        """World-space volume of the active cut, drawn translucent only in GPUOffScreen.
+
+        The solid keeps its normal shading; only the removed material is see-through.
+        Reuses the session tessellation and recomputes only when depth/extent,
+        sketch, units or the body transform change.
+        """
+        session=self.session
+        if not (self.workspace and session and session['operation']=='CUT' and session.get('preview')):
+            return None
+        doc=session['preview']
         try:
-            shading.type='SOLID'; shading.show_xray=True; shading.xray_alpha=.35
-            yield
-        finally:
-            shading.type,shading.show_xray,shading.xray_alpha=old
+            feature=model.find(doc,'features',session['feature_id'])
+            sketch,entity=model.profile(doc,feature['profile_id'])
+        except CommandError:
+            return None
+        body=next((o for o in self.objects(doc) if o.get(BODY_KEY)==feature['body_id']),None)
+        matrix=body.matrix_world.copy() if body is not None else None
+        scale=max(float(bpy.context.scene.unit_settings.scale_length),1e-12)
+        extent=feature.get('extent','ONE')
+        key=(model.dumps(sketch),feature['profile_id'],feature['depth'],extent,model.dumps(feature.get('mirror')),scale,
+             tuple(tuple(row) for row in matrix) if matrix is not None else None)
+        cached=session.get('ghost')
+        if cached and cached['key']==key:
+            return cached
+        from mathutils.geometry import tessellate_polygon
+        depth=feature['depth']
+        vertices,faces=session['extrusion_cache'].extrude(sketch,entity,depth if extent=='BOTH' else -depth,symmetric=extent=='BOTH')
+        if feature.get('mirror'):
+            from . import mirror
+            vertices,faces=mirror.solid((vertices,faces),feature['mirror'])
+        points=[Vector(v)/scale for v in vertices]
+        if matrix is not None:
+            points=[matrix@p for p in points]
+        triangles,normals,edges=[],[],{}
+        for index,face in enumerate(faces):
+            corners=[points[i] for i in face]
+            triangles.extend(tuple(corners[i]) for tri in tessellate_polygon([corners]) for i in tri)
+            normals.append((corners[1]-corners[0]).cross(corners[-1]-corners[0]).normalized())
+            for a,b in zip(face,face[1:]+face[:1]):
+                edges.setdefault((min(a,b),max(a,b)),[]).append(index)
+        # Outline only design creases, not the fan/cap tessellation or dense arc walls.
+        segments=[p for (a,b),owners in edges.items()
+                  if len(owners)!=2 or normals[owners[0]].dot(normals[owners[1]])<.87
+                  for p in (tuple(points[a]),tuple(points[b]))]
+        session['ghost']=dict(key=key,triangles=triangles,segments=segments)
+        return session['ghost']
 
     def status(self):
         try:
