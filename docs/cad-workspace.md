@@ -208,10 +208,15 @@ la misma cota de radio, si existe. Tras dibujar un arco se activa el cursor: arr
 el **rombo de su extremo** para cambiar el ángulo conservando centro, radio e inicio.
 Cancelar restaura el arco; las restricciones siguen mandando. Los redondeos conservan
 sus tangencias y no ofrecen ese tirador.
-Arcos y redondeos muestran **Ángulo** en grados con su propio candado. Cerrado, el
-barrido ya no cambia al arrastrar el rombo, los extremos ni las líneas del redondeo:
-en un redondeo mantiene también el ángulo entre sus dos lados. Confirmar un Ángulo
-escrito lo fija; la cota aparece en Cotas y reglas como «Ángulo del arco».
+Los arcos dibujados con la herramienta Arco muestran **Ángulo** en grados con su
+propio candado: cerrado, el barrido ya no cambia al arrastrar el rombo ni por otras
+reglas. Confirmar un Ángulo escrito lo fija; aparece en Cotas y reglas como «Ángulo
+del arco». Los redondeos no muestran Ángulo: el suyo lo deciden sus dos lados.
+Para varios arcos iguales, selecciónalos y pulsa **Igualdad**: toman el radio y el
+ángulo del primero, sin fijarlos. Con varios arcos seleccionados, escribir Radio o
+Ángulo en la bandeja y confirmar lo aplica a todos: añade las igualdades que falten
+y una sola cota, en un único paso de undo. Si hay redondeos entre ellos, solo se
+iguala el radio.
 
 Junto a **Deshacer/Rehacer** hay un grupo con **Seleccionar todo**, **Deseleccionar
 todo**, **Borrar selección**, **Construcción** y **Soldar puntos**. Cada candado de **Fijar medida/Quitar

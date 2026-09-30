@@ -674,9 +674,12 @@ no quedan archivos o referencias temporales.
   `radius` de `diameter`; ambos editan la misma cota, sin cambiar el almacenamiento.
   Tras dibujar Arco se vuelve al cursor. Su extremo END anuncia `intent:ANGLE` y se
   dibuja como rombo; arrastrarlo cambia solo el barrido, conservando centro, radio e
-  inicio y las restricciones. Redondeos no ofrecen tirador angular. Arcos y
-  redondeos describen Ángulo (`sweep`, cota `ANGLE` en grados, magnitud) con candado:
-  fijado, ni el rombo ni las líneas del redondeo cambian el barrido. Cada preview
+  inicio y las restricciones. Redondeos no ofrecen tirador angular. Solo los arcos
+  dibujados describen Ángulo (`sweep`, cota `ANGLE` en grados, magnitud) con candado;
+  el ángulo de un redondeo es automático y no se muestra ni se iguala.
+  Igualdad entre arcos iguala radio y ángulo (`EQUAL` + `EQUAL_ANGLE`), solo radio si
+  hay redondeos; con varios arcos seleccionados, la bandeja aplica sus medidas a todos
+  (`equal_ids`) en un undo. Cada preview
   parte del baseline, END no sondea otra posición y confirmar crea un undo si cambió.
 - Soldar puntos añade coincidencias persistentes entre extremos/esquinas seleccionados
   sobre el último punto (el origen prevalece), con un undo. Respeta restricciones;

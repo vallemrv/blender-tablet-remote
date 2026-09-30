@@ -28,14 +28,41 @@ def groups(sketch):
         if c['type']=='EQUAL':
             a,b=[quantity(sketch,r) for r in c['refs']]
             if a is not None and b is not None: parents[root(b)]=root(a)
+        elif c['type']=='EQUAL_ANGLE':
+            a,b=[(r['id'],'sweep') for r in c['refs']]
+            parents[root(b)]=root(a)
     return root
+
+
+def equalize_arcs(sketch, refs):
+    """Equal arcs share radius and, for drawn arcs, angle: one dimension governs all.
+
+    A rounding's angle follows its sides, so any rounding makes it radius-only.
+    Adds only the missing EQUAL/EQUAL_ANGLE pairs (to the first arc); callers solve.
+    Returns the first arc and whether angles were equalized.
+    """
+    ids=list(dict.fromkeys(r['id'] for r in refs))
+    if len(ids)<2: raise BadPayload('Selecciona al menos dos arcos')
+    if any(geometry.get_entity(sketch,dict(id=i))['type']!='ARC' for i in ids):
+        raise BadPayload('La igualdad de radio y ángulo requiere arcos o redondeos')
+    first=dict(id=ids[0],part='BODY')
+    angles=not any(geometry.fillet_sides(sketch,geometry.get_entity(sketch,dict(id=i))) for i in ids)
+    rules=(('EQUAL','radius'),('EQUAL_ANGLE','sweep')) if angles else (('EQUAL','radius'),)
+    for other in ids[1:]:
+        ref=dict(id=other,part='BODY')
+        for typ,field in rules:
+            root=groups(sketch)
+            if root((first['id'],field))!=root((other,field)):
+                sketch.setdefault('constraints',[]).append(dict(id=model.uid('constraint'),type=typ,refs=[dict(first),dict(ref)]))
+    geometry.validate_constraints(sketch)
+    return first,angles
 
 
 def key(sketch, constraint, root=None):
     if constraint['type'] not in NUMERIC: return None
     root=root or groups(sketch)
     refs=constraint['refs']
-    if constraint['type']=='ANGLE': return ('ANGLE',refs[0]['id'])
+    if constraint['type']=='ANGLE': return root((refs[0]['id'],'sweep'))
     if constraint['type'] in ('DISTANCE_X','DISTANCE_Y'):
         return (constraint['type'],tuple(sorted((r['id'],r.get('part','BODY')) for r in refs)))
     if len(refs)==1: return root(quantity(sketch,refs[0]))
@@ -88,7 +115,7 @@ def bindings(sketch, entity):
     root=groups(sketch)
     result={}
     for field in fields:
-        target=('ANGLE',entity['id']) if field=='sweep' else root((entity['id'],'radius' if field in ('diameter','flats','width','module') and entity['type']!='RECTANGLE' else field))
+        target=root((entity['id'],'sweep')) if field=='sweep' else root((entity['id'],'radius' if field in ('diameter','flats','width','module') and entity['type']!='RECTANGLE' else field))
         result[field]=[c['id'] for c in sketch.get('constraints',[]) if key(sketch,c,root)==target]
     return result
 
@@ -165,9 +192,9 @@ def describe(sketch, entity):
     bound=bindings(sketch,entity); typ=entity['type']
     fields={'RECTANGLE':[('width','Lado' if is_square(sketch,entity) else 'Ancho','DISTANCE','EDGE0',1.),('height','Alto','DISTANCE','EDGE1',1.)],
             'CIRCLE':[('radius','Radio','RADIUS','BODY',1.)],
-            # Sweep in degrees; on a rounding it also holds the angle between its sides.
-            'ARC':[('radius','Radio del redondeo' if geometry.fillet_sides(sketch,entity) else 'Radio','RADIUS','BODY',1.),
-                   ('sweep','Ángulo','ANGLE','BODY',1.)],
+            # Only drawn arcs expose their sweep; a rounding's angle follows its sides.
+            'ARC':[('radius','Radio del redondeo','RADIUS','BODY',1.)] if geometry.fillet_sides(sketch,entity) else
+                  [('radius','Radio','RADIUS','BODY',1.),('sweep','Ángulo','ANGLE','BODY',1.)],
             'LINE':[('length','Lado completo' if any((entity['id'],role) in geometry.rounding_links(sketch) for role in ('START','END')) else 'Longitud','DISTANCE','BODY',1.)],
             # Its dimension is an inscribed RADIUS constraint, shown as the full size.
             'NGON':[('flats','Entre caras' if entity.get('sides',6)%2==0 else 'Ø inscrito','RADIUS','BODY',.5)],

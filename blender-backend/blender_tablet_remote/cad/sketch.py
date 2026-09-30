@@ -11,7 +11,7 @@ from ..errors import BadPayload, CommandError
 
 CONSTRAINTS = ('COINCIDENT', 'POINT_ON_LINE', 'HORIZONTAL', 'VERTICAL', 'PARALLEL', 'COLLINEAR', 'PERPENDICULAR',
                'TANGENT', 'EQUAL', 'DISTANCE', 'DISTANCE_X', 'DISTANCE_Y', 'RADIUS', 'FIX', 'MIDPOINT',
-               'SYMMETRIC', 'SYMMETRIC_LINE', 'OFFSET', 'ANGLE')
+               'SYMMETRIC', 'SYMMETRIC_LINE', 'OFFSET', 'ANGLE', 'EQUAL_ANGLE')
 
 
 def handles(e):
@@ -174,6 +174,10 @@ def residual(sketch, c, scale):
         e = get_entity(sketch,refs[0])
         if e['type'] != 'ARC': raise BadPayload('La cota de ángulo requiere un arco o redondeo')
         return [(abs(e['sweep'])-c['value'])/180.]
+    if typ == 'EQUAL_ANGLE':
+        es = [get_entity(sketch,r) for r in refs]
+        if any(e['type'] != 'ARC' for e in es): raise BadPayload('La igualdad de ángulo requiere arcos o redondeos')
+        return [(abs(es[0]['sweep'])-abs(es[1]['sweep']))/180.]
     if typ == 'EQUAL':
         es = [get_entity(sketch,r) for r in refs]
         if all(e['type'] in ('ARC','CIRCLE') for e in es):

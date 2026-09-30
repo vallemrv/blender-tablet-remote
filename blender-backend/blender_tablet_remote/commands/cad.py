@@ -282,8 +282,17 @@ def entity_set(payload):
         raise BadPayload('Faltan las dimensiones')
     constrain=payload.get('constrain',False)
     if not isinstance(constrain,bool): raise BadPayload('constrain debe ser booleano')
+    equal_ids=payload.get('equal_ids') or []
+    if not isinstance(equal_ids,list) or not all(isinstance(i,str) for i in equal_ids): raise BadPayload('equal_ids debe ser una lista de IDs')
     def change(doc):
         sketch, e = model.entity(doc,payload.get('entity_id'))
+        if equal_ids:
+            # Several selected arcs: the edited radius/angle applies to all of them
+            # through equalities, in the same transaction and undo.
+            if e['type']!='ARC': raise BadPayload('Aplicar a varios solo está disponible para arcos')
+            for identifier in equal_ids:
+                if not any(x['id']==identifier for x in sketch['entities']): raise BadPayload('Los arcos deben pertenecer al mismo croquis')
+            dimensions.equalize_arcs(sketch,[dict(id=e['id'])]+[dict(id=i) for i in equal_ids])
         from ..cad.offset import rule_for, set_value
         offset_rule=rule_for(sketch,e['id'])
         if offset_rule:
@@ -1217,6 +1226,13 @@ def constraint_add(payload):
                 if key not in existing:
                     sketch.setdefault('constraints',[]).append(rule);existing.add(key)
             geometry.solve(sketch)
+            return
+        if typ=='EQUAL' and len({r['id'] for r in refs})>=2 and all(geometry.get_entity(sketch,r)['type']=='ARC' for r in refs):
+            # Drawn arcs keep the radius and angle of the first one; roundings only the radius.
+            first,angles=dimensions.equalize_arcs(sketch,refs); arc=geometry.get_entity(sketch,first)
+            goals=[dict(constraint=dict(type='RADIUS',refs=[first],value=arc['radius']))]
+            if angles: goals.append(dict(constraint=dict(type='ANGLE',refs=[first],value=abs(arc['sweep']))))
+            geometry.solve(sketch,goals)
             return
         if typ=='EQUAL':
             unique=[]; quantities=set()

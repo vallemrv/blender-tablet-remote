@@ -5,6 +5,17 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadFeedbackTest {
+    @Test fun trayValuesOfOneArcApplyToTheOtherSelectedArcsOnly() {
+        val arcs = listOf("a", "b", "c").map { CadEntity(it, "ARC", mapOf("radius" to .01, "sweep" to 90.0)) }
+        val line = CadEntity("l", "LINE", emptyMap())
+        val sketch = CadSketch("s", "Boceto", "XY", arcs + line, emptyList())
+        val cad = CadState(activeSketchId = "s", sketches = listOf(sketch), selectionKind = "ENTITY", selectionId = "c",
+            selection = listOf(CadSelection("a"), CadSelection("l"), CadSelection("b"), CadSelection("c")))
+        assertEquals(listOf("a", "b"), cadOtherSelectedArcs(cad, arcs[2]))
+        assertTrue(cadOtherSelectedArcs(cad, line).isEmpty())
+        assertTrue(cadOtherSelectedArcs(cad.copy(selection = listOf(CadSelection("c"))), arcs[2]).isEmpty())
+    }
+
     @Test fun planeAxesNameTheBackendFrameInWorldTerms() {
         // base_frame: XY normal +Z, XZ normal −Y, YZ normal +X; local x/y map to these world axes.
         assertEquals(listOf("X", "Y"), cadPlaneAxes("XY").inPlane)

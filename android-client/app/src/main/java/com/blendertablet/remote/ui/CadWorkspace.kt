@@ -374,7 +374,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 editingConstraint = null
             }
             entity != null && drafts.isNotEmpty() -> command("cad.entity.set", "entity_id" to entity.id,
-                "values" to drafts.toMap(), "constrain" to true)
+                "values" to drafts.toMap(), "constrain" to true,
+                "equal_ids" to cadOtherSelectedArcs(cad, entity).takeIf { it.isNotEmpty() })
             feature?.isMirror == true && drafts["mirror_offset"] != null -> command("cad.feature.set", "feature_id" to feature.id, "offset" to drafts["mirror_offset"])
             feature?.type == "HELIX" && drafts["pitch"] != null -> command("cad.feature.set", "feature_id" to feature.id, "pitch" to drafts["pitch"])
             feature != null && drafts["depth"] != null -> command("cad.feature.set", "feature_id" to feature.id, "depth" to drafts["depth"])
@@ -509,6 +510,13 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             // El ángulo del arco/redondeo es una medida más, con su candado.
                             val measures = cadDisplayMeasures(selected, showDiameter)
                             val fields = measures.map { it.field to it.label }
+                            val otherArcs = cadOtherSelectedArcs(cad, selected)
+                            if (otherArcs.isNotEmpty()) {
+                                // El ángulo de un redondeo es automático: entonces solo se iguala el radio.
+                                val roundings = selected.isFillet || cad.activeSketch?.entities.orEmpty().any { it.id in otherArcs && it.isFillet }
+                                Text("${otherArcs.size + 1} arcos: " + if (roundings) "Radio se aplica a todos (Igualdad)" else "Radio y Ángulo se aplican a todos (Igualdad)",
+                                    color = Ink.Accent, fontSize = 11.sp)
+                            }
                             fields.forEach { (field, label) ->
                                 val measure = measures.firstOrNull { it.field == field }
                                 val degrees = measure?.constraintType == "ANGLE"
@@ -729,6 +737,11 @@ internal fun cadRefsTouch(a: CadSelection, b: CadSelection): Boolean {
     return roles(a).intersect(roles(b)).isNotEmpty()
 }
 
+/** Other arcs selected with [entity]: tray values apply to all of them through equalities. */
+internal fun cadOtherSelectedArcs(cad: CadState, entity: CadEntity): List<String> =
+    if (entity.type != "ARC") emptyList() else cad.selection.map { it.id }.distinct()
+        .filter { id -> id != entity.id && cad.activeSketch?.entities?.any { it.id == id && it.type == "ARC" } == true }
+
 internal fun cadDisplayMeasures(entity: CadEntity, fullWidth: Boolean): List<CadMeasure> = entity.dimensions.map {
     if (fullWidth && it.field == "radius") when (entity.type) {
         "CIRCLE" -> it.copy(field = "diameter", label = "Diámetro", valueFactor = .5)
@@ -830,7 +843,7 @@ internal fun cadLabel(type: String) = when (type) {
     "COLLINEAR" -> "Colineal (misma recta)"
     "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "SLOT" -> "Ranura"; "GEAR" -> "Engranaje"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "POINT" -> "Punto"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
-    "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad (tamaño del primero)"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "ANGLE" -> "Ángulo del arco"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
+    "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad (tamaño del primero; en arcos también el ángulo, salvo redondeos)"; "EQUAL_ANGLE" -> "Igualdad de ángulo"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "ANGLE" -> "Ángulo del arco"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
     "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; else -> type
 }
 

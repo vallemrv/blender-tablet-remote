@@ -117,17 +117,59 @@ class DimensionTests(CadTests):
         self.assertAlmostEqual(abs(model.entity(runtime.doc(),arc)[1]['sweep']),45.,places=6)
         with self.assertRaises(CommandError): cad.constraint_set(dict(constraint_id=rule['id'],value=400,**OWNER))
 
-    def test_rounding_angle_padlock_keeps_the_corner_angle(self):
-        a=self.draw('LINE',(0,0),(.08,0)); b=self.draw('LINE',(.08,0),(.08,.04))
-        self.refs((a,'BODY'),(b,'BODY')); cad.fillet(dict(radius=.005,**OWNER))
-        sketch=runtime.doc()['sketches'][0]; e=next(x for x in sketch['entities'] if x['type']=='ARC')
-        def drag(sketch):
-            geometry.solve(sketch,geometry.move_goals(sketch,[dict(id=b,part='END')],-.03,0),drag=True)
-            return abs(model.find(sketch,'entities',e['id'])['sweep'])
-        self.assertGreater(abs(drag(copy.deepcopy(sketch))-90.),5.)   # free rounding follows the sides
-        angle=next(m for m in dimensions.describe(sketch,e) if m['field']=='sweep')
-        cad.constraint_add(dict(type='ANGLE',value=e['sweep'],refs=angle['refs'],**OWNER))
-        self.assertAlmostEqual(drag(runtime.doc()['sketches'][0]),90.,places=5)
+    def test_roundings_have_no_angle_field_and_equalize_only_their_radius(self):
+        ids=[self.draw('LINE',a,b) for a,b in [((0,0),(.08,0)),((.08,0),(.06,.04)),((.06,.04),(0,.04))]]
+        self.refs((ids[0],'BODY'),(ids[1],'BODY')); cad.fillet(dict(radius=.004,**OWNER))
+        self.refs((ids[1],'BODY'),(ids[2],'BODY')); cad.fillet(dict(radius=.006,**OWNER))
+        sketch=runtime.doc()['sketches'][0]
+        fillets=[e for e in sketch['entities'] if e['type']=='ARC']
+        self.assertEqual(len(fillets),2)
+        for e in fillets: self.assertEqual([m['field'] for m in dimensions.describe(sketch,e)],['radius'])
+        second=next(c for c in sketch['constraints'] if c['type']=='RADIUS' and c['refs'][0]['id']==fillets[1]['id'])
+        cad.constraint_delete(dict(constraint_id=second['id'],**OWNER))
+        self.refs(*[(e['id'],'BODY') for e in fillets]); cad.constraint_add(dict(type='EQUAL',**OWNER))
+        sketch=runtime.doc()['sketches'][0]
+        self.assertFalse([c for c in sketch['constraints'] if c['type']=='EQUAL_ANGLE'])
+        arcs=[e for e in sketch['entities'] if e['type']=='ARC']
+        self.assertAlmostEqual(arcs[0]['radius'],arcs[1]['radius'],places=7)
+        self.assertGreater(abs(abs(arcs[0]['sweep'])-abs(arcs[1]['sweep'])),30.)   # angles follow their own corners
+
+    def test_equal_arcs_share_radius_and_angle_and_one_dimension_governs_all(self):
+        arcs=[self.draw('ARC',(x,0),(x+r,0)) for x,r in ((0,.01),(.1,.02),(.2,.015))]
+        cad.entity_set(dict(entity_id=arcs[1],values={'sweep':150.},**OWNER))
+        self.refs(*[(a,'BODY') for a in arcs])
+        with patch('blender_tablet_remote.cad.runtime.undo_push') as undo:
+            cad.constraint_add(dict(type='EQUAL',**OWNER)); undo.assert_called_once()
+        sketch=runtime.doc()['sketches'][0]
+        first=model.find(sketch,'entities',arcs[0])
+        for a in arcs[1:]:
+            e=model.find(sketch,'entities',a)
+            self.assertAlmostEqual(e['radius'],first['radius'],places=7)
+            self.assertAlmostEqual(abs(e['sweep']),abs(first['sweep']),places=5)
+        count=len(sketch['constraints'])
+        self.refs(*[(a,'BODY') for a in arcs]); cad.constraint_add(dict(type='EQUAL',**OWNER))
+        self.assertEqual(len(runtime.doc()['sketches'][0]['constraints']),count)   # no duplicates
+        cad.entity_set(dict(entity_id=arcs[2],values={'radius':.012,'sweep':60.},constrain=True,**OWNER))
+        sketch=runtime.doc()['sketches'][0]
+        for a in arcs:
+            e=model.find(sketch,'entities',a)
+            self.assertAlmostEqual(e['radius'],.012,places=7); self.assertAlmostEqual(abs(e['sweep']),60.,places=5)
+            radius,angle=dimensions.describe(sketch,e)
+            self.assertEqual(len(radius['constraint_ids']),1); self.assertEqual(len(angle['constraint_ids']),1)
+        self.assertEqual(len([c for c in sketch['constraints'] if c['type'] in ('RADIUS','ANGLE')]),2)
+
+    def test_tray_values_with_several_arcs_selected_equalize_them_in_one_undo(self):
+        a=self.draw('ARC',(0,0),(.01,0)); b=self.draw('ARC',(.1,0),(.13,0))
+        with patch('blender_tablet_remote.cad.runtime.undo_push') as undo:
+            cad.entity_set(dict(entity_id=a,values={'sweep':45.},constrain=True,equal_ids=[b],**OWNER))
+            undo.assert_called_once()
+        sketch=runtime.doc()['sketches'][0]
+        ea,eb=model.find(sketch,'entities',a),model.find(sketch,'entities',b)
+        self.assertAlmostEqual(abs(eb['sweep']),45.,places=5); self.assertAlmostEqual(eb['radius'],ea['radius'],places=7)
+        self.assertEqual({c['type'] for c in sketch['constraints']},{'EQUAL','EQUAL_ANGLE','ANGLE'})
+        before=model.dumps(runtime.doc()); line=self.draw('LINE',(0,.1),(.02,.1)); before=model.dumps(runtime.doc())
+        with self.assertRaises(CommandError): cad.entity_set(dict(entity_id=a,values={'radius':.02},equal_ids=[line],**OWNER))
+        self.assertEqual(model.dumps(runtime.doc()),before)
 
     def refs(self,*refs): cad._set_selection([dict(kind='ENTITY',id=i,part=p) for i,p in refs])
     def dimension(self,typ,value): cad.constraint_add(dict(type=typ,value=value,**OWNER))

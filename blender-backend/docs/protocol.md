@@ -1413,7 +1413,8 @@ de banda y configuración de latencia interactiva.
 `features.cad` anuncia `version:2`, `planes:[XY,XZ,YZ]`,
 `entities:[LINE,RECTANGLE,CIRCLE,ARC,NGON,SLOT,GEAR,POLYGON]`, `features:[EXTRUDE,CUT,LOFT,HELIX,MIRROR]` (más FILLET/CHAMFER en la pila vía `cad.finish.*`),
 `sketch_editing:true`, `fillet:true`, `length_unit:METERS` y `constraints` con
-`COINCIDENT,POINT_ON_LINE,HORIZONTAL,VERTICAL,PARALLEL,COLLINEAR,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,DISTANCE_X,DISTANCE_Y,RADIUS,FIX,MIDPOINT,SYMMETRIC,SYMMETRIC_LINE`.
+`COINCIDENT,POINT_ON_LINE,HORIZONTAL,VERTICAL,PARALLEL,COLLINEAR,PERPENDICULAR,TANGENT,EQUAL,DISTANCE,DISTANCE_X,DISTANCE_Y,RADIUS,FIX,MIDPOINT,SYMMETRIC,SYMMETRIC_LINE`
+(`ANGLE` y `EQUAL_ANGLE` existen en el documento, pero no se anuncian en el rail).
 `cad.constraint.add` acepta una o varias referencias para `HORIZONTAL`/`VERTICAL`
 (`LINE/BODY` o `RECTANGLE|NGON/EDGEi`). Persiste una regla individual por referencia,
 sin duplicados, y resuelve el grupo en una transacción y un undo. Una referencia
@@ -1621,12 +1622,19 @@ hasta las esquinas virtuales cuando el lado participa en un redondeo. El sondeo,
 el trazo visible y las distancias entre puntos explícitos siguen usando los puntos
 reales; no se persisten coordenadas de pantalla ni referencias RNA.
 
-`ANGLE` es una cota de un solo `ARC/BODY` (arco o redondeo): `value` en grados,
+`ANGLE` es una cota de un solo `ARC/BODY`; solo los arcos que no son redondeos la describen: `value` en grados,
 magnitud del barrido (0,01–360), independiente del sentido de dibujo; `add/set`
 aceptan un valor negativo y guardan su valor absoluto. No se anuncia en
 `constraints` ni en `dimension_options`: el esquema `dimensions` del arco describe
 `sweep` con `constraint_type:ANGLE`, y su candado o `cad.entity.set` con
 `constrain:true` la crea. El overlay la rotula `∠ N°`.
+
+`EQUAL` entre dos o más `ARC` añade, respecto al primero, `EQUAL` (radio) y, si
+ninguno es un redondeo, `EQUAL_ANGLE` (magnitud del barrido), sin duplicar parejas; ambas
+cantidades se agrupan como las igualdades de longitud, así una sola cota RADIUS y
+una sola ANGLE gobiernan el grupo. `cad.entity.set` sobre un arco acepta
+`equal_ids` (otros arcos del mismo croquis): añade esas igualdades y aplica los
+valores/cotas en la misma transacción y undo; otro tipo se rechaza sin cambios.
 
 Cada sketch contiene `constraints:[{id,type,refs:[{id,part}],value?,values?}]`.
 FIX guarda `points:{rol:[x,y]}` para los puntos/los extremos de una arista,
