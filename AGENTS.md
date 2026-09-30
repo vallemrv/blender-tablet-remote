@@ -99,6 +99,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   una escena. Android solo actualiza la escena desde sus snapshots explícitos;
   el arrastre nunca cambia el selector Edit/Object ni cancela su propia entrada.
 - El snap táctil filtra primero por geometría visible y después clasifica el candidato.
+- El snap de Knife comprueba primero la oclusión propia con el BVH del BMesh vivo.
+  Ordena candidatos por distancia y consulta la escena solo hasta encontrar el
+  competidor visible más cercano, además del candidato retenido. Conserva la
+  política pegajosa común, la prioridad de puntos sobre aristas y END sin raycast;
+  no cambia el snap de Mover ni mantiene cachés de geometría entre actualizaciones.
 - Mover sin snap sigue al dedo continuamente; con Incremento avanza en saltos táctiles
   perceptibles y no reutiliza la misma sensibilidad del movimiento libre.
 - Un preset de escala de trabajo nunca reescala geometría ni modifica `scale_length`.

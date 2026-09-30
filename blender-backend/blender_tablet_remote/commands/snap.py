@@ -89,15 +89,36 @@ def query_edit_surface_candidate(obj, u, v, enabled=True, mode="AUTO", previous=
         return point, index
 
     def visible(position, screen):
-        if not _visible(position, screen, depsgraph, rv3d, {obj.name}, viewport):
-            return False
         point, _ = surface(screen)
-        if point is None:
-            return True  # silueta o arista sin cara
-        origin, direction = camera.ray(*screen, rv3d)
-        target_distance = (position - origin).dot(direction)
-        hit_distance = (obj.matrix_world @ point - origin).dot(direction)
-        return target_distance <= hit_distance + max(1e-6, abs(target_distance) * 1e-5)
+        if point is not None:
+            origin, direction = camera.ray(*screen, rv3d)
+            target_distance = (position - origin).dot(direction)
+            hit_distance = (obj.matrix_world @ point - origin).dot(direction)
+            if target_distance > hit_distance + max(1e-6, abs(target_distance) * 1e-5):
+                return False
+        # The live BVH rejects hidden back geometry before the expensive scene
+        # query. Silhouettes and wires still have to respect other objects.
+        return _visible(position, screen, depsgraph, rv3d, {obj.name}, viewport)
+
+    visibility = {}
+    def choose_visible(candidates):
+        # Only the incumbent and closest eligible visible challenger can affect
+        # the common sticky policy. No ray per nearby vertex/edge is needed.
+        def is_visible(candidate):
+            identity = candidate['id']
+            if identity not in visibility:
+                visibility[identity] = visible(Vector(candidate['position']), candidate['screen'])
+            return visibility[identity]
+        previous_id = previous.get('id') if previous else None
+        incumbent = next((c for c in candidates if c['id'] == previous_id), None)
+        eligible = [incumbent] if incumbent is not None and is_visible(incumbent) else []
+        for candidate in sorted(candidates, key=lambda c: c['distance']):
+            if candidate['id'] == previous_id or candidate['distance'] > candidate['acquire_threshold']:
+                continue
+            if is_visible(candidate):
+                eligible.append(candidate)
+                break
+        return choose_sticky_candidate(eligible, previous, max(thresholds.values()))
 
     thresholds = ({"VERTEX": .035, "EDGE_CENTER": .028, "EDGE": .042} if mode == "AUTO"
                   else {mode: {"VERTEX": .080, "EDGE_CENTER": .070, "EDGE": .042}[mode]})
@@ -111,7 +132,7 @@ def query_edit_surface_candidate(obj, u, v, enabled=True, mode="AUTO", previous=
                 if distance > limit:
                     continue
                 screen = camera.project(position, rv3d)
-                if screen is None or not visible(position, screen):
+                if screen is None:
                     continue
                 ranked.append(dict(hit=True, snap_type=kind, id=identity, object=obj.name,
                                    element=element, position=list(position), screen=list(screen),
@@ -120,9 +141,9 @@ def query_edit_surface_candidate(obj, u, v, enabled=True, mode="AUTO", previous=
         # AUTO deja adquirir puntos discretos cerca de una arista; una arista a
         # distancia cero no puede tapar sus extremos ni su centro.
         points = [c for c in ranked if c["snap_type"] != "EDGE"]
-        chosen = choose_sticky_candidate(points, previous, max(thresholds.values()))
+        chosen = choose_visible(points)
         if chosen is None:
-            chosen = choose_sticky_candidate(ranked, previous, max(thresholds.values()))
+            chosen = choose_visible(ranked)
         if chosen is not None:
             return {k: value for k, value in chosen.items() if k != "acquire_threshold"}
     local, index = surface((u, v))

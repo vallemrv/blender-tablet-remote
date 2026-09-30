@@ -59,6 +59,39 @@ class SnapTests(unittest.TestCase):
         self.assertEqual(snap.choose_sticky_candidate([old,new],old,.08)['id'], 'old')
         self.assertIsNone(snap.choose_sticky_candidate([new],old,.08))
 
+    def test_knife_dense_front_grid_checks_only_competing_visible_candidates(self):
+        side=31
+        vertices=[(-1+x/15,-1+y/15,0) for y in range(side) for x in range(side)]
+        faces=[(y*side+x,y*side+x+1,(y+1)*side+x+1,(y+1)*side+x)
+               for y in range(side-1) for x in range(side-1)]
+        obj=self.mesh('dense',vertices,faces=faces)
+        bpy.ops.object.mode_set(mode='EDIT')
+        with patch.object(snap,'_visible',wraps=snap._visible) as visibility:
+            first=snap.query_edit_surface_candidate(obj,.5,.5,True,'AUTO')
+            self.assertEqual(first['snap_type'],'VERTEX')
+            self.assertLess(Vector(first['local_position']).length,1e-6)
+            self.assertLessEqual(visibility.call_count,2)
+        with patch.object(snap,'_visible',wraps=snap._visible) as visibility:
+            retained=snap.query_edit_surface_candidate(obj,.503,.5,True,'AUTO',first)
+            self.assertEqual(retained['id'],first['id'])
+            self.assertLessEqual(visibility.call_count,2)
+        switched=snap.query_edit_surface_candidate(obj,.54,.5,True,'AUTO',retained)
+        self.assertNotEqual(switched['id'],first['id'])
+        self.assertEqual(switched['snap_type'],'VERTEX')
+
+    def test_knife_skips_a_nearer_occluded_vertex_before_choosing_visible_one(self):
+        obj=self.mesh('points',[(0,0,0),(.2,0,0)])
+        wall=self.mesh('wall',[(-.04,-.2,2),(.04,-.2,2),(.04,.2,2),(-.04,.2,2)],faces=[(0,1,2,3)])
+        wall.select_set(False);bpy.context.view_layer.objects.active=obj
+        bpy.ops.object.mode_set(mode='EDIT')
+        result=snap.query_edit_surface_candidate(obj,.5,.5,True,'VERTEX')
+        self.assertTrue(result['hit'])
+        self.assertEqual(result['element'],1)
+        # A previously acquired vertex does not stay selected behind an occluder.
+        previous=dict(id='points:VERTEX:0',snap_type='VERTEX')
+        result=snap.query_edit_surface_candidate(obj,.5,.5,True,'VERTEX',previous)
+        self.assertEqual(result['element'],1)
+
     def test_jitter_retains_identity_and_clear_approach_switches(self):
         old = dict(id='old', distance=.04)
         near = dict(id='near', distance=.035)
