@@ -411,3 +411,74 @@ def helix(sketch, source, axis, pitch, turns, hand='RIGHT'):
                  for f in faces for i in range(1, len(f)-1))
     if volume < 0: faces = [tuple(reversed(f)) for f in faces]
     return vertices, faces
+
+
+def revolve(sketch, source, axis, angle):
+    """Revolve a closed contour `angle` degrees (≤ 360) around an in-plane axis.
+
+    Unlike the helix, the contour may rest on the axis (cones, domes): those points
+    are shared by every step so the solid stays closed. A full turn welds its last
+    step to the first and has no end caps.
+    """
+    import math
+    from mathutils.geometry import tessellate_polygon
+    if len(region(sketch, source)) != 1:
+        raise CommandError('La revolución usa un contorno sin huecos', code='cad_profile_invalid')
+    ring = outline(source)
+    (ax, ay), (dx, dy) = helix_axis(sketch, axis)
+    heights = [(x-ax)*dx+(y-ay)*dy for x, y in ring]
+    radial = [-(x-ax)*dy+(y-ay)*dx for x, y in ring]
+    span = max(max(heights)-min(heights), max(abs(r) for r in radial), 1e-12)
+    eps = span*1e-9
+    if min(radial) < -eps and max(radial) > eps:
+        raise CommandError('El perfil cruza el eje; déjalo a un lado del eje (puede apoyarse en él)', code='cad_profile_invalid')
+    if max(abs(r) for r in radial) <= eps:
+        raise CommandError('El perfil está sobre el eje y no encierra volumen', code='cad_profile_invalid')
+    full = angle >= 360-1e-9
+    basis = frame(sketch)
+    o, fx, fy, fn = (Vector(basis[k]) for k in ('origin', 'x', 'y', 'normal'))
+    origin = o+fx*ax+fy*ay
+    d = (fx*dx+fy*dy).normalized()
+    side = 1. if max(radial) > eps else -1.
+    u = (fx*-dy+fy*dx)*side
+    w = d.cross(u)
+    steps = max(4, math.ceil(angle/360*64))
+    rings = steps if full else steps+1
+    n = len(ring)
+    on_axis = [abs(r) <= eps for r in radial]
+    vertices, index = [], {}
+    for i in range(n):
+        if on_axis[i]:
+            index[(None, i)] = len(vertices); vertices.append(tuple(origin+d*heights[i]))
+    for k in range(rings):
+        theta = math.radians(angle)*k/steps
+        c, s = math.cos(theta), math.sin(theta)
+        for i in range(n):
+            if not on_axis[i]:
+                index[(k, i)] = len(vertices)
+                vertices.append(tuple(origin+d*heights[i]+(u*c+w*s)*abs(radial[i])))
+    def at(k, i):
+        return index[(None, i)] if on_axis[i] else index[(k % rings if full else k, i)]
+    faces = []
+    for k in range(steps):
+        for i in range(n):
+            j = (i+1) % n
+            loop = []
+            for v in (at(k, i), at(k, j), at(k+1, j), at(k+1, i)):
+                if v not in loop: loop.append(v)
+            if len(loop) >= 3: faces.append(tuple(loop))
+    caps = []
+    if not full:
+        for tri in tessellate_polygon([[Vector((x, y, 0.)) for x, y in ring]]):
+            caps.append(tuple(at(0, i) for i in tri))
+            caps.append(tuple(at(steps, i) for i in reversed(tri)))
+        # Side quads share one winding; a cap wound like its neighbouring side
+        # repeats a directed edge and must be flipped to close the surface.
+        directed = {(f[i], f[(i+1) % len(f)]) for f in faces for i in range(len(f))}
+        caps = [tuple(reversed(f)) if any((f[i], f[(i+1) % len(f)]) in directed for i in range(len(f))) else f
+                for f in caps]
+    faces += caps
+    volume = sum(Vector(vertices[f[0]]).dot(Vector(vertices[f[i]]).cross(Vector(vertices[f[i+1]])))
+                 for f in faces for i in range(1, len(f)-1))
+    if volume < 0: faces = [tuple(reversed(f)) for f in faces]
+    return vertices, faces

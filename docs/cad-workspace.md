@@ -468,6 +468,11 @@ Usa el bisel nativo de Blender sobre el sólido; no es un fillet B-rep.
   **Boceto en cara** consume la cara resaltada; **Ver objetos
   de la escena** permite elegir referencias externas. Esa referencia conserva su
   posición capturada, sin seguir cambios topológicos de una cara arbitraria.
+- **Revolución** (rail 3D, con un perfil seleccionado) gira el contorno alrededor de
+  un eje del croquis y lo suma a la pieza. Para un cono, dibuja un triángulo con un
+  lado sobre una línea de construcción: esa línea es el eje por defecto. La bandeja
+  cambia el **Ángulo** (hasta 360°) y el eje (Y, X o las líneas de construcción).
+  El perfil puede tocar el eje, pero no cruzarlo.
 - **Nuevo cuerpo** crea una pieza independiente. El árbol agrupa sus bocetos y
   operaciones; **Nuevo boceto** está disponible también cuando ya hay otros.
   El ojo de cada boceto oculta/muestra su overlay sin desactivar las operaciones.

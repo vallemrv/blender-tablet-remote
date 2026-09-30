@@ -26,7 +26,7 @@ object CadParser {
         j.optString("length_unit") != "METERS") CadCapabilities() else CadCapabilities(2,
         strings(j.optJSONArray("planes")).filter { it in listOf("XY", "XZ", "YZ") },
         strings(j.optJSONArray("entities")).filter { it in listOf("LINE", "RECTANGLE", "CIRCLE", "ARC", "NGON", "SLOT", "GEAR", "POLYGON") },
-        strings(j.optJSONArray("features")).filter { it in listOf("EXTRUDE", "CUT", "LOFT", "HELIX", "MIRROR") },
+        strings(j.optJSONArray("features")).filter { it in listOf("EXTRUDE", "CUT", "LOFT", "HELIX", "REVOLVE", "MIRROR") },
         strings(j.optJSONArray("constraints")).filter { it in listOf("COINCIDENT", "POINT_ON_LINE", "HORIZONTAL", "VERTICAL", "PARALLEL", "PERPENDICULAR", "TANGENT", "EQUAL", "DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "FIX", "MIDPOINT", "SYMMETRIC", "SYMMETRIC_LINE") },
         j.optBoolean("sketch_editing"), strings(j.optJSONArray("offset_entities")), j.optBoolean("feature_mirror"))
     fun state(j: JSONObject?): CadState {
@@ -65,7 +65,7 @@ object CadParser {
                 it.optJSONArray("edges")?.length() ?: 0, it.optDouble("pitch", 0.0), it.optDouble("turns", 0.0),
                 it.optString("hand", "RIGHT"), it.optString("axis", "Y"),
                 it.optJSONObject("mirror")?.id("source_id"), it.optJSONObject("mirror")?.optString("plane", "XZ") ?: "XZ",
-                it.optJSONObject("mirror")?.optDouble("offset", 0.0) ?: 0.0) },
+                it.optJSONObject("mirror")?.optDouble("offset", 0.0) ?: 0.0, it.optDouble("angle", 360.0)) },
             activeSketchId = j.id("active_sketch_id"), selectionKind = selection?.id("kind"), selectionId = selection?.id("id"),
             sessionActive = session?.optBoolean("active") == true, sessionId = session?.id("id"), canConfirm = session?.optBoolean("can_confirm", true) == true,
             canClose = session?.optBoolean("can_close") == true, operation = session?.optString("operation").orEmpty(),

@@ -99,7 +99,7 @@ def _new_sketch(doc,payload):
     if support_id:
         feature=model.find(doc,'features',support_id)
         if feature.get('mirror'): raise BadPayload('Usa Boceto en cara sobre el resultado de la simetría')
-        if feature['type'] in model.FINISHES + ('LOFT','HELIX'):
+        if feature['type'] in model.FINISHES + ('LOFT','HELIX','REVOLVE'):
             raise BadPayload('Un redondeo o solevado no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
         source,_=model.profile(doc,feature['profile_id'])
         plane_local=source['plane']
@@ -549,9 +549,9 @@ def entity_delete(payload):
                 try: model.profile(doc,feature[profile_key])
                 except CommandError as exc:
                     raise CommandError('El borrado abriría un perfil utilizado; elimina primero su operación CAD',code='cad_dependency') from exc
-            if feature.get('type')=='HELIX' and feature['sketch_id']==sketch['id'] and feature['axis'] not in ('X','Y') and \
+            if feature.get('type') in ('HELIX','REVOLVE') and feature['sketch_id']==sketch['id'] and feature['axis'] not in ('X','Y') and \
                     not any(e['id']==feature['axis'] for e in sketch['entities']):
-                raise CommandError('Esa línea es el eje de un barrido helicoidal; cambia antes su eje',code='cad_dependency')
+                raise CommandError('Esa línea es el eje de un barrido o revolución; cambia antes su eje',code='cad_dependency')
     yield from runtime.transaction_steps(payload,change,'CAD borrar selección')
     runtime.selection=None
     return runtime.status()
@@ -762,6 +762,42 @@ def _helix_axis(sketch, axis):
     return axis
 
 
+@command('cad.revolve.create')
+def revolve_create(payload):
+    """Revolve one closed contour around an axis of its sketch and add it to the body; one undo.
+
+    Without `axis`, the first construction line the contour touches or leaves to one
+    side is used (the usual way to draw a cone or boss), then the sketch Y/X axes.
+    """
+    from ..cad.kernel import helix_axis
+    def change(doc):
+        sketch,identifier=_loft_profile(doc,dict(from_sketch_id=payload.get('sketch_id'),from_profile_id=payload.get('profile_id')),'from')
+        _,source=model.profile(doc,identifier)
+        ring=model.outline(source)
+        axis=payload.get('axis')
+        if axis is None:
+            def clear(name):
+                (ax,ay),(dx,dy)=helix_axis(sketch,name)
+                side=[-(x-ax)*dy+(y-ay)*dx for x,y in ring]
+                eps=1e-9
+                return not (min(side)<-eps and max(side)>eps) and max(abs(v) for v in side)>eps
+            names=[e['id'] for e in sketch['entities'] if e['type']=='LINE' and e.get('construction')]+['Y','X']
+            axis=next((name for name in names if clear(name)),'Y')
+        feature=model.validate_revolve(dict(id=model.uid('feature'),name='Revolución '+str(len(doc['features'])+1),type='REVOLVE',
+            order=model.next_order(doc),sketch_id=sketch['id'],profile_id=identifier,enabled=True,body_id=sketch['body_id'],
+            axis=_helix_axis(sketch,axis),angle=payload.get('angle',360)))
+        doc['features'].append(feature)
+        bar=runtime.bar(doc)
+        if bar:
+            model.insert_after(doc,feature,bar)
+            runtime.rollback_id=feature['id']
+        created.append(feature['id'])
+    created=[]
+    yield from runtime.transaction_steps(payload,change,'CAD revolución')
+    runtime.selection=dict(kind='FEATURE',id=created[0])
+    return runtime.status()
+
+
 @command('cad.helix.create')
 def helix_create(payload):
     """Helical sweep of one closed contour around an axis of its sketch; one undo."""
@@ -954,6 +990,10 @@ def feature_set(payload):
             if 'width' in payload: feature['width']=payload['width']
             if 'segments' in payload: feature['segments']=payload['segments']
             model.validate_finish(feature)
+        if feature['type']=='REVOLVE':
+            if 'angle' in payload: feature['angle']=payload['angle']
+            if 'axis' in payload: feature['axis']=_helix_axis(model.find(doc,'sketches',feature['sketch_id']),payload['axis'])
+            model.validate_revolve(feature)
         if feature['type']=='HELIX':
             for key in ('pitch','turns','hand'):
                 if key in payload: feature[key]=payload[key]

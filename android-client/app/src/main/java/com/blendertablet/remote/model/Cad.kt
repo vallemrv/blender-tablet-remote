@@ -29,7 +29,9 @@ data class CadFeature(val id: String, val name: String, val sketchId: String,
     val width: Double = 0.0, val segments: Int = 1, val edgeCount: Int = 0,
     /** Barrido helicoidal (`HELIX`): paso por vuelta, vueltas, sentido y eje del croquis (X, Y o una línea). */
     val pitch: Double = 0.0, val turns: Double = 0.0, val hand: String = "RIGHT", val axis: String = "Y",
-    val mirrorSourceId: String? = null, val mirrorPlane: String = "XZ", val mirrorOffset: Double = 0.0) {
+    val mirrorSourceId: String? = null, val mirrorPlane: String = "XZ", val mirrorOffset: Double = 0.0,
+    /** Revolución (`REVOLVE`): grados alrededor de su eje (X, Y o una línea del croquis). */
+    val angle: Double = 360.0) {
     val isFinish get() = type in listOf("FILLET", "CHAMFER")
     val isMirror get() = mirrorSourceId != null
 }

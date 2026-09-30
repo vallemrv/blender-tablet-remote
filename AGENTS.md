@@ -791,6 +791,12 @@ no quedan archivos o referencias temporales.
   vuelta) y se suma al cuerpo. Rechaza perfiles que toquen/crucen el eje y pasos
   menores o iguales que la altura axial del perfil (vueltas solapadas). Crear elige
   el primer eje Y/X no cruzado; la línea de eje no se borra mientras la use.
+- Revolución (`REVOLVE`) guarda `sketch_id/profile_id`, `axis` (`X`/`Y` del croquis
+  o id de una línea del mismo croquis) y `angle` (0–360°). Gira el contorno y se suma
+  al cuerpo. El perfil puede apoyarse en el eje (conos, cúpulas: esos puntos se
+  comparten en todos los pasos) pero no cruzarlo; 360° cierra la vuelta sin tapas.
+  Crear elige la primera línea de construcción válida y después Y/X. Comparte con el
+  helicoidal la protección de su línea de eje y no sirve de apoyo de bocetos.
 - Seleccionar todo/Deseleccionar todo comparten el rail de Deshacer/Rehacer, también
   en CAD 3D. En edición seleccionan figuras del croquis; en 3D el croquis elegido.
   Extruir/Vaciar aceptan `sketch_id` para todos sus contornos: exteriores como volumen,

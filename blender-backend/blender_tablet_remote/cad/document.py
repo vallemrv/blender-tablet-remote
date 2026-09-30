@@ -43,6 +43,17 @@ def validate_helix(feature):
     return feature
 
 
+def validate_revolve(feature):
+    """Revolution: `angle` degrees (0–360] around an in-sketch axis (X, Y or a line)."""
+    feature['angle'] = number(feature.get('angle', 360), positive=True)
+    if feature['angle'] > 360:
+        raise BadPayload('La revolución admite hasta 360°')
+    axis = feature.setdefault('axis', 'Y')
+    if not isinstance(axis, str) or not axis:
+        raise BadPayload('Eje no válido')
+    return feature
+
+
 def validate_finish(feature):
     edges = feature.get('edges')
     if not isinstance(edges, list) or not edges or len(edges) > 200:
@@ -170,13 +181,13 @@ def loads(raw):
                     raise ValueError('invalid loft')
                 seen_features.add(feature['id'])
                 continue
-            if feature.get('type') == 'HELIX':
+            if feature.get('type') in ('HELIX', 'REVOLVE'):
                 sketch, _ = profile(doc, feature['profile_id'])
                 feature.setdefault('body_id', sketch['body_id'])
                 find(doc,'bodies',feature['body_id'])
                 if sketch['id'] != feature['sketch_id'] or not isinstance(feature['enabled'], bool):
-                    raise ValueError('invalid helix')
-                validate_helix(feature)
+                    raise ValueError('invalid sweep')
+                (validate_helix if feature['type'] == 'HELIX' else validate_revolve)(feature)
                 seen_features.add(feature['id'])
                 continue
             sketch, _ = profile(doc, feature['profile_id'])
@@ -397,7 +408,7 @@ def resolve_supports(doc):
     def supported(feature_id):
         f=find(doc,'features',feature_id)
         if f.get('mirror'): raise BadPayload('Usa Boceto en cara sobre el resultado de la simetría')
-        if f['type'] in FINISHES + ('LOFT','HELIX'):
+        if f['type'] in FINISHES + ('LOFT','HELIX','REVOLVE'):
             raise BadPayload('Un redondeo o solevado no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
         source=find(doc,'sketches',f['sketch_id']); resolve(source)
         result=copy.deepcopy(frame(source))

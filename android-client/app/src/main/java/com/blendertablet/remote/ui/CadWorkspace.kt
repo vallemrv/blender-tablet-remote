@@ -159,6 +159,10 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 enabled = connected && !cad.sessionActive && (loftFrom != null || cad.selectionKind in listOf("PROFILE", "SKETCH"))) {
                 loftFrom = if (loftFrom != null) null else cad.selectionKind!! to cad.selectionId!!
             }
+            if ("REVOLVE" in capabilities.features) CadAction("REVOLVE", "Revolución: gira el perfil alrededor de un eje del croquis (puede apoyarse en él)",
+                enabled = connected && !cad.sessionActive && cad.selectionKind in listOf("PROFILE", "SKETCH")) {
+                command("cad.revolve.create", (if (cad.selectionKind == "SKETCH") "sketch_id" else "profile_id") to cad.selectionId)
+            }
             if ("HELIX" in capabilities.features) CadAction("HELIX", "Barrido helicoidal del perfil alrededor de un eje del croquis",
                 enabled = connected && !cad.sessionActive && cad.selectionKind in listOf("PROFILE", "SKETCH")) {
                 command("cad.helix.create", (if (cad.selectionKind == "SKETCH") "sketch_id" else "profile_id") to cad.selectionId)
@@ -403,6 +407,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 "values" to drafts.toMap(), "constrain" to true,
                 "equal_ids" to cadOtherSelectedArcs(cad, entity).takeIf { it.isNotEmpty() })
             feature?.isMirror == true && drafts["mirror_offset"] != null -> command("cad.feature.set", "feature_id" to feature.id, "offset" to drafts["mirror_offset"])
+            feature?.type == "REVOLVE" && drafts["angle"] != null -> command("cad.feature.set", "feature_id" to feature.id, "angle" to drafts["angle"])
             feature?.type == "HELIX" && drafts["pitch"] != null -> command("cad.feature.set", "feature_id" to feature.id, "pitch" to drafts["pitch"])
             feature != null && drafts["depth"] != null -> command("cad.feature.set", "feature_id" to feature.id, "depth" to drafts["depth"])
             offsetPlane != null && drafts["offset"] != null -> command("cad.plane.set", "plane_id" to offsetPlane.id,
@@ -438,6 +443,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 feature?.isMirror == true -> "${feature.name} · perfil y profundidad siguen a la operación fuente"
                 editingConstraint != null -> "${cadLabel(editingConstraint!!.type)} · escribe el valor · arrastra la cota para colocarla sin mover el dibujo"
                 loftFrom != null -> "Solevado: toca el perfil del otro croquis (o elígelo en la pila) · vuelve a pulsar Solevado para cancelar"
+                feature?.type == "REVOLVE" -> "${feature.name} · el perfil gira alrededor del eje elegido; puede apoyarse en él (conos, cúpulas) pero no cruzarlo"
                 feature?.type == "HELIX" -> "${feature.name} · altura ${formatToolDistance(feature.pitch * feature.turns * lengthFactor(unit), 2)} ${unit.short} · el paso debe superar la altura del perfil · el eje es X, Y o una línea del croquis"
                 feature?.type == "LOFT" -> "${feature.name} · une ${cad.sketches.firstOrNull { it.id == feature.sketchId }?.name.orEmpty()} con otro croquis · mover su plano lo actualiza"
                 pendingDimension == "FILLET" -> "Redondeo: varias esquinas, el rectángulo entero o líneas unidas · un radio para todas · tras el primero, toca otra esquina"
@@ -676,6 +682,17 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                 command("cad.feature.set", "feature_id" to feature.id, "segments" to it)
                             }
                             Text("${feature.edgeCount} aristas", color = Ink.Muted, fontSize = 12.sp)
+                            CadAction("VISIBLE", if (feature.enabled) "Ocultar" else "Mostrar", selected = feature.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled) }
+                            CadAction("DELETE", "Borrar operación", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
+                        } else if (feature?.type == "REVOLVE") {
+                            CadDimension("Ángulo", drafts["angle"] ?: feature.angle, unit, feature.id + "angle", degrees = true, step = 15.0,
+                                minimum = .01, maximum = 360.0, enabled = connected, onDone = ::acceptValues) { drafts["angle"] = it }
+                            val lines = cad.sketches.firstOrNull { it.id == feature.sketchId }?.entities.orEmpty().filter { it.type == "LINE" && it.construction }
+                            (listOf("Y" to "Eje Y", "X" to "Eje X") + lines.mapIndexed { i, line -> line.id to "Eje línea ${i + 1}" }).forEach { (axis, label) ->
+                                PillButton(label, selected = feature.axis == axis, enabled = connected && drafts.isEmpty()) {
+                                    command("cad.feature.set", "feature_id" to feature.id, "axis" to axis)
+                                }
+                            }
                             CadAction("VISIBLE", if (feature.enabled) "Ocultar" else "Mostrar", selected = feature.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled) }
                             CadAction("DELETE", "Borrar operación", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
                         } else if (feature?.type == "HELIX") {
@@ -922,7 +939,7 @@ internal fun cadLabel(type: String) = when (type) {
     "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "SLOT" -> "Ranura"; "GEAR" -> "Engranaje"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "POINT" -> "Punto"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
     "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad (tamaño del primero; en arcos también el ángulo, salvo redondeos)"; "EQUAL_ANGLE" -> "Igualdad de ángulo"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "ANGLE" -> "Ángulo"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
-    "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; else -> type
+    "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; "REVOLVE" -> "Revolución"; else -> type
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

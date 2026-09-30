@@ -1,6 +1,6 @@
 """CAD evaluation on plain snapshots; run by the auxiliary Blender main thread."""
 from . import document as model
-from .kernel import kernel, ExtrusionPreviewCache, finish_edges, loft, helix
+from .kernel import kernel, ExtrusionPreviewCache, finish_edges, loft, helix, revolve
 from ..errors import CommandError
 from . import mirror
 
@@ -62,6 +62,20 @@ class Evaluator:
                 cached=self._solids.get(identifier)
                 if cached is None or cached[0]!=model.dumps(signature):
                     operand=helix(sketch,source,feature['axis'],feature['pitch'],feature['turns'],feature['hand'])
+                    if previous: operand=kernel.union(solids[previous],operand)
+                    cached=(model.dumps(signature),operand)
+                    self._solids[identifier]=cached
+                solids[identifier]=cached[1]
+                keys[identifier]=hashlib.blake2b(repr(signature).encode(),digest_size=16).hexdigest()
+                tips[body]=identifier
+                continue
+            if feature['type']=='REVOLVE':
+                sketch,source=model.profile(doc,feature['profile_id'])
+                signature=(doc['id'],'REVOLVE',feature['profile_id'],feature['axis'],feature['angle'],
+                           model.dumps(dict(frame=model.frame(sketch),entities=sketch['entities'])),keys.get(previous))
+                cached=self._solids.get(identifier)
+                if cached is None or cached[0]!=model.dumps(signature):
+                    operand=revolve(sketch,source,feature['axis'],feature['angle'])
                     if previous: operand=kernel.union(solids[previous],operand)
                     cached=(model.dumps(signature),operand)
                     self._solids[identifier]=cached
