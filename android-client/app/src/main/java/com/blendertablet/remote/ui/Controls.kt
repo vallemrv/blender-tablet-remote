@@ -25,6 +25,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
@@ -51,33 +58,65 @@ fun CompactNumericField(
     placeholder: String? = null,
     textColor: Color = Ink.OnPanel,
     onFocusChange: (Boolean) -> Unit = {},
+    /** Tocar el campo selecciona todo su contenido: lo que se escribe sustituye al valor. */
+    selectAllOnFocus: Boolean = false,
     onDone: () -> Unit,
 ) {
+    if (!selectAllOnFocus) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = TextStyle(color = textColor, fontSize = 13.sp, textAlign = textAlign),
+            cursorBrush = SolidColor(Ink.Accent),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { onDone() }),
+            modifier = modifier
+                .onFocusChanged { onFocusChange(it.isFocused) }
+                .height(34.dp)
+                .clip(RoundedCornerShape(7.dp))
+                .background(Color.White.copy(alpha = .07f)),
+            decorationBox = { inner -> NumericFieldBox(value, placeholder, textAlign, inner) },
+        )
+        return
+    }
+    // Con texto alineado a la derecha, un toque deja el cursor delante del número y
+    // lo tecleado se antepone («45» sobre «0» da «450»). Se selecciona todo al enfocar,
+    // después de que el propio toque coloque el cursor.
+    var field by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
+    if (field.text != value) field = TextFieldValue(value, TextRange(value.length))
+    var focused by remember { mutableStateOf(false) }
+    LaunchedEffect(focused) {
+        if (focused) field = field.copy(selection = TextRange(0, field.text.length))
+    }
     BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = field,
+        onValueChange = { next -> field = next; if (next.text != value) onValueChange(next.text) },
         singleLine = true,
         textStyle = TextStyle(color = textColor, fontSize = 13.sp, textAlign = textAlign),
         cursorBrush = SolidColor(Ink.Accent),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { onDone() }),
         modifier = modifier
-            .onFocusChanged { onFocusChange(it.isFocused) }
+            .onFocusChanged { focused = it.isFocused; onFocusChange(it.isFocused) }
             .height(34.dp)
             .clip(RoundedCornerShape(7.dp))
             .background(Color.White.copy(alpha = .07f)),
-        decorationBox = { inner ->
-            Box(
-                Modifier.fillMaxSize().padding(horizontal = 6.dp),
-                contentAlignment = if (textAlign == TextAlign.End) Alignment.CenterEnd else Alignment.Center,
-            ) {
-                if (value.isEmpty() && placeholder != null) {
-                    Text(placeholder, color = Ink.Faint, fontSize = 11.sp, maxLines = 1)
-                }
-                inner()
-            }
-        },
+        decorationBox = { inner -> NumericFieldBox(value, placeholder, textAlign, inner) },
     )
+}
+
+@Composable
+private fun NumericFieldBox(value: String, placeholder: String?, textAlign: TextAlign, inner: @Composable () -> Unit) {
+    Box(
+        Modifier.fillMaxSize().padding(horizontal = 6.dp),
+        contentAlignment = if (textAlign == TextAlign.End) Alignment.CenterEnd else Alignment.Center,
+    ) {
+        if (value.isEmpty() && placeholder != null) {
+            Text(placeholder, color = Ink.Faint, fontSize = 11.sp, maxLines = 1)
+        }
+        inner()
+    }
 }
 
 /**

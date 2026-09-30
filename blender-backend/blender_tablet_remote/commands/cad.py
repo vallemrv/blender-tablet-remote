@@ -601,7 +601,9 @@ def _travel_along(anchor, normal, start, end):
         direction = direction.normalized()
         b = normal.dot(direction)
         denominator = 1. - b*b
-        if denominator < 1e-4:  # The normal points at the camera: no 1:1 reading.
+        # Within ~13° of the view ray the closest point runs away with tiny pen moves;
+        # the caller then falls back to the on-screen scale instead of jumping.
+        if denominator < .05:
             return None
         w = anchor - origin
         return (b*direction.dot(w) - normal.dot(w)) / denominator
@@ -1120,6 +1122,16 @@ def _pick(payload):
         elif item['closed'] and model.contains(ring,(u,v)):
             area=abs(sum(a[0]*b[1]-b[0]*a[1] for a,b in zip(ring,ring[1:]+ring[:1])))
             candidates.append((0,area,dict(kind='PROFILE',id='profile_'+item['id'])))
+        if runtime.active_sketch_id:
+            # A slot's axis (centre line between its cap centres) is a straight
+            # reference for angles and point-on-line: tapping near it picks AXIS.
+            ends={h['part']:h['point'] for h in item.get('handles',[]) if h['part'] in ('START','END')}
+            if len(ends)==2 and any(h['part']=='SIDE' for h in item.get('handles',[])):
+                a,b=ends['START'],ends['END']
+                dx,dy=(b[0]-a[0])*aspect,b[1]-a[1]
+                t=max(0,min(1,((u-a[0])*aspect*dx+(v-a[1])*dy)/max(dx*dx+dy*dy,1e-20)))
+                distance=math.hypot((u-a[0])*aspect-t*dx,v-a[1]-t*dy)
+                if distance<.024: candidates.append((1,distance,dict(kind='ENTITY',id=item['id'],part='AXIS')))
         for index,(a,b) in enumerate(zip(ring,ring[1:]+(ring[:1] if item['closed'] else []))):
             dx,dy=(b[0]-a[0])*aspect,b[1]-a[1]
             t=max(0,min(1,((u-a[0])*aspect*dx+(v-a[1])*dy)/max(dx*dx+dy*dy,1e-20)))
@@ -1753,10 +1765,12 @@ def plane_update(payload):
         gu,gv=model.number(payload.get('gesture_u',0)),model.number(payload.get('gesture_v',0))
         u,v=model.number(payload.get('u',.5)),model.number(payload.get('v',.5))
         travel=_travel_along(frame['origin'],frame['normal'],(u-gu,v-gv),(u,v))
-        if travel is not None:
-            value=model.number(payload.get('baseline_offset',p['offset']))+travel
-            if runtime.increment: value=round(value/runtime.step)*runtime.step
-            p['offset']=value
+        if travel is None:
+            # Normal towards the camera: move by the on-screen scale, one step per 4 % of height.
+            travel=-gv/.04*runtime.step
+        value=model.number(payload.get('baseline_offset',p['offset']))+travel
+        if runtime.increment: value=round(value/runtime.step)*runtime.step
+        p['offset']=value
     previous=session['plane']; session['plane']=p
     try: _plane_preview(session)
     except (BadPayload,CommandError):

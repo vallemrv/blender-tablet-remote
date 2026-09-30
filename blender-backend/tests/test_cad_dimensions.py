@@ -192,6 +192,17 @@ class DimensionTests(CadTests):
         self.assertEqual(label['label'],'135°'); self.assertEqual(len(label['arrows']),2)
         with self.assertRaises(CommandError): cad.constraint_set(dict(constraint_id=rule['id'],value=200,**OWNER))
 
+    def test_tapping_between_slot_centres_picks_its_axis_for_an_angle(self):
+        slot=self.draw('SLOT',(.02,.02),(.08,.02)); base=self.draw('LINE',(0,-.05),(.1,-.05))
+        ring=[[.1,.4],[.5,.4],[.5,.6],[.1,.6]]
+        item=dict(id=slot,points=ring,closed=True,selected=False,
+                  handles=[dict(part='START',point=[.2,.5]),dict(part='END',point=[.4,.5]),dict(part='SIDE',point=[.3,.4]),dict(part='CENTER',point=[.3,.5])])
+        with patch.object(runtime,'overlay',return_value=[item]):
+            self.assertEqual(cad._pick(dict(u=.25,v=.505)),dict(kind='ENTITY',id=slot,part='AXIS'))
+        cad.constraint_add(dict(type='ANGLE',value=30.,refs=[dict(id=base,part='BODY'),dict(id=slot,part='AXIS')],**OWNER))
+        sketch=runtime.doc()['sketches'][0]
+        self.assertAlmostEqual(geometry.line_angle(sketch,[dict(id=base,part='BODY'),dict(id=slot,part='AXIS')])[3],30.,places=5)
+
     def refs(self,*refs): cad._set_selection([dict(kind='ENTITY',id=i,part=p) for i,p in refs])
     def dimension(self,typ,value): cad.constraint_add(dict(type=typ,value=value,**OWNER))
 

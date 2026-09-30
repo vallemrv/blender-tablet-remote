@@ -1188,6 +1188,15 @@ private class GestureView(
                 cadPaint.clearShadowLayer()
                 cadPaint.style = android.graphics.Paint.Style.STROKE
             }
+            if ("AXIS" in stroke.selectedParts) {
+                // Eje de una ranura: la línea entre los centros de sus extremos.
+                val a = stroke.handles.firstOrNull { it.part == "START" }?.point
+                val b = stroke.handles.firstOrNull { it.part == "END" }?.point
+                if (a != null && b != null) {
+                    cadPaint.color = 0xffffb347.toInt()
+                    canvas.drawLine(a.first * width, a.second * height, b.first * width, b.second * height, cadPaint)
+                }
+            }
             stroke.selectedParts.filter { it.startsWith("EDGE") }.forEach { part ->
                 val index = part.removePrefix("EDGE").toIntOrNull()
                 if (index != null && index in stroke.points.indices) {

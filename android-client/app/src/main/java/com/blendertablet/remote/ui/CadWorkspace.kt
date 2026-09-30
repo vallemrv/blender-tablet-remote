@@ -1013,7 +1013,7 @@ private fun CadDimension(
         } else CompactNumericField(value = input.text ?: formatToolDistance(displayed, detailDecimalPlaces(displayed, if (degrees || unit == LengthUnit.MILLIMETERS) 2 else 4)),
             onValueChange = { if (enabled) { input.text = it; onDraft(input.read(meters, factor, minimum, maximum)) } },
             modifier = Modifier.width(84.dp), textAlign = TextAlign.End, placeholder = if (degrees) "°" else unit.short,
-            textColor = if (value == null) Ink.Bad else if (enabled) Ink.OnPanel else Ink.Faint,
+            textColor = if (value == null) Ink.Bad else if (enabled) Ink.OnPanel else Ink.Faint, selectAllOnFocus = true,
             onDone = { if (enabled && value != null) { input.pending = value; input.text = null; onDone() } })
         Text(if (degrees) "°" else unit.short, color = Ink.Muted, fontSize = 12.sp)
         StepperButton("+", enabled && !readOnly && value != null && value < maximum) { nudge(1) }

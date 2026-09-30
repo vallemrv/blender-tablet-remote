@@ -641,6 +641,11 @@ no quedan archivos o referencias temporales.
 - Los campos numéricos aceptan cuentas (`10-3`, `2x4`, `(1+2)/4`) y, si empiezan
   por `+`, `*` o `/`, operan sobre el valor actual. Un menos seguido de un número
   sigue siendo una cota negativa.
+- Los campos numéricos CAD seleccionan todo su contenido al enfocarse
+  (`selectAllOnFocus`): con texto alineado a la derecha, el toque dejaba el cursor
+  delante del número y lo tecleado se anteponía. Mover conserva su campo sin cambios.
+- Tocar cerca de la línea entre los centros de una ranura selecciona su eje (`AXIS`),
+  que Android resalta; sirve para Ángulo y Punto sobre recta. Arrastrarlo mueve la ranura.
 - La bandeja inferior CAD usa `CompactNumericField`, `StepperButton` y el campo
   de paso compartido de `SnapControl.kt`; mantener −/+ acelera la repetición
   común de 180 a 80 ms después de 400 ms, sin multiplicar la cota elegida.
