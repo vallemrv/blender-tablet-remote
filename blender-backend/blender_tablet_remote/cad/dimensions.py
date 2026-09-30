@@ -62,6 +62,8 @@ def key(sketch, constraint, root=None):
     if constraint['type'] not in NUMERIC: return None
     root=root or groups(sketch)
     refs=constraint['refs']
+    if constraint['type']=='ANGLE' and len(refs)==2:
+        return ('angle',tuple(sorted((r['id'],r.get('part','BODY')) for r in refs)))
     if constraint['type']=='ANGLE': return root((refs[0]['id'],'sweep'))
     if constraint['type'] in ('DISTANCE_X','DISTANCE_Y'):
         return (constraint['type'],tuple(sorted((r['id'],r.get('part','BODY')) for r in refs)))
@@ -210,9 +212,12 @@ def describe(sketch, entity):
 def offers(sketch, refs):
     result={}
     for typ in NUMERIC:
-        if typ=='ANGLE': continue  # Offered only by the arc's own padlock.
         try:
-            if typ=='RADIUS':
+            if typ=='ANGLE':
+                # Between two straight lines; an arc's angle has its own padlock.
+                if len(refs)!=2: continue
+                value=geometry.line_angle(sketch,refs)[3]
+            elif typ=='RADIUS':
                 if len(refs)!=1: continue
                 value=geometry.radius(sketch,refs[0])
             elif len(refs)==1:
@@ -222,7 +227,7 @@ def offers(sketch, refs):
             else: continue
             if typ in ('DISTANCE_X','DISTANCE_Y'):
                 value=abs(float(b[0 if typ=='DISTANCE_X' else 1]-a[0 if typ=='DISTANCE_X' else 1]))
-            elif value<1e-7: continue
+            elif value<1e-7 and typ!='ANGLE': continue
             c=dict(id='offer',type=typ,refs=refs,value=value)
             geometry.validate_constraints(dict(sketch,constraints=[c]))
             existing=matching(sketch,c)

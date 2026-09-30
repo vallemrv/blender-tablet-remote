@@ -225,6 +225,10 @@ Los arcos dibujados con la herramienta Arco muestran **Ángulo** en grados con s
 propio candado: cerrado, el barrido ya no cambia al arrastrar el rombo ni por otras
 reglas. Confirmar un Ángulo escrito lo fija; aparece en Cotas y reglas como «Ángulo
 del arco». Los redondeos no muestran Ángulo: el suyo lo deciden sus dos lados.
+Para fijar el ángulo entre dos líneas o lados (por ejemplo un brazo a 45° o una
+cara con 10° de inclinación), selecciona ambos y pulsa **Ángulo** en el grupo de
+cotas. Se mide el ángulo que se ve entre los dos tramos; en una esquina, el
+interior. Escribe el valor en grados y se dibuja como un arco con flechas.
 Para varios arcos iguales, selecciónalos y pulsa **Igualdad**: toman el radio y el
 ángulo del primero, sin fijarlos. Con varios arcos seleccionados, escribir Radio o
 Ángulo en la bandeja y confirmar lo aplica a todos: añade las igualdades que falten

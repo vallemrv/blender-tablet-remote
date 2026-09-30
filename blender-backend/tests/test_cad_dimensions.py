@@ -171,6 +171,27 @@ class DimensionTests(CadTests):
         with self.assertRaises(CommandError): cad.entity_set(dict(entity_id=a,values={'radius':.02},equal_ids=[line],**OWNER))
         self.assertEqual(model.dumps(runtime.doc()),before)
 
+    def test_angle_between_lines_is_a_dimension_that_holds_while_dragging(self):
+        base=self.draw('LINE',(0,0),(.1,0)); arm=self.draw('LINE',(0,0),(.05,.05))
+        cad.constraint_add(dict(type='HORIZONTAL',refs=[dict(id=base,part='BODY')],**OWNER))
+        cad._set_selection([dict(kind='ENTITY',id=base,part='BODY'),dict(kind='ENTITY',id=arm,part='BODY')])
+        offer=runtime.status()['dimension_options']['ANGLE']
+        self.assertAlmostEqual(offer['value'],45.,places=6)
+        with patch('blender_tablet_remote.cad.runtime.undo_push') as undo:
+            cad.constraint_add(dict(type='ANGLE',value=30.,refs=[dict(id=base,part='BODY'),dict(id=arm,part='BODY')],**OWNER))
+            undo.assert_called_once()
+        sketch=runtime.doc()['sketches'][0]
+        self.assertAlmostEqual(geometry.line_angle(sketch,[dict(id=base),dict(id=arm)])[3],30.,places=5)
+        rule=next(c for c in sketch['constraints'] if c['type']=='ANGLE')
+        geometry.solve(sketch,geometry.move_goals(sketch,[dict(id=arm,part='END')],.02,.03),drag=True)
+        self.assertAlmostEqual(geometry.line_angle(sketch,[dict(id=base),dict(id=arm)])[3],30.,places=5)
+        cad.constraint_set(dict(constraint_id=rule['id'],value=135,**OWNER))   # obtuse interior corner
+        sketch=runtime.doc()['sketches'][0]
+        self.assertAlmostEqual(geometry.line_angle(sketch,[dict(id=base),dict(id=arm)])[3],135.,places=5)
+        label=next(o for o in runtime.overlay(runtime.doc()) if o['id']==rule['id'])
+        self.assertEqual(label['label'],'135°'); self.assertEqual(len(label['arrows']),2)
+        with self.assertRaises(CommandError): cad.constraint_set(dict(constraint_id=rule['id'],value=200,**OWNER))
+
     def refs(self,*refs): cad._set_selection([dict(kind='ENTITY',id=i,part=p) for i,p in refs])
     def dimension(self,typ,value): cad.constraint_add(dict(type=typ,value=value,**OWNER))
 

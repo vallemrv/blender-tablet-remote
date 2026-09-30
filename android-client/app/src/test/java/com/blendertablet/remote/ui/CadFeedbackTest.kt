@@ -5,6 +5,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadFeedbackTest {
+    @Test fun angleDimensionNeedsTwoDistinctStraightLines() {
+        val lines = listOf(CadEntity("a", "LINE", emptyMap()), CadEntity("b", "LINE", emptyMap()), CadEntity("c", "CIRCLE", emptyMap()))
+        val sketch = CadSketch("s", "Boceto", "XY", lines, emptyList())
+        val base = CadState(activeSketchId = "s", sketches = listOf(sketch), selectionKind = "ENTITY", selectionId = "b")
+        assertTrue(cadConstraintEnabled(base.copy(selection = listOf(CadSelection("a"), CadSelection("b"))), "ANGLE"))
+        assertFalse(cadConstraintEnabled(base.copy(selection = listOf(CadSelection("a"))), "ANGLE"))
+        assertFalse(cadConstraintEnabled(base.copy(selection = listOf(CadSelection("a"), CadSelection("c"))), "ANGLE"))
+        assertTrue("ANGLE" in cadConstraintGroups(listOf("DISTANCE", "ANGLE")).last())
+    }
+
     @Test fun trayValuesOfOneArcApplyToTheOtherSelectedArcsOnly() {
         val arcs = listOf("a", "b", "c").map { CadEntity(it, "ARC", mapOf("radius" to .01, "sweep" to 90.0)) }
         val line = CadEntity("l", "LINE", emptyMap())

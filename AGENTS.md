@@ -431,6 +431,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   Solo restringe la distancia perpendicular: el punto desliza por la recta y su
   prolongación. Respeta FIX/cotas sin fijar automáticamente la guía. Rechaza
   puntos sobre su propia figura, dos puntos, dos líneas o una guía curva.
+- `ANGLE` con dos líneas/lados rectos es la cota de ángulo entre ellas (0–180°):
+  cada segmento apunta desde la intersección de ambas rectas hacia su extremo más
+  lejano, así una esquina compartida mide su ángulo interior. Vive en el grupo de
+  cotas del rail, se ofrece con el valor actual y se dibuja como arco con flechas.
 - Las cotas CAD distinguen distancia diagonal, horizontal y vertical (`DISTANCE`,
   `DISTANCE_X`, `DISTANCE_Y`). Las dos últimas miden la separación absoluta en los
   ejes del croquis, admiten cero y conservan cantidades independientes. Pueden usar

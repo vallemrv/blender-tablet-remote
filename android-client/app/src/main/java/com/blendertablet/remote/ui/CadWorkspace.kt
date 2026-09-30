@@ -165,7 +165,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             group.forEach { type ->
                 CadAction(type, cadLabel(type), enabled = connected && !cad.sessionActive && cadConstraintEnabled(cad, type),
                     selected = pendingDimension == type) {
-                    if (type in listOf("DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS")) {
+                    if (type in listOf("DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "ANGLE")) {
                         val existing = cad.dimensionOptions[type]?.constraintId?.let { id -> cad.activeSketch?.constraints?.firstOrNull { it.id == id } }
                         if (existing != null) { editingConstraint = existing; pendingDimension = null }
                         else { pendingDimension = type; editingConstraint = null }
@@ -479,8 +479,10 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             }
                         }
                         pendingDimension?.let { type ->
+                            val angle = type == "ANGLE"
                             CadDimension(if (type == "FILLET") "Radio" else cadLabel(type), drafts["constraint"] ?: cad.dimensionOptions[type]?.value ?: cad.step * 5, unit, type,
-                                step = cad.step, enabled = connected, minimum = if (type in listOf("DISTANCE_X", "DISTANCE_Y")) 0.0 else .0000001,
+                                degrees = angle, step = if (angle) 1.0 else cad.step, maximum = if (angle) 180.0 else 10000.0,
+                                enabled = connected, minimum = if (angle || type in listOf("DISTANCE_X", "DISTANCE_Y")) 0.0 else .0000001,
                                 onDone = ::acceptValues) { drafts["constraint"] = it }
                         }
                         if (editing && state.cadTool == "NGON" && entity == null) {
@@ -785,6 +787,7 @@ internal fun cadConstraintEnabled(cad: CadState, type: String): Boolean {
         "EQUAL" -> if (curves) refs.map { it.id }.distinct().size >= 2 else refs.size >= 2 && lines
         "DISTANCE", "DISTANCE_X", "DISTANCE_Y" -> (refs.size == 1 && lines) || (refs.size == 2 && points)
         "RADIUS" -> refs.size == 1 && entities[0].type in listOf("CIRCLE", "ARC", "SLOT")
+        "ANGLE" -> refs.size == 2 && refs.distinct().size == 2 && lines
         "TANGENT" -> refs.size == 2 && entities.any { it.type == "LINE" } && entities.any { it.type in listOf("CIRCLE", "ARC") }
         else -> false
     }
@@ -824,7 +827,7 @@ internal fun cadConstraintGroups(available: List<String>): List<List<String>> {
         listOf("COINCIDENT", "POINT_ON_LINE", "MIDPOINT", "FIX"),
         listOf("HORIZONTAL", "VERTICAL", "PARALLEL", "COLLINEAR", "PERPENDICULAR", "TANGENT"),
         listOf("EQUAL", "SYMMETRIC", "SYMMETRIC_LINE"),
-        listOf("DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS"),
+        listOf("DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "ANGLE"),
     )
     val rest = available.filter { type -> groups.none { type in it } }
     return (groups.map { group -> group.filter { it in available } } + listOf(rest)).filter { it.isNotEmpty() }
@@ -849,7 +852,7 @@ internal fun cadLabel(type: String) = when (type) {
     "COLLINEAR" -> "Colineal (misma recta)"
     "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "SLOT" -> "Ranura"; "GEAR" -> "Engranaje"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "POINT" -> "Punto"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
-    "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad (tamaño del primero; en arcos también el ángulo, salvo redondeos)"; "EQUAL_ANGLE" -> "Igualdad de ángulo"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "ANGLE" -> "Ángulo del arco"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
+    "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad (tamaño del primero; en arcos también el ángulo, salvo redondeos)"; "EQUAL_ANGLE" -> "Igualdad de ángulo"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "ANGLE" -> "Ángulo"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
     "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; else -> type
 }
 

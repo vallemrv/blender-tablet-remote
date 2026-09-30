@@ -169,6 +169,8 @@ def residual(sketch, c, scale):
         return [(measured-c['value'])/scale]
     if typ == 'RADIUS':
         return [(radius(sketch,refs[0])-c['value'])/scale]
+    if typ == 'ANGLE' and len(refs) == 2:
+        return [(line_angle(sketch, refs)[3]-c['value'])/180.]
     if typ == 'ANGLE':
         # Arc sweep in degrees; the sign only records the drawing direction.
         e = get_entity(sketch,refs[0])
@@ -210,6 +212,33 @@ def residual(sketch, c, scale):
     return [(d[0]*other[1]-d[1]*other[0])/denom if typ=='PARALLEL' else np.dot(d,other)/denom]
 
 
+def line_angle(sketch, refs):
+    """Angle between two drawn straight segments, as the drawing shows it.
+
+    Each segment points from the intersection of both infinite lines towards its
+    farther end, so a shared corner measures its interior angle (0–180°).
+    Returns (vertex, direction_a, direction_b, degrees); parallel lines use the
+    midpoint between them as vertex.
+    """
+    (a0,a1),(b0,b1) = line(sketch,refs[0]), line(sketch,refs[1])
+    da, db = a1-a0, b1-b0
+    if np.linalg.norm(da) < 1e-12 or np.linalg.norm(db) < 1e-12:
+        raise BadPayload('Las líneas del ángulo necesitan dos puntos distintos')
+    denominator = da[0]*db[1]-da[1]*db[0]
+    if abs(denominator) > 1e-12*np.linalg.norm(da)*np.linalg.norm(db):
+        t = ((b0-a0)[0]*db[1]-(b0-a0)[1]*db[0])/denominator
+        vertex = a0+da*t
+    else:
+        vertex = (a0+a1+b0+b1)/4
+    def away(p, q):
+        far = p if np.linalg.norm(p-vertex) >= np.linalg.norm(q-vertex) else q
+        d = far-vertex
+        return d/np.linalg.norm(d) if np.linalg.norm(d) > 1e-12 else (q-p)/np.linalg.norm(q-p)
+    ua, ub = away(a0,a1), away(b0,b1)
+    degrees = math.degrees(math.atan2(abs(ua[0]*ub[1]-ua[1]*ub[0]), float(np.dot(ua,ub))))
+    return vertex, ua, ub, degrees
+
+
 def validate_constraints(sketch):
     ids = set()
     for c in sketch.get('constraints',[]):
@@ -223,15 +252,17 @@ def validate_constraints(sketch):
             for value in position: model.number(value)
         refs = c.get('refs')
         typ = c['type']
-        count = (3,) if typ in ('SYMMETRIC','SYMMETRIC_LINE') else (1,2) if typ in ('DISTANCE','DISTANCE_X','DISTANCE_Y') else (1,) if typ in ('FIX','HORIZONTAL','VERTICAL','RADIUS','ANGLE') else (2,)
+        count = (3,) if typ in ('SYMMETRIC','SYMMETRIC_LINE') else (1,2) if typ in ('DISTANCE','DISTANCE_X','DISTANCE_Y') else (1,2) if typ == 'ANGLE' else (1,) if typ in ('FIX','HORIZONTAL','VERTICAL','RADIUS') else (2,)
         if not isinstance(refs,list) or len(refs) not in count or (len(refs)==2 and refs[0]==refs[1]):
             raise BadPayload('Número de elementos incorrecto para la restricción')
         for ref in refs:
             get_entity(sketch,ref)
         if typ in ('DISTANCE','RADIUS'):
             model.number(c.get('value'),positive=True)
-        if typ == 'ANGLE' and not .01 <= model.number(c.get('value')) < 360:
+        if typ == 'ANGLE' and len(refs) == 1 and not .01 <= model.number(c.get('value')) < 360:
             raise BadPayload('El ángulo del arco debe estar entre 0,01° y 360°')
+        if typ == 'ANGLE' and len(refs) == 2 and not 0 <= model.number(c.get('value')) <= 180:
+            raise BadPayload('El ángulo entre líneas debe estar entre 0° y 180°')
         if typ in ('DISTANCE_X','DISTANCE_Y') and model.number(c.get('value')) < 0:
             raise BadPayload('La distancia horizontal o vertical no puede ser negativa')
         if typ == 'FIX':

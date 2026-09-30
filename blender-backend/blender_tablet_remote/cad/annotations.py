@@ -89,6 +89,19 @@ def layout(sketch, constraint, index=0, *, base_gap=None):
         label=tuple(constraint.get('label_position',default))
         center,direction=radius_anchor(e,label);rim=add(center,mul(direction,radius))
         lines=[(center,rim),(rim,label)];arrows=[(rim,center)]
+    elif typ=='ANGLE' and len(refs)==2:
+        vertex,ua,ub,degrees=geometry.line_angle(sketch,refs);vertex=tuple(vertex)
+        start=math.atan2(ua[1],ua[0]);sweep=math.radians(degrees)
+        if (ua[0]*ub[1]-ua[1]*ub[0])<0: sweep=-sweep
+        reach=min(max(math.dist(vertex,tuple(p)) for p in geometry.line(sketch,r)) for r in refs)
+        default=add(vertex,mul((math.cos(start+sweep/2),math.sin(start+sweep/2)),max(reach*.5,gap*2)))
+        label=tuple(constraint.get('label_position',default));radius=max(math.dist(label,vertex),gap*.5)
+        arc=[add(vertex,mul((math.cos(start+sweep*i/32),math.sin(start+sweep*i/32)),radius)) for i in range(33)]
+        lines=list(zip(arc,arc[1:]));arrows=[(arc[0],arc[1]),(arc[-1],arc[-2])]
+        # Witness lines extend each segment to the arc when it ends short of it.
+        for direction,r in ((ua,refs[0]),(ub,refs[1])):
+            end=max((tuple(p) for p in geometry.line(sketch,r)),key=lambda p:math.dist(p,vertex))
+            if math.dist(end,vertex)<radius: lines.append((end,add(vertex,mul(tuple(direction),radius))))
     elif typ=='ANGLE' and len(refs)==1:
         e=geometry.get_entity(sketch,refs[0]);center=(e['x'],e['y'])
         start=math.radians(e['start']);sweep=math.radians(e['sweep'])

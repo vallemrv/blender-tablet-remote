@@ -1622,7 +1622,11 @@ hasta las esquinas virtuales cuando el lado participa en un redondeo. El sondeo,
 el trazo visible y las distancias entre puntos explícitos siguen usando los puntos
 reales; no se persisten coordenadas de pantalla ni referencias RNA.
 
-`ANGLE` es una cota de un solo `ARC/BODY`; solo los arcos que no son redondeos la describen: `value` en grados,
+`ANGLE` con dos referencias rectas (`LINE/BODY`, `RECTANGLE|NGON/EDGEi`, `SLOT/AXIS`)
+es el ángulo entre ellas en grados (0–180): cada segmento se orienta desde la
+intersección de ambas rectas hacia su extremo más lejano (ángulo interior en una
+esquina). Se anuncia en `constraints` y en `dimension_options.ANGLE` para dos líneas.
+Con una sola referencia, `ANGLE` es una cota de un `ARC/BODY`; solo los arcos que no son redondeos la describen: `value` en grados,
 magnitud del barrido (0,01–360), independiente del sentido de dibujo; `add/set`
 aceptan un valor negativo y guardan su valor absoluto. No se anuncia en
 `constraints` ni en `dimension_options`: el esquema `dimensions` del arco describe
