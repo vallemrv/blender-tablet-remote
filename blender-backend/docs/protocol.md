@@ -1621,6 +1621,13 @@ hasta las esquinas virtuales cuando el lado participa en un redondeo. El sondeo,
 el trazo visible y las distancias entre puntos explícitos siguen usando los puntos
 reales; no se persisten coordenadas de pantalla ni referencias RNA.
 
+`ANGLE` es una cota de un solo `ARC/BODY` (arco o redondeo): `value` en grados,
+magnitud del barrido (0,01–360), independiente del sentido de dibujo; `add/set`
+aceptan un valor negativo y guardan su valor absoluto. No se anuncia en
+`constraints` ni en `dimension_options`: el esquema `dimensions` del arco describe
+`sweep` con `constraint_type:ANGLE`, y su candado o `cad.entity.set` con
+`constrain:true` la crea. El overlay la rotula `∠ N°`.
+
 Cada sketch contiene `constraints:[{id,type,refs:[{id,part}],value?,values?}]`.
 FIX guarda `points:{rol:[x,y]}` para los puntos/los extremos de una arista,
 y `values` únicamente al seleccionar la figura completa. Una selección múltiple

@@ -4,7 +4,7 @@ import math
 from . import document as model, sketch as geometry
 from ..errors import BadPayload, CommandError
 
-NUMERIC = ('DISTANCE', 'DISTANCE_X', 'DISTANCE_Y', 'RADIUS')
+NUMERIC = ('DISTANCE', 'DISTANCE_X', 'DISTANCE_Y', 'RADIUS', 'ANGLE')
 
 
 def quantity(sketch, ref):
@@ -35,6 +35,7 @@ def key(sketch, constraint, root=None):
     if constraint['type'] not in NUMERIC: return None
     root=root or groups(sketch)
     refs=constraint['refs']
+    if constraint['type']=='ANGLE': return ('ANGLE',refs[0]['id'])
     if constraint['type'] in ('DISTANCE_X','DISTANCE_Y'):
         return (constraint['type'],tuple(sorted((r['id'],r.get('part','BODY')) for r in refs)))
     if len(refs)==1: return root(quantity(sketch,refs[0]))
@@ -82,12 +83,12 @@ def factor(entity, field):
 
 
 def bindings(sketch, entity):
-    fields={'RECTANGLE':('width','height'),'CIRCLE':('diameter',),'ARC':('radius',),'LINE':('length',),'NGON':('flats',),
+    fields={'RECTANGLE':('width','height'),'CIRCLE':('diameter',),'ARC':('radius','sweep'),'LINE':('length',),'NGON':('flats',),
             'SLOT':('length','width'),'GEAR':('module',),'POINT':()}[entity['type']]
     root=groups(sketch)
     result={}
     for field in fields:
-        target=root((entity['id'],'radius' if field in ('diameter','flats','width','module') and entity['type']!='RECTANGLE' else field))
+        target=('ANGLE',entity['id']) if field=='sweep' else root((entity['id'],'radius' if field in ('diameter','flats','width','module') and entity['type']!='RECTANGLE' else field))
         result[field]=[c['id'] for c in sketch.get('constraints',[]) if key(sketch,c,root)==target]
     return result
 
@@ -103,7 +104,7 @@ def set_values(sketch, entity, changes):
     for field,value in changes.items():
         for identifier in bound.get(field,[]):
             c=model.find(sketch,'constraints',identifier)
-            target=key(sketch,c,root); amount=value*factor(entity,field)
+            target=key(sketch,c,root); amount=(abs(value) if field=='sweep' else value)*factor(entity,field)
             if target in updated and not math.isclose(updated[target],amount,rel_tol=1e-9,abs_tol=1e-12):
                 raise BadPayload('Estas medidas están enlazadas por Igualdad; escribe un único valor')
             updated[target]=amount
@@ -150,8 +151,9 @@ def constrain_values(sketch, entity, changes):
         if field=='radius' and field not in changes and entity['type'] in ('CIRCLE','SLOT'):
             field='diameter' if entity['type']=='CIRCLE' else 'width'
         if field not in changes or not measure.get('lockable',True): continue
+        value=abs(model.number(changes[field])) if field=='sweep' else model.number(changes[field],positive=True)
         put(sketch,dict(id=model.uid('constraint'),type=measure['constraint_type'],
-                        refs=measure['refs'],value=model.number(changes[field],positive=True)*factor(entity,field)))
+                        refs=measure['refs'],value=value*factor(entity,field)))
 
 
 def describe(sketch, entity):
@@ -163,7 +165,9 @@ def describe(sketch, entity):
     bound=bindings(sketch,entity); typ=entity['type']
     fields={'RECTANGLE':[('width','Lado' if is_square(sketch,entity) else 'Ancho','DISTANCE','EDGE0',1.),('height','Alto','DISTANCE','EDGE1',1.)],
             'CIRCLE':[('radius','Radio','RADIUS','BODY',1.)],
-            'ARC':[('radius','Radio del redondeo' if geometry.fillet_sides(sketch,entity) else 'Radio','RADIUS','BODY',1.)],
+            # Sweep in degrees; on a rounding it also holds the angle between its sides.
+            'ARC':[('radius','Radio del redondeo' if geometry.fillet_sides(sketch,entity) else 'Radio','RADIUS','BODY',1.),
+                   ('sweep','Ángulo','ANGLE','BODY',1.)],
             'LINE':[('length','Lado completo' if any((entity['id'],role) in geometry.rounding_links(sketch) for role in ('START','END')) else 'Longitud','DISTANCE','BODY',1.)],
             # Its dimension is an inscribed RADIUS constraint, shown as the full size.
             'NGON':[('flats','Entre caras' if entity.get('sides',6)%2==0 else 'Ø inscrito','RADIUS','BODY',.5)],
@@ -179,6 +183,7 @@ def describe(sketch, entity):
 def offers(sketch, refs):
     result={}
     for typ in NUMERIC:
+        if typ=='ANGLE': continue  # Offered only by the arc's own padlock.
         try:
             if typ=='RADIUS':
                 if len(refs)!=1: continue

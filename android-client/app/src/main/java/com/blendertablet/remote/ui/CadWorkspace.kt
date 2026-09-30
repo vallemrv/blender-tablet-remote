@@ -464,8 +464,11 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                     "sketch_id" to cad.sketches.firstOrNull { sketch -> sketch.constraints.any { it.id == constraint.id } }?.id)
                                 editingConstraint = null
                             }
+                            val angle = constraint.type == "ANGLE"
                             CadDimension(cadLabel(constraint.type), drafts["constraint"] ?: constraint.value ?: 0.0, unit, constraint.id,
-                                step = cad.step, enabled = connected, minimum = if (constraint.type in listOf("DISTANCE_X", "DISTANCE_Y")) 0.0 else .0000001,
+                                degrees = angle, step = if (angle) 1.0 else cad.step, enabled = connected,
+                                minimum = if (angle) .01 else if (constraint.type in listOf("DISTANCE_X", "DISTANCE_Y")) 0.0 else .0000001,
+                                maximum = if (angle) 359.99 else 10000.0,
                                 onDone = ::acceptValues) { drafts["constraint"] = it }
                         }
                         pendingDimension?.let { type ->
@@ -503,18 +506,18 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             }
                             // Solo medidas: la posición se fija con candados y cotas a otros
                             // puntos (origen, esquinas, centros), no escribiendo coordenadas.
-                            val coordinates = if (selected.type == "ARC" && !selected.isFillet) listOf("sweep" to "Ángulo") else emptyList()
+                            // El ángulo del arco/redondeo es una medida más, con su candado.
                             val measures = cadDisplayMeasures(selected, showDiameter)
-                            val fields = measures.map { it.field to it.label } + coordinates
+                            val fields = measures.map { it.field to it.label }
                             fields.forEach { (field, label) ->
                                 val measure = measures.firstOrNull { it.field == field }
-                                val degrees = field in listOf("start", "sweep")
+                                val degrees = measure?.constraintType == "ANGLE"
                                 val bound = measure?.constraintIds?.isNotEmpty() == true
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     CadDimension(label + if (measure != null) if (bound) " · cota" else " · sin cota" else "",
                                         drafts[field] ?: selected.values[field] ?: 0.0, unit, selected.id + field,
                                         degrees = degrees, step = if (degrees) 1.0 else cad.step, enabled = connected, readOnly = livePreview,
-                                        minimum = if (measure != null) .0000001 else -10000.0,
+                                        minimum = if (degrees) -359.99 else if (measure != null) .0000001 else -10000.0,
                                         maximum = if (field == "sweep") 359.99 else 10000.0,
                                         onDone = ::acceptValues) { drafts[field] = it?.takeIf { value -> field != "sweep" || kotlin.math.abs(value) in .01..359.99 } }
                                     if (measure != null && measure.lockable) CadAction("FIX", (if (bound) "Quitar cota: " else "Fijar medida: ") + label,
@@ -827,7 +830,7 @@ internal fun cadLabel(type: String) = when (type) {
     "COLLINEAR" -> "Colineal (misma recta)"
     "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "SLOT" -> "Ranura"; "GEAR" -> "Engranaje"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "POINT" -> "Punto"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
-    "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad (tamaño del primero)"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
+    "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad (tamaño del primero)"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "ANGLE" -> "Ángulo del arco"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
     "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; else -> type
 }
 
@@ -913,7 +916,8 @@ private fun CadDimension(
 @Composable
 private fun CadConstraintRow(c: CadConstraint, sketch: CadSketch, unit: LengthUnit, enabled: Boolean, edit: () -> Unit, delete: () -> Unit) {
     val factor = when (unit) { LengthUnit.MILLIMETERS -> 1000.0; LengthUnit.CENTIMETERS -> 100.0; LengthUnit.METERS -> 1.0 }
-    val value = c.value?.let { " · ${formatToolDistance(it * factor, detailDecimalPlaces(it * factor, 2))} ${unit.short}" }.orEmpty()
+    val value = c.value?.let { if (c.type == "ANGLE") " · ${formatToolDistance(it, 2)}°"
+        else " · ${formatToolDistance(it * factor, detailDecimalPlaces(it * factor, 2))} ${unit.short}" }.orEmpty()
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         Column(Modifier.weight(1f)) {
             Text(cadLabel(c.type) + value, color = Ink.OnPanel, fontSize = 12.sp)

@@ -11,7 +11,7 @@ from ..errors import BadPayload, CommandError
 
 CONSTRAINTS = ('COINCIDENT', 'POINT_ON_LINE', 'HORIZONTAL', 'VERTICAL', 'PARALLEL', 'COLLINEAR', 'PERPENDICULAR',
                'TANGENT', 'EQUAL', 'DISTANCE', 'DISTANCE_X', 'DISTANCE_Y', 'RADIUS', 'FIX', 'MIDPOINT',
-               'SYMMETRIC', 'SYMMETRIC_LINE', 'OFFSET')
+               'SYMMETRIC', 'SYMMETRIC_LINE', 'OFFSET', 'ANGLE')
 
 
 def handles(e):
@@ -169,6 +169,11 @@ def residual(sketch, c, scale):
         return [(measured-c['value'])/scale]
     if typ == 'RADIUS':
         return [(radius(sketch,refs[0])-c['value'])/scale]
+    if typ == 'ANGLE':
+        # Arc sweep in degrees; the sign only records the drawing direction.
+        e = get_entity(sketch,refs[0])
+        if e['type'] != 'ARC': raise BadPayload('La cota de ángulo requiere un arco o redondeo')
+        return [(abs(e['sweep'])-c['value'])/180.]
     if typ == 'EQUAL':
         es = [get_entity(sketch,r) for r in refs]
         if all(e['type'] in ('ARC','CIRCLE') for e in es):
@@ -209,13 +214,15 @@ def validate_constraints(sketch):
         ids.add(c['id'])
         refs = c.get('refs')
         typ = c['type']
-        count = (3,) if typ in ('SYMMETRIC','SYMMETRIC_LINE') else (1,2) if typ in ('DISTANCE','DISTANCE_X','DISTANCE_Y') else (1,) if typ in ('FIX','HORIZONTAL','VERTICAL','RADIUS') else (2,)
+        count = (3,) if typ in ('SYMMETRIC','SYMMETRIC_LINE') else (1,2) if typ in ('DISTANCE','DISTANCE_X','DISTANCE_Y') else (1,) if typ in ('FIX','HORIZONTAL','VERTICAL','RADIUS','ANGLE') else (2,)
         if not isinstance(refs,list) or len(refs) not in count or (len(refs)==2 and refs[0]==refs[1]):
             raise BadPayload('Número de elementos incorrecto para la restricción')
         for ref in refs:
             get_entity(sketch,ref)
         if typ in ('DISTANCE','RADIUS'):
             model.number(c.get('value'),positive=True)
+        if typ == 'ANGLE' and not .01 <= model.number(c.get('value')) < 360:
+            raise BadPayload('El ángulo del arco debe estar entre 0,01° y 360°')
         if typ in ('DISTANCE_X','DISTANCE_Y') and model.number(c.get('value')) < 0:
             raise BadPayload('La distancia horizontal o vertical no puede ser negativa')
         if typ == 'FIX':

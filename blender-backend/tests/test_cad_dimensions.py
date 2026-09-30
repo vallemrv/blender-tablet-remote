@@ -90,15 +90,44 @@ class DimensionTests(CadTests):
                 self.assertAlmostEqual(rule['value'],expected,places=9)
                 self.assertTrue(dimensions.describe(sketch,e)[0]['constraint_ids'])
 
-    def test_confirmation_does_not_lock_discrete_fields_or_arc_sweep(self):
+    def test_confirmation_does_not_lock_discrete_fields_but_locks_arc_angle(self):
         gear=self.draw('GEAR',(0,0),(.02,0))
         cad.entity_set(dict(entity_id=gear,values={'teeth':24},constrain=True,**OWNER))
         sketch,e=model.entity(runtime.doc(),gear)
         self.assertEqual(dimensions.describe(sketch,e)[0]['constraint_ids'],[])
         arc=self.draw('ARC',(.1,.1),(.12,.1))
-        cad.entity_set(dict(entity_id=arc,values={'sweep':180.},constrain=True,**OWNER))
+        cad.entity_set(dict(entity_id=arc,values={'sweep':120.},constrain=True,**OWNER))
         sketch,e=model.entity(runtime.doc(),arc)
-        self.assertEqual(dimensions.describe(sketch,e)[0]['constraint_ids'],[])
+        radius,angle=dimensions.describe(sketch,e)
+        self.assertEqual(radius['constraint_ids'],[])
+        self.assertEqual(angle['field'],'sweep'); self.assertEqual(angle['constraint_type'],'ANGLE')
+        self.assertAlmostEqual(model.find(sketch,'constraints',angle['constraint_ids'][0])['value'],120.)
+
+    def test_arc_angle_padlock_holds_the_sweep_while_dragging_its_end(self):
+        arc=self.draw('ARC',(.1,.1),(.12,.1))
+        sketch,e=model.entity(runtime.doc(),arc)
+        cad.constraint_add(dict(type='ANGLE',value=-e['sweep'],refs=[dict(id=arc,part='BODY')],**OWNER))
+        sketch,e=model.entity(runtime.doc(),arc); locked=e['sweep']
+        self.assertNotIn('ANGLE',runtime.status()['dimension_options'])
+        geometry.solve(sketch,geometry.arc_angle_goals(e,(.1,.13),locked),drag=True)
+        self.assertAlmostEqual(model.find(sketch,'entities',arc)['sweep'],locked,places=6)
+        rule=next(c for c in sketch['constraints'] if c['type']=='ANGLE')
+        self.assertIn('∠',next(o['label'] for o in runtime.overlay(runtime.doc()) if o['id']==rule['id']))
+        cad.constraint_set(dict(constraint_id=rule['id'],value=45,**OWNER))
+        self.assertAlmostEqual(abs(model.entity(runtime.doc(),arc)[1]['sweep']),45.,places=6)
+        with self.assertRaises(CommandError): cad.constraint_set(dict(constraint_id=rule['id'],value=400,**OWNER))
+
+    def test_rounding_angle_padlock_keeps_the_corner_angle(self):
+        a=self.draw('LINE',(0,0),(.08,0)); b=self.draw('LINE',(.08,0),(.08,.04))
+        self.refs((a,'BODY'),(b,'BODY')); cad.fillet(dict(radius=.005,**OWNER))
+        sketch=runtime.doc()['sketches'][0]; e=next(x for x in sketch['entities'] if x['type']=='ARC')
+        def drag(sketch):
+            geometry.solve(sketch,geometry.move_goals(sketch,[dict(id=b,part='END')],-.03,0),drag=True)
+            return abs(model.find(sketch,'entities',e['id'])['sweep'])
+        self.assertGreater(abs(drag(copy.deepcopy(sketch))-90.),5.)   # free rounding follows the sides
+        angle=next(m for m in dimensions.describe(sketch,e) if m['field']=='sweep')
+        cad.constraint_add(dict(type='ANGLE',value=e['sweep'],refs=angle['refs'],**OWNER))
+        self.assertAlmostEqual(drag(runtime.doc()['sketches'][0]),90.,places=5)
 
     def refs(self,*refs): cad._set_selection([dict(kind='ENTITY',id=i,part=p) for i,p in refs])
     def dimension(self,typ,value): cad.constraint_add(dict(type=typ,value=value,**OWNER))

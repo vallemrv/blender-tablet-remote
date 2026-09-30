@@ -1200,7 +1200,7 @@ def constraint_add(payload):
         refs=[dict(id=r['id'],part=r.get('part','BODY')) for r in source]
         if typ=='POINT_ON_LINE': refs=geometry.point_line_refs(sketch,refs)
         c=dict(id=model.uid('constraint'),type=typ,refs=refs)
-        if typ in dimensions.NUMERIC: c['value']=model.number(payload.get('value'),positive=typ in ('DISTANCE','RADIUS'))
+        if typ in dimensions.NUMERIC: c['value']=_dimension_value(typ,payload.get('value'))
         if typ in ('HORIZONTAL','VERTICAL'):
             if not refs: raise BadPayload('Selecciona una o varias líneas o lados rectos')
             existing={(rule['type'],r['id'],r.get('part','BODY'))
@@ -1307,6 +1307,12 @@ def fillet_remove(payload):
     return runtime.status()
 
 
+def _dimension_value(typ, value):
+    # An arc's sweep sign is its drawing direction; its angle dimension is a magnitude.
+    if typ=='ANGLE': return abs(model.number(value))
+    return model.number(value,positive=typ in ('DISTANCE','RADIUS'))
+
+
 @command('cad.constraint.set')
 def constraint_set(payload):
     def change(doc):
@@ -1317,7 +1323,7 @@ def constraint_set(payload):
             set_value(sketch,c,payload.get('value'))
             return
         if c['type'] not in dimensions.NUMERIC: raise BadPayload('Esta restricción no tiene una cota editable')
-        updated=dict(c,value=model.number(payload.get('value'),positive=c['type'] in ('RADIUS','DISTANCE')))
+        updated=dict(c,value=_dimension_value(c['type'],payload.get('value')))
         c=dimensions.put(sketch,updated)
         dimensions.solve_dimension(sketch,c)
     return (yield from runtime.transaction_steps(payload,change,'CAD editar restricción'))
