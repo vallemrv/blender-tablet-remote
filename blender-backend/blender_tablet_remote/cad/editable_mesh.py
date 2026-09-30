@@ -28,8 +28,14 @@ def clean_mesh(mesh):
             bm, angle_limit=.001, verts=list(bm.verts), edges=list(bm.edges),
             use_dissolve_boundaries=False, delimit={'MATERIAL', 'SEAM', 'SHARP', 'UV'},
         )
+        # Collapsed boolean slivers may survive dissolution as wires. They have
+        # no surface or volume; remove only these leftovers, never boundary edges.
+        wires=[e for e in bm.edges if not e.link_faces]
+        if wires: bmesh.ops.delete(bm,geom=wires,context='EDGES')
+        loose=[v for v in bm.verts if not v.link_edges]
+        if loose: bmesh.ops.delete(bm,geom=loose,context='VERTS')
         bm.normal_update()
-        if (any(not e.is_manifold for e in bm.edges)
+        if (not bm.faces or any(not e.is_manifold for e in bm.edges)
                 or any(e.calc_length() <= tolerance * .01 for e in bm.edges)
                 or any(f.calc_area() <= tolerance * tolerance for f in bm.faces)
                 or abs(abs(bm.calc_volume()) - volume) > max(volume * 1e-6, extent**3 * 1e-10)):

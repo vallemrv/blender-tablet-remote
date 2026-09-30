@@ -14,6 +14,44 @@ from blender_tablet_remote.commands import cad, objects, mode, mesh, modifiers
 
 
 class MeshCopyTests(CadTests):
+    def test_copy_removes_surface_free_wires_and_vertices_without_changing_solid(self):
+        from test_cad import volume
+        for size in (.0001,.1,100.):
+            with self.subTest(size=size):
+                vertices=[(0,0,0),(size,0,0),(size,size,0),(0,size,0),
+                          (0,0,size),(size,0,size),(size,size,size),(0,size,size),
+                          (.25*size,0,size),(.75*size,0,size),(.5*size,.5*size,size)]
+                faces=[(0,3,2,1),(4,5,6,7),(0,1,5,4),(1,2,6,5),(2,3,7,6),(3,0,4,7)]
+                data=bpy.data.meshes.new('Residual wire');data.from_pydata(vertices,[(8,9)],faces);data.update()
+                source=bpy.data.objects.new('Residual wire',data)
+                before=([tuple(v.co) for v in data.vertices],[tuple(e.vertices) for e in data.edges],
+                        [tuple(f.vertices) for f in data.polygons])
+                result=mesh_copy(source)
+                self.assertEqual((len(result.data.vertices),len(result.data.edges),len(result.data.polygons)),(8,12,6))
+                self.assertAlmostEqual(volume(result)/size**3,1.,places=6)
+                self.assertEqual(before,([tuple(v.co) for v in data.vertices],[tuple(e.vertices) for e in data.edges],
+                                         [tuple(f.vertices) for f in data.polygons]))
+
+    def test_cleanup_still_rejects_an_open_boundary_and_discards_the_copy(self):
+        from blender_tablet_remote.errors import CommandError
+        vertices=[(0,0,0),(1,0,0),(1,1,0),(0,1,0),(0,0,1),(1,0,1),(1,1,1),(0,1,1)]
+        faces=[(0,3,2,1),(0,1,5,4),(1,2,6,5),(2,3,7,6),(3,0,4,7)]
+        data=bpy.data.meshes.new('Open box');data.from_pydata(vertices,[],faces);data.update()
+        source=bpy.data.objects.new('Open box',data)
+        counts=(len(bpy.data.objects),len(bpy.data.meshes))
+        with self.assertRaises(CommandError): mesh_copy(source)
+        self.assertEqual((len(bpy.data.objects),len(bpy.data.meshes)),counts)
+        self.assertEqual(len(data.polygons),5)
+
+    def test_cleanup_rejects_a_face_that_collapses_entirely_to_wire(self):
+        from blender_tablet_remote.errors import CommandError
+        data=bpy.data.meshes.new('Collapsed face')
+        data.from_pydata([(0,0,0),(.5,0,0),(1,0,0)],[],[(0,1,2)]);data.update()
+        source=bpy.data.objects.new('Collapsed face',data)
+        counts=(len(bpy.data.objects),len(bpy.data.meshes))
+        with self.assertRaises(CommandError): mesh_copy(source)
+        self.assertEqual((len(bpy.data.objects),len(bpy.data.meshes)),counts)
+
     def test_duplicate_boolean_seam_is_cleaned_without_changing_source(self):
         from test_cad import volume
         for size in (.0001, .1, 100.):

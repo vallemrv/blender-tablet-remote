@@ -592,7 +592,9 @@ no quedan archivos o referencias temporales.
   esa superficie sin forzar cuadriláteros ni añadir una retícula. `cad/editable_mesh.py`
   suelda coincidencias numéricas con tolerancia relativa al tamaño, elimina
   degenerados y disuelve divisiones casi coplanares, respetando contornos curvos,
-  huecos, materiales y costuras. Valida cierre, caras/aristas no nulas y volumen;
+  huecos, materiales y costuras. Retira las aristas sin caras y los vértices sueltos
+  residuales de esa limpieza; nunca elimina bordes abiertos de la superficie.
+  Valida cierre, caras/aristas no nulas y volumen;
   un error descarta la copia sin tocar el original. La limpieza ocurre solo al
   exportar/duplicar: nunca se realimenta a la pila CAD. Una malla compacta no
   garantiza biseles de cualquier ancho ni topología regular para Subdivisión.
