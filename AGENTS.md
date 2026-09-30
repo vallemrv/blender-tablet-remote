@@ -704,8 +704,11 @@ no quedan archivos o referencias temporales.
   caras guardan su marco. Las selecciones del sólido son transitorias y se invalidan
   al cambiar geometría o transformación; no persisten índices de la malla evaluada.
 - En un boceto, Proyectar está en el rail: cualquier punto, arista o cara, aunque esté
-  a otra altura, se copia al plano del croquis como construcción fija. Los tramos se
-  encadenan y ajustan: rectos → LINE, cocirculares con paso teselado pequeño → ARC,
+  a otra altura, se copia al plano del croquis como construcción fija. Las referencias
+  se seleccionan de forma acumulativa, también entre tipos y objetos; tocar de nuevo
+  retira esa referencia y un miss conserva el grupo. La bandeja cuenta la selección;
+  Proyectar al plano copia todo en un undo y Limpiar retira el grupo completo.
+  Los tramos se encadenan y ajustan: rectos → LINE, cocirculares con paso teselado pequeño → ARC,
   un lazo redondo → CIRCLE (con centro); un vértice → `POINT` (solo por proyección).
   FIX y un undo. Las figuras con FIX completo son constantes y no cuentan en el límite
   de 300 parámetros del solver. Permite acotar desde esos elementos;

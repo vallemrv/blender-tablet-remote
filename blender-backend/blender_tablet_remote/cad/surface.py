@@ -111,16 +111,19 @@ class SurfaceSelection:
         names={item['object'] for item in valid}
         self._stamps={name:value for name,value in self._stamps.items() if name in names}
 
-    def select(self, payload):
+    def select(self, payload, *, accumulate=False):
         from ..commands.snap import query_cad_surface
         self.validate()
         item=query_cad_surface(payload,self.mode)
-        if item is None: self.clear(); return
+        if item is None:
+            if not accumulate: self.clear()
+            return
         old=next((i for i in self.items if i['id']==item['id']),None)
         if old: self.items.remove(old); return
-        # Two references are enough for a measurement; a third starts a fresh pair.
+        # Sketch projection keeps every reference, including across objects/kinds.
+        # Two references are enough for a 3D measurement; a third starts a fresh pair.
         # Edges accumulate: Redondear/Chaflán act on every selected edge at once.
-        if len(self.items)>=2 and not (item['kind']=='EDGE' and all(i['kind']=='EDGE' and i['object']==item['object'] for i in self.items)):
+        if not accumulate and len(self.items)>=2 and not (item['kind']=='EDGE' and all(i['kind']=='EDGE' and i['object']==item['object'] for i in self.items)):
             self.clear()
         self.items.append(item)
         self._stamps[item['object']]=stamp(bpy.data.objects[item['object']])

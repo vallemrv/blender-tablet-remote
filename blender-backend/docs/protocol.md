@@ -1526,7 +1526,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.plane.create` | `{base?,translation?,rotation?,reference_sketch_id?,support_id?,start_sketch?}` | Plano persistente en metros y grados locales XYZ. start_sketch crea y activa también su croquis en el mismo undo |
 | `cad.plane.set` | `{plane_id,translation?,rotation?}` | Ajusta el plano y reconstruye bocetos/sólidos dependientes |
 | `cad.surface.mode` | `{mode:"PROFILE\|FACE\|EDGE\|VERTEX"}` | Elige selección del boceto/perfiles o referencias del sólido, sin undo |
-| `cad.surface.select` | `{u,v}` | Alterna una referencia visible; conserva hasta dos para medir |
+| `cad.surface.select` | `{u,v}` | Alterna una referencia visible; en boceto acumula puntos/aristas/caras de distintos objetos para proyectarlos juntos y un miss conserva la selección; en 3D conserva dos para medir o varias aristas del mismo objeto para acabado |
 | `cad.surface.clear` | `{}` | Limpia las referencias transitorias |
 | `cad.sketch.on_face` | `{}` | Crea un boceto en la cara plana resaltada, sin repetir sondeo y con un undo |
 | `cad.reference.project` | `{}` | Copia las referencias seleccionadas a construcción fija en el boceto activo |

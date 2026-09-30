@@ -408,7 +408,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 dragPreview -> "Medidas en vivo · suelta para fijar una medida con su candado"
                 drawPreview -> "Medidas en vivo · Incremento redondea al paso y los puntos existentes atraen · suelta para editar las medidas"
                 cad.sessionActive && cad.operation == "POLYGON" -> "Polígono: traza o toca cada vértice · cierra tocando el primer punto o con Cerrar · dos dedos descarta"
-                editing && cad.surface.mode != "PROFILE" -> "Toca puntos, aristas o caras (Puntos/Aristas/Caras junto al selector) · Proyectar las copia al croquis: tramos rectos como líneas, curvas como arcos y círculos con su centro"
+                editing && cad.surface.mode != "PROFILE" -> "Toca para añadir referencias; repite para quitarlas · puedes combinar Puntos/Aristas/Caras · Proyectar al plano copia toda la selección al croquis"
                 cad.surface.mode == "FACE" -> if (cad.surface.selection.size > 1) "Dos referencias para medir · quita una cara seleccionada para crear el boceto" else "Toca una cara: se resalta en el vídeo · Boceto en cara usa exactamente esa selección"
                 cad.surface.mode != "PROFILE" -> "Toca hasta dos referencias para medir · durante el boceto puedes proyectarlas para acotar desde ellas"
                 state.cadTool == "ARC" -> "Arrastra centro → inicio del arco · al soltar, arrastra el rombo del extremo para variar el ángulo"
@@ -1013,7 +1013,10 @@ private fun CadVectorFields(label: String, values: List<String>, unit: String, c
 private fun CadSurfaceControls(cad: CadState, unit: LengthUnit, enabled: Boolean, vm: MainViewModel) {
     if (cad.surface.mode != "PROFILE") PillButton("Ver escena", selected = cad.showScene, enabled = enabled) { vm.cadCommand("cad.settings", mapOf("show_scene" to !cad.showScene)) }
     val edges = cad.surface.selection.isNotEmpty() && cad.surface.selection.all { it.kind == "EDGE" }
-    if (cad.surface.selection.size > 2 && edges) {
+    if (cad.activeSketchId != null && cad.surface.selection.isNotEmpty()) {
+        Text("${cad.surface.selection.size} referencias seleccionadas", color = Ink.Accent, fontSize = 11.sp)
+        PillButton("Limpiar", enabled = enabled) { vm.cadCommand("cad.surface.clear") }
+    } else if (cad.surface.selection.size > 2 && edges) {
         Text("${cad.surface.selection.size} aristas · ${cad.surface.selection.first().objectName}", color = Ink.Accent, fontSize = 11.sp)
         PillButton("Limpiar", enabled = enabled) { vm.cadCommand("cad.surface.clear") }
     } else if (cad.surface.selection.isNotEmpty()) {
@@ -1028,7 +1031,7 @@ private fun CadSurfaceControls(cad: CadState, unit: LengthUnit, enabled: Boolean
         CadAction("CHAMFER", "Chaflán en aristas", enabled = enabled) { vm.cadCommand("cad.finish.begin", mapOf("operation" to "CHAMFER")) }
     }
     if (cad.activeSketchId != null && cad.surface.selection.isNotEmpty()) {
-        PillButton("Proyectar al plano", enabled = enabled) { vm.cadCommand("cad.reference.project") }
+        PillButton("Proyectar al plano (${cad.surface.selection.size})", enabled = enabled) { vm.cadCommand("cad.reference.project") }
     }
     val factor = when (unit) { LengthUnit.MILLIMETERS -> 1000.0; LengthUnit.CENTIMETERS -> 100.0; LengthUnit.METERS -> 1.0 }
     cad.surface.measurements.forEach { measurement ->

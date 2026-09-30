@@ -20,6 +20,77 @@ from blender_tablet_remote.errors import CommandError
 
 
 class SurfaceTests(CadTests):
+    def projection_objects(self):
+        cad.settings(dict(show_scene=True,**OWNER))
+        objects=[]
+        for x in (.1,.2):
+            bpy.ops.mesh.primitive_cube_add(size=.02,location=(x,.1,.03))
+            objects.append(bpy.context.object)
+        bpy.context.view_layer.update()
+        return objects
+
+    def reference(self,obj,kind,index):
+        graph=snap._cad_mesh(obj)
+        source=list(graph[6])[index] if kind=='EDGE' else (index,) if kind=='VERTEX' else index
+        item=snap._cad_reference_geometry(graph,kind,source)
+        return dict(item,id=obj.name+':'+item['id'],object=obj.name,feature_id=None)
+
+    def select_reference(self,item):
+        if item: cad.surface_mode(dict(mode=item['kind'],**OWNER))
+        with patch.object(snap,'query_cad_surface',return_value=item):
+            return cad.surface_select(dict(u=.5,v=.5,**OWNER))
+
+    def test_projection_accumulates_mixed_objects_and_kinds_and_commits_once(self):
+        first,second=self.projection_objects()
+        graph=snap._cad_mesh(second)
+        edge_index=next(i for i,(a,b) in enumerate(graph[6]) if (graph[1][a]-graph[1][b]).xy.length>1e-5)
+        refs=[self.reference(first,'VERTEX',0),self.reference(first,'VERTEX',1),
+              self.reference(second,'VERTEX',0),self.reference(second,'EDGE',edge_index)]
+        for item in refs: self.select_reference(item)
+        self.assertEqual([item['id'] for item in runtime.surface.items],[item['id'] for item in refs])
+        self.select_reference(refs[1])
+        self.assertEqual(len(runtime.surface.items),3)
+        self.select_reference(None)  # A missed touch must not throw away the group.
+        self.assertEqual(len(runtime.surface.items),3)
+        self.select_reference(refs[1])
+        before=model.dumps(runtime.doc())
+        with patch('blender_tablet_remote.cad.runtime.undo_push') as undo:
+            state=cad.project_reference(OWNER)
+            undo.assert_called_once()
+        sketch=runtime.doc()['sketches'][-1]
+        self.assertCountEqual([e['type'] for e in sketch['entities']],['POINT','POINT','POINT','LINE'])
+        self.assertTrue(all(e['construction'] and e['reference'] for e in sketch['entities']))
+        self.assertEqual(len(sketch['constraints']),4)
+        self.assertTrue(all(c['type']=='FIX' for c in sketch['constraints']))
+        actual=sorted((round(e['x'],7),round(e['y'],7)) for e in sketch['entities'] if e['type']=='POINT')
+        expected=sorted((round(item['points'][0][0],7),round(item['points'][0][1],7)) for item in refs[:3])
+        self.assertEqual(actual,expected)
+        self.assertNotEqual(model.dumps(runtime.doc()),before)
+        self.assertEqual(state['surface']['mode'],'PROFILE')
+        self.assertEqual(state['surface']['selection'],[])
+
+    def test_projection_accumulates_faces_and_clear_or_cursor_remove_the_group(self):
+        obj,_=self.projection_objects()
+        refs=[self.reference(obj,'FACE',i) for i in range(3)]
+        for item in refs: self.select_reference(item)
+        self.assertEqual(len(runtime.surface.items),3)
+        cad.surface_clear(OWNER)
+        self.assertEqual(runtime.surface.items,[])
+        for item in refs: self.select_reference(item)
+        cad.surface_mode(dict(mode='PROFILE',**OWNER))
+        self.assertEqual(runtime.surface.items,[])
+
+    def test_solid_measurement_keeps_pair_limit_and_finish_keeps_multiple_edges(self):
+        obj,_=self.projection_objects()
+        cad.sketch_finish(OWNER)
+        refs=[self.reference(obj,'FACE',i) for i in range(3)]
+        for item in refs: self.select_reference(item)
+        self.assertEqual([i['id'] for i in runtime.surface.items],[refs[-1]['id']])
+        self.select_reference(None)
+        self.assertEqual(runtime.surface.items,[])
+        for i in range(3): self.select_reference(self.reference(obj,'EDGE',i))
+        self.assertEqual(len(runtime.surface.items),3)
+
     def test_face_sketch_axes_follow_the_upright_view_not_a_tessellation_edge(self):
         import math
         from blender_tablet_remote.cad.surface import SurfaceSelection

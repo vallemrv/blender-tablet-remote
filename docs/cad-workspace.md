@@ -299,8 +299,12 @@ y orienta la vista al plano. Una cara superior CAD sigue a su operación soporte
 una cara arbitraria conserva el marco capturado. Si el sólido cambia antes de
 confirmar, la selección se invalida y hay que volver a elegirla.
 
-Durante un boceto, el rail tiene **Proyectar**. Toca cualquier arista del sólido,
-aunque esté en otra altura: se copia al plano del croquis como construcción fija.
+Durante un boceto, el rail tiene **Proyectar**. Toca puntos, aristas o caras para
+acumular referencias, incluso de distintos objetos o alturas. Puedes cambiar entre
+Puntos/Aristas/Caras sin perder el grupo; repetir un toque quita esa referencia y
+tocar el fondo conserva la selección. La bandeja muestra el total y **Limpiar** lo
+vacía. **Proyectar al plano (N)** copia toda la selección como construcción fija
+en una sola operación de deshacer.
 Un contorno circular llega como círculo. También sigue en **Planos y bocetos →
 Medir desde sólido**. No aparece permanentemente en la bandeja de
 propiedades. **Proyectar al plano** vuelve al cursor y usa esos puntos/aristas para acotar.

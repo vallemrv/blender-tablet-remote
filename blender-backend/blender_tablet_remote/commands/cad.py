@@ -1415,7 +1415,7 @@ def surface_mode(payload):
 def surface_select(payload):
     runtime.require_workspace()
     if runtime.session: raise CommandError('Termina la preview antes de medir',code='session_active')
-    runtime.surface.select(payload)
+    runtime.surface.select(payload,accumulate=runtime.active_sketch_id is not None)
     last=runtime.surface.items[-1] if runtime.surface.items else None
     runtime.selection=dict(kind='SURFACE',id=last['id'],feature_id=last['feature_id']) if last else None
     if last and last['feature_id'] and not runtime.active_sketch_id:
