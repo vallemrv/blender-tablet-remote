@@ -16,6 +16,90 @@ from blender_tablet_remote.errors import CommandError
 
 
 class DimensionTests(CadTests):
+    def test_confirmed_fields_lock_only_edited_measures_in_one_undo(self):
+        entity=self.rect()
+        with patch('blender_tablet_remote.cad.runtime.undo_push') as undo:
+            state=cad.entity_set(dict(entity_id=entity,values={'width':.09123},constrain=True,**OWNER))
+            undo.assert_called_once()
+        measures=state['document']['sketches'][0]['entities'][0]['dimensions']
+        self.assertEqual(len(measures[0]['constraint_ids']),1)
+        self.assertEqual(measures[1]['constraint_ids'],[])
+        sketch,e=model.entity(runtime.doc(),entity)
+        identifier=measures[0]['constraint_ids'][0]
+        self.assertAlmostEqual(model.find(sketch,'constraints',identifier)['value'],.09123,places=10)
+        geometry.solve(sketch,geometry.move_goals(sketch,[dict(id=entity,part='P2')],.02,.01),drag=True)
+        e=model.find(sketch,'entities',entity)
+        self.assertAlmostEqual(e['width'],.09123,places=7)
+        self.assertGreater(e['height'],.045)
+        cad.entity_set(dict(entity_id=entity,values={'width':.08,'height':.06},constrain=True,**OWNER))
+        restored=model.loads(bpy.context.scene[model.KEY]); sketch,e=model.entity(restored,entity)
+        self.assertEqual(dimensions.bindings(sketch,e)['width'],[identifier])
+        self.assertEqual(len(sketch['constraints']),2)
+        cad.constraint_delete(dict(constraint_id=identifier,**OWNER))
+        sketch,e=model.entity(runtime.doc(),entity)
+        self.assertEqual(dimensions.bindings(sketch,e)['width'],[])
+        self.assertEqual(len(dimensions.bindings(sketch,e)['height']),1)
+
+    def test_confirmed_radius_aliases_reuse_one_constraint(self):
+        for kind,alias,amount in (('CIRCLE','diameter',.03),('SLOT','width',.03)):
+            with self.subTest(kind=kind):
+                cad.sketch_create(dict(plane='XY',**OWNER))
+                entity=self.draw(kind,(0,0),(.025,0))
+                cad.entity_set(dict(entity_id=entity,values={alias:amount},constrain=True,**OWNER))
+                sketch,e=model.entity(runtime.doc(),entity)
+                radius=next(c for c in sketch['constraints'] if c['type']=='RADIUS')
+                self.assertAlmostEqual(radius['value'],.015,places=10)
+                cad.entity_set(dict(entity_id=entity,values={'radius':.02},constrain=True,**OWNER))
+                sketch,e=model.entity(runtime.doc(),entity)
+                rules=[c for c in sketch['constraints'] if c['type']=='RADIUS']
+                self.assertEqual([c['id'] for c in rules],[radius['id']])
+                self.assertAlmostEqual(rules[0]['value'],.02,places=10)
+                self.assertAlmostEqual(e[alias],.04,places=9)
+
+    def test_confirmed_square_reuses_equality_and_conflict_is_atomic(self):
+        entity=self.square((0,0),(.04,.04))
+        cad.entity_set(dict(entity_id=entity,values={'width':.06},constrain=True,**OWNER))
+        sketch,e=model.entity(runtime.doc(),entity)
+        self.assertAlmostEqual(e['height'],.06)
+        self.assertEqual(len([c for c in sketch['constraints'] if c['type']=='DISTANCE']),1)
+        before=model.dumps(runtime.doc())
+        with patch('blender_tablet_remote.cad.runtime.undo_push') as undo:
+            with self.assertRaises(CommandError):
+                cad.entity_set(dict(entity_id=entity,values={'width':.08,'height':.09},constrain=True,**OWNER))
+            undo.assert_not_called()
+        self.assertEqual(model.dumps(runtime.doc()),before)
+
+    def test_new_locks_reject_fixed_conflict_without_partial_changes(self):
+        entity=self.rect(); self.refs((entity,'BODY')); cad.constraint_add(dict(type='FIX',**OWNER))
+        before=model.dumps(runtime.doc())
+        with patch('blender_tablet_remote.cad.runtime.undo_push') as undo:
+            with self.assertRaises(CommandError):
+                cad.entity_set(dict(entity_id=entity,values={'width':.12,'height':.09},constrain=True,**OWNER))
+            undo.assert_not_called()
+        self.assertEqual(model.dumps(runtime.doc()),before)
+
+    def test_confirmed_primitive_measures_use_the_schema_factors(self):
+        for kind,field,value,expected in (('LINE','length',.055,.055),('NGON','flats',.032,.016),
+                                          ('GEAR','module',.002,.02),('ARC','radius',.018,.018)):
+            with self.subTest(kind=kind):
+                cad.sketch_create(dict(plane='XY',**OWNER))
+                entity=self.draw(kind,(0,0),(.02,0))
+                cad.entity_set(dict(entity_id=entity,values={field:value},constrain=True,**OWNER))
+                sketch,e=model.entity(runtime.doc(),entity)
+                rule=sketch['constraints'][-1]
+                self.assertAlmostEqual(rule['value'],expected,places=9)
+                self.assertTrue(dimensions.describe(sketch,e)[0]['constraint_ids'])
+
+    def test_confirmation_does_not_lock_discrete_fields_or_arc_sweep(self):
+        gear=self.draw('GEAR',(0,0),(.02,0))
+        cad.entity_set(dict(entity_id=gear,values={'teeth':24},constrain=True,**OWNER))
+        sketch,e=model.entity(runtime.doc(),gear)
+        self.assertEqual(dimensions.describe(sketch,e)[0]['constraint_ids'],[])
+        arc=self.draw('ARC',(.1,.1),(.12,.1))
+        cad.entity_set(dict(entity_id=arc,values={'sweep':180.},constrain=True,**OWNER))
+        sketch,e=model.entity(runtime.doc(),arc)
+        self.assertEqual(dimensions.describe(sketch,e)[0]['constraint_ids'],[])
+
     def refs(self,*refs): cad._set_selection([dict(kind='ENTITY',id=i,part=p) for i,p in refs])
     def dimension(self,typ,value): cad.constraint_add(dict(type=typ,value=value,**OWNER))
 
@@ -29,7 +113,7 @@ class DimensionTests(CadTests):
     def test_radius_field_edits_fillet_dimension_and_keeps_outer_bounds(self):
         arc=self.rounded(extrude=True)
         before=runtime.doc(); old_feature=before['features'][0]['id']
-        cad.entity_set(dict(entity_id=arc,values={'radius':.01},**OWNER))
+        cad.entity_set(dict(entity_id=arc,values={'radius':.01},constrain=True,**OWNER))
         doc=runtime.doc(); sketch,e=model.entity(doc,arc)
         self.assertAlmostEqual(e['radius'],.01)
         self.assertEqual(doc['features'][0]['id'],old_feature)

@@ -646,6 +646,11 @@ no quedan archivos o referencias temporales.
   su tamaño. Los campos distinguen «sin cota» de «cota», con Fijar medida/Quitar cota;
   quitar la medida conserva la figura y la igualdad. La bandeja usa los descriptores
   `dimensions` del backend, sin duplicar el mapa de medidas en Compose.
+- Confirmar una medida de boceto con el check verde crea o actualiza su cota y
+  marca su candado desde el estado confirmado (`cad.entity.set`, `constrain:true`).
+  Solo acota los campos editados que ofrecen candado; el resto sigue libre. Radio/
+  diámetro/ancho y las Igualdades reutilizan la misma cota. Valores y cotas forman
+  una transacción y un undo; un conflicto no deja bloqueos ni cambios parciales.
 - Los redondeos se reconocen por sus coincidencias y tangencias, también en archivos
   anteriores. Editar su radio reconstruye el contacto con las dos líneas; Quitar
   redondeo restituye la esquina y actualiza el perfil de las operaciones dependientes.

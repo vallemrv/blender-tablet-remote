@@ -282,6 +282,8 @@ def entity_set(payload):
     changes = payload.get('values')
     if not isinstance(changes,dict) or not changes:
         raise BadPayload('Faltan las dimensiones')
+    constrain=payload.get('constrain',False)
+    if not isinstance(constrain,bool): raise BadPayload('constrain debe ser booleano')
     def change(doc):
         sketch, e = model.entity(doc,payload.get('entity_id'))
         from ..cad.offset import rule_for, set_value
@@ -318,6 +320,7 @@ def entity_set(payload):
                 raise BadPayload('Radio y diámetro deben describir el mismo círculo')
             values['diameter']=diameter
         goals=dimensions.set_values(sketch,e,values)
+        if constrain: dimensions.constrain_values(sketch,e,changes)
         geometry.solve(sketch,goals)
     return (yield from runtime.transaction_steps(payload,change,'CAD editar dimensiones'))
 

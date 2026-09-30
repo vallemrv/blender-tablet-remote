@@ -231,7 +231,11 @@ al soltar puedes editarlas o fijarlas con el candado de cada medida.
 
 Al editar un boceto o una operación confirmada, las medidas quedan en borrador:
 **✓** las aplica juntas y **×** las descarta. Ambos botones permanecen fijos a la
-derecha aunque desplaces los parámetros. En la preview de Extruir/Vaciar, −/+
+derecha aunque desplaces los parámetros. En las figuras del boceto, ✓ también
+fija las medidas editadas que tienen candado: crea o actualiza sus cotas y deja
+los candados marcados. Las medidas no editadas siguen libres. Se guarda todo en
+un único deshacer; si alguna cota entra en conflicto, no se aplica ninguna.
+En la preview de Extruir/Vaciar, −/+
 actualiza la profundidad visible inmediatamente; ✓ confirma y × cancela la sesión.
 Extruir puede ir en el sentido de la normal o en el contrario (Arriba/Abajo,
 Izquierda/Derecha o Adelante/Atrás, según el plano). El lápiz sigue ese eje en
@@ -242,7 +246,8 @@ Las respuestas antiguas de Blender no hacen perder pulsaciones acumuladas.
 
 Un cuadrado tiene **lados iguales**, pero su tamaño no queda fijado por dibujarlo.
 Por eso muestra un único campo **Lado**. Un campo **sin cota** describe el tamaño
-actual; **Fijar medida** la convierte en una cota que se conserva al arrastrar.
+actual; editarlo y confirmar con **✓**, o pulsar **Fijar medida**, lo convierte
+en una cota que se conserva al arrastrar.
 El campo pasa a indicar **cota**: editarlo cambia esa misma restricción. **Quitar
 cota** retira esa medida fija conservando el dibujo y sus otras reglas. Fijar
 geometría u otras restricciones todavía pueden limitar el cambio. Quitar Igualdad

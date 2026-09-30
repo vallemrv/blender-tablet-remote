@@ -139,6 +139,21 @@ def solve_dimension(sketch, constraint):
     geometry.solve(sketch,goals)
 
 
+def constrain_values(sketch, entity, changes):
+    """Persist only the edited measures that expose a padlock in the tray.
+
+    Read the explicit input fields, accepting radius and its diameter/width alias.
+    Existing/equality-linked dimensions keep their identity through put().
+    """
+    for measure in describe(sketch,entity):
+        field=measure['field']
+        if field=='radius' and field not in changes and entity['type'] in ('CIRCLE','SLOT'):
+            field='diameter' if entity['type']=='CIRCLE' else 'width'
+        if field not in changes or not measure.get('lockable',True): continue
+        put(sketch,dict(id=model.uid('constraint'),type=measure['constraint_type'],
+                        refs=measure['refs'],value=model.number(changes[field],positive=True)*factor(entity,field)))
+
+
 def describe(sketch, entity):
     from .offset import rule_for
     rule = rule_for(sketch, entity['id'])

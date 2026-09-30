@@ -1493,7 +1493,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.polygon.update` | `{u,v}` | Tramo provisional desde el último vértice, con snap a extremos incluidos los de la propia cadena |
 | `cad.polygon.segment` | `{u,v}` | Consolida un vértice por trazo o toque; si el extremo es el punto inicial con tres o más vértices, cierra y confirma con un único undo |
 | `cad.polygon.close` | `{}` | Cierra la cadena con el segmento final y confirma; con menos de tres vértices responde error y conserva la sesión |
-| `cad.entity.set` | `{entity_id,values:{width?,height?,diameter?,radius?,start?,sweep?,length?,flats?,angle?,sides?,module?,teeth?,pressure?,x?,y?,x2?,y2?}}` | Edita dimensiones y reconstruye dependientes |
+| `cad.entity.set` | `{entity_id,values:{width?,height?,diameter?,radius?,start?,sweep?,length?,flats?,angle?,sides?,module?,teeth?,pressure?,x?,y?,x2?,y2?},constrain?:bool}` | Edita dimensiones y reconstruye dependientes; `constrain:true` acota las medidas editadas que ofrecen candado |
 | `cad.entity.delete` | `{entity_id}` o `{}` | Borra una figura completa o la selección de puntos/aristas/figuras en un undo; protege perfiles usados |
 | `cad.extrude.begin` | `{profile_id?,sketch_id?,depth,operation:"EXTRUDE\\|CUT",target_id?,extent?}` | Un perfil o el croquis completo; contornos exteriores como volumen e interiores como huecos. CUT exige destino. `extent` es `ONE` (defecto) o `BOTH`; en EXTRUDE, `BOTH` es simetría a los dos lados del croquis |
 | `cad.finish.begin` | `{operation:"FILLET\|CHAMFER",width?,segments?}` | Redondea/achaflana las aristas seleccionadas del sólido (`surface` en EDGE, un mismo cuerpo) como nuevo nodo de la pila; preview reversible |
@@ -1563,6 +1563,10 @@ Las entidades públicas anuncian `dimensions:[{field,label,constraint_type,
 value_factor,refs:[{id,part}],constraint_ids:[]}]`, `is_square` e `is_fillet`.
 `constraint_ids` vacío significa medida libre; si tiene IDs, editar el campo
 mediante `cad.entity.set` actualiza esa cota en lugar de imponer un valor paralelo.
+Al confirmar campos de medidas, Android envía `constrain:true`: crea o reutiliza
+sus cotas en la misma transacción y undo, y sus `constraint_ids` marcan los candados.
+No acota campos no editados, coordenadas, ángulos ni parámetros discretos. Un
+conflicto rechaza valores y cotas juntos. Omitir el flag conserva la edición libre.
 CIRCLE publica `radius=diameter/2` y describe Radio con `value_factor:1` para RADIUS.
 `cad.entity.set` admite radio o diámetro y actualiza la misma cota; si se envían ambos,
 deben coincidir. El documento conserva `diameter` como parámetro canónico. La bandeja
