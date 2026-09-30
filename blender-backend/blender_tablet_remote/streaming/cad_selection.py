@@ -86,3 +86,52 @@ def draw_cad_cut(rv3d, width, height):
                 line.uniform_float('lineWidth',2.); line.uniform_float('color',(1.,.45,.3,.9)); _cut_batches['line'].draw(line)
     finally:
         gpu.state.blend_set(saved[0]); gpu.state.depth_test_set(saved[1]); gpu.state.depth_mask_set(saved[2]); gpu.state.viewport_set(*saved[3])
+
+
+def draw_cad_plane(rv3d, width, height):
+    """Preview of the plane being placed: translucent sheet, border, axes and normal.
+
+    The sheet covers the visible CAD result so its position against the part is
+    readable; it is faint behind the solid and stronger in front of it.
+    """
+    from ..cad.runtime import runtime
+    import bpy
+    session=runtime.session
+    if not (runtime.workspace and session and session['operation']=='PLANE' and session.get('plane_frame')):
+        return
+    frame=session['plane_frame']
+    scale=max(float(bpy.context.scene.unit_settings.scale_length),1e-12)
+    origin=Vector(frame['origin'])/scale; x=Vector(frame['x']); y=Vector(frame['y']); n=Vector(frame['normal'])
+    corners=[c for o in runtime.objects(runtime.doc()) if o.visible_get() for c in (o.matrix_world@Vector(b) for b in o.bound_box)]
+    if corners:
+        half=max(max((c-origin).dot(x) for c in corners)-min((c-origin).dot(x) for c in corners),
+                 max((c-origin).dot(y) for c in corners)-min((c-origin).dot(y) for c in corners))*.5
+        center=origin+x*sum((c-origin).dot(x) for c in corners)/len(corners)+y*sum((c-origin).dot(y) for c in corners)/len(corners)
+    else:
+        half=.05/scale; center=origin
+    half=max(half*1.2,.01/scale)
+    quad=[center+x*a*half+y*b*half for a,b in ((-1,-1),(1,-1),(1,1),(-1,1))]
+    fill=gpu.shader.from_builtin('UNIFORM_COLOR'); line=gpu.shader.from_builtin('POLYLINE_UNIFORM_COLOR')
+    sheet=batch_for_shader(fill,'TRIS',{'pos':[quad[0],quad[1],quad[2],quad[0],quad[2],quad[3]]})
+    border=batch_for_shader(line,'LINES',{'pos':[p for i in range(4) for p in (quad[i],quad[(i+1)%4])]})
+    axis=half*.45
+    axes=[(batch_for_shader(line,'LINES',{'pos':[origin,origin+x*axis]}),(1.,.33,.33,1.)),
+          (batch_for_shader(line,'LINES',{'pos':[origin,origin+y*axis]}),(.55,.86,.24,1.)),
+          (batch_for_shader(line,'LINES',{'pos':[origin,origin+n*axis*.8]}),(.3,.55,1.,1.))]
+    saved=(gpu.state.blend_get(),gpu.state.depth_test_get(),gpu.state.depth_mask_get(),gpu.state.viewport_get())
+    try:
+        gpu.state.viewport_set(0,0,width,height)
+        gpu.state.blend_set('ALPHA'); gpu.state.depth_mask_set(False)
+        with gpu.matrix.push_pop(),gpu.matrix.push_pop_projection():
+            gpu.matrix.load_identity(); gpu.matrix.load_projection_matrix(camera.perspective_matrix(rv3d))
+            for test,alpha in (('NONE',.07),('LESS_EQUAL',.16)):
+                gpu.state.depth_test_set(test)
+                fill.bind(); fill.uniform_float('color',(.35,.62,1.,alpha)); sheet.draw(fill)
+            gpu.state.depth_test_set('NONE')
+            line.bind(); line.uniform_float('viewportSize',(width,height))
+            line.uniform_float('lineWidth',2.); line.uniform_float('color',(.55,.78,1.,.95)); border.draw(line)
+            line.uniform_float('lineWidth',3.)
+            for batch,color in axes:
+                line.uniform_float('color',color); batch.draw(line)
+    finally:
+        gpu.state.blend_set(saved[0]); gpu.state.depth_test_set(saved[1]); gpu.state.depth_mask_set(saved[2]); gpu.state.viewport_set(*saved[3])

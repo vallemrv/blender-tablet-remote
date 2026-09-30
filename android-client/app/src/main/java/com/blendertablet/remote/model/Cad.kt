@@ -40,6 +40,9 @@ data class CadOverlay(val id: String, val points: List<Pair<Float, Float>>, val 
     val kind: String = "ENTITY", val labelBox: List<Float> = emptyList(),
     val dimensionLines: List<List<Pair<Float, Float>>> = emptyList(), val arrows: List<List<Pair<Float, Float>>> = emptyList())
 data class CadBody(val id: String, val name: String)
+/** Interactive plane: base XY/XZ/YZ/FACE, separation along its normal (m), tilt (°) and in-plane shift (m). */
+data class CadPlaneSession(val base: String, val planeId: String?, val offset: Double, val tilt: List<Double>,
+    val shift: List<Double>, val positiveLabel: String, val negativeLabel: String)
 /** [derived]: framed by a face, sketch or top-face support, so its axes are local, not world. */
 data class CadPlane(val id: String, val name: String, val translation: List<Double>, val rotation: List<Double>,
     val base: String = "XY", val derived: Boolean = false)
@@ -75,6 +78,8 @@ data class CadState(
     val step: Double = .001,
     val increment: Boolean = true,
     val transparent: Boolean = false,
+    /** Plane being placed interactively (`session.operation == "PLANE"`). */
+    val plane: CadPlaneSession? = null,
     val construction: Boolean = false, val showScene: Boolean = false,
     val bodies: List<CadBody> = emptyList(), val activeBodyId: String? = null,
     val planes: List<CadPlane> = emptyList(),

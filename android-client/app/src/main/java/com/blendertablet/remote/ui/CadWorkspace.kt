@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.North
+import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
@@ -99,6 +100,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     val drawPreview = cad.sessionActive && cad.operation in listOf("LINE", "RECTANGLE", "CIRCLE", "ARC")
     val livePreview = dragPreview || drawPreview
     val finishPreview = cad.sessionActive && cad.operation in listOf("FILLET", "CHAMFER")
+    // Colocar un plano: el rail elige la base y la bandeja sus medidas, con preview en la vista.
+    val planePreview = cad.sessionActive && cad.operation == "PLANE"
     val availableHeight = (LocalConfiguration.current.screenHeightDp - 320).coerceAtLeast(100).dp
     fun command(name: String, vararg values: Pair<String, Any?>) { if (connected) vm.cadCommand(name, mapOf(*values)) }
     fun editSketch(sketchId: String) {
@@ -112,7 +115,17 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             "sketch_id" to cad.selectionId.takeIf { cad.selectionKind == "SKETCH" }, "depth" to cad.step * 10,
             "operation" to operation, "target_id" to target?.id)
     }
-    ToolRail(Modifier.align(Alignment.CenterStart).padding(start = Metrics.EdgeMargin, top = 120.dp, bottom = 160.dp).heightIn(max = availableHeight)) {
+    if (planePreview) ToolRail(Modifier.align(Alignment.CenterStart).padding(start = Metrics.EdgeMargin, top = 120.dp, bottom = 160.dp).heightIn(max = availableHeight)) {
+        val plane = cad.plane
+        capabilities.planes.forEach { base ->
+            CadAction("PLANE_$base", "Plano base ${cadPlaneLabel(base)}", selected = plane?.base == base,
+                enabled = connected && plane?.planeId == null) { command("cad.plane.update", "base" to base) }
+        }
+        CadAction("SKETCH_FACE", if (cad.surface.canSketch) "Plano en la cara seleccionada" else "Selecciona antes una cara del sólido",
+            selected = plane?.base == "FACE", enabled = connected && plane?.planeId == null && cad.surface.canSketch) {
+            command("cad.plane.update", "base" to "FACE")
+        }
+    } else ToolRail(Modifier.align(Alignment.CenterStart).padding(start = Metrics.EdgeMargin, top = 120.dp, bottom = 160.dp).heightIn(max = availableHeight)) {
         CadAction("SELECT", "Cursor · tocar alterna selección · arrastrar mueve", selected = state.cadTool == null && cad.surface.mode == "PROFILE", enabled = !cad.sessionActive) { vm.cadTool(null) }
         if (editing) {
             RailDivider()
@@ -129,10 +142,10 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
         } else {
             RailDivider()
             capabilities.planes.forEach { plane ->
-                CadAction("PLANE_$plane", "Nuevo boceto en ${cadPlaneLabel(plane)}", enabled = connected && !cad.sessionActive) { command("cad.sketch.create", "plane" to plane) }
+                CadAction("PLANE_$plane", "Nuevo boceto en ${cadPlaneLabel(plane)}", enabled = connected && !cad.sessionActive) { command("cad.plane.begin", "base" to plane) }
             }
             if (capabilities.sketchEditing) CadAction("SKETCH_FACE", "Crear croquis en la cara seleccionada",
-                enabled = connected && !cad.sessionActive && cad.surface.canSketch) { command("cad.sketch.on_face") }
+                enabled = connected && !cad.sessionActive && cad.surface.canSketch) { command("cad.plane.begin", "base" to "FACE") }
             RailDivider()
             val solidEdges = cad.surface.selection.any { it.kind == "EDGE" }
             CadAction("FILLET", "Redondear aristas del sólido", enabled = connected && !cad.sessionActive) {
@@ -337,10 +350,22 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     // A sketch on a saved plane moves along its normal from the 3D tray.
     val offsetPlane = if (editing || feature != null || cad.sessionActive) null
         else selectedSketch?.planeId?.let { id -> cad.planes.firstOrNull { it.id == id } }
+    /** Envía las medidas escritas del plano (las no escritas conservan su valor actual). */
+    fun pushPlane() {
+        val plane = cad.plane ?: return
+        command("cad.plane.update", "offset" to (drafts["plane_offset"] ?: plane.offset),
+            "tilt" to listOf(drafts["plane_tilt0"] ?: plane.tilt[0], drafts["plane_tilt1"] ?: plane.tilt[1]),
+            "shift" to listOf(drafts["plane_shift0"] ?: plane.shift[0], drafts["plane_shift1"] ?: plane.shift[1]))
+        drafts.keys.filter { it.startsWith("plane_") }.forEach { drafts.remove(it) }
+    }
     fun acceptValues() {
         if (!connected || !validDrafts || livePreview) return
         focusManager.clearFocus()
         when {
+            planePreview -> {
+                if (drafts.keys.any { it.startsWith("plane_") }) pushPlane()
+                command("cad.session.confirm")
+            }
             depthPreview -> {
                 drafts["depth"]?.let { command("cad.extrude.update", "depth" to it) }
                 if (cad.canConfirm) command("cad.session.confirm")
@@ -386,22 +411,28 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     }
     fun discardValues() {
         focusManager.clearFocus()
-        if (depthPreview || finishPreview) command("cad.session.cancel")
+        if (depthPreview || finishPreview || planePreview) command("cad.session.cancel")
         if (cad.selectionKind == "CONSTRAINT") command("cad.select_all", "action" to "DESELECT")
         pendingDimension = null; editingConstraint = null; offsetSource = null; mirrorSource = null; resetInputs++
     }
     val canAccept = connected && validDrafts && when {
         depthPreview || finishPreview -> cad.canConfirm
+        planePreview -> true
         pendingDimension != null -> true
         offsetSource != null || mirrorSource != null -> true
         else -> drafts.isNotEmpty()
     }
     val parameterScroll = rememberScrollState()
-    val hasValues = depthPreview || finishPreview || pendingDimension != null || editingConstraint != null || entity != null || feature != null || offsetPlane != null || offsetSource != null || mirrorSource != null
+    val hasValues = depthPreview || finishPreview || planePreview || pendingDimension != null || editingConstraint != null || entity != null || feature != null || offsetPlane != null || offsetSource != null || mirrorSource != null
     FloatingPanel(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { onTrayHeight(it.height) }.padding(Metrics.EdgeMargin)) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(cad.error ?: when {
                 !connected -> "Reconectando · recuperando el documento de Blender"
+                planePreview -> cad.plane?.let { plane ->
+                    (if (plane.planeId != null) "Colocar plano guardado" else "Plano ${if (plane.base == "FACE") "en la cara" else cadPlaneLabel(plane.base)}") +
+                        " · arrastra con el lápiz para separarlo · positivo: ${plane.positiveLabel.lowercase()} · ✓ " +
+                        (if (plane.planeId != null) "aplica la posición" else "crea el croquis")
+                } ?: "Colocando plano"
                 offsetSource != null -> "Desfase vinculado: elige dentro o fuera y escribe el grosor · ✓ crea el contorno"
                 mirrorSource != null -> "Simetría de ${mirrorSource!!.name}: elige el plano y su posición · ✓ crea la operación vinculada"
                 feature?.isMirror == true -> "${feature.name} · perfil y profundidad siguen a la operación fuente"
@@ -559,6 +590,44 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             PillButton("Cerrar polígono", enabled = connected && cad.canClose) { vm.cadCommand("cad.polygon.close") }
                             RoundAction(AppIcons.cad("CANCEL"), "Descartar polígono", Ink.Bad, { vm.cadCommand("cad.session.cancel") })
                         }
+                        if (planePreview) cad.plane?.let { plane ->
+                            val axes = cadPlaneAxes(plane.base.takeIf { it != "FACE" && plane.planeId == null })
+                            val id = cad.sessionId.orEmpty()
+                            fun send(offset: Double = plane.offset, tilt: List<Double> = plane.tilt, shift: List<Double> = plane.shift) {
+                                drafts.keys.filter { it.startsWith("plane_") }.forEach { drafts.remove(it) }
+                                command("cad.plane.update", "offset" to offset, "tilt" to tilt, "shift" to shift)
+                            }
+                            CadDimension("Separación", plane.offset, unit, id + "offset", step = cad.step, enabled = connected,
+                                onNudge = { send(offset = it) }, onDone = { drafts["plane_offset"]?.let { send(offset = it) } }) { drafts["plane_offset"] = it }
+                            (0..1).forEach { i ->
+                                CadDimension("Inclinar ${axes.rotation[i]}", plane.tilt[i], unit, id + "tilt$i", degrees = true, step = 5.0,
+                                    minimum = -180.0, maximum = 180.0, enabled = connected,
+                                    onNudge = { send(tilt = plane.tilt.toMutableList().also { list -> list[i] = it }) },
+                                    onDone = { drafts["plane_tilt$i"]?.let { send(tilt = plane.tilt.toMutableList().also { list -> list[i] = it }) } }) { drafts["plane_tilt$i"] = it }
+                            }
+                            (0..1).forEach { i ->
+                                CadDimension("Mover ${axes.inPlane[i]}", plane.shift[i], unit, id + "shift$i", step = cad.step, enabled = connected,
+                                    onNudge = { send(shift = plane.shift.toMutableList().also { list -> list[i] = it }) },
+                                    onDone = { drafts["plane_shift$i"]?.let { send(shift = plane.shift.toMutableList().also { list -> list[i] = it }) } }) { drafts["plane_shift$i"] = it }
+                            }
+                            PillButton("Ver escena", selected = cad.showScene, enabled = connected) { command("cad.settings", "show_scene" to !cad.showScene) }
+                            if (cad.planes.isNotEmpty() && plane.planeId == null) {
+                                var savedOpen by remember { mutableStateOf(false) }
+                                Box {
+                                    PillButton("Planos guardados", enabled = connected) { savedOpen = true }
+                                    DropdownMenu(savedOpen, onDismissRequest = { savedOpen = false }) {
+                                        cad.planes.forEach { saved ->
+                                            DropdownMenuItem(text = { Text("${saved.name} · nuevo croquis") }, onClick = {
+                                                savedOpen = false; command("cad.session.cancel"); command("cad.sketch.create", "plane_id" to saved.id)
+                                            })
+                                            DropdownMenuItem(text = { Text("${saved.name} · colocar") }, onClick = {
+                                                savedOpen = false; command("cad.plane.begin", "plane_id" to saved.id)
+                                            })
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         if (depthPreview) {
                             PillButton("Una dirección", selected = cad.extent != "BOTH", enabled = connected) {
                                 command("cad.extrude.update", "extent" to "ONE")
@@ -653,9 +722,10 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 }
                 if (hasValues && !livePreview) {
                     Spacer(Modifier.width(10.dp))
-                    RoundAction(AppIcons.cad("CANCEL"), if (depthPreview || finishPreview) "Descartar preview" else "Descartar medidas", Ink.Bad, ::discardValues)
+                    RoundAction(AppIcons.cad("CANCEL"), if (depthPreview || finishPreview || planePreview) "Descartar preview" else "Descartar medidas", Ink.Bad, ::discardValues)
                     Spacer(Modifier.width(4.dp))
-                    RoundAction(AppIcons.cad("FINISH"), if (depthPreview || finishPreview) "Confirmar ${cadLabel(cad.operation)}" else "Aplicar medidas",
+                    RoundAction(AppIcons.cad("FINISH"), if (planePreview) (if (cad.plane?.planeId != null) "Aplicar posición del plano" else "Crear el plano y su croquis")
+                        else if (depthPreview || finishPreview) "Confirmar ${cadLabel(cad.operation)}" else "Aplicar medidas",
                         if (canAccept) Ink.Ok else Ink.Faint, { if (canAccept) acceptValues() })
                 }
             }
@@ -706,10 +776,12 @@ internal fun cadWeldEnabled(cad: CadState): Boolean = cad.selection.distinct().s
 fun CadTopActions(state: AppUiState, vm: MainViewModel) {
     val cad = state.blender.cad
     val connected = state.connection == ConnectionStatus.CONNECTED
-    var planesOpen by rememberSaveable { mutableStateOf(false) }
     val editing = cad.activeSketchId != null
     fun command(name: String, vararg values: Pair<String, Any?>) { if (connected) vm.cadCommand(name, mapOf(*values)) }
-    IconAction(Icons.Default.Layers, "Planos y bocetos", enabled = connected && !cad.sessionActive) { planesOpen = true }
+    if (editing) IconAction(Icons.Default.Straighten, "Medir desde el sólido", enabled = connected && !cad.sessionActive) { vm.cadSurfaceMode("EDGE") }
+    else IconAction(Icons.Default.Layers, "Nuevo plano y croquis", enabled = connected && !cad.sessionActive) {
+        command("cad.plane.begin", "base" to if (cad.surface.canSketch) "FACE" else "XY")
+    }
     if (editing) {
         IconAction(Icons.AutoMirrored.Filled.RotateRight, "Girar la vista 90° sobre el plano",
             enabled = connected && !cad.sessionActive) { command("cad.view.roll", "degrees" to 90) }
@@ -729,9 +801,6 @@ fun CadTopActions(state: AppUiState, vm: MainViewModel) {
             }
         }
     }
-    if (planesOpen) CadPlanesDialog(cad, state.blender.sceneScale.lengthUnit, { planesOpen = false },
-        { name, values -> vm.cadCommand(name, values) }, { planesOpen = false; vm.cadSurfaceMode("FACE") },
-        { planesOpen = false; vm.cadSurfaceMode("EDGE") })
 }
 
 
@@ -974,134 +1043,6 @@ internal fun cadPlaneAxes(base: String?): CadPlaneAxes = when (base) {
     "YZ" -> CadPlaneAxes(listOf("Y", "Z"), listOf("Y", "Z", "X"), "hacia la derecha (+X)", "hacia la izquierda (−X)")
     else -> CadPlaneAxes(listOf("U", "V"), listOf("U", "V", "normal"), "hacia fuera de la cara", "hacia dentro")
 }
-
-@Composable
-private fun CadPlaneChoice(intent: String, title: String, caption: String, selected: Boolean, onClick: () -> Unit) {
-    Column(Modifier.width(76.dp).clip(RoundedCornerShape(10.dp))
-        .background(if (selected) Ink.Accent.copy(alpha = .22f) else Color.White.copy(alpha = .05f))
-        .border(1.dp, if (selected) Ink.Accent else Color.Transparent, RoundedCornerShape(10.dp))
-        .clickable(onClick = onClick).padding(vertical = 8.dp, horizontal = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Icon(AppIcons.cad(intent), title, Modifier.size(34.dp),
-            tint = if (AppIcons.cadMulticolor(intent)) Color.Unspecified else if (selected) Ink.Accent else Ink.OnPanel)
-        Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = if (selected) Ink.Accent else Ink.OnPanel)
-        Text(caption, fontSize = 10.sp, color = Ink.Faint, textAlign = TextAlign.Center, lineHeight = 12.sp)
-    }
-}
-
-@Composable
-private fun CadPlanesDialog(cad: CadState, unit: LengthUnit, dismiss: () -> Unit,
-    command: (String, Map<String, Any?>) -> Unit, pickFace: () -> Unit, pickReference: () -> Unit) {
-    // FACE = the highlighted body face; otherwise a base plane XY/XZ/YZ.
-    var base by remember { mutableStateOf(if (cad.surface.canSketch) "FACE" else "XY") }
-    var source by remember { mutableStateOf<String?>(null) }
-    var planeToEdit by remember { mutableStateOf<CadPlane?>(null) }
-    val factor = when (unit) { LengthUnit.MILLIMETERS -> 1000.0; LengthUnit.CENTIMETERS -> 100.0; LengthUnit.METERS -> 1.0 }
-    var translation by remember { mutableStateOf(listOf("0","0","0")) }
-    var rotation by remember { mutableStateOf(listOf("0","0","0")) }
-    fun parse(values: List<String>) = values.map { NumericExpression.evaluate(it)?.takeIf { number -> number.isFinite() } }
-    val position = parse(translation)
-    val angles = parse(rotation)
-    val valid = position.all { it != null } && angles.all { it != null }
-    var advanced by remember { mutableStateOf(false) }
-    var savedPlanes by remember { mutableStateOf(false) }
-    val face = planeToEdit == null && base == "FACE"
-    val axes = cadPlaneAxes(planeToEdit?.let { if (it.derived) null else it.base } ?: base.takeIf { source == null })
-    val step = cad.step * factor
-    fun nudge(sign: Int) {
-        val current = position[2] ?: 0.0
-        translation = translation.toMutableList().also { it[2] = String.format(Locale.US, "%.6g", current + sign * step) }
-    }
-    AlertDialog(onDismissRequest = dismiss, title = { Text(planeToEdit?.let { "Colocar ${it.name}" } ?: "Nuevo croquis") }, text = {
-        Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (planeToEdit == null) {
-                Text("1 · ¿Sobre qué plano dibujas?", fontWeight = FontWeight.SemiBold)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    CadPlaneChoice("PLANE_XY", "Superior", "XY · suelo\nvista desde arriba", base == "XY" && source == null) { base = "XY"; source = null }
-                    CadPlaneChoice("PLANE_XZ", "Frontal", "XZ · pared\nvista de frente", base == "XZ" && source == null) { base = "XZ"; source = null }
-                    CadPlaneChoice("PLANE_YZ", "Lateral", "YZ · pared\nvista de lado", base == "YZ" && source == null) { base = "YZ"; source = null }
-                    CadPlaneChoice("SKETCH_FACE", "Cara", if (cad.surface.canSketch) "la seleccionada" else "toca una\nen el sólido", face) {
-                        if (cad.surface.canSketch) { base = "FACE"; source = null; advanced = false } else pickFace()
-                    }
-                }
-                Text("Ejes: X rojo · Y verde · Z azul, como en Blender.", fontSize = 11.sp, color = Ink.Faint)
-            }
-            Text(if (planeToEdit == null) "2 · Separación" else "Separación", fontWeight = FontWeight.SemiBold)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                StepperButton("−") { nudge(-1) }
-                OutlinedTextField(translation[2], { value -> translation = translation.toMutableList().also { it[2] = value } },
-                    label = { Text(unit.short) }, singleLine = true, isError = position[2] == null,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text), modifier = Modifier.weight(1f))
-                StepperButton("+") { nudge(1) }
-            }
-            Text("0 dibuja sobre el plano. Positivo: ${axes.positive}. Negativo: ${axes.negative}.", fontSize = 11.sp, color = Ink.Faint)
-            if (!face) {
-                PillButton(if (advanced) "Ocultar ajustes avanzados" else "Mover dentro del plano e inclinar", selected = advanced) { advanced = !advanced }
-                if (advanced) {
-                    CadVectorFields("Mover dentro del plano", translation.take(2), axes.inPlane, unit.short) {
-                        translation = it + translation[2]
-                    }
-                    CadVectorFields("Inclinar sobre cada eje", rotation, axes.rotation, "°") { rotation = it }
-                    if (planeToEdit == null && cad.sketches.isNotEmpty()) {
-                        Text("Partir del plano de otro croquis (sus ejes pasan a ser U, V y normal):", fontSize = 11.sp, color = Ink.Faint)
-                        cad.sketches.forEach { sketch ->
-                            PillButton(sketch.name, selected = source == sketch.id) { source = if (source == sketch.id) null else sketch.id }
-                        }
-                    }
-                }
-            }
-            val createLabel = when {
-                planeToEdit != null -> "Aplicar posición"
-                face -> "Crear croquis en la cara"
-                source != null -> "Crear croquis"
-                else -> "Crear croquis en ${cadPlaneLabel(base)}"
-            }
-            PillButton(createLabel, enabled = valid) {
-                if (face) command("cad.sketch.on_face", mapOf("offset" to position[2]!! / factor))
-                else command(if (planeToEdit == null) "cad.plane.create" else "cad.plane.set", mapOf(
-                    "plane_id" to planeToEdit?.id, "base" to base, "reference_sketch_id" to source,
-                    "translation" to position.map { it!! / factor }, "rotation" to angles.map { it!! },
-                    "start_sketch" to (planeToEdit == null)))
-                dismiss()
-            }
-            if (cad.planes.isNotEmpty() && planeToEdit == null) {
-                HorizontalDivider()
-                PillButton("Planos existentes", selected = savedPlanes) { savedPlanes = !savedPlanes }
-                if (savedPlanes) cad.planes.forEach { plane ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        PillButton(plane.name) { command("cad.sketch.create", mapOf("plane_id" to plane.id)); dismiss() }
-                        PillButton("Colocar") {
-                            planeToEdit = plane
-                            advanced = true
-                            translation = plane.translation.map { String.format(Locale.US, "%.8g", it * factor) }
-                            rotation = plane.rotation.map { it.toString() }
-                        }
-                    }
-                }
-            }
-            if (cad.activeSketchId != null && planeToEdit == null) {
-                HorizontalDivider()
-                PillButton("Medir desde sólido", onClick = pickReference)
-            }
-            PillButton("Ver objetos de la escena", selected = cad.showScene) { command("cad.settings", mapOf("show_scene" to !cad.showScene)) }
-        }
-    }, confirmButton = { TextButton(onClick = dismiss) { Text("Cerrar") } })
-}
-
-
-@Composable
-private fun CadVectorFields(label: String, values: List<String>, axes: List<String>, unit: String, change: (List<String>) -> Unit) {
-    Text("$label · $unit", fontSize = 12.sp)
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        axes.forEachIndexed { index, axis ->
-            OutlinedTextField(values[index], { value -> change(values.toMutableList().also { it[index] = value }) },
-                label = { Text(axis) }, singleLine = true,
-                isError = NumericExpression.evaluate(values[index])?.isFinite() != true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text), modifier = Modifier.weight(1f))
-        }
-    }
-}
-
 
 @Composable
 private fun CadSurfaceControls(cad: CadState, unit: LengthUnit, enabled: Boolean, vm: MainViewModel) {

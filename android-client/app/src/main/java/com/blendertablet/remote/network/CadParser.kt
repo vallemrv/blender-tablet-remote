@@ -99,10 +99,15 @@ object CadParser {
             selection = objects(selection?.optJSONArray("items")).map { CadSelection(it.optString("id"), it.optString("part", "BODY")) },
             step = j.optDouble("step", .001).takeIf { it.isFinite() && it > 0 } ?: .001,
             increment = j.optBoolean("increment", true), transparent = session?.optBoolean("transparent") == true,
-            dimensionOptions = listOf("DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS").mapNotNull { type ->
+            plane = session?.optJSONObject("plane")?.let { p ->
+                fun pair(key: String) = (0..1).map { p.optJSONArray(key)?.optDouble(it, 0.0) ?: 0.0 }
+                CadPlaneSession(p.optString("base", "XY"), p.id("plane_id"), p.optDouble("offset", 0.0),
+                    pair("tilt"), pair("shift"), p.optString("positive_label"), p.optString("negative_label"))
+            },
+            dimensionOptions = listOf("DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "ANGLE").mapNotNull { type ->
                 j.optJSONObject("dimension_options")?.optJSONObject(type)?.let { option ->
                     option.optDouble("value").takeIf {
-                        it.isFinite() && (it > 0 || (it == 0.0 && type in listOf("DISTANCE_X", "DISTANCE_Y")))
+                        it.isFinite() && (it > 0 || (it == 0.0 && type in listOf("DISTANCE_X", "DISTANCE_Y", "ANGLE")))
                     }?.let { type to CadDimensionOption(it,option.id("constraint_id")) }
                 }
             }.toMap(),

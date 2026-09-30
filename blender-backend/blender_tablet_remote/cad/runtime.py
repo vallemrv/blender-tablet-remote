@@ -359,7 +359,7 @@ class CadRuntime:
             original = session['baseline']
             self.session = None
             if restore and self._scene == bpy.context.scene.as_pointer():
-                if not session.get('annotation_id') and (session['operation']!='DRAG' or session.get('preview')): self.rebuild(original, limit=self.bar(original))
+                if not session.get('annotation_id') and session['operation']!='PLANE' and (session['operation']!='DRAG' or session.get('preview')): self.rebuild(original, limit=self.bar(original))
             self.selection = copy.deepcopy(session.get('selection_before')) if session['operation']=='DRAG' and restore else None
         self._baseline_evaluation = {}
         self._evaluations = self._current_evaluation.copy()
@@ -621,13 +621,14 @@ class CadRuntime:
             session = self.session
             if self.active_sketch_id and not any(s['id']==self.active_sketch_id for s in doc['sketches']):
                 self.active_sketch_id = None
-            if session and session.get('preview'):
-                doc = session['preview']
+            if session and session.get('preview') and session['operation']!='PLANE':
+                doc = session['preview']  # A plane preview only draws; the tree stays as saved.
             if (self.selection or {}).get('kind')=='CONSTRAINT':
                 active=next((s for s in doc['sketches'] if s['id']==self.active_sketch_id),None)
                 if active is None or not any(c['id']==self.selection['id'] for c in active['constraints']): self.selection=None
             if not any(b['id']==self.active_body_id for b in doc['bodies']): self.active_body_id=doc['bodies'][0]['id']
             from . import dimensions
+            from ..commands.cad import _plane_public
             sketch=next((s for s in doc['sketches'] if s['id']==self.active_sketch_id),None)
             refs=(self.selection or {}).get('items',[])
             numeric=dimensions.offers(sketch,[r for r in refs if r.get('kind')=='ENTITY']) if sketch else {}
@@ -652,6 +653,7 @@ class CadRuntime:
                                       positive_label=labels[0] if labels else None,
                                       negative_label=labels[1] if labels else None,
                                       transparent=bool(session and session['operation']=='CUT'),
+                                      plane=_plane_public(session) if session and session['operation']=='PLANE' else None,
                                      can_confirm=bool(session and session.get('candidate')),
                                      can_close=bool(session and session.get('can_close'))),
                         overlay=self.overlay(doc),error=None)

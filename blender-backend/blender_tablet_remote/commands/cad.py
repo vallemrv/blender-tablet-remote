@@ -568,10 +568,22 @@ def direction_labels(normal):
 
 
 def _normal_travel(sketch, source, start, end):
-    """Metres along the sketch normal between two pen positions, or None if edge-on.
+    """Metres along the sketch normal between two pen positions, or None if edge-on."""
+    basis = model.frame(sketch)
+    try:
+        ring = model.outline(source)
+        cx, cy = sum(p[0] for p in ring)/len(ring), sum(p[1] for p in ring)/len(ring)
+    except Exception:
+        cx = cy = 0.
+    anchor = [basis['origin'][i]+cx*basis['x'][i]+cy*basis['y'][i] for i in range(3)]
+    return _travel_along(anchor, basis['normal'], start, end)
 
-    Each pen ray is intersected (closest point) with the normal line through the
-    profile's centre, so the depth stays under the tip at any zoom or perspective.
+
+def _travel_along(anchor, normal, start, end):
+    """Metres along the line anchor+t·normal between two pen positions.
+
+    Each pen ray is intersected (closest point) with that line, so what moves stays
+    under the tip at any zoom or perspective. None when the line points at the camera.
     """
     from ..bpy_utils import find_view3d
     from ..camera import camera
@@ -582,14 +594,8 @@ def _normal_travel(sketch, source, start, end):
     rv3d = found[3]
     camera.sync_from_region(rv3d)
     scale = max(float(bpy.context.scene.unit_settings.scale_length), 1e-12)
-    basis = model.frame(sketch)
-    try:
-        ring = model.outline(source)
-        cx, cy = sum(p[0] for p in ring)/len(ring), sum(p[1] for p in ring)/len(ring)
-    except Exception:
-        cx = cy = 0.
-    anchor = Vector([basis['origin'][i]+cx*basis['x'][i]+cy*basis['y'][i] for i in range(3)]) / scale
-    normal = Vector(basis['normal']).normalized()
+    anchor = Vector(anchor) / scale
+    normal = Vector(normal).normalized()
     def parameter(u, v):
         origin, direction = camera.ray(u, v, rv3d)
         direction = direction.normalized()
@@ -902,6 +908,15 @@ def confirm(payload):
         runtime.cancel()
         return runtime.status()
     doc = session['preview']
+    if session['operation'] == 'PLANE':
+        runtime.session = None
+        yield from runtime.commit_steps(doc, 'CAD plano', geometry=False)
+        target = model.find(doc,'sketches',session['sketch_id']) if session.get('sketch_id') else (
+            model.find(doc,'sketches',runtime.active_sketch_id) if runtime.active_sketch_id else None)
+        if target is not None:
+            if session.get('sketch_id'): runtime.enter_sketch(target)
+            else: runtime.focus(target)
+        return runtime.status()
     if session.get('at_bar'):
         # A node inserted at the bar becomes the viewed state immediately.
         runtime.rollback_id = session['feature_id']
@@ -1541,6 +1556,28 @@ def surface_clear(payload):
     return runtime.status()
 
 
+def _face_plane(doc, frame, source, offset=0.):
+    """Plane on a captured face frame; a CAD top face keeps an associative support."""
+    from mathutils import Vector
+    plane=dict(id=model.uid('plane'),name='Cara de '+source['object'],base='XY',implicit=True,
+               translation=[0,0,offset],rotation=[0,0,0],face_frame=frame)
+    feature=next((f for f in doc['features'] if f['id']==source['feature_id']),None)
+    candidates=[node for node in reversed(model.history(doc)) if node['kind']=='FEATURE' and node['enabled'] and not node.get('mirror') and
+                node['type'] in ('EXTRUDE','CUT') and
+                feature and node['body_id']==feature['body_id'] and node['id'] in _reachable_ids(doc)]
+    for support in candidates:
+        source_sketch=model.find(doc,'sketches',support['sketch_id']); base=model.frame(source_sketch)
+        normal=Vector(base['normal'])
+        top=Vector(base['origin'])+normal*(support['depth'] if support['type']=='EXTRUDE' else 0)
+        delta=Vector(frame['origin'])-top
+        if Vector(frame['normal']).dot(normal)>1-1e-6 and abs(delta.dot(normal))<1e-7:
+            plane.pop('face_frame'); plane['support_id']=support['id']
+            plane['translation']=[delta.dot(Vector(base['x'])),delta.dot(Vector(base['y'])),offset]
+            plane['rotation']=[0.,0.,math.degrees(math.atan2(Vector(frame['x']).dot(Vector(base['y'])),Vector(frame['x']).dot(Vector(base['x']))))]
+            break
+    return plane,(feature.get('body_id') if feature else None)
+
+
 @command('cad.sketch.on_face')
 def sketch_on_face(payload):
     frame=runtime.surface.face_frame()  # The visible selection, never a second raycast.
@@ -1549,29 +1586,142 @@ def sketch_on_face(payload):
     offset=model.number(payload.get('offset',0))
     def change(doc):
         from mathutils import Vector
-        plane=dict(id=model.uid('plane'),name='Cara de '+source['object'],base='XY',implicit=True,
-                   translation=[0,0,offset],rotation=[0,0,0],face_frame=frame)
-        feature=next((f for f in doc['features'] if f['id']==source['feature_id']),None)
-        candidates=[node for node in reversed(model.history(doc)) if node['kind']=='FEATURE' and node['enabled'] and not node.get('mirror') and
-                    node['type'] in ('EXTRUDE','CUT') and
-                    feature and node['body_id']==feature['body_id'] and node['id'] in _reachable_ids(doc)]
-        for support in candidates:
-            source_sketch=model.find(doc,'sketches',support['sketch_id']); base=model.frame(source_sketch)
-            normal=Vector(base['normal'])
-            top=Vector(base['origin'])+normal*(support['depth'] if support['type']=='EXTRUDE' else 0)
-            delta=Vector(frame['origin'])-top
-            if Vector(frame['normal']).dot(normal)>1-1e-6 and abs(delta.dot(normal))<1e-7:
-                plane.pop('face_frame'); plane['support_id']=support['id']
-                plane['translation']=[delta.dot(Vector(base['x'])),delta.dot(Vector(base['y'])),offset]
-                plane['rotation']=[0.,0.,math.degrees(math.atan2(Vector(frame['x']).dot(Vector(base['y'])),Vector(frame['x']).dot(Vector(base['x']))))]
-                break
+        plane,body=_face_plane(doc,frame,source,offset)
         model.validate_plane(plane); doc['planes'].append(plane)
-        _new_sketch(doc,dict(plane_id=plane['id'],body_id=feature.get('body_id') if feature else None))
+        _new_sketch(doc,dict(plane_id=plane['id'],body_id=body))
         from ..bpy_utils import find_view3d
         from ..camera import camera
         found=find_view3d()
         if found: camera.look_at(Vector(source['center']),[Vector(p) for p in source['points']],found[3])
     return (yield from runtime.transaction_steps(payload,change,'CAD boceto en cara seleccionada'))
+
+
+# ---- Interactive plane placement -------------------------------------------------
+# The plane is a preview drawn in the capture while its base, separation, tilt and
+# in-plane shift are adjusted; confirming creates the plane (and a sketch) in one undo.
+
+def _rotation(degrees):
+    import numpy as np
+    rx,ry,rz=map(math.radians,degrees)
+    cx,sx,cy,sy,cz,sz=math.cos(rx),math.sin(rx),math.cos(ry),math.sin(ry),math.cos(rz),math.sin(rz)
+    return np.array([[cz,-sz,0],[sz,cz,0],[0,0,1]])@np.array([[cy,0,sy],[0,1,0],[-sy,0,cy]])@np.array([[1,0,0],[0,cx,-sx],[0,sx,cx]])
+
+
+def _session_plane(doc, session):
+    """Document plane for the session parameters. Separation follows the tilted normal."""
+    import numpy as np
+    p=session['plane']
+    if p.get('plane_id'):
+        plane=copy.deepcopy(model.find(doc,'planes',p['plane_id'])); body=None
+        base_translation=[0.,0.,0.]; base_rz=plane['rotation'][2]
+    elif p['base']=='FACE':
+        plane,body=_face_plane(doc,session['face'][0],session['face'][1])
+        base_translation=list(plane['translation']); base_rz=plane['rotation'][2]
+    else:
+        plane=dict(id=model.uid('plane'),name='Plano '+str(len(doc['planes'])+1),base=p['base'],
+                   translation=[0,0,0],rotation=[0,0,0]); body=None
+        base_translation=[0.,0.,0.]; base_rz=0.
+    rotation=[p['tilt'][0],p['tilt'][1],base_rz]
+    lifted=_rotation(rotation)@np.array([0.,0.,p['offset']])
+    plane['translation']=[base_translation[0]+p['shift'][0]+float(lifted[0]),
+                          base_translation[1]+p['shift'][1]+float(lifted[1]),float(lifted[2])]
+    plane['rotation']=rotation
+    return plane,body
+
+
+def _plane_preview(session):
+    """Rebuild the preview document and the frame the capture draws."""
+    doc=copy.deepcopy(session['baseline'])
+    plane,body=_session_plane(doc,session)
+    model.validate_plane(plane)
+    p=session['plane']
+    if p.get('plane_id'):
+        doc['planes']=[plane if q['id']==plane['id'] else q for q in doc['planes']]
+        model.resolve_supports(doc)
+        frame=model.find(doc,'planes',plane['id'])['frame']; sketch_id=None
+    else:
+        doc['planes'].append(plane)
+        sketch=dict(id=model.uid('sketch'),name='Boceto '+str(len(doc['sketches'])+1),plane='XY',offset=0,
+                    plane_id=plane['id'],entities=[],constraints=[],visible=True,order=model.next_order(doc),
+                    body_id=body or runtime.active_body_id or doc['bodies'][0]['id'])
+        doc['sketches'].append(sketch)
+        bar=runtime.bar(doc)
+        if bar: model.insert_after(doc,sketch,bar)
+        model.resolve_supports(doc)
+        frame=model.find(doc,'planes',plane['id'])['frame']; sketch_id=sketch['id']
+    session.update(preview=doc,candidate=plane['id'],plane_frame=frame,sketch_id=sketch_id)
+
+
+def _plane_public(session):
+    p=session['plane']
+    from ..cad import document as _model
+    labels=direction_labels(session['plane_frame']['normal']) if session.get('plane_frame') else ('','')
+    return dict(base=p['base'],plane_id=p.get('plane_id'),offset=p['offset'],tilt=list(p['tilt']),shift=list(p['shift']),
+                positive_label=labels[0],negative_label=labels[1])
+
+
+@command('cad.plane.begin')
+def plane_begin(payload):
+    """Start placing a plane: `base` XY/XZ/YZ/FACE, or `plane_id` to move a saved one."""
+    import numpy as np
+    runtime.require_workspace()
+    plane_id=payload.get('plane_id')
+    base=str(payload.get('base','XY')).upper()
+    face=None
+    if plane_id:
+        saved=model.find(runtime.doc(),'planes',plane_id)
+        # Decompose the stored translation into in-plane shift + separation along the tilted normal.
+        R=_rotation(saved['rotation']); t=saved['translation']
+        offset=t[2]/R[2,2] if abs(R[2,2])>1e-9 else 0.
+        params=dict(base=saved.get('base','XY'),plane_id=plane_id,offset=offset,tilt=[saved['rotation'][0],saved['rotation'][1]],
+                    shift=[t[0]-offset*R[0,2],t[1]-offset*R[1,2]])
+    else:
+        if base not in model.PLANES+('FACE',): raise BadPayload('Base de plano: XY, XZ, YZ o FACE')
+        if base=='FACE':
+            face=(runtime.surface.face_frame(),copy.deepcopy(runtime.surface.items[0]))
+        params=dict(base=base,offset=0.,tilt=[0.,0.],shift=[0.,0.])
+    session=runtime.begin(payload,'PLANE')
+    session.update(plane=params,face=face)
+    _plane_preview(session)
+    return runtime.status()
+
+
+@command('cad.plane.update')
+def plane_update(payload):
+    session=runtime.require(payload)
+    if session['operation']!='PLANE': raise CommandError('La sesión no coloca un plano',code='wrong_tool')
+    p=dict(session['plane'],tilt=list(session['plane']['tilt']),shift=list(session['plane']['shift']))
+    if 'base' in payload:
+        base=str(payload['base']).upper()
+        if p.get('plane_id'): raise BadPayload('Un plano guardado conserva su base')
+        if base not in model.PLANES+('FACE',): raise BadPayload('Base de plano: XY, XZ, YZ o FACE')
+        if base=='FACE' and session.get('face') is None:
+            raise BadPayload('Selecciona antes una cara plana del sólido')
+        p['base']=base
+    if 'offset' in payload: p['offset']=model.number(payload['offset'])
+    if 'tilt' in payload:
+        values=payload['tilt']
+        if not isinstance(values,list) or len(values)!=2: raise BadPayload('Inclinación: dos ángulos en grados')
+        p['tilt']=[model.number(v) for v in values]
+    if 'shift' in payload:
+        values=payload['shift']
+        if not isinstance(values,list) or len(values)!=2: raise BadPayload('Desplazamiento: dos distancias en metros')
+        p['shift']=[model.number(v) for v in values]
+    if 'gesture_u' in payload or 'gesture_v' in payload:
+        # The pen drags the plane along its own normal, 1:1 under the tip.
+        frame=session['plane_frame']
+        gu,gv=model.number(payload.get('gesture_u',0)),model.number(payload.get('gesture_v',0))
+        u,v=model.number(payload.get('u',.5)),model.number(payload.get('v',.5))
+        travel=_travel_along(frame['origin'],frame['normal'],(u-gu,v-gv),(u,v))
+        if travel is not None:
+            value=model.number(payload.get('baseline_offset',p['offset']))+travel
+            if runtime.increment: value=round(value/runtime.step)*runtime.step
+            p['offset']=value
+    previous=session['plane']; session['plane']=p
+    try: _plane_preview(session)
+    except (BadPayload,CommandError):
+        session['plane']=previous; _plane_preview(session); raise
+    return runtime.status()
 
 
 @command('cad.reference.project')

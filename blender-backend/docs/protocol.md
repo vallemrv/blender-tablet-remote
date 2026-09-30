@@ -1530,6 +1530,8 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.body.activate` | `{body_id}` | Elige el cuerpo de los nuevos bocetos, sin undo |
 | `cad.plane.create` | `{base?,translation?,rotation?,reference_sketch_id?,support_id?,start_sketch?}` | Plano persistente en metros y grados locales XYZ. start_sketch crea y activa también su croquis en el mismo undo |
 | `cad.plane.set` | `{plane_id,translation?,rotation?}` | Ajusta el plano y reconstruye bocetos/sólidos dependientes |
+| `cad.plane.begin` | `{base:"XY"\|"XZ"\|"YZ"\|"FACE"}` o `{plane_id}` | Abre la sesión `PLANE`: preview del plano dibujada en la captura, sin tocar el documento. FACE usa la cara resaltada (sin otro raycast); `plane_id` recoloca un plano guardado |
+| `cad.plane.update` | `{base?,offset?,tilt?[2],shift?[2]}` o `{gesture_u,gesture_v,u,v,baseline_offset}` | `offset` en metros por la normal ya inclinada, `tilt` en grados sobre los ejes X/Y del plano, `shift` en metros dentro del plano base. El gesto arrastra la separación 1:1 bajo la punta, en pasos con Incremento. `session.plane` publica `{base,plane_id,offset,tilt,shift,positive_label,negative_label}`; `cad.session.confirm` crea plano y croquis activo en un undo (o aplica la posición del guardado) |
 | `cad.surface.mode` | `{mode:"PROFILE\|FACE\|EDGE\|VERTEX"}` | Elige selección del boceto/perfiles o referencias del sólido, sin undo |
 | `cad.surface.select` | `{u,v}` | Alterna una referencia visible; en boceto acumula puntos/aristas/caras de distintos objetos para proyectarlos juntos y un miss conserva la selección; en 3D conserva dos para medir o varias aristas del mismo objeto para acabado |
 | `cad.surface.clear` | `{}` | Limpia las referencias transitorias |

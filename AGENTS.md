@@ -764,13 +764,16 @@ no quedan archivos o referencias temporales.
   La pila muestra solo croquis y operaciones, sin filas
   para figuras o perfiles. El menú del croquis ofrece Renombrar y Seleccionar croquis
   completo; las figuras permanecen dentro de la edición. Tocar un nodo selecciona ese paso.
-- Planos ofrece Superior/Frontal/Lateral, una cara y Separación como controles básicos.
-  Los iconos de plano comparten un trípode con colores de Blender y rellenan el plano;
-  Separación nombra su dirección (+Z, −Y, +X o fuera de la cara) y también desplaza
-  el boceto en cara por su normal (`cad.sketch.on_face` `offset`).
-  Crear croquis crea plano y boceto en un undo. Mover/Inclinar son ajustes opcionales
-  con ejes del mundo (U/V/normal si el plano deriva de una cara u otro croquis);
-  Planos existentes permite reutilizar y colocar los guardados con la misma interfaz.
+- Los planos se colocan de forma interactiva, sin diálogo: sesión `PLANE`
+  (`cad.plane.begin/update`, confirmar/cancelar con `cad.session.*`). El rail pasa a
+  elegir la base (Superior/Frontal/Lateral con el trípode de colores de Blender, o
+  la cara seleccionada) y la bandeja lleva Separación, Inclinar sobre dos ejes y
+  Mover dentro del plano, con −/+. La separación sigue la normal inclinada y el lápiz
+  la arrastra 1:1 (rayo contra la recta normal), con Incremento por pasos enteros.
+  GPUOffScreen dibuja la preview (lámina translúcida del tamaño del resultado, borde,
+  ejes y normal); el documento no cambia hasta ✓, que crea plano y croquis en un undo.
+  Los planos guardados se reutilizan o se recolocan con esa misma sesión (`plane_id`).
+  Boceto en cara usa `_face_plane`, compartido con la base Cara de la sesión.
 - «Copiar a otro plano paralelo» (menú del croquis) crea con un undo un plano implícito
   referido al croquis fuente (traslación `[0,0,z]`) y una copia con IDs nuevos y reglas
   remapeadas. Sigue al fuente; su «Separación Z» se edita en la bandeja 3D al

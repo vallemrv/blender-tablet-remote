@@ -453,17 +453,18 @@ Usa el bisel nativo de Blender sobre el sólido; no es un fillet B-rep.
 - El redondeo es de sketch entre líneas conectadas o en esquinas de rectángulos. No es fillet de aristas
   del sólido. Vaciar quita un perfil por profundidad, a un lado del croquis o a los dos; no es una operación Shell
   de espesor automático sobre caras arbitrarias.
-- **Planos y bocetos** empieza por cuatro tarjetas: Superior (XY, suelo), Frontal
-  (XZ), Lateral (YZ) y Cara. Sus iconos, igual que los del rail, comparten un
-  trípode con los colores de Blender (X rojo, Y verde, Z azul) y rellenan el plano
-  elegido. Si hay una cara resaltada, Cara aparece preseleccionada; si no, la
-  tarjeta pide tocar una en el sólido y el diálogo se reabre después.
-  **Separación** (con −/+ del paso CAD) indica siempre su dirección: arriba (+Z),
-  delante (−Y), derecha (+X) o hacia fuera de la cara; negativo va al otro lado.
-  **Crear croquis** crea su plano y lo abre en un solo paso.
-  **Mover dentro del plano e inclinar** nombra los campos con los ejes del mundo
-  (p. ej. X/Z en Frontal) y permite partir del plano de otro croquis (ejes U/V/normal).
-  **Planos existentes → Colocar** ajusta la posición de un plano guardado.
+- **Nuevo plano y croquis** (icono de capas arriba, o los iconos de plano del rail)
+  entra en modo plano, sin diálogo. El plano aparece en la vista como una lámina
+  azul translúcida con sus ejes (X rojo, Y verde, normal azul) y se ajusta en vivo:
+  - el rail elige la base: Superior (XY), Frontal (XZ), Lateral (YZ) o la cara que
+    tengas seleccionada;
+  - **arrastrar con el lápiz** lo separa por su normal, siguiendo la punta 1:1; con
+    Incremento, en pasos del paso CAD;
+  - la bandeja tiene **Separación**, **Inclinar** sobre sus dos ejes y **Mover**
+    dentro del plano, con −/+; la línea de ayuda dice hacia dónde es positivo;
+  - **Planos guardados** permite abrir un croquis en uno existente o recolocarlo;
+  - ✓ crea plano y croquis en un solo paso de deshacer; ✗ lo descarta sin cambios.
+  Dentro de un croquis, el mismo sitio arriba es **Medir desde el sólido**.
   **Boceto en cara** consume la cara resaltada; **Ver objetos
   de la escena** permite elegir referencias externas. Esa referencia conserva su
   posición capturada, sin seguir cambios topológicos de una cara arbitraria.

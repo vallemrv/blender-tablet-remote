@@ -24,7 +24,7 @@ from ..camera import camera
 from .encoder import VideoEncoder
 from .frames import FrameBuffer
 from .markers import draw_transform_markers
-from .cad_selection import draw_cad_cut, draw_cad_selection
+from .cad_selection import draw_cad_cut, draw_cad_plane, draw_cad_selection
 
 # Tras varios fallos seguidos dejamos de intentarlo: si no hay GPU o no hay VIEW_3D,
 # reintentar 30 veces por segundo solo llena la consola de trazas idénticas.
@@ -291,6 +291,7 @@ class ViewportCapture:
             if not clean and not materials.active:
                 draw_transform_markers(rv3d, width, height)
                 draw_cad_cut(rv3d, width, height)
+                draw_cad_plane(rv3d, width, height)
                 draw_cad_selection(rv3d, width, height)
             buffer = fb.read_color(0, 0, width, height, 4, 0, "UBYTE")
 

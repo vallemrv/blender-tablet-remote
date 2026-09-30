@@ -378,6 +378,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (cadStroke) {
             cadStroke = false
             if (cadGestureMode == "DEPTH") client.cadCommand("cad.extrude.update", mapOf("depth" to cadDepthStart))
+            else if (cadGestureMode == "PLANE") client.cadCommand("cad.plane.update", mapOf("offset" to cadDepthStart))
             else if (cadGestureMode == "FINISH") client.cadCommand("cad.finish.update", mapOf("width" to cadDepthStart))
             else client.cadCommand("cad.session.cancel")
             cadGestureMode = null
@@ -392,6 +393,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 cadPointerStartV = v
                 if (cad.sessionActive && cad.operation in listOf("EXTRUDE", "CUT")) {
                     cadStroke = true; cadGestureMode = "DEPTH"; cadDepthStart = cad.depth
+                    return
+                }
+                if (cad.sessionActive && cad.operation == "PLANE") {
+                    // El lápiz desplaza el plano por su normal, 1:1 bajo la punta.
+                    cadStroke = true; cadGestureMode = "PLANE"; cadDepthStart = cad.plane?.offset ?: 0.0
                     return
                 }
                 if (cad.sessionActive && cad.operation in listOf("FILLET", "CHAMFER")) {
@@ -424,6 +430,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         "gesture_u" to (u - cadPointerStartU), "gesture_v" to (v - cadPointerStartV),
                         "u" to u, "v" to v, "baseline_depth" to cadDepthStart))
                     "FINISH" -> client.cadCommand("cad.finish.update", mapOf("gesture" to (cadPointerStartV - v), "baseline_width" to cadDepthStart))
+                    "PLANE" -> client.cadCommand("cad.plane.update", mapOf("gesture_u" to (u - cadPointerStartU),
+                        "gesture_v" to (v - cadPointerStartV), "u" to u, "v" to v, "baseline_offset" to cadDepthStart))
                     "DRAG" -> client.cadCommand("cad.drag.update", mapOf("u" to u, "v" to v))
                     "POLY" -> client.cadCommand("cad.polygon.update", mapOf("u" to u, "v" to v))
                     "DRAW" -> client.cadCommand("cad.entity.update", mapOf("u" to u, "v" to v))

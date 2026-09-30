@@ -5,6 +5,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadParserTest {
+    @Test fun planeSessionAndLineAngleOfferAreRead() {
+        val state = CadParser.state(JSONObject("""{"version":1,"workspace":true,
+            "session":{"active":true,"id":"p","operation":"PLANE","plane":{"base":"XZ","plane_id":null,"offset":0.02,
+            "tilt":[45,0],"shift":[0.01,-0.005],"positive_label":"Adelante","negative_label":"Atrás"}},
+            "dimension_options":{"ANGLE":{"value":45.0,"constraint_id":null}}}"""))
+        val plane = state.plane!!
+        assertEquals("XZ", plane.base); assertNull(plane.planeId)
+        assertEquals(.02, plane.offset, 1e-12); assertEquals(listOf(45.0, 0.0), plane.tilt)
+        assertEquals(listOf(.01, -.005), plane.shift); assertEquals("Adelante", plane.positiveLabel)
+        assertEquals(45.0, state.dimensionOptions["ANGLE"]!!.value, 1e-12)
+    }
+
     @Test fun dimensionSelectionCarriesArrowsAndAnIndividualConstraint() {
         val state = CadParser.state(JSONObject("""{"version":1,"active_sketch_id":"s",
             "selection":{"kind":"CONSTRAINT","id":"d","part":"LABEL","items":[{"kind":"CONSTRAINT","id":"d","part":"LABEL"}]},
