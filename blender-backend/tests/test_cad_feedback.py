@@ -250,10 +250,15 @@ class FeedbackTests(CadTests):
     def test_sketch_navigation_locked_and_dimensions_projected(self):
         e=self.draw('LINE',(0,0),(.04,0)); self.refs((e,'BODY')); self.rule('DISTANCE',value=.04)
         runtime.focus(runtime.doc()['sketches'][0]); rotation=camera.rotation.copy()
-        view.orbit_delta(.1,.2); view.axis({'axis':'FRONT'}); view.perspective({'mode':'PERSP'})
+        view.orbit_delta(.1,.2); view.axis({'axis':'FRONT'})
         self.assertEqual(camera.rotation,rotation); self.assertEqual(camera.perspective,'ORTHO')
+        # Projection is a choice in the sketch; the view stays face-on and survives roll/Enderezar.
+        view.perspective({'mode':'PERSP'})
+        self.assertEqual(camera.rotation,rotation); self.assertEqual(camera.perspective,'PERSP')
         view.roll_delta(.3)
-        self.assertNotEqual(camera.rotation,rotation); self.assertEqual(camera.perspective,'ORTHO')
+        self.assertNotEqual(camera.rotation,rotation); self.assertEqual(camera.perspective,'PERSP')
+        runtime.focus(runtime.doc()['sketches'][0]); self.assertEqual(camera.perspective,'PERSP')
+        view.perspective({'mode':'ORTHO'}); self.assertEqual(camera.perspective,'ORTHO')
         forward=camera.rotation@Vector((0,0,-1))
         self.assertGreater(abs(forward.dot(Vector(model.frame(runtime.doc()['sketches'][0])['normal']))),.99)
         overlay=runtime.overlay(runtime.doc())

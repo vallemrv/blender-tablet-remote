@@ -1760,7 +1760,9 @@ undo, y la selección de referencias del sólido ignora la parte retirada.
 Mientras `active_sketch_id` esté activo, la cámara remota permanece ortogonal al
 boceto: orbit se traduce a pan y las vistas de eje no cambian orientación. El
 roll de dos dedos y `cad.view.roll` giran esa vista sobre la normal y se quedan;
-`cad.view.align` la endereza con el mundo arriba. La perspectiva permanece ORTHO.
+`cad.view.align` la endereza con el mundo arriba. La proyección es ORTHO por defecto;
+`view.perspective` elige PERSP u ORTHO sin cambiar la orientación y la elección se
+conserva al enderezar, girar y reabrir bocetos.
 Zoom/pan siguen funcionando y no escriben en `rv3d`.
 
 Al entrar en CAD se conserva la edición del boceto activo si existe; en caso

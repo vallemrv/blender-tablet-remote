@@ -575,7 +575,7 @@ no quedan archivos o referencias temporales.
 
 ## Pulido de feedback (septiembre 2026)
 
-- CAD bloquea órbita libre y proyección durante el boceto; orbit desplaza la vista,
+- CAD bloquea la órbita libre durante el boceto; orbit desplaza la vista,
   pan/zoom siguen activos. El giro de dos dedos y Girar 90° rotan la vista sobre el
   plano y se quedan; Enderezar la deja de frente, con el mundo arriba. En el boceto y en Extruir/Vaciar aparece el círculo de
   navegación de las transformaciones. En el boceto, sostenerlo orbita en perspectiva
@@ -788,6 +788,9 @@ no quedan archivos o referencias temporales.
   remota se apoya en el plano del croquis y retira lo que queda delante. Solo actúa
   con la vista de frente al plano; no escribe en `rv3d` ni crea undo, y la selección
   de referencias del sólido ignora la parte retirada.
+- La vista del boceto es ortográfica por defecto; el icono Perspectiva de la fila del
+  ojo (`view.perspective`) la cambia sin dejar de mirar de frente al plano. La elección
+  (`sketch_projection`) se conserva al Enderezar, girar y reabrir bocetos.
 - Todas las referencias del sólido seleccionadas (varias aristas incluidas) se
   resaltan en el mismo azul.
 - «Copiar a otro plano paralelo» (menú del croquis) crea con un undo un plano implícito

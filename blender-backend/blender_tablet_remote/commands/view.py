@@ -40,6 +40,11 @@ def _sketch_locked():
     return runtime.workspace and runtime.active_sketch_id is not None
 
 
+def _sketch_projection():
+    from ..cad.runtime import runtime
+    return runtime.sketch_projection
+
+
 # Vista del plano guardada mientras se sostiene el círculo de navegación en un
 # boceto: orbitar allí es un vistazo en perspectiva y soltar vuelve a ella.
 _sketch_peek = None
@@ -94,7 +99,7 @@ def roll_delta(angle: float) -> None:
     _region_view()
     camera.roll(-angle)
     if _sketch_locked():
-        camera.perspective = 'ORTHO'
+        camera.perspective = _sketch_projection()
 
 
 def _view_state() -> dict:
@@ -201,7 +206,10 @@ def perspective(payload: dict) -> dict:
         mode = "ORTHO" if camera.perspective == "PERSP" else "PERSP"
     if mode not in ("PERSP", "ORTHO"):
         raise BadPayload("'mode' must be PERSP, ORTHO or TOGGLE")
-    if _sketch_locked(): mode = "ORTHO"
+    if _sketch_locked():
+        # The sketch view stays face-on; only its projection is a choice.
+        from ..cad.runtime import runtime
+        runtime.sketch_projection = mode
     changed = camera.perspective != mode
     camera.perspective = mode
     return dict(camera.as_dict(), changed=changed)
@@ -393,6 +401,6 @@ def set_view(payload: dict) -> dict:
         location=payload.get("location"),
         rotation=None if _sketch_locked() else rotation,
         distance=get_float(payload, "distance", camera.distance) if "distance" in payload else None,
-        perspective="ORTHO" if _sketch_locked() else str(projection).upper() if projection is not None else None,
+        perspective=_sketch_projection() if _sketch_locked() else str(projection).upper() if projection is not None else None,
     )
     return camera.as_dict()

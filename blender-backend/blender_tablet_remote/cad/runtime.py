@@ -66,6 +66,8 @@ class CadRuntime:
         self.active_body_id = None
         self.show_scene = False
         self.section = False
+        # Projection of the face-on sketch view; orbit stays locked in both.
+        self.sketch_projection = 'ORTHO'
         self._solid_view = None
         self.rollback_id = None
         self._extrusion_cache = ExtrusionPreviewCache()
@@ -95,7 +97,7 @@ class CadRuntime:
             # Undo replaces RNA addresses. Keep the workspace, but never hold an
             # old scene preview; explicit file loads call reset_session().
             workspace, active = self.workspace, self.active_sketch_id
-            settings={k:getattr(self,k) for k in ("active_body_id","step","increment","construction","show_scene","section","_solid_view","rollback_id")}
+            settings={k:getattr(self,k) for k in ("active_body_id","step","increment","construction","show_scene","section","sketch_projection","_solid_view","rollback_id")}
             hidden, shown, owner = self._hidden, self._shown, self.workspace_owner
             self.reset()
             self.workspace, self.active_sketch_id = workspace, active
@@ -520,7 +522,7 @@ class CadRuntime:
         else:
             camera.location = Vector(world(sketch,0,0))/scale
             camera.distance = .2/scale
-        camera.perspective = 'ORTHO'
+        camera.perspective = self.sketch_projection
         camera.axis_view = None
         camera._synced = True
         camera._frame_cache = None

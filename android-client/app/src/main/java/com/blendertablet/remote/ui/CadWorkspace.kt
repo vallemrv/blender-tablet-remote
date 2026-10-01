@@ -816,6 +816,9 @@ fun CadTopActions(state: AppUiState, vm: MainViewModel) {
         if (state.blender.features.cad.sectionView) IconAction(AppIcons.cad("SECTION"),
             if (cad.section) "Quitar la sección" else "Vista en sección: corta la pieza por el plano del boceto",
             selected = cad.section, enabled = connected) { command("cad.settings", "section" to !cad.section) }
+        val perspective = state.blender.view.perspective == Projection.PERSP
+        IconAction(AppIcons.cad("PERSPECTIVE"), if (perspective) "Volver a vista ortográfica" else "Ver el boceto en perspectiva",
+            selected = perspective, enabled = connected) { vm.viewPerspective(if (perspective) Projection.ORTHO else Projection.PERSP) }
         IconAction(Icons.AutoMirrored.Filled.RotateRight, "Girar la vista 90° sobre el plano",
             enabled = connected && !cad.sessionActive) { command("cad.view.roll", "degrees" to 90) }
         IconAction(Icons.Default.North, "Enderezar: de frente y sin girar",
