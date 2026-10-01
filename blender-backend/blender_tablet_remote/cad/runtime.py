@@ -60,6 +60,10 @@ class CadRuntime:
         self._shown = []
         self._save_suspended = False
         self._empty = model.new_document()
+        self._doc_raw = None
+        self._doc_value = None
+        self._public_source = None
+        self._public_value = None
         self.step = .001
         self.increment = True
         self.construction = False
@@ -105,7 +109,23 @@ class CadRuntime:
             self._hidden, self._shown, self.workspace_owner = hidden, shown, owner
             self._scene = identity
         raw = scene.get(model.KEY)
-        return model.loads(raw) if raw else copy.deepcopy(self._empty)
+        if not raw:
+            self._doc_raw = self._doc_value = None
+            return copy.deepcopy(self._empty)
+        if raw != self._doc_raw or self._doc_value is None:
+            # Only unchanged, validated JSON is reused. Callers still own an
+            # independent document, including while solving previews.
+            value = model.loads(raw)
+            self._doc_raw, self._doc_value = raw, value
+        return copy.deepcopy(self._doc_value)
+
+    def public_document(self, doc):
+        # Revision alone is insufficient: previews change geometry before commit.
+        # Keep only plain Python data, never RNA or view-dependent overlays.
+        if doc != self._public_source or self._public_value is None:
+            value = model.public(doc)
+            self._public_source, self._public_value = copy.deepcopy(doc), value
+        return copy.deepcopy(self._public_value)
 
     def isolate(self):
         """Same hide_set technique as view.local, with a separate restoration set."""
@@ -651,7 +671,7 @@ class CadRuntime:
                     labels = direction_labels(model.frame(sketch)['normal'])
                 except CommandError:
                     labels = None
-            return dict(version=1,workspace=self.workspace,isolated=bool(self.workspace and not self.show_scene),document=model.public(doc),
+            return dict(version=1,workspace=self.workspace,isolated=bool(self.workspace and not self.show_scene),document=self.public_document(doc),
                         dimension_options=numeric,surface=self.surface.status(),
                         rollback_id=self.bar(doc),
                         active_sketch_id=self.active_sketch_id,selection=self.selection,step=self.step,increment=self.increment,construction=self.construction,active_body_id=self.active_body_id or doc['bodies'][0]['id'],show_scene=self.show_scene,section=self.section,
