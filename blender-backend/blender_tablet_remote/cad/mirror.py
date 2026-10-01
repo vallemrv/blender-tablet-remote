@@ -24,6 +24,8 @@ def resolve(doc):
         feature['operation']=source['type']
         for key in ('sketch_id','profile_id','depth','extent'):
             feature[key]=source.get(key,'ONE') if key=='extent' else source[key]
+        if source.get('to_face'): feature['to_face']=source['to_face']
+        else: feature.pop('to_face',None)
         if source['type']=='CUT': feature['target_id']=source['target_id']
 
 

@@ -455,6 +455,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 feature?.type == "REVOLVE" -> "${feature.name} · el perfil gira alrededor del eje elegido; puede apoyarse en él (conos, cúpulas) pero no cruzarlo"
                 feature?.type == "HELIX" -> "${feature.name} · altura ${formatToolDistance(feature.pitch * feature.turns * lengthFactor(unit), 2)} ${unit.short} · el paso debe superar la altura del perfil · el eje es X, Y o una línea del croquis"
                 feature?.type == "LOFT" -> "${feature.name} · une ${cad.sketches.firstOrNull { it.id == feature.sketchId }?.name.orEmpty()} con otro croquis · mover su plano lo actualiza"
+                state.cadFacePick != null -> "Hasta cara: toca la cara plana donde termina · su plano corta la extrusión, también inclinado · vuelve a pulsar para cancelar"
                 pendingDimension == "FILLET" -> "Redondeo: varias esquinas, el rectángulo entero o líneas unidas · un radio para todas · tras el primero, toca otra esquina"
                 drafts.isNotEmpty() && !depthPreview -> "Medidas pendientes · ✓ aplica los cambios · × descarta"
                 depthPreview -> if (cad.operation == "EXTRUDE")
@@ -650,12 +651,18 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             }
                         }
                         if (depthPreview) {
-                            PillButton("Una dirección", selected = cad.extent != "BOTH", enabled = connected) {
+                            PillButton("Una dirección", selected = cad.extent == "ONE" && state.cadFacePick == null, enabled = connected) {
                                 command("cad.extrude.update", "extent" to "ONE")
                             }
-                            PillButton(if (cad.operation == "EXTRUDE") "Simetría" else "Dos direcciones", selected = cad.extent == "BOTH", enabled = connected) {
+                            PillButton(if (cad.operation == "EXTRUDE") "Simetría" else "Dos direcciones", selected = cad.extent == "BOTH" && state.cadFacePick == null, enabled = connected) {
                                 command("cad.extrude.update", "extent" to "BOTH")
                             }
+                            PillButton("Hasta cara", selected = cad.extent == "TO_FACE" || state.cadFacePick == "SESSION", enabled = connected) {
+                                vm.cadPickEndFace(if (state.cadFacePick == "SESSION") null else "SESSION")
+                            }
+                            if (cad.extent == "TO_FACE") {
+                                Text("Termina en la cara elegida", color = Ink.Muted, fontSize = 12.sp)
+                            } else {
                             if (cad.operation == "EXTRUDE" && cad.extent != "BOTH" && cad.positiveDirection.isNotEmpty()) {
                                 val magnitude = kotlin.math.abs(cad.depth).coerceAtLeast(cad.step)
                                 PillButton(cad.positiveDirection, selected = cad.depth >= 0, enabled = connected) {
@@ -669,6 +676,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             CadDimension("Profundidad", cad.depth, unit, cad.sessionId.orEmpty(), step = cad.step,
                                 minimum = if (cad.operation == "EXTRUDE") -10000.0 else .0000001, enabled = connected, onNudge = ::preview,
                                 onDone = { drafts["depth"]?.let(::preview) }) { drafts["depth"] = it }
+                            }
                         } else if (finishPreview) {
                             fun preview(value: Double) { drafts.remove("width"); command("cad.finish.update", "width" to value) }
                             CadDimension("Ancho", cad.width, unit, cad.sessionId.orEmpty(), step = cad.step,
@@ -737,14 +745,18 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                 step = cad.step, enabled = connected, onDone = ::acceptValues) { drafts["offset"] = it }
                         } else feature?.let { selected ->
                             if (selected.type == "CUT" || selected.type == "EXTRUDE") {
-                                PillButton("Una dirección", selected = selected.extent != "BOTH", enabled = connected) {
+                                PillButton("Una dirección", selected = selected.extent == "ONE" && state.cadFacePick == null, enabled = connected) {
                                     command("cad.feature.set", "feature_id" to selected.id, "extent" to "ONE")
                                 }
-                                PillButton(if (selected.type == "EXTRUDE") "Simetría" else "Dos direcciones", selected = selected.extent == "BOTH", enabled = connected) {
+                                PillButton(if (selected.type == "EXTRUDE") "Simetría" else "Dos direcciones", selected = selected.extent == "BOTH" && state.cadFacePick == null, enabled = connected) {
                                     command("cad.feature.set", "feature_id" to selected.id, "extent" to "BOTH")
                                 }
+                                PillButton("Hasta cara", selected = selected.extent == "TO_FACE" || state.cadFacePick == selected.id, enabled = connected) {
+                                    vm.cadPickEndFace(if (state.cadFacePick == selected.id) null else selected.id)
+                                }
                             }
-                            CadDimension("Profundidad", drafts["depth"] ?: selected.depth, unit, selected.id,
+                            if (selected.extent == "TO_FACE") Text("Termina en la cara elegida", color = Ink.Muted, fontSize = 12.sp)
+                            else CadDimension("Profundidad", drafts["depth"] ?: selected.depth, unit, selected.id,
                                 step = cad.step, minimum = if (selected.type == "EXTRUDE") -10000.0 else .0000001,
                                 enabled = connected, onDone = ::acceptValues) { drafts["depth"] = it }
                             CadAction("VISIBLE", if (selected.enabled) "Ocultar" else "Mostrar", selected = selected.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to selected.id, "enabled" to !selected.enabled) }

@@ -62,7 +62,7 @@ object CadParser {
             },
             features = objects(document?.optJSONArray("features")).map { CadFeature(it.optString("id"), it.optString("name", "Extrusión"),
                 it.id("sketch_id").orEmpty(), it.id("profile_id").orEmpty(), it.optDouble("depth", 0.02), it.optBoolean("enabled", true), it.optString("type", "EXTRUDE"), it.id("target_id"), it.optString("body_id"),
-                if (it.optString("extent") == "BOTH") "BOTH" else "ONE", it.optDouble("width", 0.0), it.optInt("segments", 1),
+                cadExtent(it.optString("extent")), it.optDouble("width", 0.0), it.optInt("segments", 1),
                 it.optJSONArray("edges")?.length() ?: 0, it.optDouble("pitch", 0.0), it.optDouble("turns", 0.0),
                 it.optString("hand", "RIGHT"), it.optString("axis", "Y"),
                 it.optJSONObject("mirror")?.id("source_id"), it.optJSONObject("mirror")?.optString("plane", "XZ") ?: "XZ",
@@ -75,7 +75,7 @@ object CadParser {
             negativeDirection = session?.optString("negative_label").orEmpty(),
             width = session?.optDouble("width", 0.0)?.takeIf { it.isFinite() } ?: 0.0,
             segments = session?.optInt("segments", 1) ?: 1,
-            extent = if (session?.optString("extent") == "BOTH") "BOTH" else "ONE",
+            extent = cadExtent(session?.optString("extent")),
             overlay = objects(j.optJSONArray("overlay")).map { item ->
                 val points = item.optJSONArray("points")
                 CadOverlay(item.optString("id"), if (points == null) emptyList() else (0 until points.length()).mapNotNull { index ->
@@ -122,3 +122,5 @@ object CadParser {
         )
     }
 }
+
+private fun cadExtent(value: String?) = if (value == "BOTH" || value == "TO_FACE") value else "ONE"

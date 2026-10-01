@@ -1,6 +1,6 @@
 """CAD evaluation on plain snapshots; run by the auxiliary Blender main thread."""
 from . import document as model
-from .kernel import kernel, ExtrusionPreviewCache, finish_edges, loft, helix, revolve
+from .kernel import kernel, ExtrusionPreviewCache, finish_edges, loft, helix, revolve, operand as extrusion_operand
 from ..errors import CommandError
 from . import mirror
 
@@ -101,15 +101,14 @@ class Evaluator:
             cut=feature.get('operation',feature['type'])=='CUT'
             depth=model.number(feature['depth'], positive=cut)
             extent=feature.get('extent','ONE')
-            if extent not in ('ONE','BOTH'): extent='ONE'
             if cut and feature.get('target_id') not in solids:
                 raise CommandError('Activa el sólido destino antes del vaciado',code='cad_dependency')
-            signature=(doc['id'],feature['profile_id'],feature['type'],depth,extent,
+            signature=(doc['id'],feature['profile_id'],feature['type'],depth,extent,feature.get('to_face'),
                        model.dumps(dict(frame=model.frame(sketch),entities=sketch['entities'])),
                        keys.get(previous),feature.get('mirror'))
             cached=self._solids.get(identifier)
             if cached is None or cached[0]!=model.dumps(signature):
-                operand=extrusion_cache.extrude(sketch,entity,depth,symmetric=True) if extent=='BOTH' else extrusion_cache.extrude(sketch,entity,-depth if cut else depth)
+                operand=extrusion_operand(extrusion_cache,sketch,entity,feature)
                 if feature.get('mirror'): operand=mirror.solid(operand,feature['mirror'])
                 if previous:
                     operand=kernel.cut(solids[previous],operand) if cut else kernel.union(solids[previous],operand)

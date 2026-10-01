@@ -5,7 +5,7 @@ import math
 import bpy
 from mathutils import Vector
 from . import document as model
-from .kernel import world, ExtrusionPreviewCache
+from .kernel import world, ExtrusionPreviewCache, operand as extrusion_operand
 from .jobs import Calculation, blocking
 from .editable_mesh import clean_mesh
 from . import sketch as sketch_geometry
@@ -302,12 +302,9 @@ class CadRuntime:
         doc = session['preview']
         feature = model.find(doc, 'features', session['feature_id'])
         sketch, entity = model.profile(doc, feature['profile_id'])
-        depth = feature['depth']
         cut = feature['type'] == 'CUT'
-        extent = feature.get('extent', 'ONE')
-        cache = session['extrusion_cache']
-        signed = -depth if cut else depth
-        vertices, faces = cache.extrude(sketch, entity, signed, symmetric=extent == 'BOTH')
+        signed = -feature['depth'] if cut else feature['depth']
+        vertices, faces = extrusion_operand(session['extrusion_cache'], sketch, entity, feature)
         scale = max(float(bpy.context.scene.unit_settings.scale_length), 1e-12)
         vertices = [tuple(c / scale for c in v) for v in vertices]
         previous = None
@@ -600,14 +597,13 @@ class CadRuntime:
         matrix=body.matrix_world.copy() if body is not None else None
         scale=max(float(bpy.context.scene.unit_settings.scale_length),1e-12)
         extent=feature.get('extent','ONE')
-        key=(model.dumps(sketch),feature['profile_id'],feature['depth'],extent,model.dumps(feature.get('mirror')),scale,
+        key=(model.dumps(sketch),feature['profile_id'],feature['depth'],extent,model.dumps(feature.get('to_face')),model.dumps(feature.get('mirror')),scale,
              tuple(tuple(row) for row in matrix) if matrix is not None else None)
         cached=session.get('ghost')
         if cached and cached['key']==key:
             return cached
         from mathutils.geometry import tessellate_polygon
-        depth=feature['depth']
-        vertices,faces=session['extrusion_cache'].extrude(sketch,entity,depth if extent=='BOTH' else -depth,symmetric=extent=='BOTH')
+        vertices,faces=extrusion_operand(session['extrusion_cache'],sketch,entity,feature)
         if feature.get('mirror'):
             from . import mirror
             vertices,faces=mirror.solid((vertices,faces),feature['mirror'])

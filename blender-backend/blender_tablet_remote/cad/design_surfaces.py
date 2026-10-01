@@ -47,8 +47,13 @@ def surfaces(doc, body_id, scale):
         f = model.frame(sketch)
         origin, fx, fy, fn = (Vector(f[k]) for k in ('origin', 'x', 'y', 'normal'))
         depth = feature['depth']
-        levels = ((-abs(depth), abs(depth)) if feature.get('extent') == 'BOTH'
-                  else (0., -depth if feature.get('operation',feature['type']) == 'CUT' else depth))
+        if feature.get('extent') == 'TO_FACE':
+            # The far cap lies on the captured face plane, inclined or not.
+            end = feature['to_face']; levels = (0.,)
+            result.append(('PLANE', Vector(end['normal']), Vector(end['origin']).dot(Vector(end['normal']))/scale))
+        else:
+            levels = ((-abs(depth), abs(depth)) if feature.get('extent') == 'BOTH'
+                      else (0., -depth if feature.get('operation',feature['type']) == 'CUT' else depth))
         for z in levels:
             result.append(('PLANE', fn.copy(), (origin+fn*z).dot(fn)/scale))
         def world(p):

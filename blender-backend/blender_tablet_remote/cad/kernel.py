@@ -20,7 +20,7 @@ class ExtrusionPreviewCache:
     def __init__(self):
         self.entries = {}
 
-    def extrude(self, sketch, source, depth, *, symmetric=False):
+    def extrude(self, sketch, source, depth, *, symmetric=False, to_face=None):
         from .document import dumps
         key = source['id']
         signature = dumps(sketch)
@@ -37,6 +37,8 @@ class ExtrusionPreviewCache:
         origin, axis_x, axis_y, normal = (basis[k] for k in ('origin', 'x', 'y', 'normal'))
         def project(x, y, z):
             return tuple(origin[i] + x*axis_x[i] + y*axis_y[i] + z*normal[i] for i in range(3))
+        if to_face is not None:
+            return _to_face(vertices, faces, project, normal, to_face)
         if symmetric:
             vertices = [project(x, y, (z - .5) * 2 * abs(depth)) for x,y,z in vertices]
         else:
@@ -44,6 +46,54 @@ class ExtrusionPreviewCache:
             if depth < 0:
                 faces = [tuple(reversed(face)) for face in faces]
         return vertices, faces
+
+
+def _to_face(vertices, faces, project, normal, to_face):
+    """Each wall runs along the sketch normal until it meets the plane of the face.
+
+    The far cap lies on that plane, so it may be inclined to the profile. The
+    whole profile must stay on one side of the plane, never touching it.
+    """
+    origin, plane = Vector(to_face['origin']), Vector(to_face['normal'])
+    direction = Vector(normal)
+    facing = direction.dot(plane)
+    if abs(facing) < 1e-6:
+        raise CommandError('La cara es paralela a la dirección de extrusión', code='cad_profile_invalid')
+    result, travels = [], []
+    for x, y, z in vertices:
+        start = Vector(project(x, y, 0))
+        travel = (origin - start).dot(plane) / facing
+        travels.append(travel)
+        result.append(tuple(start + direction * travel * z))
+    extent = max(max(abs(t) for t in travels), 1e-9)
+    if not (min(travels) > extent * 1e-6 or max(travels) < -extent * 1e-6):
+        raise CommandError('La cara corta o toca el perfil; elige una que quede entera a un lado',
+                           code='cad_profile_invalid')
+    if travels[0] < 0:
+        faces = [tuple(reversed(face)) for face in faces]
+    return result, faces
+
+
+def face_travel(sketch, to_face):
+    """Signed distance along the sketch normal from its origin to the face plane."""
+    basis = frame(sketch)
+    plane = Vector(to_face['normal']); direction = Vector(basis['normal'])
+    facing = direction.dot(plane)
+    if abs(facing) < 1e-6:
+        raise CommandError('La cara es paralela a la dirección de extrusión', code='cad_profile_invalid')
+    return (Vector(to_face['origin']) - Vector(basis['origin'])).dot(plane) / facing
+
+
+def operand(cache, sketch, source, feature):
+    """Tool solid of an extrusion or cut before it joins or leaves its body."""
+    extent = feature.get('extent', 'ONE')
+    if extent == 'TO_FACE':
+        return cache.extrude(sketch, source, 0, to_face=feature['to_face'])
+    depth = feature['depth']
+    if extent == 'BOTH':
+        return cache.extrude(sketch, source, depth, symmetric=True)
+    cut = feature.get('operation', feature['type']) == 'CUT'
+    return cache.extrude(sketch, source, -depth if cut else depth)
 
 
 def world(plane, x, y, z=0):

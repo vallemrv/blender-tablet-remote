@@ -530,6 +530,8 @@ data class AppUiState(
     val cadNgonSides: Int = 6,
     /** Dientes del próximo engranaje (CAD `GEAR`); se envían al empezar a dibujarlo. */
     val cadGearTeeth: Int = 20,
+    /** Hasta cara armado: `SESSION` para la preview de extrusión o el ID de la operación a editar. */
+    val cadFacePick: String? = null,
     val sculptSmooth: Boolean = false,
     val sculptInvert: Boolean = false,
     val sculptStylusOnly: Boolean = true,

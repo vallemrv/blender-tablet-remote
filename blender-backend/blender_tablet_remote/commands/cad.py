@@ -99,8 +99,8 @@ def _new_sketch(doc,payload):
     if support_id:
         feature=model.find(doc,'features',support_id)
         if feature.get('mirror'): raise BadPayload('Usa Boceto en cara sobre el resultado de la simetría')
-        if feature['type'] in model.FINISHES + ('LOFT','HELIX','REVOLVE'):
-            raise BadPayload('Un redondeo o solevado no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
+        if feature['type'] in model.FINISHES + ('LOFT','HELIX','REVOLVE') or feature.get('extent')=='TO_FACE':
+            raise BadPayload('Esta operación no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
         source,_=model.profile(doc,feature['profile_id'])
         plane_local=source['plane']
         offset=source.get('offset',0)+(feature['depth'] if feature['type']=='EXTRUDE' else 0)
@@ -683,9 +683,30 @@ def _depth_value(session, payload):
 
 def _extent(value):
     value=str(value or 'ONE').upper()
-    if value not in ('ONE','BOTH'):
-        raise BadPayload('La extensión debe ser una dirección o dos')
+    if value not in ('ONE','BOTH','TO_FACE'):
+        raise BadPayload('La extensión debe ser una dirección, dos o hasta una cara')
     return value
+
+
+def _face_target(payload):
+    """Plane of the planar solid face under the tap, in metres. Sampled once."""
+    from .snap import query_cad_surface
+    from mathutils import Vector
+    item=query_cad_surface(payload,'FACE')
+    if item is None or not item.get('planar'):
+        raise BadPayload('Toca una cara plana del sólido donde termine la extrusión')
+    scale=bpy.context.scene.unit_settings.scale_length
+    return model.validate_face(dict(origin=list(Vector(item['center'])*scale),normal=list(item['normal'])))
+
+
+def _reach_face(doc, feature, face):
+    """TO_FACE keeps depth as the travel at the sketch origin, for display only."""
+    from ..cad.kernel import face_travel
+    sketch,_=model.profile(doc,feature['profile_id'])
+    travel=face_travel(sketch,face)
+    feature.update(extent='TO_FACE',to_face=face)
+    if feature['type']=='CUT': feature['depth']=max(abs(travel),1e-7)
+    else: feature['depth']=travel if abs(travel)>=1e-7 else 1e-7
 
 
 @command('cad.extrude.begin')
@@ -698,6 +719,7 @@ def extrude_begin(payload):
     operation=str(payload.get('operation','EXTRUDE')).upper()
     if operation not in ('EXTRUDE','CUT'): raise BadPayload('Operación CAD no compatible')
     extent=_extent(payload.get('extent','ONE'))
+    if extent=='TO_FACE': raise BadPayload('Empieza la extrusión y después toca la cara donde termina')
     target=None
     if operation=='CUT':
         target=model.find(doc,'features',payload.get('target_id'))
@@ -844,6 +866,20 @@ def extrude_update(payload):
     if 'extent' in payload and session['operation'] not in ('EXTRUDE','CUT'):
         raise BadPayload('Solo extruir o vaciar eligen una dirección o dos')
     extent=_extent(payload['extent']) if 'extent' in payload else session.get('extent','ONE')
+    if extent=='TO_FACE':
+        # Only an explicit choice samples the tap; pen samples carry u/v too.
+        if 'extent' in payload and 'u' in payload and 'v' in payload: face=_face_target(payload)
+        elif session.get('to_face'): face=session['to_face']
+        else: raise BadPayload('Toca la cara donde termina la extrusión')
+        if session.get('extent')=='TO_FACE' and face==session.get('to_face'):
+            return runtime.status()
+        preview=copy.deepcopy(session['preview'])
+        feature=model.find(preview,'features',session['feature_id'])
+        _reach_face(preview,feature,face)
+        yield from runtime.rebuild_steps(preview,limit=session['feature_id'] if session.get('at_bar') else None,
+                        extrusion_cache=session['extrusion_cache'])
+        session.update(preview=preview,depth=feature['depth'],extent='TO_FACE',to_face=face)
+        return runtime.status()
     stylus = 'gesture_u' in payload or 'gesture_v' in payload
     settle = bool(payload.get('settle'))
     depth = _depth_value(session, payload)
@@ -853,11 +889,12 @@ def extrude_update(payload):
     feature=model.find(preview,'features',session['feature_id'])
     feature['depth'] = depth
     feature['extent']=extent
+    feature.pop('to_face',None)
     if feature['type']=='EXTRUDE' and extent=='BOTH':
         feature['depth']=abs(feature['depth'])
     if stylus and not settle:
-        previous = dict(preview=session['preview'], depth=session['depth'], extent=session.get('extent', 'ONE'))
-        session.update(preview=preview,depth=depth,extent=extent)
+        previous = dict(preview=session['preview'], depth=session['depth'], extent=session.get('extent', 'ONE'), to_face=session.get('to_face'))
+        session.update(preview=preview,depth=depth,extent=extent,to_face=None)
         try:
             runtime.fast_depth(session)
             return runtime.status()
@@ -866,7 +903,7 @@ def extrude_update(payload):
             runtime.drop_prisms()
     yield from runtime.rebuild_steps(preview,limit=session['feature_id'] if session.get('at_bar') else None,
                     extrusion_cache=session['extrusion_cache'])
-    session.update(preview=preview,depth=depth,extent=extent)
+    session.update(preview=preview,depth=depth,extent=extent,to_face=None)
     return runtime.status()
 
 
@@ -979,6 +1016,8 @@ def cancel(payload):
 
 @command('cad.feature.set')
 def feature_set(payload):
+    # The tap is sampled once on the visible solid, before the transaction.
+    face=_face_target(payload) if str(payload.get('extent','')).upper()=='TO_FACE' else None
     def change(doc):
         feature = model.find(doc,'features',payload.get('feature_id'))
         _require_reachable(doc,feature['id'])
@@ -1004,10 +1043,15 @@ def feature_set(payload):
         if 'depth' in payload:
             if feature['type'] not in ('EXTRUDE','CUT'): raise BadPayload('Esta operación no tiene profundidad')
             feature['depth'] = _depth_value(dict(operation=feature['type'], depth=feature['depth'], preview=doc), dict(depth=payload['depth']))
+            if 'extent' not in payload and feature.get('extent')=='TO_FACE':
+                # A written depth replaces the face.
+                feature['extent']='ONE'; feature.pop('to_face',None)
         if 'extent' in payload:
             if feature['type'] not in ('EXTRUDE','CUT'):
                 raise BadPayload('Solo extruir o vaciar eligen una dirección o dos')
-            feature['extent']=_extent(payload['extent'])
+            extent=_extent(payload['extent'])
+            if extent=='TO_FACE': _reach_face(doc,feature,face)
+            else: feature['extent']=extent; feature.pop('to_face',None)
         if 'enabled' in payload:
             if not isinstance(payload['enabled'],bool):
                 raise BadPayload('enabled debe ser booleano')
@@ -1638,7 +1682,7 @@ def _face_plane(doc, frame, source, offset=0.):
                translation=[0,0,offset],rotation=[0,0,0],face_frame=frame)
     feature=next((f for f in doc['features'] if f['id']==source['feature_id']),None)
     candidates=[node for node in reversed(model.history(doc)) if node['kind']=='FEATURE' and node['enabled'] and not node.get('mirror') and
-                node['type'] in ('EXTRUDE','CUT') and
+                node['type'] in ('EXTRUDE','CUT') and node.get('extent')!='TO_FACE' and
                 feature and node['body_id']==feature['body_id'] and node['id'] in _reachable_ids(doc)]
     for support in candidates:
         source_sketch=model.find(doc,'sketches',support['sketch_id']); base=model.frame(source_sketch)

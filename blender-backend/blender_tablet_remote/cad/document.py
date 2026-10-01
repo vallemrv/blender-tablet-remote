@@ -203,8 +203,12 @@ def loads(raw):
                 raise ValueError('invalid feature')
             feature['depth'] = depth
             feature.setdefault('extent', 'ONE')
-            if feature['extent'] not in ('ONE', 'BOTH'):
+            if feature['extent'] not in ('ONE', 'BOTH', 'TO_FACE'):
                 raise ValueError('invalid feature extent')
+            if feature['extent'] == 'TO_FACE':
+                feature['to_face'] = validate_face(feature.get('to_face'))
+            else:
+                feature.pop('to_face', None)
             if feature.get('operation',feature['type']) == 'CUT' and feature.get('target_id') not in seen_features:
                 raise ValueError('invalid cut dependency')
             seen_features.add(feature['id'])
@@ -394,6 +398,22 @@ def validate_plane(plane):
             raise BadPayload('La referencia debe ser ortonormal')
 
 
+def validate_face(value):
+    """Captured plane of a solid face in metres: where TO_FACE extrusions end."""
+    if not isinstance(value, dict):
+        raise BadPayload('Falta la cara donde termina la extrusión')
+    face = {}
+    for key in ('origin', 'normal'):
+        if not isinstance(value.get(key), list) or len(value[key]) != 3:
+            raise BadPayload('Referencia de cara inválida')
+        face[key] = [number(v) for v in value[key]]
+    length = math.sqrt(sum(v*v for v in face['normal']))
+    if length < 1e-9:
+        raise BadPayload('Referencia de cara inválida')
+    face['normal'] = [v/length for v in face['normal']]
+    return face
+
+
 def resolve_supports(doc):
     """Resolve datum planes and associative top faces without evaluated mesh IDs."""
     import numpy as np
@@ -410,6 +430,8 @@ def resolve_supports(doc):
         if f.get('mirror'): raise BadPayload('Usa Boceto en cara sobre el resultado de la simetría')
         if f['type'] in FINISHES + ('LOFT','HELIX','REVOLVE'):
             raise BadPayload('Un redondeo o solevado no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
+        if f.get('extent')=='TO_FACE':
+            raise BadPayload('Una extrusión hasta cara no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
         source=find(doc,'sketches',f['sketch_id']); resolve(source)
         result=copy.deepcopy(frame(source))
         depth=f['depth'] if f['type']=='EXTRUDE' else 0
