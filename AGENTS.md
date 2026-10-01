@@ -171,6 +171,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 
 - El rail es una superficie limitada para herramientas gestuales frecuentes, no un
   catálogo completo.
+- Una acción no se duplica entre el rail lateral y la bandeja inferior en el mismo
+  contexto. Se prioriza el espacio de dibujo y el acceso táctil en la tablet.
 - El rail de tools permanece siempre abierto, sin botón de cierre ni estado plegado.
   Mover/Rotar/Escalar viven ahí; en Edit añade Tweak.
 - Tweak marca únicamente su botón, aunque use una sesión MOVE interna. Mientras está
@@ -534,9 +536,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - El resaltado CAD conserva lotes de GPU en coordenadas 3D; la cámara solo cambia
   su matriz de proyección. Las medidas y la adyacencia se reutilizan mientras la firma
   de geometría/topología/transformación/unidades siga igual. No se retienen referencias RNA.
-- En CAD 3D, el rail ofrece Redondear y Chaflán de las aristas del sólido. Sin
-  aristas elegidas, el botón pasa a Aristas para tocarlas; con selección abre la
-  preview. Extruir admite Simetría: la profundidad crece a los dos lados del croquis.
+- En CAD 3D, Redondear y Chaflán de las aristas del sólido aparecen únicamente en
+  la bandeja inferior al seleccionar aristas; no se duplican en el rail izquierdo.
+  El redondeo del croquis conserva su acceso contextual durante la edición.
+  Extruir admite Simetría: la profundidad crece a los dos lados del croquis.
 - Si el ancho de un acabado CAD no cabe, la sesión conserva Ancho y Segmentos para
   corregirlo; el candidato inválido nunca se confirma ni crea undo. Aplicar un
   borrador de Ancho espera su preview antes de permitir confirmar la operación.

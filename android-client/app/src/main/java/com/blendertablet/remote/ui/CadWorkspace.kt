@@ -159,14 +159,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 if (cad.surface.canEdgePlane) command("cad.plane.begin", "base" to "EDGE") else vm.cadSurfaceMode("EDGE")
             }
             RailDivider()
-            val solidEdges = cad.surface.selection.any { it.kind == "EDGE" }
-            CadAction("FILLET", "Redondear aristas del sólido", enabled = connected && !cad.sessionActive) {
-                if (solidEdges) command("cad.finish.begin", "operation" to "FILLET") else vm.cadSurfaceMode("EDGE")
-            }
-            CadAction("CHAMFER", "Chaflán en aristas del sólido", enabled = connected && !cad.sessionActive) {
-                if (solidEdges) command("cad.finish.begin", "operation" to "CHAMFER") else vm.cadSurfaceMode("EDGE")
-            }
-            RailDivider()
             if ("LOFT" in capabilities.features) CadAction("LOFT", "Solevado: une este perfil con el de otro croquis", selected = loftFrom != null,
                 enabled = connected && !cad.sessionActive && (loftFrom != null || cad.selectionKind in listOf("PROFILE", "SKETCH"))) {
                 loftFrom = if (loftFrom != null) null else cad.selectionKind!! to cad.selectionId!!
