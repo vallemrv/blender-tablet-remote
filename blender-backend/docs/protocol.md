@@ -1515,7 +1515,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.drag.end` | `{}` | Sin UPDATE alterna el elemento sondeado en BEGIN; con arrastre confirma el último candidato. Nunca vuelve a sondear |
 | `cad.points.weld` | `{}` | Une los puntos seleccionados mediante coincidencias persistentes; conserva el último punto (el origen manda si está incluido), resuelve restricciones y crea un único undo |
 | `cad.select_all` | `{action:"SELECT\\|DESELECT",sketch_id?}` | En boceto selecciona figuras (también construcción, nunca origen). En 3D selecciona el croquis indicado como SKETCH. DESELECT limpia; sin undo |
-| `cad.constraint.add` | `{type,value?,refs?}` | Restringe selección o referencias explícitas del boceto activo; una cota equivalente se actualiza conservando ID |
+| `cad.constraint.add` | `{type,value?,refs?}` | Restringe selección o referencias explícitas del boceto activo; una cota equivalente se actualiza conservando ID. `DISTANCE` con `value:0` entre dos puntos crea `COINCIDENT` |
 | `cad.constraint.set` | `{constraint_id,value,sketch_id?}` | Cambia la cota canónica y resuelve dependientes; Radio de redondeo ajusta su contacto |
 | `cad.constraint.delete` | `{constraint_id,sketch_id?}` | Elimina una restricción del sketch activo |
 | `cad.fillet` | `{radius}` | Redondea cada esquina de la selección (rectángulo entero, varias esquinas, extremos de línea o líneas unidas) con un radio compartido; conserva restricciones y operaciones dependientes |

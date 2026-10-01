@@ -700,6 +700,11 @@ no quedan archivos o referencias temporales.
   hay redondeos; con varios arcos seleccionados, la bandeja aplica sus medidas a todos
   (`equal_ids`) en un undo. Cada preview
   parte del baseline, END no sondea otra posición y confirmar crea un undo si cambió.
+- El solver acepta residuos de hasta una millonésima del tamaño del boceto: las
+  referencias proyectadas traen ruido float32 y reglas casi redundantes no bajan de
+  ~1e-7; los conflictos reales siguen rechazándose. Su jacobiano solo reevalúa las
+  reglas que leen la figura de cada parámetro (incluidos los lados de un redondeo).
+  Distancia 0 entre dos puntos crea una coincidencia, no un error de rango.
 - Soldar puntos añade coincidencias persistentes entre extremos/esquinas seleccionados
   sobre el último punto (el origen prevalece), con un undo. Respeta restricciones;
   un conflicto es atómico y una soldadura ya existente no duplica reglas ni undo.

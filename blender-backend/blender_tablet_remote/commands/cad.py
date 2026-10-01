@@ -1350,6 +1350,15 @@ def constraint_add(payload):
             raise BadPayload('Referencias de cota inválidas')
         refs=[dict(id=r['id'],part=r.get('part','BODY')) for r in source]
         if typ=='POINT_ON_LINE': refs=geometry.point_line_refs(sketch,refs)
+        if typ=='DISTANCE' and len(refs)==2 and payload.get('value') in (0,0.) and all(
+                r['part'] in geometry.handles(geometry.get_entity(sketch,r)) for r in refs):
+            # Zero distance between two points is a coincidence, not an out-of-range length.
+            if any(rule['type']=='COINCIDENT' and rule['refs'] in (refs,refs[::-1]) for rule in sketch.get('constraints',[])):
+                raise BadPayload('Esos puntos ya están unidos')
+            anchor=geometry.point(sketch,refs[1])
+            sketch.setdefault('constraints',[]).append(dict(id=model.uid('constraint'),type='COINCIDENT',refs=refs))
+            geometry.solve(sketch,[dict(refs[1],point=anchor,hard=True)])
+            return
         c=dict(id=model.uid('constraint'),type=typ,refs=refs)
         if typ in dimensions.NUMERIC: c['value']=_dimension_value(typ,payload.get('value'))
         if typ in ('HORIZONTAL','VERTICAL'):

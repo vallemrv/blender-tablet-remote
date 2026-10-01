@@ -528,7 +528,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             val angle = type == "ANGLE"
                             CadDimension(if (type == "FILLET") "Radio" else cadLabel(type), drafts["constraint"] ?: cad.dimensionOptions[type]?.value ?: cad.step * 5, unit, type,
                                 degrees = angle, step = if (angle) 1.0 else cad.step, maximum = if (angle) 180.0 else 10000.0,
-                                enabled = connected, minimum = if (angle || type in listOf("DISTANCE_X", "DISTANCE_Y")) 0.0 else .0000001,
+                                // Distancia 0 entre dos puntos los une (coincidencia).
+                                enabled = connected, minimum = if (angle || type in listOf("DISTANCE", "DISTANCE_X", "DISTANCE_Y")) 0.0 else .0000001,
                                 onDone = ::acceptValues) { drafts["constraint"] = it }
                         }
                         if (editing && state.cadTool == "NGON" && entity == null) {

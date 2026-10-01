@@ -30,8 +30,10 @@ def handles(e):
     if typ == 'GEAR':
         return {'CENTER': (e['x'],e['y'])}
     if typ == 'ARC':
-        path = model.outline(e)
-        return {'CENTER': (e['x'],e['y']), 'START': path[0], 'END': path[-1]}
+        # Only the two ends: the solver asks for them on every residual evaluation.
+        start,end=math.radians(e['start']),math.radians(e['start']+e['sweep'])
+        return {'CENTER': (e['x'],e['y']), 'START': (e['x']+e['radius']*math.cos(start),e['y']+e['radius']*math.sin(start)),
+                'END': (e['x']+e['radius']*math.cos(end),e['y']+e['radius']*math.sin(end))}
     return {'CENTER': (e['x'],e['y']), 'RIM': (e['x']+e['diameter']/2,e['y'])}
 
 
@@ -48,9 +50,10 @@ def get_entity(sketch, ref):
 def point(sketch, ref):
     e = get_entity(sketch, ref)
     role = ref.get('part')
-    if role not in handles(e):
+    points = handles(e)
+    if role not in points:
         raise BadPayload('Selecciona un punto del boceto')
-    return np.array(handles(e)[role], dtype=float)
+    return np.array(points[role], dtype=float)
 
 
 def line(sketch, ref):
@@ -301,34 +304,50 @@ def solve(sketch, goals=(), *, drag=False):
     scale = max([abs(e[k]) for e,k in layout if k not in model.ANGULAR]+[.001])
     units = np.array([180. if k in model.ANGULAR else scale for e,k in layout])
     x = np.array([e[k] for e,k in layout])/units
-    def evaluate(values):
+    def goal_rows(goal):
+        if 'constraint' in goal:
+            rows=list(residual(work,goal['constraint'],scale))
+        elif 'field' in goal:
+            e = get_entity(work,goal)
+            divisor = 180 if goal['field'] in model.ANGULAR else scale
+            rows=[(e[goal['field']]-goal['value'])/divisor]
+        elif 'center' in goal:
+            e = get_entity(work,goal)
+            cx,cy = goal['center']
+            rows=[(e['x']+e['width']/2-cx)/scale, (e['y']+e['height']/2-cy)/scale]
+        else:
+            rows=list((point(work,goal)-goal['point'])/scale)
+        return [v*.001 for v in rows] if drag and not goal.get('hard') else rows
+    items=[(lambda c=c:residual(work,c,scale)) for c in work.get('constraints',[])]+[(lambda g=g:goal_rows(g)) for g in goals]
+    # Entities each item reads: its references plus the sides a rounding links to them.
+    links=work['_rounding_links']
+    def reads(c):
+        ids={r['id'] for r in c['refs']}
+        return ids|{links[(i,role)]['id'] for i in ids for role in ('START','END') if (i,role) in links}
+    depends=[reads(c) for c in work.get('constraints',[])]+[reads(g['constraint']) if 'constraint' in g else {g['id']} for g in goals]
+    readers={}
+    for n,ids in enumerate(depends):
+        for i in ids: readers.setdefault(i,[]).append(n)
+    def assign(values):
         for (e,k),v,u in zip(layout,values,units): e[k]=float(v*u)
-        result = []
-        for c in work.get('constraints',[]): result.extend(residual(work,c,scale))
-        for goal in goals:
-            goal_start=len(result)
-            if 'constraint' in goal:
-                result.extend(residual(work,goal['constraint'],scale))
-            elif 'field' in goal:
-                e = get_entity(work,goal)
-                divisor = 180 if goal['field'] in model.ANGULAR else scale
-                result.append((e[goal['field']]-goal['value'])/divisor)
-            elif 'center' in goal:
-                e = get_entity(work,goal)
-                cx,cy = goal['center']
-                result.extend([(e['x']+e['width']/2-cx)/scale, (e['y']+e['height']/2-cy)/scale])
-            else:
-                result.extend((point(work,goal)-goal['point'])/scale)
-            if drag and not goal.get('hard'):
-                result[goal_start:]=[v*.001 for v in result[goal_start:]]
-        return np.array(result,dtype=float)
+    def evaluate(values):
+        assign(values)
+        rows=[np.asarray(item(),dtype=float).ravel() for item in items]
+        evaluate.slices=np.cumsum([0]+[len(row) for row in rows])
+        return np.concatenate(rows) if rows else np.zeros(0)
     def jacobian(values,r):
-        columns=[]
-        for i in range(len(values)):
-            p=values.copy(); p[i]+=1e-6
-            columns.append((evaluate(p)-r)/1e-6)
-        evaluate(values)
-        return np.array(columns).T
+        # A parameter only moves the rows of items reading its entity, so each
+        # finite difference re-evaluates those items instead of the whole sketch.
+        slices=evaluate.slices
+        matrix=np.zeros((len(r),len(values)))
+        for i,(e,_k) in enumerate(layout):
+            touched=readers.get(e['id'])
+            if not touched: continue
+            p=values.copy(); p[i]+=1e-6; assign(p)
+            for n in touched:
+                matrix[slices[n]:slices[n+1],i]=(np.asarray(items[n](),dtype=float).ravel()-r[slices[n]:slices[n+1]])/1e-6
+        assign(values)
+        return matrix
     r=evaluate(x)
     for _ in range(60 if layout else 0):
         if not len(r) or np.max(np.abs(r))<1e-8: break
@@ -345,7 +364,10 @@ def solve(sketch, goals=(), *, drag=False):
         # Reproject onto the hard constraint manifold after fitting the pointer.
         # A locked or constrained point follows only its remaining freedom.
         solve(work,[g for g in goals if g.get('hard')])
-    elif len(r) and np.max(np.abs(r))>1e-7:
+    # Residuals are relative to the sketch size. Projected references carry float32
+    # noise, so near-redundant rules can only meet within ~1e-7: a millionth of the
+    # drawing (0.1 µm on 100 mm) still separates real conflicts from that noise.
+    elif len(r) and np.max(np.abs(r))>1e-6:
         raise CommandError('Restricciones incompatibles con este cambio; revisa o elimina una restricción',code='cad_constraint_conflict')
     for e in work['entities']: model.validate_entity(e)
     sketch['entities']=work['entities']

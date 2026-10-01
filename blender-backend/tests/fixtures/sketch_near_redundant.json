@@ -1,0 +1,755 @@
+{
+"entities": [
+{
+"id": "entity_738c5779b2e24aa0939f70273b01f3f7",
+"type": "LINE",
+"construction": true,
+"x": -0.0022009200629730594,
+"y": 0.021206703742189692,
+"x2": -0.00292631758963096,
+"y2": 0.021332574083205103,
+"reference": true
+},
+{
+"id": "entity_c9225f2d028b4df697fc1b3906c48290",
+"type": "LINE",
+"construction": true,
+"x": -0.00292631758963096,
+"y": 0.021332574083205103,
+"x2": -0.0036446654473513626,
+"y2": 0.021493883108571032,
+"reference": true
+},
+{
+"id": "entity_4d27cd9faab540c3870a38b4195e3674",
+"type": "LINE",
+"construction": true,
+"x": -0.0036446654473513626,
+"y": 0.021493883108571032,
+"x2": -0.004354233239032217,
+"y2": 0.021690250838122926,
+"reference": true
+},
+{
+"id": "entity_f6b8144be955474dbb77c233af7b7f86",
+"type": "ARC",
+"construction": true,
+"x": 4.900879559545634e-08,
+"y": 0.036044349876882965,
+"radius": 0.014999997770275844,
+"start": -106.87505083803362,
+"sweep": -258.7499734913211,
+"reference": true
+},
+{
+"id": "entity_31701a8326584a2b9aa17909311bea84",
+"type": "LINE",
+"construction": true,
+"x": 0.014927817065578504,
+"y": 0.0345740866517521,
+"x2": 0.014837693443136298,
+"y2": 0.03384338588974467,
+"reference": true
+},
+{
+"id": "entity_88f1ad6cd4a54d3eb6b9a10c706759de",
+"type": "ARC",
+"construction": true,
+"x": 4.75408309328071e-08,
+"y": 0.03604434897409481,
+"radius": 0.01499999914736235,
+"start": -8.437523526767084,
+"sweep": -90.00001745193538,
+"reference": true
+},
+{
+"id": "entity_1660f8610f0b487bb76cbaaba257e062",
+"type": "CIRCLE",
+"construction": true,
+"x": 4.75408309328071e-08,
+"y": 0.03604434897409481,
+"diameter": 0.05
+},
+{
+"id": "entity_bb39251b025246878e84d6211fb3fc20",
+"type": "LINE",
+"construction": false,
+"x": -0.01000000850813276,
+"y": -0.07380000218737028,
+"x2": 0.009999991260681311,
+"y2": -0.07380000724631146
+},
+{
+"id": "entity_0be06bbf74b54813be6327de332df9b1",
+"type": "LINE",
+"construction": false,
+"x": 0.010000072860833709,
+"y": 0.08841276817527653,
+"x2": -0.00999992690802813,
+"y2": 0.08841276817527653
+},
+{
+"id": "entity_0d4a5b019bf647409fab11ac148cd252",
+"type": "LINE",
+"construction": true,
+"x": 4.7540830932807104e-08,
+"y": 0.03604434897409481,
+"x2": -5.625555212987209e-09,
+"y2": -0.06395563948899584
+},
+{
+"id": "entity_75123a782388448e89604053f4a2fcbd",
+"type": "LINE",
+"construction": true,
+"x": 0.07499999583500615,
+"y": -0.06395566351833182,
+"x2": -0.07500001012545833,
+"y2": -0.06395561545965833,
+"reference": true
+},
+{
+"id": "entity_ce8b969a3b3343ef8ee8ded5e7150ec2",
+"type": "LINE",
+"construction": true,
+"x": 7.297640278885106e-08,
+"y": 0.08841276817527653,
+"x2": -2.2523004318892152e-08,
+"y2": -0.10036072489169576
+},
+{
+"id": "entity_7d6ba1b53ca844e9aaf552b0016855d0",
+"type": "ARC",
+"construction": false,
+"x": 4.75408309328071e-08,
+"y": 0.03604434897409481,
+"radius": 0.025,
+"start": 66.42175820676565,
+"sweep": 47.15635637845203
+},
+{
+"id": "entity_7457516c017d4ee89ee5e7c53aa8f816",
+"type": "ARC",
+"construction": false,
+"x": 4.754083093280709e-08,
+"y": 0.03604434897409481,
+"radius": 0.025,
+"start": -113.5783186339131,
+"sweep": 47.15635637845203
+},
+{
+"id": "entity_9a3bf8a1e642480e9221f52b77314fe8",
+"type": "LINE",
+"construction": false,
+"x": -0.01000000850813276,
+"y": -0.07380000218737028,
+"x2": -0.01000000850813276,
+"y2": 0.013131494961170428
+},
+{
+"id": "entity_f7dad8b9e3d34c6d9d824994e22520ee",
+"type": "LINE",
+"construction": false,
+"x": 0.009999991260681313,
+"y": -0.07380000724631146,
+"x2": 0.009999991260681313,
+"y2": 0.013131445936726868
+},
+{
+"id": "entity_d14978b99d46430da9d34194ce3bebb7",
+"type": "LINE",
+"construction": false,
+"x": -0.00999992690802813,
+"y": 0.08841276817527653,
+"x2": -0.00999992690802813,
+"y2": 0.05895723860028919
+},
+{
+"id": "entity_5df3c79c788c4f9081affd5a385e312b",
+"type": "LINE",
+"construction": false,
+"x": 0.010000072860833709,
+"y": 0.08841276817527653,
+"x2": 0.010000072860833709,
+"y2": 0.05895721639830218
+},
+{
+"id": "entity_e9bd94a8477b4bac875fbb95ee01f9b1",
+"type": "ARC",
+"construction": false,
+"x": 4.754083093280709e-08,
+"y": 0.03604434897409481,
+"radius": 0.02499999999999999,
+"start": 157.23744196353113,
+"sweep": 89.1842394025558
+},
+{
+"id": "entity_def612f8c35d462f92b8aba6156c2f44",
+"type": "ARC",
+"construction": false,
+"x": 4.75408309328071e-08,
+"y": 0.03604434897409481,
+"radius": 0.025,
+"start": -66.42196225546107,
+"sweep": 68.58658714755839
+}
+],
+"constraints": [
+{
+"id": "constraint_52eee98ec12c4bd0ba16ab0b88783926",
+"type": "FIX",
+"refs": [
+{
+"id": "entity_738c5779b2e24aa0939f70273b01f3f7",
+"part": "BODY"
+}
+],
+"values": {
+"x": -0.0022009200629730594,
+"y": 0.021206703742189692,
+"x2": -0.00292631758963096,
+"y2": 0.021332574083205103
+}
+},
+{
+"id": "constraint_4567fb64385d42e9afcd236846721887",
+"type": "FIX",
+"refs": [
+{
+"id": "entity_c9225f2d028b4df697fc1b3906c48290",
+"part": "BODY"
+}
+],
+"values": {
+"x": -0.00292631758963096,
+"y": 0.021332574083205103,
+"x2": -0.0036446654473513626,
+"y2": 0.021493883108571032
+}
+},
+{
+"id": "constraint_d11068246bcd459c950cf12e49b05174",
+"type": "FIX",
+"refs": [
+{
+"id": "entity_4d27cd9faab540c3870a38b4195e3674",
+"part": "BODY"
+}
+],
+"values": {
+"x": -0.0036446654473513626,
+"y": 0.021493883108571032,
+"x2": -0.004354233239032217,
+"y2": 0.021690250838122926
+}
+},
+{
+"id": "constraint_b792cf839d064008bc7b73350efd7a9d",
+"type": "FIX",
+"refs": [
+{
+"id": "entity_f6b8144be955474dbb77c233af7b7f86",
+"part": "BODY"
+}
+],
+"values": {
+"x": 4.900879559545634e-08,
+"y": 0.036044349876882965,
+"radius": 0.014999997770275844,
+"start": -106.87505083803362,
+"sweep": -258.7499734913211
+}
+},
+{
+"id": "constraint_f66171af819240cfae757cb6c20b3a9a",
+"type": "FIX",
+"refs": [
+{
+"id": "entity_31701a8326584a2b9aa17909311bea84",
+"part": "BODY"
+}
+],
+"values": {
+"x": 0.014927817065578504,
+"y": 0.0345740866517521,
+"x2": 0.014837693443136298,
+"y2": 0.03384338588974467
+}
+},
+{
+"id": "constraint_96d3a52017be4109b81433bdcfe1b47d",
+"type": "FIX",
+"refs": [
+{
+"id": "entity_88f1ad6cd4a54d3eb6b9a10c706759de",
+"part": "BODY"
+}
+],
+"values": {
+"x": 4.75408309328071e-08,
+"y": 0.03604434897409481,
+"radius": 0.01499999914736235,
+"start": -8.437523526767084,
+"sweep": -90.00001745193538
+}
+},
+{
+"id": "join_entity_1660f8610f0b487bb76cbaaba257e062_START",
+"type": "COINCIDENT",
+"refs": [
+{
+"id": "entity_1660f8610f0b487bb76cbaaba257e062",
+"part": "CENTER"
+},
+{
+"id": "entity_88f1ad6cd4a54d3eb6b9a10c706759de",
+"part": "CENTER"
+}
+]
+},
+{
+"id": "constraint_5625adbc6c5a4844827a5415d5eb4c40",
+"type": "RADIUS",
+"refs": [
+{
+"id": "entity_1660f8610f0b487bb76cbaaba257e062",
+"part": "BODY"
+}
+],
+"value": 0.025,
+"label_position": [
+0.1049602470580698,
+0.09490823628765564
+]
+},
+{
+"id": "join_entity_0d4a5b019bf647409fab11ac148cd252_START",
+"type": "COINCIDENT",
+"refs": [
+{
+"id": "entity_0d4a5b019bf647409fab11ac148cd252",
+"part": "START"
+},
+{
+"id": "entity_88f1ad6cd4a54d3eb6b9a10c706759de",
+"part": "CENTER"
+}
+]
+},
+{
+"id": "constraint_108fbb62c9174ac6ba5b7952e313361f",
+"type": "FIX",
+"refs": [
+{
+"id": "entity_75123a782388448e89604053f4a2fcbd",
+"part": "BODY"
+}
+],
+"values": {
+"x": 0.07499999583500615,
+"y": -0.06395566351833182,
+"x2": -0.07500001012545833,
+"y2": -0.06395561545965833
+}
+},
+{
+"id": "constraint_5ff22f02d9a9464498ab3560ba2df242",
+"type": "MIDPOINT",
+"refs": [
+{
+"id": "entity_0d4a5b019bf647409fab11ac148cd252",
+"part": "END"
+},
+{
+"id": "entity_75123a782388448e89604053f4a2fcbd",
+"part": "BODY"
+}
+]
+},
+{
+"id": "constraint_4eda4fce841c468f861231d3daf62199",
+"type": "DISTANCE",
+"refs": [
+{
+"id": "entity_bb39251b025246878e84d6211fb3fc20",
+"part": "BODY"
+}
+],
+"value": 0.02
+},
+{
+"id": "constraint_2aaf066f810b4d339b3e07d29d7f1d87",
+"type": "POINT_ON_LINE",
+"refs": [
+{
+"id": "entity_88f1ad6cd4a54d3eb6b9a10c706759de",
+"part": "CENTER"
+},
+{
+"id": "entity_ce8b969a3b3343ef8ee8ded5e7150ec2",
+"part": "BODY"
+}
+]
+},
+{
+"id": "constraint_4d51d6b707864d9fb79ab0b390787782",
+"type": "POINT_ON_LINE",
+"refs": [
+{
+"id": "entity_0d4a5b019bf647409fab11ac148cd252",
+"part": "END"
+},
+{
+"id": "entity_ce8b969a3b3343ef8ee8ded5e7150ec2",
+"part": "BODY"
+}
+]
+},
+{
+"id": "constraint_a572d194a352408e918f404a24de1e75",
+"type": "SYMMETRIC_LINE",
+"refs": [
+{
+"id": "entity_bb39251b025246878e84d6211fb3fc20",
+"part": "START"
+},
+{
+"id": "entity_bb39251b025246878e84d6211fb3fc20",
+"part": "END"
+},
+{
+"id": "entity_ce8b969a3b3343ef8ee8ded5e7150ec2",
+"part": "BODY"
+}
+]
+},
+{
+"id": "constraint_b6fc51c7305b49f9ac43bff7c5735f3a",
+"type": "FIX",
+"refs": [
+{
+"id": "entity_bb39251b025246878e84d6211fb3fc20",
+"part": "START"
+}
+],
+"points": {
+"START": [
+-0.010000008045767301,
+-0.07380000218737166
+]
+}
+},
+{
+"id": "constraint_99de6a835442461cb2cac12a4400f428",
+"type": "HORIZONTAL",
+"refs": [
+{
+"id": "entity_bb39251b025246878e84d6211fb3fc20",
+"part": "BODY"
+}
+]
+},
+{
+"id": "constraint_12c39f5efa3445feba20dc00e0b4f6ca",
+"type": "HORIZONTAL",
+"refs": [
+{
+"id": "entity_0be06bbf74b54813be6327de332df9b1",
+"part": "BODY"
+}
+]
+},
+{
+"id": "join_entity_7d6ba1b53ca844e9aaf552b0016855d0_START",
+"type": "COINCIDENT",
+"refs": [
+{
+"id": "entity_7d6ba1b53ca844e9aaf552b0016855d0",
+"part": "CENTER"
+},
+{
+"id": "entity_88f1ad6cd4a54d3eb6b9a10c706759de",
+"part": "CENTER"
+}
+]
+},
+{
+"id": "join_entity_7457516c017d4ee89ee5e7c53aa8f816_START",
+"type": "COINCIDENT",
+"refs": [
+{
+"id": "entity_7457516c017d4ee89ee5e7c53aa8f816",
+"part": "CENTER"
+},
+{
+"id": "entity_88f1ad6cd4a54d3eb6b9a10c706759de",
+"part": "CENTER"
+}
+]
+},
+{
+"id": "join_entity_9a3bf8a1e642480e9221f52b77314fe8_START",
+"type": "COINCIDENT",
+"refs": [
+{
+"id": "entity_9a3bf8a1e642480e9221f52b77314fe8",
+"part": "START"
+},
+{
+"id": "entity_bb39251b025246878e84d6211fb3fc20",
+"part": "START"
+}
+]
+},
+{
+"id": "join_entity_9a3bf8a1e642480e9221f52b77314fe8_END",
+"type": "COINCIDENT",
+"refs": [
+{
+"id": "entity_9a3bf8a1e642480e9221f52b77314fe8",
+"part": "END"
+},
+{
+"id": "entity_7457516c017d4ee89ee5e7c53aa8f816",
+"part": "START"
+}
+]
+},
+{
+"id": "join_entity_f7dad8b9e3d34c6d9d824994e22520ee_START",
+"type": "COINCIDENT",
+"refs": [
+{
+"id": "entity_f7dad8b9e3d34c6d9d824994e22520ee",
+"part": "START"
+},
+{
+"id": "entity_bb39251b025246878e84d6211fb3fc20",
+"part": "END"
+}
+]
+},
+{
+"id": "join_entity_f7dad8b9e3d34c6d9d824994e22520ee_END",
+"type": "COINCIDENT",
+"refs": [
+{
+"id": "entity_f7dad8b9e3d34c6d9d824994e22520ee",
+"part": "END"
+},
+{
+"id": "entity_7457516c017d4ee89ee5e7c53aa8f816",
+"part": "END"
+}
+]
+},
+{
+"id": "join_entity_d14978b99d46430da9d34194ce3bebb7_START",
+"type": "COINCIDENT",
+"refs": [
+{
+"id": "entity_d14978b99d46430da9d34194ce3bebb7",
+"part": "START"
+},
+{
+"id": "entity_0be06bbf74b54813be6327de332df9b1",
+"part": "END"
+}
+]
+},
+{
+"id": "join_entity_d14978b99d46430da9d34194ce3bebb7_END",
+"type": "COINCIDENT",
+"refs": [
+{
+"id": "entity_d14978b99d46430da9d34194ce3bebb7",
+"part": "END"
+},
+{
+"id": "entity_7d6ba1b53ca844e9aaf552b0016855d0",
+"part": "END"
+}
+]
+},
+{
+"id": "join_entity_5df3c79c788c4f9081affd5a385e312b_START",
+"type": "COINCIDENT",
+"refs": [
+{
+"id": "entity_5df3c79c788c4f9081affd5a385e312b",
+"part": "START"
+},
+{
+"id": "entity_0be06bbf74b54813be6327de332df9b1",
+"part": "START"
+}
+]
+},
+{
+"id": "join_entity_5df3c79c788c4f9081affd5a385e312b_END",
+"type": "COINCIDENT",
+"refs": [
+{
+"id": "entity_5df3c79c788c4f9081affd5a385e312b",
+"part": "END"
+},
+{
+"id": "entity_7d6ba1b53ca844e9aaf552b0016855d0",
+"part": "START"
+}
+]
+},
+{
+"id": "constraint_540e7244a3c340fb98ad5248b36abb26",
+"type": "RADIUS",
+"refs": [
+{
+"id": "entity_7457516c017d4ee89ee5e7c53aa8f816",
+"part": "BODY"
+}
+],
+"value": 0.025
+},
+{
+"id": "constraint_de090c3a8d5b464f9a941780c612bff1",
+"type": "EQUAL",
+"refs": [
+{
+"id": "entity_7457516c017d4ee89ee5e7c53aa8f816",
+"part": "BODY"
+},
+{
+"id": "entity_7d6ba1b53ca844e9aaf552b0016855d0",
+"part": "BODY"
+}
+]
+},
+{
+"id": "constraint_9407cd8aafab4e5c921d63e8edc81090",
+"type": "EQUAL_ANGLE",
+"refs": [
+{
+"id": "entity_7457516c017d4ee89ee5e7c53aa8f816",
+"part": "BODY"
+},
+{
+"id": "entity_7d6ba1b53ca844e9aaf552b0016855d0",
+"part": "BODY"
+}
+]
+},
+{
+"id": "constraint_ec4750a06be14048b8e98563e2fe6ed5",
+"type": "VERTICAL",
+"refs": [
+{
+"id": "entity_f7dad8b9e3d34c6d9d824994e22520ee",
+"part": "BODY"
+}
+]
+},
+{
+"id": "constraint_d3b047b860da4488a5fa824191199cb9",
+"type": "VERTICAL",
+"refs": [
+{
+"id": "entity_5df3c79c788c4f9081affd5a385e312b",
+"part": "BODY"
+}
+]
+},
+{
+"id": "constraint_ad78e15d0ba84c49b565d118b2e61f4d",
+"type": "VERTICAL",
+"refs": [
+{
+"id": "entity_d14978b99d46430da9d34194ce3bebb7",
+"part": "BODY"
+}
+]
+},
+{
+"id": "constraint_62f57430683e4df689b079dae8180a08",
+"type": "VERTICAL",
+"refs": [
+{
+"id": "entity_9a3bf8a1e642480e9221f52b77314fe8",
+"part": "BODY"
+}
+]
+},
+{
+"id": "constraint_37362325251044859050752218ffae6b",
+"type": "SYMMETRIC",
+"refs": [
+{
+"id": "entity_0be06bbf74b54813be6327de332df9b1",
+"part": "END"
+},
+{
+"id": "entity_0be06bbf74b54813be6327de332df9b1",
+"part": "START"
+},
+{
+"id": "entity_ce8b969a3b3343ef8ee8ded5e7150ec2",
+"part": "START"
+}
+]
+},
+{
+"id": "join_entity_e9bd94a8477b4bac875fbb95ee01f9b1_START",
+"type": "COINCIDENT",
+"refs": [
+{
+"id": "entity_e9bd94a8477b4bac875fbb95ee01f9b1",
+"part": "CENTER"
+},
+{
+"id": "entity_88f1ad6cd4a54d3eb6b9a10c706759de",
+"part": "CENTER"
+}
+]
+},
+{
+"id": "join_entity_def612f8c35d462f92b8aba6156c2f44_START",
+"type": "COINCIDENT",
+"refs": [
+{
+"id": "entity_def612f8c35d462f92b8aba6156c2f44",
+"part": "CENTER"
+},
+{
+"id": "entity_88f1ad6cd4a54d3eb6b9a10c706759de",
+"part": "CENTER"
+}
+]
+},
+{
+"id": "constraint_9212aba13bde471e8b4a027e8ae04484",
+"type": "COINCIDENT",
+"refs": [
+{
+"id": "entity_def612f8c35d462f92b8aba6156c2f44",
+"part": "START"
+},
+{
+"id": "entity_7457516c017d4ee89ee5e7c53aa8f816",
+"part": "END"
+}
+]
+},
+{
+"id": "constraint_a6bf863aec4a481ab89d15d3ce302bbc",
+"type": "COINCIDENT",
+"refs": [
+{
+"id": "entity_e9bd94a8477b4bac875fbb95ee01f9b1",
+"part": "END"
+},
+{
+"id": "entity_7457516c017d4ee89ee5e7c53aa8f816",
+"part": "START"
+}
+]
+}
+]
+}
