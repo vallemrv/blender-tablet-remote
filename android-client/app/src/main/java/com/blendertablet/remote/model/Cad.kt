@@ -10,6 +10,9 @@ data class CadCapabilities(
     val sketchEditing: Boolean = false,
     val offsetEntities: List<String> = emptyList(),
     val featureMirror: Boolean = false,
+    val edgePlane: Boolean = false,
+    val planePurge: Boolean = false,
+    val sectionView: Boolean = false,
 ) { val available get() = version == 2 && planes.isNotEmpty() }
 data class CadEntity(val id: String, val type: String, val values: Map<String, Double>, val construction: Boolean = false,
     val dimensions: List<CadMeasure> = emptyList(), val isFillet: Boolean = false, val isSquare: Boolean = false, val reference: Boolean = false)
@@ -51,7 +54,9 @@ data class CadPlane(val id: String, val name: String, val translation: List<Doub
 data class CadSurfaceItem(val id: String, val kind: String, val objectName: String, val featureId: String?, val planar: Boolean)
 data class CadMeasurement(val label: String, val value: Double, val unit: String)
 data class CadSurface(val mode: String = "PROFILE", val selection: List<CadSurfaceItem> = emptyList(),
-    val measurements: List<CadMeasurement> = emptyList(), val canSketch: Boolean = false)
+    val measurements: List<CadMeasurement> = emptyList(), val canSketch: Boolean = false,
+    /** A single straight solid edge is selected: a plane can be hinged on it. */
+    val canEdgePlane: Boolean = false)
 data class CadHistoryNode(val id: String, val kind: String, val name: String, val bodyId: String, val sketchId: String?)
 data class CadState(
     val workspace: Boolean = false,
@@ -83,6 +88,8 @@ data class CadState(
     /** Plane being placed interactively (`session.operation == "PLANE"`). */
     val plane: CadPlaneSession? = null,
     val construction: Boolean = false, val showScene: Boolean = false,
+    /** The video is cut at the open sketch plane (`cad.settings` `section`). */
+    val section: Boolean = false,
     val bodies: List<CadBody> = emptyList(), val activeBodyId: String? = null,
     val planes: List<CadPlane> = emptyList(),
     val dimensionOptions: Map<String, CadDimensionOption> = emptyMap(),

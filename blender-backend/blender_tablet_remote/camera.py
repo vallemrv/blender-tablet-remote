@@ -52,6 +52,9 @@ class RemoteCamera:
         self.axis_view = None
         self.clip_start = DEFAULT_CLIP_START
         self.clip_end = DEFAULT_CLIP_END
+        # Plano de sección (punto, normal) en el mundo: con la vista de frente a él,
+        # el plano cercano se apoya en él y retira lo que queda delante.
+        self.section = None
         # Caché de matrices del frame en curso: (rv3d, window_matrix, perspectiva,
         # inversa). `project`/`ray` se llaman decenas de veces por frame (picking,
         # box/circle y captura) y reconstruir la cadena completa cada vez
@@ -99,7 +102,7 @@ class RemoteCamera:
         """
         persp = self._perspective_window(rv3d)
         if self.perspective == "PERSP":
-            return self._reclipped(persp)
+            return self._reclipped(persp, self._section_near())
         # Proyección ortográfica propia: conserva el encuadre que tenía la vista
         # perspectiva en el plano del pivote, por lo que el cambio no da saltos.
         width = 2.0 * self.distance / max(abs(persp[0][0]), 1e-9)
@@ -108,6 +111,9 @@ class RemoteCamera:
         # de profundidad se centra en el pivote y conserva el volumen encuadrado.
         depth = max(min(self.clip_end, self.distance * 100.0), self._ortho_depth, self.distance * 4.0)
         near, far = self.distance - depth, self.distance + depth
+        section = self._section_near()
+        if section is not None and section < far:
+            near = section
         return Matrix(((2.0 / width, 0.0, 0.0, 0.0),
                        (0.0, 2.0 / height, 0.0, 0.0),
                        (0.0, 0.0, -2.0 / (far - near), -(far + near) / (far - near)),
@@ -126,11 +132,13 @@ class RemoteCamera:
                        (0.0, 0.0, -1.0, -1.0),
                        (0.0, 0.0, -1.0, 0.0)))
 
-    def _reclipped(self, window: Matrix) -> Matrix:
+    def _reclipped(self, window: Matrix, section=None) -> Matrix:
         """La matriz de la ventana con `clip_start`/`clip_end` en vez de los suyos."""
         # Acercarse a una pieza pequeña reduce también el rango de profundidad;
         # alejarse lo amplía. El preset nunca obliga a separar la cámara de la pieza.
         near, far = self._depth_range(self.distance)
+        if section is not None and near < section < far:
+            near = section
         if far <= near:
             return window.copy()
         matrix = window.copy()
@@ -145,6 +153,34 @@ class RemoteCamera:
         far = max(distance * 4.0, min(self.clip_end, distance * 100.0))
         near = max(min(self.clip_start, distance * .01), far / 10_000.0)
         return near, far
+
+    def _section_near(self):
+        """Profundidad del plano de sección, solo si la vista lo mira de frente."""
+        if self.section is None:
+            return None
+        point, normal = self.section
+        forward = self.rotation @ Vector((0.0, 0.0, -1.0))
+        if abs(forward.dot(normal)) < 0.999:
+            return None
+        eye = self.location + self.rotation @ Vector((0.0, 0.0, self.distance))
+        # Un margen mínimo hacia la cámara conserva la geometría apoyada en el plano.
+        return (point - eye).dot(forward) - max(self.distance * 1e-3, MIN_DISTANCE)
+
+    def set_section(self, value) -> None:
+        if value is not None:
+            value = (Vector(value[0]), Vector(value[1]).normalized())
+        if value != self.section:
+            self.section = value
+            self._invalidate()
+
+    def section_hides(self, point) -> bool:
+        """True si el punto queda retirado por la sección visible."""
+        near = self._section_near()
+        if near is None:
+            return False
+        forward = self.rotation @ Vector((0.0, 0.0, -1.0))
+        eye = self.location + self.rotation @ Vector((0.0, 0.0, self.distance))
+        return (Vector(point) - eye).dot(forward) < near
 
     def set_clipping(self, start: float, end: float) -> None:
         self.clip_start = float(start)

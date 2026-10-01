@@ -779,6 +779,17 @@ no quedan archivos o referencias temporales.
   ejes y normal); el documento no cambia hasta ✓, que crea plano y croquis en un undo.
   Los planos guardados se reutilizan o se recolocan con esa misma sesión (`plane_id`).
   Boceto en cara usa `_face_plane`, compartido con la base Cara de la sesión.
+  La base Arista usa la única arista recta seleccionada del sólido: X sigue la
+  arista, empieza enrasada con una cara contigua e «Inclinar sobre la arista» la
+  gira alrededor de ella. Es un plano implícito con su marco capturado.
+  «Limpiar planos sin usar» (Planos guardados) borra con un undo los planos que
+  ningún boceto usa; no existe borrado de planos con bocetos.
+- Vista en sección (fila del ojo, solo en el boceto): el plano cercano de la cámara
+  remota se apoya en el plano del croquis y retira lo que queda delante. Solo actúa
+  con la vista de frente al plano; no escribe en `rv3d` ni crea undo, y la selección
+  de referencias del sólido ignora la parte retirada.
+- Todas las referencias del sólido seleccionadas (varias aristas incluidas) se
+  resaltan en el mismo azul.
 - «Copiar a otro plano paralelo» (menú del croquis) crea con un undo un plano implícito
   referido al croquis fuente (traslación `[0,0,z]`) y una copia con IDs nuevos y reglas
   remapeadas. Sigue al fuente; su «Separación Z» se edita en la bandeja 3D al

@@ -125,6 +125,10 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             selected = plane?.base == "FACE", enabled = connected && plane?.planeId == null && cad.surface.canSketch) {
             command("cad.plane.update", "base" to "FACE")
         }
+        CadAction("PLANE_EDGE", if (cad.surface.canEdgePlane) "Plano en la arista seleccionada · gíralo sobre ella" else "Selecciona antes una arista recta del sólido",
+            selected = plane?.base == "EDGE", enabled = connected && plane?.planeId == null && cad.surface.canEdgePlane) {
+            command("cad.plane.update", "base" to "EDGE")
+        }
     } else ToolRail(Modifier.align(Alignment.CenterStart).padding(start = Metrics.EdgeMargin, top = 120.dp, bottom = 160.dp).heightIn(max = availableHeight)) {
         CadAction("SELECT", "Cursor · tocar alterna selección · arrastrar mueve", selected = state.cadTool == null && cad.surface.mode == "PROFILE", enabled = !cad.sessionActive) { vm.cadTool(null) }
         if (editing) {
@@ -146,6 +150,11 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             }
             if (capabilities.sketchEditing) CadAction("SKETCH_FACE", "Crear croquis en la cara seleccionada",
                 enabled = connected && !cad.sessionActive && cad.surface.canSketch) { command("cad.plane.begin", "base" to "FACE") }
+            if (capabilities.edgePlane) CadAction("PLANE_EDGE", if (cad.surface.canEdgePlane) "Plano en la arista seleccionada · gíralo sobre ella"
+                else "Plano en una arista: elige antes una arista recta del sólido",
+                enabled = connected && !cad.sessionActive && (cad.surface.canEdgePlane || cad.surface.mode != "EDGE")) {
+                if (cad.surface.canEdgePlane) command("cad.plane.begin", "base" to "EDGE") else vm.cadSurfaceMode("EDGE")
+            }
             RailDivider()
             val solidEdges = cad.surface.selection.any { it.kind == "EDGE" }
             CadAction("FILLET", "Redondear aristas del sólido", enabled = connected && !cad.sessionActive) {
@@ -603,6 +612,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                 drafts.keys.filter { it.startsWith("plane_") }.forEach { drafts.remove(it) }
                                 command("cad.plane.update", "offset" to offset, "tilt" to tilt, "shift" to shift)
                             }
+                            if (plane.base == "EDGE") Text("Inclinar sobre la arista gira el plano alrededor de ella", color = Ink.Accent, fontSize = 11.sp)
                             CadDimension("Separación", plane.offset, unit, id + "offset", step = cad.step, enabled = connected,
                                 onNudge = { send(offset = it) }, onDone = { drafts["plane_offset"]?.let { send(offset = it) } }) { drafts["plane_offset"] = it }
                             (0..1).forEach { i ->
@@ -622,6 +632,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                 Box {
                                     PillButton("Planos guardados", enabled = connected) { savedOpen = true }
                                     DropdownMenu(savedOpen, onDismissRequest = { savedOpen = false }) {
+                                        if (capabilities.planePurge) DropdownMenuItem(text = { Text("Limpiar planos sin usar") }, onClick = {
+                                            savedOpen = false; command("cad.session.cancel"); command("cad.plane.purge")
+                                        })
                                         cad.planes.forEach { saved ->
                                             DropdownMenuItem(text = { Text("${saved.name} · nuevo croquis") }, onClick = {
                                                 savedOpen = false; command("cad.session.cancel"); command("cad.sketch.create", "plane_id" to saved.id)
@@ -797,9 +810,12 @@ fun CadTopActions(state: AppUiState, vm: MainViewModel) {
     fun command(name: String, vararg values: Pair<String, Any?>) { if (connected) vm.cadCommand(name, mapOf(*values)) }
     if (editing) IconAction(Icons.Default.Straighten, "Medir desde el sólido", enabled = connected && !cad.sessionActive) { vm.cadSurfaceMode("EDGE") }
     else IconAction(Icons.Default.Layers, "Nuevo plano y croquis", enabled = connected && !cad.sessionActive) {
-        command("cad.plane.begin", "base" to if (cad.surface.canSketch) "FACE" else "XY")
+        command("cad.plane.begin", "base" to if (cad.surface.canSketch) "FACE" else if (cad.surface.canEdgePlane) "EDGE" else "XY")
     }
     if (editing) {
+        if (state.blender.features.cad.sectionView) IconAction(AppIcons.cad("SECTION"),
+            if (cad.section) "Quitar la sección" else "Vista en sección: corta la pieza por el plano del boceto",
+            selected = cad.section, enabled = connected) { command("cad.settings", "section" to !cad.section) }
         IconAction(Icons.AutoMirrored.Filled.RotateRight, "Girar la vista 90° sobre el plano",
             enabled = connected && !cad.sessionActive) { command("cad.view.roll", "degrees" to 90) }
         IconAction(Icons.Default.North, "Enderezar: de frente y sin girar",
@@ -1058,6 +1074,7 @@ internal fun cadPlaneAxes(base: String?): CadPlaneAxes = when (base) {
     "XY" -> CadPlaneAxes(listOf("X", "Y"), listOf("X", "Y", "Z"), "hacia arriba (+Z)", "hacia abajo (−Z)")
     "XZ" -> CadPlaneAxes(listOf("X", "Z"), listOf("X", "Z", "−Y"), "hacia delante (−Y)", "hacia atrás (+Y)")
     "YZ" -> CadPlaneAxes(listOf("Y", "Z"), listOf("Y", "Z", "X"), "hacia la derecha (+X)", "hacia la izquierda (−X)")
+    "EDGE" -> CadPlaneAxes(listOf("a lo largo", "transversal"), listOf("sobre la arista", "transversal", "normal"), "hacia fuera", "hacia dentro")
     else -> CadPlaneAxes(listOf("U", "V"), listOf("U", "V", "normal"), "hacia fuera de la cara", "hacia dentro")
 }
 

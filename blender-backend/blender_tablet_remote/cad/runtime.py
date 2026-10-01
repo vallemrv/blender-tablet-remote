@@ -65,6 +65,7 @@ class CadRuntime:
         self.construction = False
         self.active_body_id = None
         self.show_scene = False
+        self.section = False
         self._solid_view = None
         self.rollback_id = None
         self._extrusion_cache = ExtrusionPreviewCache()
@@ -85,6 +86,7 @@ class CadRuntime:
         epoch = self._epoch + 1
         self.__init__()
         self._epoch = epoch
+        self.sync_section(None)
 
     def doc(self):
         scene = bpy.context.scene
@@ -93,7 +95,7 @@ class CadRuntime:
             # Undo replaces RNA addresses. Keep the workspace, but never hold an
             # old scene preview; explicit file loads call reset_session().
             workspace, active = self.workspace, self.active_sketch_id
-            settings={k:getattr(self,k) for k in ("active_body_id","step","increment","construction","show_scene","_solid_view","rollback_id")}
+            settings={k:getattr(self,k) for k in ("active_body_id","step","increment","construction","show_scene","section","_solid_view","rollback_id")}
             hidden, shown, owner = self._hidden, self._shown, self.workspace_owner
             self.reset()
             self.workspace, self.active_sketch_id = workspace, active
@@ -138,6 +140,16 @@ class CadRuntime:
         self.workspace_owner = None
         self._save_suspended = False
         self.rollback_id = None
+        self.sync_section(None)
+
+    def sync_section(self, sketch):
+        """Section the video at the open sketch plane while the option is on."""
+        from ..camera import camera
+        if not (self.workspace and self.section and sketch):
+            camera.set_section(None); return
+        f=model.frame(sketch)
+        scale=max(float(bpy.context.scene.unit_settings.scale_length),1e-12)
+        camera.set_section(([v/scale for v in f['origin']],f['normal']))
 
     def suspend_save(self):
         if self._save_suspended:
@@ -630,6 +642,7 @@ class CadRuntime:
             from . import dimensions
             from ..commands.cad import _plane_public
             sketch=next((s for s in doc['sketches'] if s['id']==self.active_sketch_id),None)
+            self.sync_section(sketch)
             refs=(self.selection or {}).get('items',[])
             numeric=dimensions.offers(sketch,[r for r in refs if r.get('kind')=='ENTITY']) if sketch else {}
             labels = None
@@ -643,7 +656,7 @@ class CadRuntime:
             return dict(version=1,workspace=self.workspace,isolated=bool(self.workspace and not self.show_scene),document=model.public(doc),
                         dimension_options=numeric,surface=self.surface.status(),
                         rollback_id=self.bar(doc),
-                        active_sketch_id=self.active_sketch_id,selection=self.selection,step=self.step,increment=self.increment,construction=self.construction,active_body_id=self.active_body_id or doc['bodies'][0]['id'],show_scene=self.show_scene,
+                        active_sketch_id=self.active_sketch_id,selection=self.selection,step=self.step,increment=self.increment,construction=self.construction,active_body_id=self.active_body_id or doc['bodies'][0]['id'],show_scene=self.show_scene,section=self.section,
                         session=dict(active=bool(session),id=session['id'] if session else None,
                                      operation=session['operation'] if session else None,
                                      depth=session.get('depth') if session else None,

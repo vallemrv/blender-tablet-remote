@@ -407,7 +407,7 @@ FEATURES = {
             "constraints": ["COINCIDENT", "POINT_ON_LINE", "HORIZONTAL", "VERTICAL", "PARALLEL", "COLLINEAR", "PERPENDICULAR",
                             "TANGENT", "EQUAL", "DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "ANGLE", "FIX", "MIDPOINT",
                             "SYMMETRIC", "SYMMETRIC_LINE"],
-            "sketch_editing": True, "solid_selection": True, "face_sketch": True, "project_reference": True, "history_order": True, "editable_dimensions": True, "fillet_remove": True, "smart_cursor": True, "selection_delete": True, "fillet": True, "construction": True, "datum_planes": True,
+            "sketch_editing": True, "solid_selection": True, "face_sketch": True, "project_reference": True, "history_order": True, "editable_dimensions": True, "fillet_remove": True, "smart_cursor": True, "selection_delete": True, "fillet": True, "construction": True, "datum_planes": True, "edge_plane": True, "plane_purge": True, "section_view": True,
             "bodies": True, "origin": True, "mesh_copy": True,
             "length_unit": "METERS", "kernel": "BLENDER_NATIVE_MESH",
             "document_version": 1, "owned_sessions": True, "persistent": True},

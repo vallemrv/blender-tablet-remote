@@ -1509,7 +1509,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.feature.set` | `{feature_id,depth?,enabled?,extent?,width?,segments?}` | Edita o suprime feature. `extent` solo en CUT: `ONE` o `BOTH`; `width`/`segments` solo en FILLET/CHAMFER |
 | `cad.feature.delete` | `{feature_id}` | Borra feature y resultado |
 | `cad.convert` | `{body_id}` o `{feature_id}` | Copia el cuerpo completo como malla independiente con sus modificadores, sale a Object y conserva el documento; el original queda oculto fuera de CAD |
-| `cad.settings` | `{step?,increment?,construction?,show_scene?}` | Paso métrico positivo y snap, sin undo ni cambio geométrico |
+| `cad.settings` | `{step?,increment?,construction?,show_scene?,section?}` | Paso métrico positivo y snap, sin undo ni cambio geométrico. `section` corta el vídeo por el plano del boceto abierto (ver «Vista en sección») |
 | `cad.drag.begin` | `{u,v}` | Sondea y conserva selección previa; prepara arrastre del grupo si cubre el elemento, sin cambiar selección todavía |
 | `cad.drag.update` | `{u,v}` | Reconstruye y resuelve geometría desde baseline; sobre una cota solo mueve su rótulo en el plano, sin snap, solver ni evaluación del sólido |
 | `cad.drag.end` | `{}` | Sin UPDATE alterna el elemento sondeado en BEGIN; con arrastre confirma el último candidato. Nunca vuelve a sondear |
@@ -1531,7 +1531,8 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.plane.create` | `{base?,translation?,rotation?,reference_sketch_id?,support_id?,start_sketch?}` | Plano persistente en metros y grados locales XYZ. start_sketch crea y activa también su croquis en el mismo undo |
 | `cad.plane.set` | `{plane_id,translation?,rotation?}` | Ajusta el plano y reconstruye bocetos/sólidos dependientes |
 | `cad.revolve.create` | `{profile_id\|sketch_id,axis?,angle?}` | Revolución (`REVOLVE`) de un contorno sin huecos alrededor de `X`/`Y` del croquis o de una línea suya; `angle` en grados (0–360, por defecto 360). Puede apoyarse en el eje, no cruzarlo. Se suma al cuerpo con un undo; `cad.feature.set` edita `angle` y `axis` |
-| `cad.plane.begin` | `{base:"XY"\|"XZ"\|"YZ"\|"FACE"}` o `{plane_id}` | Abre la sesión `PLANE`: preview del plano dibujada en la captura, sin tocar el documento. FACE usa la cara resaltada (sin otro raycast); `plane_id` recoloca un plano guardado |
+| `cad.plane.begin` | `{base:"XY"\|"XZ"\|"YZ"\|"FACE"\|"EDGE"}` o `{plane_id}` | Abre la sesión `PLANE`: preview del plano dibujada en la captura, sin tocar el documento. FACE usa la cara resaltada (sin otro raycast); EDGE usa la única arista recta resaltada: X sigue la arista, el plano empieza enrasado con una cara contigua y `tilt[0]` lo gira alrededor de ella. `plane_id` recoloca un plano guardado |
+| `cad.plane.purge` | `{}` | Borra todos los planos que no usa ningún boceto, con un undo; `nothing_to_purge` si no hay ninguno |
 | `cad.plane.update` | `{base?,offset?,tilt?[2],shift?[2]}` o `{gesture_u,gesture_v,u,v,baseline_offset}` | `offset` en metros por la normal ya inclinada, `tilt` en grados sobre los ejes X/Y del plano, `shift` en metros dentro del plano base. El gesto arrastra la separación 1:1 bajo la punta, en pasos con Incremento. `session.plane` publica `{base,plane_id,offset,tilt,shift,positive_label,negative_label}`; `cad.session.confirm` crea plano y croquis activo en un undo (o aplica la posición del guardado) |
 | `cad.surface.mode` | `{mode:"PROFILE\|FACE\|EDGE\|VERTEX"}` | Elige selección del boceto/perfiles o referencias del sólido, sin undo |
 | `cad.surface.select` | `{u,v}` | Alterna una referencia visible; en boceto acumula puntos/aristas/caras de distintos objetos para proyectarlos juntos y un miss conserva la selección; en 3D conserva dos para medir o varias aristas del mismo objeto para acabado |
@@ -1746,7 +1747,15 @@ en ese instante, sin persistir índices de polígonos ni prometer seguimiento de
 cambios topológicos posteriores. Se rechazan ciclos de referencias.
 `document.bodies` contiene `{id,name}`; bocetos y operaciones llevan `body_id`.
 Los documentos anteriores se normalizan a un cuerpo inicial al leerlos.
-`active_body_id`, `construction` y `show_scene` son estado del workspace.
+`active_body_id`, `construction`, `show_scene` y `section` son estado del workspace.
+
+### Vista en sección
+
+Con `section:true` y un boceto abierto, el vídeo retira lo que queda entre la cámara
+y el plano del croquis: el plano cercano de la cámara remota se apoya en él (con un
+margen mínimo hacia la cámara). Solo actúa mientras la vista lo mira de frente; el
+vistazo en perspectiva lo ignora. No escribe en `rv3d`, no cambia la escena ni crea
+undo, y la selección de referencias del sólido ignora la parte retirada.
 
 Mientras `active_sketch_id` esté activo, la cámara remota permanece ortogonal al
 boceto: orbit se traduce a pan y las vistas de eje no cambian orientación. El
@@ -1992,10 +2001,11 @@ o editar, y permanece fija durante el trazo cuya cámara también es fija.
 ## Referencias de sólidos y navegación CAD
 
 `cad.state.surface` contiene `mode`, `selection:[{id,kind,object,feature_id?,planar}]`,
-`measurements:[{label,value,unit}]` y `can_sketch`. Las unidades de medida son
+`measurements:[{label,value,unit}]`, `can_sketch` y `can_edge_plane` (una única
+arista recta, base de `cad.plane.begin` con `EDGE`). Las unidades de medida son
 `LENGTH` (metros), `AREA` (m²) y `ANGLE` (grados). No son órdenes para reescalar
 la malla; miden la geometría seleccionada. Una tercera referencia inicia otra pareja.
-La primera se resalta en azul y la segunda en naranja dentro de GPUOffScreen.
+Todas las referencias seleccionadas se resaltan en azul dentro de GPUOffScreen.
 La captura limpia excluye estos marcadores.
 
 El sondeo de `commands/snap.py` usa malla evaluada y oclusión común. Las referencias

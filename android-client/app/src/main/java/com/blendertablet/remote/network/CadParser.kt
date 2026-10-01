@@ -28,7 +28,8 @@ object CadParser {
         strings(j.optJSONArray("entities")).filter { it in listOf("LINE", "RECTANGLE", "CIRCLE", "ARC", "NGON", "SLOT", "GEAR", "POLYGON") },
         strings(j.optJSONArray("features")).filter { it in listOf("EXTRUDE", "CUT", "LOFT", "HELIX", "REVOLVE", "MIRROR") },
         strings(j.optJSONArray("constraints")).filter { it in listOf("COINCIDENT", "POINT_ON_LINE", "HORIZONTAL", "VERTICAL", "PARALLEL", "PERPENDICULAR", "TANGENT", "EQUAL", "DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "FIX", "MIDPOINT", "SYMMETRIC", "SYMMETRIC_LINE") },
-        j.optBoolean("sketch_editing"), strings(j.optJSONArray("offset_entities")), j.optBoolean("feature_mirror"))
+        j.optBoolean("sketch_editing"), strings(j.optJSONArray("offset_entities")), j.optBoolean("feature_mirror"),
+        j.optBoolean("edge_plane"), j.optBoolean("plane_purge"), j.optBoolean("section_view"))
     fun state(j: JSONObject?): CadState {
         if (j == null || j.optInt("version") != 1) return CadState()
         val document = j.optJSONObject("document")
@@ -40,7 +41,7 @@ object CadParser {
             surface = CadSurface(surface?.optString("mode", "PROFILE") ?: "PROFILE",
                 objects(surface?.optJSONArray("selection")).map { CadSurfaceItem(it.optString("id"),it.optString("kind"),it.optString("object"),it.id("feature_id"),it.optBoolean("planar")) },
                 objects(surface?.optJSONArray("measurements")).mapNotNull { m -> m.optDouble("value").takeIf { it.isFinite() }?.let { CadMeasurement(m.optString("label"),it,m.optString("unit")) } },
-                surface?.optBoolean("can_sketch") == true),
+                surface?.optBoolean("can_sketch") == true, surface?.optBoolean("can_edge_plane") == true),
             workspace = j.optBoolean("workspace"), isolated = j.optBoolean("isolated"),
             revision = document?.optLong("revision", 0) ?: 0, documentId = document?.id("id"),
             sketches = objects(document?.optJSONArray("sketches")).map { sketch ->
@@ -111,7 +112,7 @@ object CadParser {
                     }?.let { type to CadDimensionOption(it,option.id("constraint_id")) }
                 }
             }.toMap(),
-            construction = j.optBoolean("construction"), showScene = j.optBoolean("show_scene"), activeBodyId = j.id("active_body_id"),
+            construction = j.optBoolean("construction"), showScene = j.optBoolean("show_scene"), section = j.optBoolean("section"), activeBodyId = j.id("active_body_id"),
             rollbackId = j.id("rollback_id"),
             bodies = objects(document?.optJSONArray("bodies")).map { CadBody(it.optString("id"),it.optString("name")) },
             planes = objects(document?.optJSONArray("planes")).map { p -> CadPlane(p.optString("id"),p.optString("name"),

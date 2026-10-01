@@ -896,6 +896,7 @@ def query_cad_surface(payload, kind):
                     position=a.lerp(b,world_t)
                 distance=(((u-screen[0])*aspect)**2+(v-screen[1])**2)**.5
                 if distance>.028: continue
+                if camera.section_hides(position): continue
                 if design_tree is not None:
                     origin,direction=camera.ray(*screen,rv3d)
                     depth=(position-origin).dot(direction)
@@ -952,6 +953,8 @@ def _cad_reference_geometry(graph, kind, source):
         vertices={i for edge in chosen for i in edge}
         data['segments']=[[list(points[i]) for i in edge] for edge in sorted(chosen)]
         data['points']=[list(points[i]) for i in sorted(vertices)]
+        # Faces that meet at the edge: a plane placed on it starts flush with one.
+        data['face_normals']=[list(normals[f]) for f in adjacency.get(tuple(sorted(min(chosen))),[])]
         data['id']='EDGE:'+str(min(chosen))
     else:
         data['points']=[list(points[source[0]])]; data['id']='VERTEX:'+str(source[0])

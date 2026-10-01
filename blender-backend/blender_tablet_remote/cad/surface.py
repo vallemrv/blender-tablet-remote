@@ -141,6 +141,30 @@ class SurfaceSelection:
         scale=bpy.context.scene.unit_settings.scale_length
         return dict(origin=list(Vector(face['center'])*scale),x=list(x),y=list(y),normal=list(normal))
 
+    def straight_edge(self):
+        """The single selected straight edge as (start, end, item), or None."""
+        if len(self.items)!=1 or self.items[0]['kind']!='EDGE': return None
+        item=self.items[0]; points=[Vector(p) for p in item['points']]
+        if len(points)<2: return None
+        a=max(points,key=lambda p:(p-points[0]).length); b=max(points,key=lambda p:(p-a).length)
+        axis=b-a
+        if axis.length<=1e-12: return None
+        direction=axis.normalized()
+        if any((p-a).cross(direction).length>axis.length*1e-6+1e-12 for p in points): return None
+        return a,b,item
+
+    def edge_frame(self):
+        """Plane through a straight edge: X along it, flush with one adjacent face."""
+        self.validate()
+        found=self.straight_edge()
+        if found is None: raise BadPayload('Selecciona una única arista recta del sólido')
+        a,b,item=found; x=(b-a).normalized()
+        candidates=[Vector(n) for n in item.get('face_normals',[])]+[Vector((0,0,1)),Vector((0,1,0))]
+        normal=next(n-x*n.dot(x) for n in candidates if (n-x*n.dot(x)).length>1e-3).normalized()
+        y=normal.cross(x).normalized()
+        scale=bpy.context.scene.unit_settings.scale_length
+        return dict(origin=list((a+b)*.5*scale),x=list(x),y=list(y),normal=list(normal))
+
     def status(self):
         self.validate()
         scale=bpy.context.scene.unit_settings.scale_length
@@ -151,4 +175,5 @@ class SurfaceSelection:
             self._measure_items=tuple(self.items)
         return dict(mode=self.mode,selection=[{k:item[k] for k in ('id','kind','object','feature_id','planar')} for item in self.items],
                     measurements=self._measurements,
-                    can_sketch=len(self.items)==1 and self.items[0]['kind']=='FACE' and self.items[0]['planar'])
+                    can_sketch=len(self.items)==1 and self.items[0]['kind']=='FACE' and self.items[0]['planar'],
+                    can_edge_plane=self.straight_edge() is not None)

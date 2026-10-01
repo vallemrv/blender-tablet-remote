@@ -1237,6 +1237,9 @@ def settings(payload):
         if not isinstance(payload['show_scene'],bool): raise BadPayload('show_scene debe ser booleano')
         runtime.show_scene=payload['show_scene']
         if runtime.show_scene: runtime.restore_visibility()
+    if 'section' in payload:
+        if not isinstance(payload['section'],bool): raise BadPayload('section debe ser booleano')
+        runtime.section=payload['section']
     if 'construction' in payload:
         if not isinstance(payload['construction'],bool): raise BadPayload('construction debe ser booleano')
         runtime.construction=payload['construction']
@@ -1579,6 +1582,17 @@ def plane_set(payload):
     return runtime.status()
 
 
+@command('cad.plane.purge')
+def plane_purge(payload):
+    """Remove every plane no sketch uses, in one undo."""
+    def change(doc):
+        used={s.get('plane_id') for s in doc['sketches']}
+        unused=[p for p in doc['planes'] if p['id'] not in used]
+        if not unused: raise CommandError('No hay planos sin usar',code='nothing_to_purge')
+        doc['planes']=[p for p in doc['planes'] if p['id'] in used]
+    return (yield from runtime.transaction_steps(payload,change,'CAD limpiar planos sin usar',geometry=False))
+
+
 @command('cad.surface.mode')
 def surface_mode(payload):
     runtime.require_workspace()
@@ -1669,6 +1683,14 @@ def _session_plane(doc, session):
     elif p['base']=='FACE':
         plane,body=_face_plane(doc,session['face'][0],session['face'][1])
         base_translation=list(plane['translation']); base_rz=plane['rotation'][2]
+    elif p['base']=='EDGE':
+        # Captured edge frame: X runs along the edge, so tilting X turns the plane around it.
+        frame,source=session['edge']
+        feature=next((f for f in doc['features'] if f['id']==source['feature_id']),None)
+        plane=dict(id=model.uid('plane'),name='Arista de '+source['object'],base='XY',implicit=True,
+                   translation=[0,0,0],rotation=[0,0,0],face_frame=frame)
+        body=feature.get('body_id') if feature else None
+        base_translation=[0.,0.,0.]; base_rz=0.
     else:
         plane=dict(id=model.uid('plane'),name='Plano '+str(len(doc['planes'])+1),base=p['base'],
                    translation=[0,0,0],rotation=[0,0,0]); body=None
@@ -1728,12 +1750,16 @@ def plane_begin(payload):
         params=dict(base=saved.get('base','XY'),plane_id=plane_id,offset=offset,tilt=[saved['rotation'][0],saved['rotation'][1]],
                     shift=[t[0]-offset*R[0,2],t[1]-offset*R[1,2]])
     else:
-        if base not in model.PLANES+('FACE',): raise BadPayload('Base de plano: XY, XZ, YZ o FACE')
+        if base not in model.PLANES+('FACE','EDGE'): raise BadPayload('Base de plano: XY, XZ, YZ, FACE o EDGE')
         if base=='FACE':
             face=(runtime.surface.face_frame(),copy.deepcopy(runtime.surface.items[0]))
         params=dict(base=base,offset=0.,tilt=[0.,0.],shift=[0.,0.])
+    edge=None
+    runtime.surface.validate()
+    if base=='EDGE' or (not plane_id and runtime.surface.straight_edge() is not None):
+        edge=(runtime.surface.edge_frame(),copy.deepcopy(runtime.surface.items[0]))
     session=runtime.begin(payload,'PLANE')
-    session.update(plane=params,face=face)
+    session.update(plane=params,face=face,edge=edge)
     _plane_preview(session)
     return runtime.status()
 
@@ -1746,9 +1772,11 @@ def plane_update(payload):
     if 'base' in payload:
         base=str(payload['base']).upper()
         if p.get('plane_id'): raise BadPayload('Un plano guardado conserva su base')
-        if base not in model.PLANES+('FACE',): raise BadPayload('Base de plano: XY, XZ, YZ o FACE')
+        if base not in model.PLANES+('FACE','EDGE'): raise BadPayload('Base de plano: XY, XZ, YZ, FACE o EDGE')
         if base=='FACE' and session.get('face') is None:
             raise BadPayload('Selecciona antes una cara plana del sólido')
+        if base=='EDGE' and session.get('edge') is None:
+            raise BadPayload('Selecciona antes una arista recta del sólido')
         p['base']=base
     if 'offset' in payload: p['offset']=model.number(payload['offset'])
     if 'tilt' in payload:
