@@ -381,13 +381,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     private var cadGestureMode: String? = null
     private var cadDepthStart = .02
+    private var cadShiftStart = listOf(0.0, 0.0)
     private var cadPointerStartU = 0f
     private var cadPointerStartV = 0f
     private fun cancelCadStroke() {
         if (cadStroke) {
             cadStroke = false
             if (cadGestureMode == "DEPTH") client.cadCommand("cad.extrude.update", mapOf("depth" to cadDepthStart))
-            else if (cadGestureMode == "PLANE") client.cadCommand("cad.plane.update", mapOf("offset" to cadDepthStart))
+            else if (cadGestureMode == "PLANE") client.cadCommand("cad.plane.update", mapOf("offset" to cadDepthStart, "shift" to cadShiftStart, "release" to true))
             else if (cadGestureMode == "FINISH") client.cadCommand("cad.finish.update", mapOf("width" to cadDepthStart))
             else if (cadGestureMode != "FACE") client.cadCommand("cad.session.cancel")
             cadGestureMode = null
@@ -409,8 +410,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     return
                 }
                 if (cad.sessionActive && cad.operation == "PLANE") {
-                    // El lápiz desplaza el plano por su normal, 1:1 bajo la punta.
+                    // El lápiz agarra la flecha que toca (o la normal) y la sigue 1:1 bajo la punta.
                     cadStroke = true; cadGestureMode = "PLANE"; cadDepthStart = cad.plane?.offset ?: 0.0
+                    cadShiftStart = cad.plane?.shift ?: listOf(0.0, 0.0)
+                    client.cadCommand("cad.plane.update", mapOf("grab_u" to u, "grab_v" to v))
                     return
                 }
                 if (cad.sessionActive && cad.operation in listOf("FILLET", "CHAMFER")) {
@@ -454,6 +457,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 cadStroke = false
                 when (cadGestureMode) {
                     "DEPTH" -> client.cadCommand("cad.extrude.update", mapOf("settle" to true))
+                    "PLANE" -> client.cadCommand("cad.plane.update", mapOf("release" to true))
                     "FACE" -> {
                         // La cara se sondea donde bajó el dedo, no donde se levantó.
                         local.update { it.copy(cadFacePick = null) }

@@ -89,17 +89,15 @@ def draw_cad_cut(rv3d, width, height):
         gpu.state.blend_set(saved[0]); gpu.state.depth_test_set(saved[1]); gpu.state.depth_mask_set(saved[2]); gpu.state.viewport_set(*saved[3])
 
 
-def draw_cad_plane(rv3d, width, height):
-    """Preview of the plane being placed: translucent sheet, border, axes and normal.
+def plane_gizmo(session):
+    """Sheet and drag handles of the plane being placed, in Blender units.
 
-    The sheet covers the visible CAD result so its position against the part is
-    readable; it is faint behind the solid and stronger in front of it.
+    `X`/`Y` follow the real in-plane shift directions (they stay true under tilt)
+    and `N` the normal along which Separación moves. Shared by the capture and
+    by the pen hit-test, so what is drawn is exactly what can be grabbed.
     """
     from ..cad.runtime import runtime
     import bpy
-    session=runtime.session
-    if not (runtime.workspace and session and session['operation']=='PLANE' and session.get('plane_frame')):
-        return
     frame=session['plane_frame']
     scale=max(float(bpy.context.scene.unit_settings.scale_length),1e-12)
     origin=Vector(frame['origin'])/scale; x=Vector(frame['x']); y=Vector(frame['y']); n=Vector(frame['normal'])
@@ -112,13 +110,34 @@ def draw_cad_plane(rv3d, width, height):
         half=.05/scale; center=origin
     half=max(half*1.2,.01/scale)
     quad=[center+x*a*half+y*b*half for a,b in ((-1,-1),(1,-1),(1,1),(-1,1))]
+    shift=session.get('shift_axes') or (list(frame['x']),list(frame['y']))
+    length=half*.45
+    handles={'X':(Vector(shift[0]).normalized(),length,y),'Y':(Vector(shift[1]).normalized(),length,x),'N':(n,length*.8,x)}
+    return dict(origin=origin,quad=quad,handles={k:(origin,origin+d*l,d,side) for k,(d,l,side) in handles.items()})
+
+
+def draw_cad_plane(rv3d, width, height):
+    """Preview of the plane being placed: translucent sheet, border and drag handles.
+
+    The sheet covers the visible CAD result so its position against the part is
+    readable; it is faint behind the solid and stronger in front of it. Each
+    handle is an arrow; the one being dragged turns yellow and thicker.
+    """
+    from ..cad.runtime import runtime
+    session=runtime.session
+    if not (runtime.workspace and session and session['operation']=='PLANE' and session.get('plane_frame')):
+        return
+    gizmo=plane_gizmo(session); quad=gizmo['quad']
     fill=gpu.shader.from_builtin('UNIFORM_COLOR'); line=gpu.shader.from_builtin('POLYLINE_UNIFORM_COLOR')
     sheet=batch_for_shader(fill,'TRIS',{'pos':[quad[0],quad[1],quad[2],quad[0],quad[2],quad[3]]})
     border=batch_for_shader(line,'LINES',{'pos':[p for i in range(4) for p in (quad[i],quad[(i+1)%4])]})
-    axis=half*.45
-    axes=[(batch_for_shader(line,'LINES',{'pos':[origin,origin+x*axis]}),(1.,.33,.33,1.)),
-          (batch_for_shader(line,'LINES',{'pos':[origin,origin+y*axis]}),(.55,.86,.24,1.)),
-          (batch_for_shader(line,'LINES',{'pos':[origin,origin+n*axis*.8]}),(.3,.55,1.,1.))]
+    grabbed=(session.get('grab') or {}).get('handle')
+    colors={'X':(1.,.33,.33,1.),'Y':(.55,.86,.24,1.),'N':(.3,.55,1.,1.)}
+    axes=[]
+    for key,(start,tip,direction,side) in gizmo['handles'].items():
+        head=(tip-start).length*.22
+        points=[start,tip,tip,tip-direction*head+side*head*.5,tip,tip-direction*head-side*head*.5]
+        axes.append((batch_for_shader(line,'LINES',{'pos':points}),(1.,.85,.2,1.) if key==grabbed else colors[key],5. if key==grabbed else 3.))
     saved=(gpu.state.blend_get(),gpu.state.depth_test_get(),gpu.state.depth_mask_get(),gpu.state.viewport_get())
     try:
         gpu.state.viewport_set(0,0,width,height)
@@ -131,8 +150,7 @@ def draw_cad_plane(rv3d, width, height):
             gpu.state.depth_test_set('NONE')
             line.bind(); line.uniform_float('viewportSize',(width,height))
             line.uniform_float('lineWidth',2.); line.uniform_float('color',(.55,.78,1.,.95)); border.draw(line)
-            line.uniform_float('lineWidth',3.)
-            for batch,color in axes:
-                line.uniform_float('color',color); batch.draw(line)
+            for batch,color,width_px in axes:
+                line.uniform_float('lineWidth',width_px); line.uniform_float('color',color); batch.draw(line)
     finally:
         gpu.state.blend_set(saved[0]); gpu.state.depth_test_set(saved[1]); gpu.state.depth_mask_set(saved[2]); gpu.state.viewport_set(*saved[3])

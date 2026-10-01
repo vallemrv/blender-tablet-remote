@@ -372,6 +372,13 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
         cad.sessionId, cad.revision, state.cadTool, pendingDimension, editingConstraint?.id, offsetSource?.id, mirrorSource?.id)
     var resetInputs by remember(editScope) { mutableIntStateOf(0) }
     val drafts = remember(editScope, resetInputs) { mutableStateMapOf<String, Double?>() }
+    // Colocar plano: la bandeja enseña solo Separación; Inclinar/Mover se abren hacia arriba.
+    var planeMore by remember(cad.sessionId) { mutableStateOf(false) }
+    fun sendPlane(offset: Double? = null, tilt: List<Double>? = null, shift: List<Double>? = null) {
+        val plane = cad.plane ?: return
+        drafts.keys.filter { it.startsWith("plane_") }.forEach { drafts.remove(it) }
+        command("cad.plane.update", "offset" to (offset ?: plane.offset), "tilt" to (tilt ?: plane.tilt), "shift" to (shift ?: plane.shift))
+    }
     val validDrafts = drafts.values.all { it != null }
     val entity = cad.selectedEntity?.takeUnless { (cad.sessionActive && !livePreview) || pendingDimension != null || editingConstraint != null || offsetSource != null || cad.surface.mode != "PROFILE" }
     val feature = cad.selectedFeature?.takeUnless { cad.sessionActive || editing || mirrorSource != null || cad.surface.mode != "PROFILE" }
@@ -459,7 +466,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 !connected -> "Reconectando · recuperando el documento de Blender"
                 planePreview -> cad.plane?.let { plane ->
                     (if (plane.planeId != null) "Colocar plano guardado" else "Plano ${if (plane.base == "FACE") "en la cara" else cadPlaneLabel(plane.base)}") +
-                        " · arrastra con el lápiz para separarlo · positivo: ${plane.positiveLabel.lowercase()} · ✓ " +
+                        " · arrastra las flechas: roja/verde lo deslizan, azul (o fuera de ellas) lo separa · positivo: ${plane.positiveLabel.lowercase()} · ✓ " +
                         (if (plane.planeId != null) "aplica la posición" else "crea el croquis")
                 } ?: "Colocando plano"
                 offsetSource != null -> "Desfase vinculado: elige dentro o fuera y escribe el grosor · ✓ crea el contorno"
@@ -503,6 +510,26 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 selectedSketch != null -> "${selectedSketch.name} · perfil seleccionado · Seleccionar todo elige el croquis completo para extruir"
                 else -> "Abre la pila (derecha) para editar un boceto · o crea uno en Planos, arriba, y selecciona un perfil para extruir"
             }, color = Ink.Muted, fontSize = 12.sp)
+            if (planePreview && planeMore) cad.plane?.let { plane ->
+                // Fila que se abre hacia arriba: inclinar y desplazar el plano por números.
+                val axes = cadPlaneAxes(plane.base.takeIf { it != "FACE" && plane.planeId == null })
+                val id = cad.sessionId.orEmpty()
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    if (plane.base == "EDGE") Text("Inclinar sobre la arista gira el plano alrededor de ella", color = Ink.Accent, fontSize = 11.sp)
+                    (0..1).forEach { i ->
+                        CadDimension("Inclinar ${axes.rotation[i]}", plane.tilt[i], unit, id + "tilt$i", degrees = true, step = 5.0,
+                            minimum = -180.0, maximum = 180.0, enabled = connected,
+                            onNudge = { sendPlane(tilt = plane.tilt.toMutableList().also { list -> list[i] = it }) },
+                            onDone = { drafts["plane_tilt$i"]?.let { sendPlane(tilt = plane.tilt.toMutableList().also { list -> list[i] = it }) } }) { drafts["plane_tilt$i"] = it }
+                    }
+                    (0..1).forEach { i ->
+                        CadDimension("Mover ${axes.inPlane[i]}", plane.shift[i], unit, id + "shift$i", step = cad.step, enabled = connected,
+                            onNudge = { sendPlane(shift = plane.shift.toMutableList().also { list -> list[i] = it }) },
+                            onDone = { drafts["plane_shift$i"]?.let { sendPlane(shift = plane.shift.toMutableList().also { list -> list[i] = it }) } }) { drafts["plane_shift$i"] = it }
+                    }
+                }
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 key(editScope, resetInputs) {
                     Row(Modifier.weight(1f).horizontalScroll(parameterScroll), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -625,26 +652,10 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             RoundAction(AppIcons.cad("CANCEL"), "Descartar polígono", Ink.Bad, { vm.cadCommand("cad.session.cancel") })
                         }
                         if (planePreview) cad.plane?.let { plane ->
-                            val axes = cadPlaneAxes(plane.base.takeIf { it != "FACE" && plane.planeId == null })
                             val id = cad.sessionId.orEmpty()
-                            fun send(offset: Double = plane.offset, tilt: List<Double> = plane.tilt, shift: List<Double> = plane.shift) {
-                                drafts.keys.filter { it.startsWith("plane_") }.forEach { drafts.remove(it) }
-                                command("cad.plane.update", "offset" to offset, "tilt" to tilt, "shift" to shift)
-                            }
-                            if (plane.base == "EDGE") Text("Inclinar sobre la arista gira el plano alrededor de ella", color = Ink.Accent, fontSize = 11.sp)
                             CadDimension("Separación", plane.offset, unit, id + "offset", step = cad.step, enabled = connected,
-                                onNudge = { send(offset = it) }, onDone = { drafts["plane_offset"]?.let { send(offset = it) } }) { drafts["plane_offset"] = it }
-                            (0..1).forEach { i ->
-                                CadDimension("Inclinar ${axes.rotation[i]}", plane.tilt[i], unit, id + "tilt$i", degrees = true, step = 5.0,
-                                    minimum = -180.0, maximum = 180.0, enabled = connected,
-                                    onNudge = { send(tilt = plane.tilt.toMutableList().also { list -> list[i] = it }) },
-                                    onDone = { drafts["plane_tilt$i"]?.let { send(tilt = plane.tilt.toMutableList().also { list -> list[i] = it }) } }) { drafts["plane_tilt$i"] = it }
-                            }
-                            (0..1).forEach { i ->
-                                CadDimension("Mover ${axes.inPlane[i]}", plane.shift[i], unit, id + "shift$i", step = cad.step, enabled = connected,
-                                    onNudge = { send(shift = plane.shift.toMutableList().also { list -> list[i] = it }) },
-                                    onDone = { drafts["plane_shift$i"]?.let { send(shift = plane.shift.toMutableList().also { list -> list[i] = it }) } }) { drafts["plane_shift$i"] = it }
-                            }
+                                onNudge = { sendPlane(offset = it) }, onDone = { drafts["plane_offset"]?.let { sendPlane(offset = it) } }) { drafts["plane_offset"] = it }
+                            PillButton(if (planeMore) "Menos opciones ▾" else "Más opciones ▴", selected = planeMore, enabled = connected) { planeMore = !planeMore }
                             if (cad.planes.isNotEmpty() && plane.planeId == null) {
                                 var savedOpen by remember { mutableStateOf(false) }
                                 Box {

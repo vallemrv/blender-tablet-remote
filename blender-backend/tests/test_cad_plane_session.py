@@ -63,6 +63,25 @@ class PlaneSessionTests(CadTests):
         self.assertAlmostEqual(runtime.session['plane_frame']['origin'][2],.012,places=9)
         cad.cancel(OWNER)
 
+    def test_grabbed_arrow_slides_the_plane_along_its_real_shift_direction(self):
+        cad.plane_begin(dict(base='XY',**OWNER)); cad.plane_update(dict(tilt=[0.,30.],**OWNER))
+        # Tilted about Y the plane's own X leans, but Mover X still slides along world X.
+        self.assertAlmostEqual(Vector(runtime.session['shift_axes'][0]).dot(Vector((1,0,0))),1.,places=6)
+        ray=lambda u,v,rv3d:(Vector((u,-10.,.5-v)),Vector((0.,1.,0.)))
+        view=(None,None,SimpleNamespace(width=100,height=100),object())
+        runtime.increment=True; runtime.step=.001
+        with patch('blender_tablet_remote.bpy_utils.find_view3d',return_value=view), \
+             patch.object(camera,'sync_from_region'),patch.object(camera,'ray',side_effect=ray), \
+             patch.object(cad,'_grab_handle',return_value='X'):
+            cad.plane_update(dict(grab_u=.5,grab_v=.5,**OWNER))
+            cad.plane_update(dict(gesture_u=.0404,gesture_v=0.,u=.5404,v=.5,**OWNER))
+        self.assertEqual(runtime.session['grab']['handle'],'X')
+        self.assertAlmostEqual(runtime.session['plane']['shift'][0],.04,places=9)
+        self.assertAlmostEqual(runtime.session['plane']['offset'],0.,places=9)
+        cad.plane_update(dict(release=True,**OWNER))
+        self.assertNotIn('grab',runtime.session)
+        cad.cancel(OWNER)
+
     def test_saved_plane_is_repositioned_with_the_same_controls(self):
         cad.plane_begin(dict(base='XY',**OWNER)); cad.plane_update(dict(offset=.01,tilt=[30.,10.],shift=[.02,-.01],**OWNER))
         cad.confirm(OWNER); cad.sketch_finish(OWNER)

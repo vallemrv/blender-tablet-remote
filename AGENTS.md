@@ -809,6 +809,10 @@ no quedan archivos o referencias temporales.
   la arrastra 1:1 (rayo contra la recta normal), con Incremento por pasos enteros.
   GPUOffScreen dibuja la preview (lámina translúcida del tamaño del resultado, borde,
   ejes y normal); el documento no cambia hasta ✓, que crea plano y croquis en un undo.
+  Las flechas son tiradores: el lápiz agarra al bajar la roja/verde (Mover por su
+  dirección real, también inclinado) o la azul/fuera de ellas (Separación); la activa
+  se dibuja amarilla. La bandeja muestra solo Separación; «Más opciones ▴» abre encima
+  Inclinar y Mover por números.
   Los planos guardados se reutilizan o se recolocan con esa misma sesión (`plane_id`).
   Boceto en cara usa `_face_plane`, compartido con la base Cara de la sesión.
   La base Arista usa la única arista recta seleccionada del sólido: X sigue la

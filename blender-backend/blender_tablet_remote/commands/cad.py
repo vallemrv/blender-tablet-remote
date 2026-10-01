@@ -1798,7 +1798,44 @@ def _plane_preview(session):
         if bar: model.insert_after(doc,sketch,bar)
         model.resolve_supports(doc)
         frame=model.find(doc,'planes',plane['id'])['frame']; sketch_id=sketch['id']
-    session.update(preview=doc,candidate=plane['id'],plane_frame=frame,sketch_id=sketch_id)
+    session.update(preview=doc,candidate=plane['id'],plane_frame=frame,sketch_id=sketch_id,shift_axes=_shift_axes(session,frame))
+
+
+def _shift_axes(session, frame):
+    """World direction each Mover value takes the plane, also under tilt or a face base."""
+    import numpy as np
+    axes=[]
+    for i in (0,1):
+        p=dict(session['plane'],shift=list(session['plane']['shift'])); p['shift'][i]+=1e-3
+        doc=copy.deepcopy(session['baseline']); plane,_=_session_plane(doc,dict(session,plane=p))
+        doc['planes']=[q for q in doc['planes'] if q['id']!=plane['id']]+[plane]
+        model.resolve_supports(doc)
+        moved=np.array(model.find(doc,'planes',plane['id'])['frame']['origin'])-np.array(frame['origin'])
+        length=float(np.linalg.norm(moved))
+        axes.append((moved/length).tolist() if length>1e-12 else list(frame['x' if i==0 else 'y']))
+    return axes
+
+
+def _grab_handle(session, u, v):
+    """Drawn arrow under the pen (X/Y slide, N separates); elsewhere the pen separates."""
+    from ..bpy_utils import find_view3d
+    from ..camera import camera
+    from ..streaming.cad_selection import plane_gizmo
+    found=find_view3d()
+    if found is None: return 'N'
+    rv3d=found[3]; camera.sync_from_region(rv3d)
+    aspect=found[2].width/max(found[2].height,1)
+    best=('N',.05)
+    for key,(start,tip,_,_) in plane_gizmo(session)['handles'].items():
+        a,b=camera.project(start,rv3d),camera.project(tip,rv3d)
+        if a is None or b is None: continue
+        dx,dy=(b[0]-a[0])*aspect,b[1]-a[1]
+        t=max(0.,min(1.,((u-a[0])*aspect*dx+(v-a[1])*dy)/max(dx*dx+dy*dy,1e-20)))
+        # The outer half of each arrow is its handle; the shared origin stays neutral.
+        if t<.35: continue
+        distance=math.hypot((u-a[0])*aspect-t*dx,(v-a[1])-t*dy)
+        if distance<best[1]: best=(key,distance)
+    return best[0]
 
 
 def _plane_public(session):
@@ -1862,18 +1899,30 @@ def plane_update(payload):
         values=payload['shift']
         if not isinstance(values,list) or len(values)!=2: raise BadPayload('Desplazamiento: dos distancias en metros')
         p['shift']=[model.number(v) for v in values]
+    if 'grab_u' in payload and 'grab_v' in payload:
+        # Pen down: pick the arrow once and keep it, with its start, for the whole stroke.
+        handle=_grab_handle(session,model.number(payload['grab_u']),model.number(payload['grab_v']))
+        session['grab']=dict(handle=handle,offset=p['offset'],shift=list(p['shift']),
+                             frame=copy.deepcopy(session['plane_frame']),axes=copy.deepcopy(session['shift_axes']))
+    if payload.get('release'):
+        session.pop('grab',None)
     if 'gesture_u' in payload or 'gesture_v' in payload:
-        # The pen drags the plane along its own normal, 1:1 under the tip.
-        frame=session['plane_frame']
+        # The pen drags the plane along the grabbed arrow, 1:1 under the tip.
+        grab=session.get('grab') or dict(handle='N',offset=model.number(payload.get('baseline_offset',p['offset'])),
+                                         shift=list(p['shift']),frame=session['plane_frame'],axes=session['shift_axes'])
+        frame=grab['frame']
         gu,gv=model.number(payload.get('gesture_u',0)),model.number(payload.get('gesture_v',0))
         u,v=model.number(payload.get('u',.5)),model.number(payload.get('v',.5))
-        travel=_travel_along(frame['origin'],frame['normal'],(u-gu,v-gv),(u,v))
+        index=None if grab['handle']=='N' else 'XY'.index(grab['handle'])
+        direction=frame['normal'] if index is None else grab['axes'][index]
+        travel=_travel_along(frame['origin'],direction,(u-gu,v-gv),(u,v))
         if travel is None:
-            # Normal towards the camera: move by the on-screen scale, one step per 4 % of height.
+            # Arrow towards the camera: move by the on-screen scale, one step per 4 % of height.
             travel=-gv/.04*runtime.step
-        value=model.number(payload.get('baseline_offset',p['offset']))+travel
+        value=(grab['offset'] if index is None else grab['shift'][index])+travel
         if runtime.increment: value=round(value/runtime.step)*runtime.step
-        p['offset']=value
+        if index is None: p['offset']=value
+        else: p['shift'][index]=value
     previous=session['plane']; session['plane']=p
     try: _plane_preview(session)
     except (BadPayload,CommandError):
