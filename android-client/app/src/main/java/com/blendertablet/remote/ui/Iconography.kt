@@ -7,6 +7,7 @@ import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Landscape
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Brush
@@ -233,6 +234,7 @@ object AppIcons {
         "DELETE" -> Icons.Default.Delete
         "CONVERT" -> Icons.Default.ViewInAr
         "VISIBLE" -> Icons.Default.Visibility
+        "SCENE" -> Icons.Default.Landscape
         else -> planeVectors[intent] ?: cadVectors[intent] ?: Fallback
     }
 

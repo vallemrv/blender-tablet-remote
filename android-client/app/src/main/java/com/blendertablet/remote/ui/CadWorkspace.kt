@@ -627,7 +627,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                     onNudge = { send(shift = plane.shift.toMutableList().also { list -> list[i] = it }) },
                                     onDone = { drafts["plane_shift$i"]?.let { send(shift = plane.shift.toMutableList().also { list -> list[i] = it }) } }) { drafts["plane_shift$i"] = it }
                             }
-                            PillButton("Ver escena", selected = cad.showScene, enabled = connected) { command("cad.settings", "show_scene" to !cad.showScene) }
                             if (cad.planes.isNotEmpty() && plane.planeId == null) {
                                 var savedOpen by remember { mutableStateOf(false) }
                                 Box {
@@ -811,6 +810,9 @@ fun CadTopActions(state: AppUiState, vm: MainViewModel) {
     val connected = state.connection == ConnectionStatus.CONNECTED
     val editing = cad.activeSketchId != null
     fun command(name: String, vararg values: Pair<String, Any?>) { if (connected) vm.cadCommand(name, mapOf(*values)) }
+    // Ver escena vale para todo CAD (3D, boceto y planos): muestra lo que el aislamiento oculta.
+    IconAction(AppIcons.cad("SCENE"), if (cad.showScene) "Ocultar el resto de la escena" else "Ver escena: mostrar también los objetos que no son CAD",
+        selected = cad.showScene, enabled = connected) { command("cad.settings", "show_scene" to !cad.showScene) }
     if (!editing) IconAction(Icons.Default.Layers, "Nuevo plano y croquis", enabled = connected && !cad.sessionActive) {
         command("cad.plane.begin", "base" to if (cad.surface.canSketch) "FACE" else if (cad.surface.canEdgePlane) "EDGE" else "XY")
     }
@@ -1085,7 +1087,6 @@ internal fun cadPlaneAxes(base: String?): CadPlaneAxes = when (base) {
 
 @Composable
 private fun CadSurfaceControls(cad: CadState, unit: LengthUnit, enabled: Boolean, vm: MainViewModel) {
-    if (cad.surface.mode != "PROFILE") PillButton("Ver escena", selected = cad.showScene, enabled = enabled) { vm.cadCommand("cad.settings", mapOf("show_scene" to !cad.showScene)) }
     val edges = cad.surface.selection.isNotEmpty() && cad.surface.selection.all { it.kind == "EDGE" }
     if (cad.activeSketchId != null && cad.surface.selection.isNotEmpty()) {
         Text("${cad.surface.selection.size} referencias seleccionadas", color = Ink.Accent, fontSize = 11.sp)

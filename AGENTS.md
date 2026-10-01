@@ -784,6 +784,8 @@ no quedan archivos o referencias temporales.
   Dentro del boceto, Proyectar es el único acceso a esa selección del sólido y su
   bandeja también muestra las medidas; no hay un icono Medir duplicado.
   Planos guardados nombra cada plano junto a los bocetos que lo usan (o «sin usar»).
+  Ver escena (`show_scene`) es un icono fijo de la fila del ojo en todo CAD (3D,
+  boceto y colocación de planos), no un botón de bandeja.
 - Finalizar boceto restaura una vista 3D orbital, con encuadre del resultado, sin
   escribir `rv3d`. Extruir/Vaciar muestran su preview en 3D. Si el croquis nuevo tiene
   varios perfiles se selecciona completo (`SKETCH`), no su última figura; un perfil
