@@ -37,6 +37,19 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   undo. Otra herramienta o repetir su botón desactiva Tweak; sus eventos pendientes
   nunca modifican una transformación posterior. En caras usa movimiento libre.
 - H.264 se decodifica sobre una `Surface`; MJPEG se decodifica a Bitmap.
+- Cada conexión H.264 crea un decoder nuevo y empieza en SPS/PPS + IDR, incluso
+  con la misma resolución. Las generaciones invalidan paquetes, callbacks y
+  reintentos anteriores. La cola Android se limita antes del Handler (seis AUs,
+  150 ms); una pérdida descarta el GOP y vacía el codec hasta otro IDR. Se decodifican
+  las referencias y se presenta solo la salida más reciente, sin esperar otro paquete.
+  Al volver de segundo plano se recrea la Surface si hubo fallback; recibir dimensiones
+  no significa haber decodificado. Pausar/cerrar cancela también el HTTP de MJPEG.
+  El servidor conserva las ráfagas H.264 pero abandona colas de más de 250 ms hasta
+  un IDR fresco; una escritura bloqueada un segundo retira al cliente suspendido.
+- Leer el estado CAD reutiliza el JSON ya validado y su documento público mientras
+  sean idénticos. Cada lector recibe copias independientes; el contenido completo,
+  no solo la revisión, invalida previews. Cambio de escena/undo/carga invalida por
+  identidad y JSON. La caché nunca guarda RNA ni overlays dependientes de la cámara.
 - H.264 usa longitudes de paquetes FLV solo en la tubería privada de ffmpeg para
   publicar cada AU completo sin esperar al siguiente fotograma; Android sigue
   recibiendo Annex B con SPS/PPS en cada keyframe. Configuración/metadatos no
@@ -149,6 +162,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - APK y ZIP se compilan desde el mismo estado cuando cambia el contrato entre ambos.
 - Cada entrega Android incluye automáticamente el APK por Telegram, sin esperar
   otra petición del usuario. Es una preferencia permanente indicada por el usuario.
+- El add-on se instala en este Manjaro: el agente instala la versión entregada y
+  reinicia Blender, guardando antes y reabriendo la escena actual. Esta tarea ya
+  está autorizada; no se delega al usuario ni se pide confirmación de nuevo.
+  El usuario instala únicamente el APK en su tablet.
 
 ## Criterio de diseño escalable
 
@@ -764,8 +781,9 @@ no quedan archivos o referencias temporales.
   FIX y un undo. Las figuras con FIX completo son constantes y no cuentan en el límite
   de 300 parámetros del solver. Permite acotar desde esos elementos;
   es una copia fija, no promete asociación topológica con cualquier cara/arista.
-  Medir desde sólido se abre desde Planos y bocetos durante la edición; no ocupa
-  permanentemente la bandeja de cotas del croquis.
+  Dentro del boceto, Proyectar es el único acceso a esa selección del sólido y su
+  bandeja también muestra las medidas; no hay un icono Medir duplicado.
+  Planos guardados nombra cada plano junto a los bocetos que lo usan (o «sin usar»).
 - Finalizar boceto restaura una vista 3D orbital, con encuadre del resultado, sin
   escribir `rv3d`. Extruir/Vaciar muestran su preview en 3D. Si el croquis nuevo tiene
   varios perfiles se selecciona completo (`SKETCH`), no su última figura; un perfil

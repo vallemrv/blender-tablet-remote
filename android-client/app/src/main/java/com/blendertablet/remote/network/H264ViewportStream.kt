@@ -16,89 +16,71 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 
 internal class H264ViewportStream(private val scope: CoroutineScope, private val onFailure: (String) -> Unit) {
-    private val http = OkHttpClient.Builder().proxy(Proxy.NO_PROXY).readTimeout(0, TimeUnit.MILLISECONDS).build()
-    private val decoder = H264SurfaceDecoder { handleFailure(it) }
+    private val http = OkHttpClient.Builder().proxy(Proxy.NO_PROXY)
+        .connectTimeout(5, TimeUnit.SECONDS).readTimeout(5, TimeUnit.SECONDS).build()
+    private val decoder = H264SurfaceDecoder()
     private var job: Job? = null
+    private var retryJob: Job? = null
     private var call: Call? = null
-    @Volatile private var surface: Surface? = null
+    private var surface: Surface? = null
     private var desiredEndpoint: StreamEndpoint? = null
     private var dimensions: Pair<Int, Int>? = null
     private var surfaceSize: Pair<Int, Int>? = null
-    @Volatile private var foreground = true
-    @Volatile private var transportGeneration = 0
-    // Un resize de ventana o el sistema reclamando el codec de hardware invalidan
-    // el decoder/la Surface durante un instante: reintentar aquí evita caer a MJPEG
-    // por un tropiezo transitorio. Se resetea con cada frame sano y con cada Surface
-    // nueva, así que no protege un fallo real y persistente.
+    private var foreground = true
+    private var transportGeneration = 0L
+    private var decoderGeneration = -1L
     private var retryAttempts = 0
     private val _size = MutableStateFlow<Pair<Int, Int>?>(null)
     val size = _size.asStateFlow()
 
-    fun attachSurface(value: Surface) {
+    @Synchronized fun attachSurface(value: Surface) {
         surface = value
         surfaceSize = null
-        dimensions = null
         retryAttempts = 0
         if (foreground) desiredEndpoint?.let(::open)
     }
 
-    fun surfaceChanged(value: Surface, width: Int, height: Int) {
-        if (surface !== value || width <= 0 || height <= 0) return
-        val newSize = width to height
-        if (surfaceSize == newSize) return
-        surfaceSize = newSize
-        dimensions = null
+    @Synchronized fun surfaceChanged(value: Surface, width: Int, height: Int) {
+        if (surface !== value || width <= 0 || height <= 0 || surfaceSize == width to height) return
+        surfaceSize = width to height
         retryAttempts = 0
         if (foreground) desiredEndpoint?.let(::open)
     }
 
-    fun detachSurface(value: Surface) {
-        // SurfaceView puede entregar el destroy antiguo después de crear el nuevo.
+    @Synchronized fun detachSurface(value: Surface) {
         if (surface !== value) return
         surface = null
         surfaceSize = null
-        dimensions = null
         cancelTransport()
-        decoder.stop()
     }
 
-    fun pause() {
+    @Synchronized fun pause() {
         foreground = false
         cancelTransport()
-        decoder.stop()
-        dimensions = null
     }
 
-    fun resume() {
+    @Synchronized fun resume() {
         if (foreground) return
         foreground = true
-        dimensions = null
         retryAttempts = 0
         if (surface?.isValid == true) desiredEndpoint?.let(::open)
     }
 
-    fun start(endpoint: StreamEndpoint) {
+    @Synchronized fun start(endpoint: StreamEndpoint) {
         stopTransport()
         desiredEndpoint = endpoint
         retryAttempts = 0
         if (foreground && surface?.isValid == true) open(endpoint)
     }
 
-    /**
-     * Deja de decodificar pero conserva `desiredEndpoint`: la siguiente
-     * [attachSurface] (el próximo resize, o volver a primer plano) reintenta H.264
-     * en vez de quedarse en MJPEG hasta que se reinicie la app.
-     */
-    fun pauseForFallback() {
+    @Synchronized fun pauseForFallback() {
         cancelTransport()
-        decoder.stop()
-        dimensions = null
-        retryAttempts = 0
     }
 
     private fun open(endpoint: StreamEndpoint) {
+        // Every HTTP connection gets a fresh codec, even when its dimensions are unchanged.
         cancelTransport()
-        val openedGeneration = transportGeneration
+        val epoch = transportGeneration
         val url = buildString {
             append("http://").append(endpoint.host).append(':').append(endpoint.port).append(endpoint.path)
             if (endpoint.token.isNotBlank()) append("?token=").append(endpoint.token)
@@ -112,59 +94,85 @@ internal class H264ViewportStream(private val scope: CoroutineScope, private val
                     val source = response.body?.source() ?: throw IOException("Respuesta H.264 vacía")
                     while (true) {
                         val packet = H264Framing.read(source) ?: break
-                        if (openedGeneration != transportGeneration) break
-                        val target = surface?.takeIf { it.isValid } ?: continue
-                        val newDimensions = packet.width to packet.height
-                        if (dimensions != newDimensions) {
-                            dimensions = newDimensions
-                            _size.value = newDimensions
-                            decoder.start(target, H264DecoderConfig(packet.width, packet.height))
-                        }
-                        decoder.queue(H264AccessUnit(packet.payload, packet.captureTimeUs, packet.keyframe, packet.config))
-                        retryAttempts = 0
+                        if (!receive(epoch, packet)) return@launch
                     }
                 }
                 throw IOException("Stream H.264 finalizado")
-            } catch (t: Throwable) {
-                if (openedGeneration == transportGeneration && job?.isActive == true) {
-                    handleFailure(t.message ?: "Fallo H.264")
+            } catch (t: Exception) {
+                reportFailure(epoch, t.message ?: "Fallo H.264")
+            }
+        }
+    }
+
+    @Synchronized private fun receive(epoch: Long, packet: H264Packet): Boolean {
+        if (epoch != transportGeneration || !foreground) return false
+        val target = surface?.takeIf { it.isValid } ?: return false
+        val newDimensions = packet.width to packet.height
+        if (dimensions != newDimensions) {
+            // SPS/PPS travel with each IDR. Never configure from a dependent picture.
+            if (!packet.keyframe || !packet.config) return true
+            dimensions = newDimensions
+            _size.value = newDimensions
+            decoderGeneration = decoder.start(target, H264DecoderConfig(packet.width, packet.height),
+                onFrame = { scope.launch { frameRendered(epoch) } },
+                onFailure = { reportFailure(epoch, it) })
+        }
+        decoder.queue(decoderGeneration,
+            H264AccessUnit(packet.payload, packet.captureTimeUs, packet.keyframe, packet.config, packet.sequence))
+        return true
+    }
+
+    @Synchronized private fun frameRendered(epoch: Long) {
+        if (epoch == transportGeneration) retryAttempts = 0
+    }
+
+    private fun reportFailure(epoch: Long, message: String) {
+        // Codec callbacks and HTTP errors cannot race the UI lifecycle or recover an old connection.
+        scope.launch { handleFailure(epoch, message) }
+    }
+
+    @Synchronized private fun handleFailure(epoch: Long, message: String) {
+        if (epoch != transportGeneration) return
+        val endpoint = desiredEndpoint
+        cancelTransport()
+        if (endpoint == null || !foreground || surface?.isValid != true) return
+        if (retryAttempts >= MAX_RETRIES) {
+            onFailure(message)
+            return
+        }
+        retryAttempts++
+        val retryEpoch = transportGeneration
+        retryJob = scope.launch {
+            delay(RETRY_DELAY_MS)
+            synchronized(this@H264ViewportStream) {
+                if (retryEpoch == transportGeneration && desiredEndpoint == endpoint && foreground && surface?.isValid == true) {
+                    retryJob = null
+                    open(endpoint)
                 }
             }
         }
     }
 
-    private fun handleFailure(message: String) {
-        val endpoint = desiredEndpoint
-        if (endpoint != null && foreground && surface?.isValid == true && retryAttempts < MAX_RETRIES) {
-            retryAttempts++
-            cancelTransport()
-            scope.launch {
-                delay(RETRY_DELAY_MS)
-                if (desiredEndpoint == endpoint && foreground && surface?.isValid == true) open(endpoint)
-            }
-            return
-        }
-        onFailure(message)
-    }
-
-    /** Cancela de verdad la conexión en vuelo: un `Job.cancel()` no interrumpe un `execute()` bloqueado. */
     private fun cancelTransport() {
         transportGeneration++
+        retryJob?.cancel()
+        retryJob = null
         job?.cancel()
         job = null
         call?.cancel()
         call = null
+        decoder.stop()
+        decoderGeneration = -1
+        dimensions = null
     }
 
-    fun stopTransport() {
+    @Synchronized fun stopTransport() {
         desiredEndpoint = null
         cancelTransport()
-        decoder.stop()
-        dimensions = null
         _size.value = null
     }
 
-    fun close() { stopTransport(); decoder.close() }
+    @Synchronized fun close() { stopTransport(); decoder.close() }
 
     private companion object {
         const val MAX_RETRIES = 3

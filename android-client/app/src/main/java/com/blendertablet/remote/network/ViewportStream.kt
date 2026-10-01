@@ -16,10 +16,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.Channel
 import okhttp3.OkHttpClient
+import okhttp3.Call
 import okhttp3.Request
 import okio.BufferedSource
 
@@ -65,49 +67,63 @@ class ViewportStream(
     val stats: StateFlow<StreamStats> = _stats.asStateFlow()
 
     private var job: Job? = null
-    private var minDelta = Long.MAX_VALUE
-    private val latestReadSeq = AtomicLong(0)
+    private var call: Call? = null
+    private var generation = 0L
 
-    fun start(host: String, port: Int, token: String, path: String = "/stream.mjpg") {
+    @Synchronized fun start(host: String, port: Int, token: String, path: String = "/stream.mjpg") {
         stop()
-        minDelta = Long.MAX_VALUE
-        latestReadSeq.set(0)
-        staleFrames = 0
+        val epoch = generation
         val url = buildString {
             append("http://").append(host).append(':').append(port).append(path)
             if (token.isNotBlank()) append("?token=").append(token)
         }
-        job = scope.launch(Dispatchers.IO) { runWithRetry(url) }
+        job = scope.launch(Dispatchers.IO) { runWithRetry(url, epoch) }
     }
 
-    fun stop() {
+    @Synchronized fun stop() {
+        generation++
         job?.cancel()
         job = null
+        call?.cancel()
+        call = null
         _frame.value = null
         _stats.value = StreamStats()
     }
 
     /** Reconexión automática con espera creciente: nunca hay que reiniciar la app (§41). */
-    private suspend fun runWithRetry(url: String) {
+    private suspend fun runWithRetry(url: String, epoch: Long) {
         var backoffMs = 500L
         while (currentCoroutineContext().isActive) {
             try {
-                consume(url)
+                consume(url, epoch)
                 backoffMs = 500L // una desconexión limpia no debe penalizar el siguiente intento
             } catch (e: IOException) {
-                _stats.value = _stats.value.copy(connected = false, fps = 0f, error = e.message)
+                currentCoroutineContext().ensureActive()
+                synchronized(this) {
+                    if (epoch == generation) _stats.value = _stats.value.copy(connected = false, fps = 0f, error = e.message)
+                }
             }
             delay(backoffMs) // cancelable: al llamar a stop() salimos aquí
             backoffMs = (backoffMs * 2).coerceAtMost(5_000L)
         }
     }
 
-    private suspend fun consume(url: String) {
-        val response = http.newCall(Request.Builder().url(url).build()).execute()
+    private suspend fun consume(url: String, epoch: Long) {
+        val request = http.newCall(Request.Builder().url(url).build())
+        synchronized(this) {
+            if (epoch != generation) return
+            call = request
+        }
+        val response = request.execute()
         response.use {
+            currentCoroutineContext().ensureActive()
             if (!it.isSuccessful) throw IOException("HTTP ${it.code}")
             val source = it.body?.source() ?: throw IOException("Respuesta sin cuerpo")
-            _stats.value = StreamStats(connected = true)
+            synchronized(this) { if (epoch == generation) _stats.value = StreamStats(connected = true) }
+
+            var minDelta = Long.MAX_VALUE
+            val latestReadSeq = AtomicLong(0)
+            var staleFrames = 0L
 
             coroutineScope {
                 // Lectura y decodificación separadas. CONFLATED conserva solo la
@@ -119,61 +135,66 @@ class ViewportStream(
                     var framesInWindow = 0
                     var windowStart = System.currentTimeMillis()
                     var lastPublishedNs = 0L
-                    for (part in newest) {
-                        val decodeStarted = System.nanoTime()
-                        val bitmap = pool.decode(part.body)
-                            ?: continue
-                        val decodeMs = (System.nanoTime() - decodeStarted) / 1_000_000
-                        // CONFLATED elimina lo que aún estaba esperando, pero no puede
-                        // cancelar BitmapFactory. Si durante el decode llegó otro frame,
-                        // publicar este produciría un salto visible hacia vídeo antiguo.
-                        val nowNs = System.nanoTime()
-                        val stale = part.seq < latestReadSeq.get()
-                        // Si el decoder nunca alcanza al productor, no debemos
-                        // quedarnos sin imagen indefinidamente: se admite como
-                        // máximo una publicación obsoleta cada 250 ms.
-                        if (stale && nowNs - lastPublishedNs < MAX_UI_SILENCE_NS) {
-                            pool.recycle(bitmap)
-                            staleFrames++
-                            if (Log.isLoggable(TAG, Log.DEBUG)) {
-                                Log.d(TAG, "drop stale frame=${part.seq} latest=${latestReadSeq.get()} decode=${decodeMs}ms")
+                    try {
+                        for (part in newest) {
+                            val decodeStarted = System.nanoTime()
+                            val bitmap = pool.decode(part.body)
+                                ?: continue
+                            if (!currentCoroutineContext().isActive) { pool.recycle(bitmap); break }
+                            val decodeMs = (System.nanoTime() - decodeStarted) / 1_000_000
+                            // CONFLATED elimina lo que aún estaba esperando, pero no puede
+                            // cancelar BitmapFactory. Si durante el decode llegó otro frame,
+                            // publicar este produciría un salto visible hacia vídeo antiguo.
+                            val nowNs = System.nanoTime()
+                            val stale = part.seq < latestReadSeq.get()
+                            // Si el decoder nunca alcanza al productor, no debemos
+                            // quedarnos sin imagen indefinidamente: se admite como
+                            // máximo una publicación obsoleta cada 250 ms.
+                            if (stale && nowNs - lastPublishedNs < MAX_UI_SILENCE_NS) {
+                                pool.recycle(bitmap)
+                                staleFrames++
+                                if (Log.isLoggable(TAG, Log.DEBUG)) {
+                                    Log.d(TAG, "drop stale frame=${part.seq} latest=${latestReadSeq.get()} decode=${decodeMs}ms")
+                                }
+                                continue
                             }
-                            continue
-                        }
-                        val previous = _frame.value?.bitmap
-                        _frame.value = ViewportFrame(bitmap, part.seq)
-                        // El bitmap sustituido vuelve al pool con dos frames de
-                        // margen: Compose puede seguir dibujándolo un instante, y
-                        // reutilizarlo antes produciría un frame rasgado.
-                        pool.retire(previous)
-                        lastPublishedNs = nowNs
-                        if (Log.isLoggable(TAG, Log.VERBOSE)) {
-                            Log.v(TAG, "publish frame=${part.seq} decode=${decodeMs}ms readToUi=${(System.nanoTime() - part.receivedAtNs) / 1_000_000}ms")
-                        }
+                            synchronized(this@ViewportStream) {
+                                if (epoch != generation) { pool.recycle(bitmap); return@launch }
+                                val previous = _frame.value?.bitmap
+                                _frame.value = ViewportFrame(bitmap, part.seq)
+                                // Give Compose two frames before reusing the previous bitmap.
+                                pool.retire(previous)
+                            }
+                            lastPublishedNs = nowNs
+                            if (Log.isLoggable(TAG, Log.VERBOSE)) {
+                                Log.v(TAG, "publish frame=${part.seq} decode=${decodeMs}ms readToUi=${(System.nanoTime() - part.receivedAtNs) / 1_000_000}ms")
+                            }
 
-                        framesInWindow++
-                        val now = System.currentTimeMillis()
-                        val elapsed = now - windowStart
-                        if (elapsed >= 1000) {
-                            val delta = now - part.stampMs
-                            if (delta < minDelta) minDelta = delta
-                            _stats.value = StreamStats(
-                                connected = true,
-                                fps = framesInWindow * 1000f / elapsed,
-                                lagMs = (delta - minDelta).coerceAtLeast(0),
-                                kbPerFrame = part.body.size / 1024,
-                                decodeMs = decodeMs,
-                                staleFrames = staleFrames,
-                            )
-                            framesInWindow = 0
-                            windowStart = now
+                            framesInWindow++
+                            val now = System.currentTimeMillis()
+                            val elapsed = now - windowStart
+                            if (elapsed >= 1000) {
+                                val delta = now - part.stampMs
+                                if (delta < minDelta) minDelta = delta
+                                val stats = StreamStats(
+                                    connected = true,
+                                    fps = framesInWindow * 1000f / elapsed,
+                                    lagMs = (delta - minDelta).coerceAtLeast(0),
+                                    kbPerFrame = part.body.size / 1024,
+                                    decodeMs = decodeMs,
+                                    staleFrames = staleFrames,
+                                )
+                                synchronized(this@ViewportStream) { if (epoch == generation) _stats.value = stats }
+                                framesInWindow = 0
+                                windowStart = now
+                            }
                         }
-                    }
-                    pool.close()
+                    } finally { pool.close() }
                 }
                 try {
                     while (currentCoroutineContext().isActive) {
                         val part = readPart(source) ?: break
+                        currentCoroutineContext().ensureActive()
                         latestReadSeq.set(part.seq)
                         newest.trySend(part)
                     }
@@ -191,8 +212,6 @@ class ViewportStream(
         val stampMs: Long,
         val receivedAtNs: Long = System.nanoTime(),
     )
-
-    private var staleFrames = 0L
 
     /**
      * Reúso de bitmaps del decoder. Sin esto, cada frame reservaba un bitmap nuevo

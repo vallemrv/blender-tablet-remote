@@ -1,37 +1,62 @@
 package com.blendertablet.remote.network
 
-/**
- * Estado puro que protege al decoder frente a vídeo atrasado.
- *
- * Un H.264 inter-frame no permite descartar P-frames arbitrariamente como MJPEG.
- * Cuando la cola se satura o el codec falla, se abandona el GOP completo y no se
- * vuelve a aceptar vídeo hasta el siguiente IDR anunciado por el parser.
- */
-internal class H264DecoderPolicy(private val capacity: Int = 6) {
-    init { require(capacity > 0) }
+import java.util.ArrayDeque
 
+internal data class H264AccessUnit(
+    val bytes: ByteArray,
+    val presentationTimeUs: Long,
+    val keyframe: Boolean,
+    val config: Boolean = false,
+    val sequence: Long,
+)
+
+/** Bounded before posting to the codec thread; a lost reference abandons the whole GOP. */
+internal class H264DecoderPolicy(private val capacity: Int = 6, private val maxAgeNs: Long = 150_000_000L) {
+    private data class Pending(val unit: H264AccessUnit, val receivedNs: Long)
+    private val pending = ArrayDeque<Pending>()
+    var generation = 0L
+        private set
     private var waitingForKeyframe = true
-    private var queued = 0
+    private var lastSequence: Long? = null
+    private var resetRequired = false
 
-    fun accept(keyframe: Boolean): Boolean {
-        if (waitingForKeyframe && !keyframe) return false
-        if (keyframe) waitingForKeyframe = false
-        if (queued >= capacity) {
-            reset()
-            return false
-        }
-        queued++
+    init { require(capacity > 0 && maxAgeNs > 0) }
+
+    @Synchronized fun restart(): Long {
+        generation++
+        pending.clear()
+        waitingForKeyframe = true
+        lastSequence = null
+        resetRequired = false
+        return generation
+    }
+
+    @Synchronized fun offer(epoch: Long, unit: H264AccessUnit, nowNs: Long): Boolean {
+        if (epoch != generation) return false
+        if (lastSequence?.let { unit.sequence != ((it + 1) and 0xffffffffL) } == true ||
+            pending.size >= capacity || expired(nowNs)) abandonGop()
+        lastSequence = unit.sequence
+        if (waitingForKeyframe && !unit.keyframe && !unit.config) return false
+        if (unit.keyframe) waitingForKeyframe = false
+        pending.addLast(Pending(unit, nowNs))
         return true
     }
 
-    fun consumed() {
-        if (queued > 0) queued--
-    }
-
-    fun reset() {
-        queued = 0
+    @Synchronized fun abandonGop() {
+        pending.clear()
         waitingForKeyframe = true
+        resetRequired = true
     }
 
-    val needsKeyframe: Boolean get() = waitingForKeyframe
+    @Synchronized fun prepare(nowNs: Long): Boolean {
+        if (expired(nowNs)) abandonGop()
+        val reset = resetRequired
+        resetRequired = false
+        return reset
+    }
+
+    @Synchronized fun peek(): H264AccessUnit? = pending.peekFirst()?.unit
+    @Synchronized fun remove(): H264AccessUnit = pending.removeFirst().unit
+    @Synchronized fun isCurrent(epoch: Long): Boolean = epoch == generation
+    private fun expired(nowNs: Long) = pending.peekFirst()?.let { nowNs - it.receivedNs > maxAgeNs } == true
 }

@@ -637,10 +637,12 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                             savedOpen = false; command("cad.session.cancel"); command("cad.plane.purge")
                                         })
                                         cad.planes.forEach { saved ->
-                                            DropdownMenuItem(text = { Text("${saved.name} · nuevo croquis") }, onClick = {
+                                            // Qué bocetos usa cada plano: el nombre solo dice de dónde salió.
+                                            val users = cad.sketches.filter { it.planeId == saved.id }.joinToString(", ") { it.name }
+                                            DropdownMenuItem(text = { Text("${saved.name} (${users.ifEmpty { "sin usar" }}) · nuevo croquis") }, onClick = {
                                                 savedOpen = false; command("cad.session.cancel"); command("cad.sketch.create", "plane_id" to saved.id)
                                             })
-                                            DropdownMenuItem(text = { Text("${saved.name} · colocar") }, onClick = {
+                                            DropdownMenuItem(text = { Text("${saved.name} (${users.ifEmpty { "sin usar" }}) · recolocar") }, onClick = {
                                                 savedOpen = false; command("cad.plane.begin", "plane_id" to saved.id)
                                             })
                                         }
@@ -809,8 +811,7 @@ fun CadTopActions(state: AppUiState, vm: MainViewModel) {
     val connected = state.connection == ConnectionStatus.CONNECTED
     val editing = cad.activeSketchId != null
     fun command(name: String, vararg values: Pair<String, Any?>) { if (connected) vm.cadCommand(name, mapOf(*values)) }
-    if (editing) IconAction(Icons.Default.Straighten, "Medir desde el sólido", enabled = connected && !cad.sessionActive) { vm.cadSurfaceMode("EDGE") }
-    else IconAction(Icons.Default.Layers, "Nuevo plano y croquis", enabled = connected && !cad.sessionActive) {
+    if (!editing) IconAction(Icons.Default.Layers, "Nuevo plano y croquis", enabled = connected && !cad.sessionActive) {
         command("cad.plane.begin", "base" to if (cad.surface.canSketch) "FACE" else if (cad.surface.canEdgePlane) "EDGE" else "XY")
     }
     if (editing) {
@@ -1094,7 +1095,7 @@ private fun CadSurfaceControls(cad: CadState, unit: LengthUnit, enabled: Boolean
         PillButton("Limpiar", enabled = enabled) { vm.cadCommand("cad.surface.clear") }
     } else if (cad.surface.selection.isNotEmpty()) {
         cad.surface.selection.forEachIndexed { index,item ->
-            Text("${index+1} · ${if (index == 0) "Azul" else "Naranja"} · ${item.objectName}", color = if (index == 0) Ink.Accent else Ink.Warn, fontSize = 11.sp)
+            Text("${index+1} · ${item.objectName}", color = Ink.Accent, fontSize = 11.sp)
         }
         PillButton("Limpiar", enabled = enabled) { vm.cadCommand("cad.surface.clear") }
     }

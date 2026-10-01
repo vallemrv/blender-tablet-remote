@@ -1,99 +1,68 @@
 package com.blendertablet.remote.network
 
 import android.media.MediaCodec
-import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
 import android.view.Surface
-import java.nio.ByteBuffer
-import java.util.ArrayDeque
+import java.util.concurrent.atomic.AtomicBoolean
 
-/** Configuración local del codec; no representa ningún campo del protocolo. */
-internal data class H264DecoderConfig(
-    val width: Int,
-    val height: Int,
-    val csd0: ByteArray? = null,
-    val csd1: ByteArray? = null,
-)
+internal data class H264DecoderConfig(val width: Int, val height: Int)
 
-/** Unidad ya delimitada por el futuro parser del transporte. */
-internal data class H264AccessUnit(
-    val bytes: ByteArray,
-    val presentationTimeUs: Long,
-    val keyframe: Boolean,
-    val config: Boolean = false,
-)
-
-/**
- * Decoder H.264 directo a Surface: no crea Bitmap, StateFlow ni recomposición.
- * Todas las llamadas a MediaCodec quedan confinadas a un HandlerThread.
- */
-internal class H264SurfaceDecoder(private val onFailure: (String) -> Unit = {}) {
+/** Codec calls stay on one thread; incoming frames occupy a bounded queue, not Handler messages. */
+internal class H264SurfaceDecoder {
     private val thread = HandlerThread("btr-h264-decoder").apply { start() }
     private val handler = Handler(thread.looper)
-    private val pending = ArrayDeque<H264AccessUnit>()
     private val policy = H264DecoderPolicy()
+    private val scheduled = AtomicBoolean(false)
     private var codec: MediaCodec? = null
-    private var generation = 0
+    private var codecGeneration = -1L
+    private var inFlight = 0
+    private var lastProgressNs = 0L
+    private var failure: (String) -> Unit = {}
+    private val pumpTask = Runnable {
+        scheduled.set(false)
+        pump()
+    }
 
-    fun start(surface: Surface, config: H264DecoderConfig) {
-        val requestedGeneration = ++generation
+    fun start(surface: Surface, config: H264DecoderConfig, onFrame: () -> Unit, onFailure: (String) -> Unit): Long {
+        val epoch = policy.restart()
         handler.post {
-            if (requestedGeneration != generation) return@post
+            if (!policy.isCurrent(epoch)) return@post
             releaseCodec()
-            policy.reset()
-            pending.clear()
+            codecGeneration = epoch
+            failure = onFailure
             try {
                 val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, config.width, config.height).apply {
-                    config.csd0?.let { setByteBuffer("csd-0", ByteBuffer.wrap(it)) }
-                    config.csd1?.let { setByteBuffer("csd-1", ByteBuffer.wrap(it)) }
                     setInteger(MediaFormat.KEY_PRIORITY, 0)
                     if (Build.VERSION.SDK_INT >= 30) setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
                 }
-                codec = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC).also {
-                    it.configure(format, surface, null, 0)
-                    it.start()
-                }
-                pump()
-            } catch (t: Throwable) {
-                Log.e(TAG, "No se pudo iniciar AVC", t)
-                releaseCodec()
-                onFailure(t.message ?: "No se pudo iniciar AVC")
-            }
+                val active = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+                codec = active
+                active.configure(format, surface, null, 0)
+                active.setOnFrameRenderedListener({ _, _, _ ->
+                    if (policy.isCurrent(epoch)) onFrame()
+                }, handler)
+                active.start()
+                schedule()
+            } catch (t: Throwable) { fail(t) }
         }
+        return epoch
     }
 
-    fun queue(unit: H264AccessUnit) {
-        handler.post {
-            // CONFIG (SPS/PPS) precede al primer IDR y deben llegar al codec aunque
-            // la política todavía esté esperando ese keyframe.
-            if (!(unit.config && !unit.keyframe) && !policy.accept(unit.keyframe)) {
-                if (policy.needsKeyframe) pending.clear()
-                return@post
-            }
-            pending.addLast(unit)
-            pump()
+    fun queue(epoch: Long, unit: H264AccessUnit) {
+        synchronized(policy) {
+            if (!policy.isCurrent(epoch)) return
+            policy.offer(epoch, unit, System.nanoTime())
+            schedule()
         }
-    }
-
-    /** Invalida referencias tras pérdida de transporte; el siguiente AU debe ser IDR. */
-    fun awaitKeyframe() = handler.post {
-        pending.clear()
-        policy.reset()
-        codec?.flush()
-        codec?.start()
     }
 
     fun stop() {
-        generation++
-        handler.post {
-            pending.clear()
-            policy.reset()
-            releaseCodec()
-        }
+        policy.restart()
+        handler.post { releaseCodec() }
     }
 
     fun close() {
@@ -101,54 +70,70 @@ internal class H264SurfaceDecoder(private val onFailure: (String) -> Unit = {}) 
         handler.post { thread.quitSafely() }
     }
 
-    private fun pump() {
-        val active = codec ?: return
+    private fun schedule(delayMs: Long = 0) {
+        if (scheduled.compareAndSet(false, true)) handler.postDelayed(pumpTask, delayMs)
+    }
+
+    private fun pump() = synchronized(policy) {
+        if (!policy.isCurrent(codecGeneration)) return@synchronized
+        val active = codec ?: return@synchronized
         try {
-            while (pending.isNotEmpty()) {
+            check(inFlight == 0 || System.nanoTime() - lastProgressNs <= 1_000_000_000L) {
+                "El decoder AVC no devuelve fotogramas"
+            }
+            if (policy.prepare(System.nanoTime())) {
+                // Synchronous MediaCodec resumes after flush without another start().
+                active.flush()
+                inFlight = 0
+            }
+            drainOutput(active)
+            while (policy.peek() != null && inFlight < 6) {
                 val index = active.dequeueInputBuffer(0)
                 if (index < 0) break
-                val unit = pending.removeFirst()
-                val buffer = active.getInputBuffer(index) ?: continue
+                val unit = policy.remove()
+                val buffer = requireNotNull(active.getInputBuffer(index))
                 buffer.clear()
-                if (buffer.remaining() < unit.bytes.size) {
-                    policy.consumed()
-                    throw IllegalArgumentException("Access unit AVC mayor que el buffer del codec")
-                }
+                require(buffer.remaining() >= unit.bytes.size) { "Access unit AVC mayor que el buffer del codec" }
                 buffer.put(unit.bytes)
-                active.queueInputBuffer(
-                    index,
-                    0,
-                    unit.bytes.size,
-                    unit.presentationTimeUs,
-                    if (unit.keyframe) MediaCodec.BUFFER_FLAG_KEY_FRAME else 0,
-                )
-                if (!(unit.config && !unit.keyframe)) policy.consumed()
+                val configOnly = unit.config && !unit.keyframe
+                active.queueInputBuffer(index, 0, unit.bytes.size, unit.presentationTimeUs,
+                    if (configOnly) MediaCodec.BUFFER_FLAG_CODEC_CONFIG else if (unit.keyframe) MediaCodec.BUFFER_FLAG_KEY_FRAME else 0)
+                if (!configOnly) {
+                    if (inFlight == 0) lastProgressNs = System.nanoTime()
+                    inFlight++
+                }
             }
-            val info = MediaCodec.BufferInfo()
-            while (true) {
-                val index = active.dequeueOutputBuffer(info, 0)
-                if (index < 0) break
-                // true programa el buffer directamente sobre la Surface.
-                active.releaseOutputBuffer(index, true)
-            }
-        } catch (t: Throwable) {
-            Log.e(TAG, "Fallo AVC; esperando una nueva inicialización/keyframe", t)
-            pending.clear()
-            policy.reset()
-            releaseCodec()
-            onFailure(t.message ?: "Fallo del decoder AVC")
+            drainOutput(active)
+            // Drain even if no next packet arrives: the last frame must not wait for another capture.
+            if (inFlight > 0 || policy.peek() != null) schedule(4)
+        } catch (t: Throwable) { fail(t) }
+    }
+
+    private fun drainOutput(active: MediaCodec) {
+        val info = MediaCodec.BufferInfo()
+        var newest = -1
+        while (true) {
+            val index = active.dequeueOutputBuffer(info, 0)
+            if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED || index == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) continue
+            if (index < 0) break
+            inFlight = (inFlight - 1).coerceAtLeast(0)
+            lastProgressNs = System.nanoTime()
+            if (newest >= 0) active.releaseOutputBuffer(newest, false)
+            newest = index
         }
+        // Decode every reference, but display only the newest available picture, immediately.
+        if (newest >= 0) active.releaseOutputBuffer(newest, System.nanoTime())
+    }
+
+    private fun fail(t: Throwable) {
+        Log.e("BTR-H264", "Fallo AVC; se requiere una conexión y un decoder nuevos", t)
+        releaseCodec()
+        if (policy.isCurrent(codecGeneration)) failure(t.message ?: "Fallo del decoder AVC")
     }
 
     private fun releaseCodec() {
-        codec?.let {
-            runCatching { it.stop() }
-            runCatching { it.release() }
-        }
+        codec?.let { runCatching { it.stop() }; runCatching { it.release() } }
         codec = null
-    }
-
-    private companion object {
-        const val TAG = "BTR-H264"
+        inFlight = 0
     }
 }

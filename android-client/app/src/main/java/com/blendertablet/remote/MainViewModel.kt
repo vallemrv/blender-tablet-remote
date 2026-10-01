@@ -81,6 +81,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val preferences = ConnectionPreferences(application)
     private val stream = ViewportStream(viewModelScope)
     private var currentStreamEndpoint: com.blendertablet.remote.network.StreamEndpoint? = null
+    private var videoForeground = true
     private val _h264Active = MutableStateFlow(false)
     val h264Active: StateFlow<Boolean> = _h264Active
     private val h264Stream = H264ViewportStream(viewModelScope) { fallbackToMjpeg() }
@@ -246,18 +247,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     stream.stop(); _h264Active.value = true; h264Stream.start(endpoint)
                 } else {
                     h264Stream.stopTransport(); _h264Active.value = false
-                    stream.start(endpoint.host, endpoint.port, endpoint.token, endpoint.path)
-                }
-            }
-        }
-        // Recuperación tras un fallback a MJPEG (§ fallbackToMjpeg): si h264Stream
-        // vuelve a decodificar frames de verdad -algo solo posible si una Surface
-        // nueva reabrió la conexión- se apaga el MJPEG y se vuelve a H.264.
-        viewModelScope.launch {
-            h264Stream.size.collect { size ->
-                if (size != null && !_h264Active.value && currentStreamEndpoint?.format == "h264") {
-                    stream.stop()
-                    _h264Active.value = true
+                    if (videoForeground) stream.start(endpoint.host, endpoint.port, endpoint.token, endpoint.path)
                 }
             }
         }
@@ -288,12 +278,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * nada.
      */
     fun onForeground() {
+        videoForeground = true
+        currentStreamEndpoint?.let { endpoint ->
+            if (endpoint.format == "h264" && endpoint.framing == H264Framing.NAME) {
+                // Fallback removed the SurfaceView. Recreate it before retrying AVC;
+                // receiving the same dimensions again cannot signal recovery.
+                stream.stop()
+                _h264Active.value = true
+            } else stream.start(endpoint.host, endpoint.port, endpoint.token, endpoint.path)
+        }
         h264Stream.resume()
         client.retryNow()
     }
 
     /** Detiene MediaCodec antes de que Android invalide los buffers de la Surface. */
-    fun onBackground() { cancelCadStroke(); cancelMaterialStroke(); cancelSculptStroke(); h264Stream.pause() }
+    fun onBackground() {
+        videoForeground = false
+        cancelCadStroke(); cancelMaterialStroke(); cancelSculptStroke()
+        h264Stream.pause(); stream.stop()
+    }
 
     fun disconnect() {
         cancelMaterialStroke()
@@ -317,8 +320,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * H.264 se rindió tras varios reintentos (§ "el vídeo pierde calidad al hacer
      * resize"). No es definitivo: [h264Stream] conserva el endpoint deseado, así que
-     * la próxima [attachVideoSurface] (el siguiente resize, o volver a primer plano)
-     * puede recuperarlo solo — ver el collector de `h264Stream.size` en `init`.
+     * al volver a primer plano se recrea la Surface y se reintenta H.264.
      */
     private fun fallbackToMjpeg() {
         val endpoint = currentStreamEndpoint ?: return
