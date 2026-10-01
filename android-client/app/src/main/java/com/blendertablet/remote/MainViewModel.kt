@@ -424,8 +424,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val type = local.value.cadTool
                 if (cad.activeSketchId == null || cad.surface.mode != "PROFILE") return
                 cadStroke = true
+                // Con Arco armado, apoyar sobre el rombo de un arco ajusta su ángulo
+                // en vez de empezar otro; el resto del lienzo sigue dibujando arcos.
+                val angleHandle = type == "ARC" && cad.overlay.any { item ->
+                    item.handles.any { it.intent == "ANGLE" && kotlin.math.hypot(it.point.first - u, it.point.second - v) < .025f }
+                }
                 cadGestureMode = when {
-                    type == null -> "DRAG"
+                    type == null || angleHandle -> "DRAG"
                     type == "POLYGON" -> "POLY"
                     else -> "DRAW"
                 }
@@ -433,7 +438,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     "DRAG" -> "cad.drag.begin"
                     "POLY" -> "cad.polygon.begin"
                     else -> "cad.entity.begin"
-                }, when (type) {
+                }, if (cadGestureMode == "DRAG") mapOf("u" to u, "v" to v) else when (type) {
                     null -> mapOf("u" to u, "v" to v)
                     "NGON" -> mapOf("type" to type, "sides" to local.value.cadNgonSides, "u" to u, "v" to v)
                     "GEAR" -> mapOf("type" to type, "teeth" to local.value.cadGearTeeth, "u" to u, "v" to v)
@@ -466,10 +471,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     "DRAG" -> client.cadCommand("cad.drag.end")
                     "POLY" -> client.cadCommand("cad.polygon.segment", mapOf("u" to u, "v" to v))
-                    "DRAW" -> {
-                        client.cadCommand("cad.session.confirm")
-                        if (local.value.cadTool == "ARC") local.update { it.copy(cadTool = null) }
-                    }
+                    "DRAW" -> client.cadCommand("cad.session.confirm")
                 }
                 cadGestureMode = null
             }
