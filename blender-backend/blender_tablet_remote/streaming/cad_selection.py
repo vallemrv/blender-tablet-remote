@@ -39,8 +39,9 @@ def draw_cad_selection(rv3d, width, height):
         gpu.state.blend_set('ALPHA'); gpu.state.depth_mask_set(False); gpu.state.depth_test_set('LESS_EQUAL')
         with gpu.matrix.push_pop(),gpu.matrix.push_pop_projection():
             gpu.matrix.load_identity(); gpu.matrix.load_projection_matrix(projection)
-            for index,(item,(triangles,segments)) in enumerate(zip(items,cache['batches'])):
-                color=(.2,.85,1.) if index==0 else (1.,.65,.15)
+            # Every selected reference shares one colour: a multi-edge pick reads as one set.
+            color=(.2,.85,1.)
+            for item,(triangles,segments) in zip(items,cache['batches']):
                 if triangles:
                     fill.bind(); fill.uniform_float('color',(*color,.25)); triangles.draw(fill)
                 if item['kind']=='VERTEX':
