@@ -7,6 +7,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadFeedbackTest {
+    @Test fun manySolidEdgesHaveOneMeasurementSummaryAboveControls() {
+        val cad = CadState(surface = CadSurface(mode = "EDGE",
+            selection = (1..8).map { CadSurfaceItem("e$it", "EDGE", "Cuerpo", null, false) },
+            measurements = (1..8).map { CadMeasurement("Longitud $it", .01, "LENGTH") }))
+        val text = cadSurfaceSummary(cad, LengthUnit.MILLIMETERS)
+        assertTrue(text.contains("8 aristas"))
+        assertTrue(text.contains("Longitud total"))
+        assertTrue(text.contains("80"))
+        assertTrue(text.contains("mm"))
+        assertFalse(text.contains("Longitud 4"))
+    }
+
     @Test fun tangentRailAcceptsDistinctArcAndCircleBodiesWithoutSelectingTheirPoints() {
         val caps = CadParser.capabilities(JSONObject("""{"version":2,"length_unit":"METERS","constraints":["TANGENT"]}"""))
         val cad = CadParser.state(JSONObject("""{"version":1,"active_sketch_id":"s","document":{"sketches":[

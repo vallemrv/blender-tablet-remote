@@ -2041,6 +2041,17 @@ la malla; miden la geometría seleccionada. Una tercera referencia inicia otra p
 Todas las referencias seleccionadas se resaltan en azul dentro de GPUOffScreen.
 La captura limpia excluye estos marcadores.
 
+En CAD 3D, EDGE une regiones contiguas con tangente analítica continua en un
+contorno. Todos sus tramos comparten ID, medida y resaltado; no cruza esquinas ni
+bifurcaciones ambiguas. En un boceto, la proyección conserva las aristas de diseño
+individuales. Los modificadores propagan también la agrupación del contorno.
+
+`cad.finish.begin/update` conserva la sesión ante `cad_finish_invalid`: publica
+el ancho solicitado, `can_confirm:false` y la explicación en `cad.state.error`.
+Reducirlo puede recuperar una preview válida sin repetir la selección. No persiste
+el candidato inválido ni confirma una preview anterior; cancelar restaura el
+baseline. Una referencia inexistente sigue siendo un error que impide iniciar.
+
 El sondeo de `commands/snap.py` usa malla evaluada y oclusión común. Las referencias
 de origen agrupan parches coplanares conectados y fragmentos collineales de aristas,
 omitiendo aristas internas coplanares. Con modificadores, etiquetas transitorias

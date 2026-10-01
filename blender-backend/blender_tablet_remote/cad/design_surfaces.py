@@ -132,7 +132,7 @@ def surfaces(doc, body_id, scale):
     return result
 
 
-def label_faces(points, faces, normals, found, tolerance):
+def label_faces(points, faces, normals, found, tolerance, *, by_label=None):
     """1-based surface label per face, 0 when the face lies on no design surface."""
     keys = {}
     def key(surface):
@@ -147,6 +147,8 @@ def label_faces(points, faces, normals, found, tolerance):
         return keys.setdefault(k, len(keys)+1)
     # Planes first: a straight side whose corners touch a circle is still flat.
     candidates = sorted(((s, key(s)) for s in found), key=lambda item: item[0][0] != 'PLANE')
+    if by_label is not None:
+        by_label.update((label,surface) for surface,label in candidates)
     labels = []
     for face, normal in zip(faces, normals):
         label = 0

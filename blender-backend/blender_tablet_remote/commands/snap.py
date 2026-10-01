@@ -677,7 +677,59 @@ def _cad_corners(edge_regions):
                   if len(regions) >= 2 or any(count < 2 for count in regions.values()))
 
 
-def _cad_topology(mesh, matrix, face_labels=None, edge_labels=None, *, smooth=False, design=None):
+def _tangent_contours(points, adjacency, edge_regions, labels, surfaces):
+    """Whole smooth outlines for solid picking; retain analytic edges for sketches.
+
+    Use the exact surface normals, not the angle between tessellation chords:
+    arcs of different radii can be tangent even with very different sample sizes.
+    """
+    if labels is None: return dict(edge_regions)
+    regions={id(r):r for r in edge_regions.values()}
+    parent={key:key for key in regions}
+    def root(key):
+        while parent[key]!=key:
+            parent[key]=parent[parent[key]];key=parent[key]
+        return key
+    def normal(surface,point):
+        if surface[0]=='PLANE': return surface[1]
+        delta=point-surface[1];axis=surface[2]
+        return (delta-axis*delta.dot(axis)).normalized()
+    def direction(edge,vertex):
+        faces=adjacency[edge]
+        if len(faces)!=2 or any(labels[f] not in surfaces for f in faces): return None
+        a,b=[normal(surfaces[labels[f]],points[vertex]) for f in faces]
+        tangent=a.cross(b)
+        outgoing=_outgoing(points,edge,vertex)
+        if tangent.length<1e-8 or outgoing is None: return None
+        tangent.normalize()
+        return tangent if tangent.dot(outgoing)>0 else -tangent
+    ends={}
+    for key,region in regions.items():
+        vertices={}
+        for edge in region:
+            for v in edge: vertices.setdefault(v,[]).append(edge)
+        for v,edges in vertices.items():
+            if len(edges)==1:
+                tangent=direction(edges[0],v)
+                if tangent is not None: ends.setdefault(v,[]).append((key,tangent))
+    limit=-math.cos(math.radians(.1))
+    for choices in ends.values():
+        matches={key:[other for other,d in choices if other!=key and tangent.dot(d)<limit]
+                 for key,tangent in choices}
+        for key,others in matches.items():
+            if len(others)==1 and matches.get(others[0])==[key]:
+                a,b=root(key),root(others[0])
+                if a!=b: parent[b]=a
+    groups={}
+    for key,region in regions.items(): groups.setdefault(root(key),set()).update(region)
+    result={}
+    for edges in groups.values():
+        region=frozenset(edges)
+        for edge in edges: result[edge]=region
+    return result
+
+
+def _cad_topology(mesh, matrix, face_labels=None, edge_labels=None, *, smooth=False, design=None, contours=None):
     """Snapshot geometry and logical regions; no evaluated RNA survives this call.
 
     `design` lists the analytic surfaces of the body's sketches: faces on one
@@ -699,10 +751,10 @@ def _cad_topology(mesh, matrix, face_labels=None, edge_labels=None, *, smooth=Fa
     neighbors=[set() for _ in faces]
     for linked in adjacency.values():
         for face in linked: neighbors[face].update(i for i in linked if i!=face)
-    labels=None
+    labels=None; labelled_surfaces={}
     if design and face_labels is None:
         from ..cad.design_surfaces import label_faces
-        labels=label_faces(points,faces,normals,design,extent*1e-5+1e-9)
+        labels=label_faces(points,faces,normals,design,extent*1e-5+1e-9,by_label=labelled_surfaces)
     face_regions=[None]*len(faces)
     for source in range(len(faces)):
         if face_regions[source] is not None: continue
@@ -772,6 +824,8 @@ def _cad_topology(mesh, matrix, face_labels=None, edge_labels=None, *, smooth=Fa
         edge_regions.update(loose)
     mesh.calc_loop_triangles()
     triangles=[(tri.polygon_index,tuple(tri.vertices)) for tri in mesh.loop_triangles]
+    if contours is not None:
+        contours.update(_tangent_contours(points,adjacency,edge_regions,labels,labelled_surfaces))
     return triangles,points,faces,normals,centers,adjacency,edges,face_regions,edge_regions
 
 
@@ -793,14 +847,14 @@ def _cad_mesh(obj):
     # Stacks that move/copy geometry (e.g. Array) must use their evaluated frame.
     cad=bool(obj.get('btr_cad_feature_id'))
     reference=cad and all(mod.type in {'BEVEL','SUBSURF'} for mod in active_modifiers)
-    mapping=dict(reference=reference)
+    mapping=dict(reference=reference,contours={},base_contours={})
     design=None
     if cad and obj.get('btr_cad_body_id'):
         from ..cad.design_surfaces import surfaces
         try: design=surfaces(runtime.doc(),obj['btr_cad_body_id'],bpy.context.scene.unit_settings.scale_length)
         except Exception: design=None   # a stale document keeps the mesh heuristics
     if active_modifiers:
-        base=_cad_topology(mesh,obj.matrix_world,smooth=cad,design=design)
+        base=_cad_topology(mesh,obj.matrix_world,smooth=cad,design=design,contours=mapping['base_contours'])
         names=[]
         try:
             # Native FACE/EDGE integer attributes follow subdivision without
@@ -826,15 +880,21 @@ def _cad_mesh(obj):
             source_edges={value:key for key,value in edge_ids.items()}
             mapping.update(base=base,faces=[label-1 for label in face_labels],
                            edges={edge:source_edges[label] for edge,label in edge_labels.items() if label in source_edges})
+            groups={}
+            for edge,original in mapping['edges'].items():
+                groups.setdefault(id(mapping['base_contours'][original]),set()).add(edge)
+            for edges in groups.values():
+                region=frozenset(edges)
+                for edge in edges: mapping['contours'][edge]=region
         finally:
             for name in names:
                 attr=mesh.attributes.get(name)
                 if attr is not None: mesh.attributes.remove(attr)
             mesh.update()
     else:
-        result=_cad_topology(obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data,obj.matrix_world,smooth=cad,design=design)
+        result=_cad_topology(obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).data,obj.matrix_world,smooth=cad,design=design,contours=mapping['contours'])
     if not active_modifiers:
-        mapping.update(base=result,faces=list(range(len(result[2]))),edges={edge:edge for edge in result[6]})
+        mapping.update(base=result,faces=list(range(len(result[2]))),edges={edge:edge for edge in result[6]},base_contours=mapping['contours'])
     result=(*result,mapping)
     cache[key]=(signature,result,{})
     cache.move_to_end(key)
@@ -914,14 +974,15 @@ def query_cad_surface(payload, kind):
         if cached and cached['object']==obj.name and cached['feature_id']==obj.get('btr_cad_feature_id'):
             return cached
     display_graph=graph[9]['base'] if kind=='VERTEX' and graph[9]['reference'] else graph
-    display=_cad_reference_geometry(display_graph,kind,source)
     mapping=graph[9]
+    contour=kind=='EDGE' and not runtime.active_sketch_id
+    display=_cad_reference_geometry(display_graph,kind,source,mapping['contours'] if contour else None)
     reference=display
     if mapping['reference']:
         base=mapping['base']
         original=(mapping['faces'][source] if kind=='FACE' else mapping['edges'].get(tuple(source)) if kind=='EDGE' else source)
         if original is not None and (kind!='FACE' or 0<=original<len(base[2])):
-            reference=_cad_reference_geometry(base,kind,original)
+            reference=_cad_reference_geometry(base,kind,original,mapping['base_contours'] if contour else None)
     data=dict(reference,object=obj.name,feature_id=obj.get('btr_cad_feature_id'),
               mesh_pointer=obj.data.as_pointer(),matrix=[list(row) for row in obj.matrix_world],display=display)
     data['id']=obj.name+':'+reference['id']
@@ -930,7 +991,7 @@ def query_cad_surface(payload, kind):
     return data
 
 
-def _cad_reference_geometry(graph, kind, source):
+def _cad_reference_geometry(graph, kind, source, regions=None):
     """Design measurements/planes and evaluated highlights share geometry extraction."""
     triangles,points,faces,normals,centers,adjacency,edges=graph[:7]
     data=dict(kind=kind,segments=[],triangles=[],points=[],planar=False)
@@ -949,7 +1010,7 @@ def _cad_reference_geometry(graph, kind, source):
         data['planar']=all(abs((Vector(p)-origin).dot(normal))<=tolerance for p in data['points'])
         data['id']='FACE:'+str(min(chosen))
     elif kind=='EDGE':
-        chosen=graph[8][tuple(source)]
+        chosen=(regions if regions is not None else graph[8])[tuple(source)]
         vertices={i for edge in chosen for i in edge}
         data['segments']=[[list(points[i]) for i in edge] for edge in sorted(chosen)]
         data['points']=[list(points[i]) for i in sorted(vertices)]

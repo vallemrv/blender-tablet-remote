@@ -17,6 +17,23 @@ from test_cad import CadTests, OWNER, volume
 
 
 class SketchTests(CadTests):
+    def test_dragging_arc_center_recalculates_free_radius_between_fixed_ends(self):
+        s=dict(entities=[dict(id='a',type='ARC',x=0.,y=.01,radius=math.sqrt(2)*.01,start=225.,sweep=90.)],
+               constraints=[dict(id='ends',type='FIX',refs=[dict(id='a',part='START')],
+                                 points={'START':[-.01,0.],'END':[.01,0.]})])
+        baseline=copy.deepcopy(s)
+        geometry.solve(s,geometry.move_goals(s,[dict(id='a',part='CENTER')],0.,.01),drag=True)
+        e=s['entities'][0]
+        self.assertAlmostEqual(e['y'],.02,places=7)
+        self.assertAlmostEqual(e['radius'],math.hypot(.01,.02),places=7)
+        self.assertLess(math.dist(geometry.handles(e)['START'],(-.01,0.)),1e-7)
+        self.assertLess(math.dist(geometry.handles(e)['END'],(.01,0.)),1e-7)
+        # An explicit radius lock removes that freedom and must still be honoured.
+        baseline['constraints'].append(dict(id='radius',type='RADIUS',refs=[dict(id='a',part='BODY')],value=math.sqrt(2)*.01))
+        geometry.solve(baseline,geometry.move_goals(baseline,[dict(id='a',part='CENTER')],0.,.01),drag=True)
+        self.assertAlmostEqual(baseline['entities'][0]['radius'],math.sqrt(2)*.01,places=7)
+        self.assertAlmostEqual(baseline['entities'][0]['y'],.01,places=7)
+
     def test_an_edge_below_the_sketch_projects_onto_that_plane(self):
         cad.sketch_create(dict(plane='XY', offset=.015, **OWNER))
         with patch.object(runtime.surface, 'validate'):

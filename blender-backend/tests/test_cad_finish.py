@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 import bpy
+import bmesh
+from mathutils import Vector
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from test_cad import CadTests, OWNER, volume
@@ -15,6 +17,55 @@ from blender_tablet_remote.errors import BadPayload, CommandError
 
 
 class FinishTests(CadTests):
+    def test_cleanup_preserves_small_geometry_away_from_the_selected_edge(self):
+        from blender_tablet_remote.cad.kernel import finish_edges
+        bm=bmesh.new()
+        try:
+            main=bmesh.ops.create_cube(bm,size=1.)['verts']
+            for v in main:
+                v.co=Vector(((v.co.x+.5)*.08,(v.co.y+.5)*.045,(v.co.z+.5)*.02))
+            small=bmesh.ops.create_cube(bm,size=1.)['verts']
+            for v in small: v.co=Vector((.2+v.co.x*8e-8,v.co.y*8e-8,.01+v.co.z*8e-8))
+            preserved={tuple(v.co) for v in small}
+            bm.verts.index_update()
+            solid=([tuple(v.co) for v in bm.verts],[tuple(v.index for v in f.verts) for f in bm.faces])
+        finally: bm.free()
+        result=finish_edges(solid,[[[(0,0,.02),(.08,0,.02)]]],.002,4)
+        self.assertTrue(preserved<=set(result[0]))
+
+    def test_initial_width_that_does_not_fit_keeps_controls_and_can_be_reduced(self):
+        self.box();before=model.dumps(runtime.doc());base=volume(self.obj())
+        self.select_edges(((0,0,.02),(.08,0,.02)))
+        with patch('blender_tablet_remote.commands.cad.undo_push') as undo:
+            with patch('blender_tablet_remote.cad.evaluation.finish_edges',side_effect=CommandError('No cabe',code='cad_finish_invalid')):
+                state=cad.finish_begin(dict(operation='FILLET',width=.5,**OWNER))
+            self.assertTrue(state['session']['active'])
+            self.assertFalse(state['session']['can_confirm'])
+            self.assertIsNotNone(state['error'])
+            self.assertEqual(state['session']['width'],.5)
+            self.assertEqual(model.dumps(runtime.doc()),before)
+            self.assertAlmostEqual(volume(self.obj()),base)
+            state=cad.finish_update(dict(width=.002,**OWNER))
+            self.assertIsNone(state['error'])
+            self.assertTrue(state['session']['can_confirm'])
+            cad.confirm(OWNER)
+            undo.assert_called_once()
+        self.assertEqual(runtime.doc()['features'][-1]['width'],.002)
+
+    def test_invalid_update_cannot_commit_previous_width_and_cancel_restores(self):
+        self.box();before=model.dumps(runtime.doc());base=volume(self.obj())
+        self.select_edges(((0,0,.02),(.08,0,.02)))
+        cad.finish_begin(dict(operation='FILLET',width=.002,**OWNER))
+        with patch('blender_tablet_remote.cad.evaluation.finish_edges',side_effect=CommandError('No cabe',code='cad_finish_invalid')):
+            state=cad.finish_update(dict(width=.5,**OWNER))
+        self.assertFalse(state['session']['can_confirm'])
+        self.assertIsNotNone(state['error'])
+        with patch('blender_tablet_remote.commands.cad.undo_push') as undo:
+            cad.confirm(OWNER)
+            undo.assert_not_called()
+        self.assertEqual(model.dumps(runtime.doc()),before)
+        self.assertAlmostEqual(volume(self.obj()),base)
+
     def box(self):
         """80 × 45 × 20 mm block."""
         return self.extrude(self.rect(),.02)

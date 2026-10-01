@@ -439,11 +439,25 @@ primero se eliminan los dependientes. El árbol permite borrar bocetos sin opera
 4. Desliza arriba/abajo o escribe el **Ancho**; el redondeo admite 1–16 **Segmentos**.
 5. ✓ añade la operación a la pila del cuerpo con un undo; × la descarta.
 
+Un borde formado por varios arcos o líneas tangentes se selecciona como un
+contorno completo con un toque. Las esquinas y bifurcaciones lo interrumpen;
+al proyectar referencias dentro del boceto se mantienen los tramos individuales.
+Las medidas se muestran sobre los controles; con más de dos aristas se resume
+su longitud total.
+
+Si el ancho no cabe, la sesión sigue abierta: reduce **Ancho** sin repetir la
+selección. No se puede confirmar un candidato inválido. Al escribir otro ancho,
+el check aplica primero su preview; con la preview válida, confirma la operación.
+
 Es una operación más de la pila: se puede ocultar, borrar o editar su ancho y
 segmentos tocando su nodo. Las aristas se guardan por su geometría, no por índices
 de malla: si alargas una extrusión, sus aristas rectas conservan el redondeo. Si
 una arista desaparece del diseño, la pila lo indica con un error en vez de ignorarla.
 Usa el bisel nativo de Blender sobre el sólido; no es un fillet B-rep.
+
+En el boceto, arrastrar el **centro de un arco** permite que su radio y sus ángulos
+libres se adapten a los extremos unidos. Las cotas fijadas siguen vigentes: para
+cambiar un radio acotado se edita su cota o se quita el candado.
 
 ## Persistencia y límites
 

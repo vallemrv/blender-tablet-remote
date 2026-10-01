@@ -406,8 +406,11 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 if (cad.canConfirm) command("cad.session.confirm")
             }
             finishPreview -> {
-                drafts["width"]?.let { command("cad.finish.update", "width" to it) }
-                if (cad.canConfirm) command("cad.session.confirm")
+                val width = drafts["width"]
+                if (width != null) {
+                    drafts.remove("width")
+                    command("cad.finish.update", "width" to width)
+                } else if (cad.canConfirm) command("cad.session.confirm")
             }
             offsetSource != null -> {
                 command("cad.entity.offset", "entity_id" to offsetSource!!.id,
@@ -452,7 +455,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
         pendingDimension = null; editingConstraint = null; offsetSource = null; mirrorSource = null; resetInputs++
     }
     val canAccept = connected && validDrafts && when {
-        depthPreview || finishPreview -> cad.canConfirm
+        depthPreview -> cad.canConfirm
+        finishPreview -> cad.canConfirm || drafts["width"] != null
         planePreview -> true
         pendingDimension != null -> true
         offsetSource != null || mirrorSource != null -> true
@@ -519,6 +523,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             }
             Text(if (cad.error != null) help else listOfNotNull(help, arcSelectionHelp).joinToString(" · "),
                 color = Ink.Muted, fontSize = 12.sp)
+            if (cad.surface.selection.isNotEmpty() && (cad.surface.mode != "PROFILE" || !editing)) {
+                Text(cadSurfaceSummary(cad, unit), color = Ink.Muted, fontSize = 12.sp)
+            }
             if (planePreview && planeMore) cad.plane?.let { plane ->
                 // Fila que se abre hacia arriba: inclinar y desplazar el plano por números.
                 val axes = cadPlaneAxes(plane.base.takeIf { it != "FACE" && plane.planeId == null })
@@ -1131,16 +1138,7 @@ internal fun cadPlaneAxes(base: String?): CadPlaneAxes = when (base) {
 @Composable
 private fun CadSurfaceControls(cad: CadState, unit: LengthUnit, enabled: Boolean, vm: MainViewModel) {
     val edges = cad.surface.selection.isNotEmpty() && cad.surface.selection.all { it.kind == "EDGE" }
-    if (cad.activeSketchId != null && cad.surface.selection.isNotEmpty()) {
-        Text("${cad.surface.selection.size} referencias seleccionadas", color = Ink.Accent, fontSize = 11.sp)
-        PillButton("Limpiar", enabled = enabled) { vm.cadCommand("cad.surface.clear") }
-    } else if (cad.surface.selection.size > 2 && edges) {
-        Text("${cad.surface.selection.size} aristas · ${cad.surface.selection.first().objectName}", color = Ink.Accent, fontSize = 11.sp)
-        PillButton("Limpiar", enabled = enabled) { vm.cadCommand("cad.surface.clear") }
-    } else if (cad.surface.selection.isNotEmpty()) {
-        cad.surface.selection.forEachIndexed { index,item ->
-            Text("${index+1} · ${item.objectName}", color = Ink.Accent, fontSize = 11.sp)
-        }
+    if (cad.surface.selection.isNotEmpty()) {
         PillButton("Limpiar", enabled = enabled) { vm.cadCommand("cad.surface.clear") }
     }
     if (cad.activeSketchId == null && edges) {
@@ -1151,12 +1149,20 @@ private fun CadSurfaceControls(cad: CadState, unit: LengthUnit, enabled: Boolean
     if (cad.activeSketchId != null && cad.surface.selection.isNotEmpty()) {
         PillButton("Proyectar al plano (${cad.surface.selection.size})", enabled = enabled) { vm.cadCommand("cad.reference.project") }
     }
-    val factor = when (unit) { LengthUnit.MILLIMETERS -> 1000.0; LengthUnit.CENTIMETERS -> 100.0; LengthUnit.METERS -> 1.0 }
-    cad.surface.measurements.forEach { measurement ->
+}
+
+internal fun cadSurfaceSummary(cad: CadState, unit: LengthUnit): String {
+    val factor = lengthFactor(unit)
+    if (cad.surface.selection.size > 2 && cad.surface.selection.all { it.kind == "EDGE" }) {
+        val total = cad.surface.measurements.filter { it.unit == "LENGTH" }.sumOf { it.value } * factor
+        return "${cad.surface.selection.size} aristas · Longitud total: ${formatToolDistance(total, detailDecimalPlaces(total, 3))} ${unit.short}"
+    }
+    val measures = cad.surface.measurements.map { measurement ->
         val scale = when (measurement.unit) { "AREA" -> factor * factor; "ANGLE" -> 1.0; else -> factor }
         val suffix = when (measurement.unit) { "AREA" -> unit.short + "²"; "ANGLE" -> "°"; else -> unit.short }
-        Text("${measurement.label}: ${formatToolDistance(measurement.value * scale, detailDecimalPlaces(measurement.value * scale, 3))} $suffix", color = Ink.OnPanel, fontSize = 12.sp)
+        "${measurement.label}: ${formatToolDistance(measurement.value * scale, detailDecimalPlaces(measurement.value * scale, 3))} $suffix"
     }
+    return (listOf("${cad.surface.selection.size} referencias seleccionadas") + measures).joinToString(" · ")
 }
 
 

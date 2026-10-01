@@ -279,13 +279,14 @@ def cut_mesh(base, cutter, *, operation='DIFFERENCE'):
             if mesh.users==0: bpy.data.meshes.remove(mesh)
 
 
-def _self_intersects(bm):
-    """True when two faces that share no vertex cross each other."""
+def _self_intersects(bm, unchanged=frozenset()):
+    """New crossings, including changed faces against the untouched solid."""
     from mathutils.bvhtree import BVHTree
     bm.faces.ensure_lookup_table()
+    bm.faces.index_update()
     tree = BVHTree.FromBMesh(bm, epsilon=0.)
     for a, b in tree.overlap(tree):
-        if a < b and not (set(bm.faces[a].verts) & set(bm.faces[b].verts)):
+        if a < b and not (bm.faces[a] in unchanged and bm.faces[b] in unchanged) and not (set(bm.faces[a].verts) & set(bm.faces[b].verts)):
             return True
     return False
 
@@ -301,7 +302,8 @@ def finish_edges(solid, edges, width, segments):
     import bmesh
     from mathutils.geometry import intersect_point_line
     vertices, faces = solid
-    extent = max(max(v[i] for v in vertices)-min(v[i] for v in vertices) for i in range(3))
+    bounds=[(min(v[i] for v in vertices),max(v[i] for v in vertices)) for i in range(3)]
+    extent = max(high-low for low,high in bounds)
     tolerance = extent*1e-6+1e-9
     lines = [[(Vector(a), Vector(b)) for a, b in edge] for edge in edges]
     # Spatial index of the stored segments: each mesh edge only tests its neighbours.
@@ -326,9 +328,12 @@ def finish_edges(solid, edges, width, segments):
         verts = [bm.verts.new(v) for v in vertices]
         for face in faces: bm.faces.new([verts[i] for i in face])
         bm.normal_update()
+        original_faces={f:frozenset(tuple(v.co) for v in f.verts) for f in bm.faces}
         # Boolean seams leave duplicate vertices; coplanar tessellation is not a design edge.
-        bmesh.ops.remove_doubles(bm, verts=list(bm.verts), dist=tolerance)
-        bmesh.ops.dissolve_limit(bm, angle_limit=1e-4, verts=list(bm.verts), edges=list(bm.edges))
+        vicinity={v for e in bm.edges if owner(e) is not None for v in e.verts}
+        bmesh.ops.remove_doubles(bm, verts=list(vicinity), dist=tolerance)
+        bmesh.ops.dissolve_limit(bm, angle_limit=1e-4, verts=[v for v in vicinity if v.is_valid],
+                                edges=[e for e in bm.edges if all(v in vicinity for v in e.verts)])
         # A vertex in the middle of a straight run of a design edge (where another
         # face was split) leaves slivers the bevel cannot offset: slide it to the
         # nearer end of that run. Faces stay planar and the edge keeps its line.
@@ -355,11 +360,18 @@ def finish_edges(solid, edges, width, segments):
             raise CommandError('Una arista del redondeo ya no existe; edita o borra la operación', code='cad_reference_missing')
         # No clamp: on a tessellated circle it shrinks the width to the ~1 mm chord
         # length and the fillet vanishes. A width that does not fit is caught below.
-        bmesh.ops.bevel(bm, geom=list(chosen)+list({v for e in chosen for v in e.verts}), offset=width,
+        bevel=bmesh.ops.bevel(bm, geom=list(chosen)+list({v for e in chosen for v in e.verts}), offset=width,
                         offset_type='OFFSET', profile_type='SUPERELLIPSE', segments=segments,
                         profile=.5, affect='EDGES', clamp_overlap=False, loop_slide=True)
         bm.normal_update()
-        if not all(e.is_manifold for e in bm.edges) or bm.calc_volume() <= 1e-18 or _self_intersects(bm):
+        unchanged={f for f,coords in original_faces.items() if f.is_valid and
+                   frozenset(tuple(v.co) for v in f.verts)==coords}
+        # A concave fillet may add material, but cannot grow beyond the source
+        # solid's bounds. Oversized offsets can otherwise produce a closed flange
+        # wider than the original and escape the intersection test.
+        outside=any(v.co[i]<low-tolerance or v.co[i]>high+tolerance
+                    for v in bm.verts for i,(low,high) in enumerate(bounds))
+        if not bevel['faces'] or outside or not all(e.is_manifold for e in bm.edges) or bm.calc_volume() <= 1e-18 or _self_intersects(bm,unchanged):
             raise CommandError('El redondeo no cabe en esas aristas; reduce el ancho', code='cad_finish_invalid')
         bm.verts.index_update()
         return [tuple(v.co) for v in bm.verts], [tuple(v.index for v in f.verts) for f in bm.faces]
@@ -714,4 +726,3 @@ def sweep(sketch, source, sampled):
         raise CommandError('El barrido no encierra volumen', code='cad_profile_invalid')
     if volume < 0: faces = [tuple(reversed(f)) for f in faces]
     return vertices, faces
-

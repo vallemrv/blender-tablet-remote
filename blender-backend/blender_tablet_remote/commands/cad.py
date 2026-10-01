@@ -980,13 +980,21 @@ def finish_begin(payload):
     session=runtime.begin(payload,operation)
     preview=copy.deepcopy(session['baseline']); preview['features'].append(feature)
     if bar: model.insert_after(preview,feature,bar)
+    session.update(feature_id=feature['id'],preview=preview,candidate=None,width=feature['width'],
+                   segments=feature['segments'],at_bar=bool(bar),error=None)
     try:
         yield from runtime.rebuild_steps(preview,limit=feature['id'] if bar else None)
+    except CommandError as exc:
+        if exc.code!='cad_finish_invalid':
+            runtime.session=None
+            raise
+        # Keep the width controls available even when the first preview cannot fit.
+        session['error']=exc.message
     except Exception:
         runtime.session=None
         raise
-    session.update(feature_id=feature['id'],preview=preview,candidate=feature['id'],width=feature['width'],
-                   segments=feature['segments'],at_bar=bool(bar))
+    else:
+        session['candidate']=feature['id']
     runtime.surface.clear()
     runtime.selection=dict(kind='FEATURE',id=feature['id'])
     return runtime.status()
@@ -1002,8 +1010,13 @@ def finish_update(payload):
     preview=copy.deepcopy(session['preview'])
     feature=model.find(preview,'features',session['feature_id'])
     feature.update(width=width,segments=segments); model.validate_finish(feature)
-    yield from runtime.rebuild_steps(preview,limit=session['feature_id'] if session.get('at_bar') else None)
-    session.update(preview=preview,width=width,segments=segments)
+    try:
+        yield from runtime.rebuild_steps(preview,limit=session['feature_id'] if session.get('at_bar') else None)
+    except CommandError as exc:
+        if exc.code!='cad_finish_invalid': raise
+        session.update(preview=preview,width=width,segments=segments,candidate=None,error=exc.message)
+    else:
+        session.update(preview=preview,width=width,segments=segments,candidate=session['feature_id'],error=None)
     return runtime.status()
 
 

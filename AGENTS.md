@@ -302,6 +302,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Los parámetros viven en una bandeja común.
 - El aviso de edición conjunta de varios arcos se muestra en la fila superior de
   ayuda de la bandeja CAD, junto a las explicaciones; no ocupa la fila de campos.
+- Las medidas del sólido y el recuento de referencias van en una línea informativa
+  sobre los controles. Más de dos aristas muestran su longitud total, sin una lista
+  de longitudes que desplace Ancho/Paso y las acciones.
 - Las nuevas herramientas deben describirse mediante catálogo/esquema siempre que sea
   posible, evitando nuevas ramas específicas en Compose.
 - Los componentes compartidos poseen disposición, estado, unidades y ciclo de sesión;
@@ -534,6 +537,12 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - En CAD 3D, el rail ofrece Redondear y Chaflán de las aristas del sólido. Sin
   aristas elegidas, el botón pasa a Aristas para tocarlas; con selección abre la
   preview. Extruir admite Simetría: la profundidad crece a los dos lados del croquis.
+- Si el ancho de un acabado CAD no cabe, la sesión conserva Ancho y Segmentos para
+  corregirlo; el candidato inválido nunca se confirma ni crea undo. Aplicar un
+  borrador de Ancho espera su preview antes de permitir confirmar la operación.
+  La limpieza del bisel actúa solo en las aristas elegidas y conserva el resto de
+  la malla. Valida cierre, volumen y cruces de las caras modificadas contra el sólido;
+  intersecciones previas entre caras intactas no se atribuyen al nuevo acabado.
 - Extruir/Vaciar CAD siguen la normal del plano en pantalla: arriba/abajo o
   izquierda/derecha, y también el sentido contrario. El lápiz mueve un prisma
   ligero que sigue la punta 1:1 sobre la normal (rayo del lápiz contra la recta
@@ -789,6 +798,13 @@ no quedan archivos o referencias temporales.
   planos del perfil (las curvas no). Un cilindro admite vértices de corte hundidos
   hasta la sagita de su teselación (2,2 ‰ del radio), así la unión de un tubo con
   una cara plana es una sola arista circular.
+- En la selección 3D, las aristas de diseño contiguas y tangentes forman un único
+  contorno seleccionable, medible y redondeable. La continuidad usa las normales
+  analíticas, no los ángulos de la teselación. Conserva esquinas y ramificaciones;
+  dentro del croquis, Proyectar mantiene las referencias de cada tramo por separado.
+- Arrastrar el centro de un arco permite adaptar su radio y sus ángulos libres a
+  los extremos unidos. El objetivo táctil tiene peso suficiente para recorrer esa
+  libertad; la proyección final conserva todas las cotas y reglas fijadas.
 - La primera selección CAD agrupa contornos suaves mediante uniones de conjuntos:
   calcula una vez qué segmentos terminan en esquinas y materializa cada grupo al
   final. No reinicia un recorrido global ni copia el contorno creciente por cada

@@ -47,6 +47,28 @@ class SelectionEfficiencyTests(CadTests):
         # Each cap: two lines and two arcs; plus four tangent seams on the sides.
         self.assertEqual(len(set(graph[8].values())), 12)
         self.assertEqual(len(snap._cad_corners(graph[8])), 8)
+        # Solid picking follows the full tangent outline, while projected
+        # sketch references and design corners retain their individual edges.
+        contours=graph[9]['contours']
+        self.assertEqual(len(set(contours.values())),6)
+        rings=[region for region in set(contours.values()) if len(region)>2]
+        self.assertEqual(len(rings),2)
+        for region in rings:
+            ids={snap._cad_reference_geometry(graph,'EDGE',edge,contours)['id'] for edge in region}
+            self.assertEqual(len(ids),1)
+            self.assertEqual(len({graph[8][edge] for edge in region}),4)
+
+    def test_whole_contours_do_not_swallow_cube_corners(self):
+        self.extrude(self.rect())
+        graph=snap._cad_mesh(self.obj())
+        self.assertEqual(len(set(graph[9]['contours'].values())),12)
+
+    def test_ambiguous_tangent_branch_is_not_joined(self):
+        points=[Vector(p) for p in [(0,0,0),(-1,0,0),(1,0,0),(2,0,0)]]
+        regions={edge:frozenset([edge]) for edge in [(0,1),(0,2),(0,3)]}
+        contours=snap._tangent_contours(points,{e:[0,1] for e in regions},regions,[1,2],
+            {1:('PLANE',Vector((0,0,1)),0.),2:('PLANE',Vector((0,1,0)),0.)})
+        self.assertEqual(len(set(contours.values())),3)
 
     def test_more_circle_samples_do_not_multiply_global_contour_passes(self):
         for samples in (128, 512):

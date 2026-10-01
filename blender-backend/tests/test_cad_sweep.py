@@ -131,6 +131,7 @@ class SweepCommandTests(CadTests):
         added = closed(finish_edges(base, [edge], .004, 4))-closed(base)
         # Concave R4 around a Ø44 tube: (1-π/4)·r²·2π·(22 mm + ~r/3), within tessellation error.
         self.assertAlmostEqual(added/((1-math.pi/4)*.004**2*2*math.pi*.0233), 1, delta=.12)
+        with self.assertRaises(CommandError): finish_edges(base,[edge],.03,4)
 
 
 if __name__ == '__main__':

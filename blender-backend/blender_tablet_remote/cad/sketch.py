@@ -330,7 +330,7 @@ def solve(sketch, goals=(), *, drag=False):
             rows=[(e['x']+e['width']/2-cx)/scale, (e['y']+e['height']/2-cy)/scale]
         else:
             rows=list((point(work,goal)-goal['point'])/scale)
-        return [v*.001 for v in rows] if drag and not goal.get('hard') else rows
+        return [v*goal.get('weight',.001) for v in rows] if drag and not goal.get('hard') else rows
     items=[(lambda c=c:residual(work,c,scale)) for c in work.get('constraints',[])]+[(lambda g=g:goal_rows(g)) for g in goals]
     # Entities each item reads: its references plus the sides a rounding links to them.
     links=work['_rounding_links']
@@ -466,7 +466,13 @@ def move_goals(sketch, refs, dx, dy):
             key=(e['id'],role)
             if key in seen: continue
             seen.add(key)
-            goals.append(dict(id=e['id'],part=role,point=np.array(points[role])+[dx,dy]))
+            goal=dict(id=e['id'],part=role,point=np.array(points[role])+[dx,dy])
+            if e['type']=='ARC' and part=='CENTER':
+                # A centre can move while its radius/angles adapt to joined ends.
+                # An excessively weak target stalls on this curved constraint set;
+                # solve() still projects onto every hard rule before publishing.
+                goal['weight']=.1
+            goals.append(goal)
     return goals
 
 

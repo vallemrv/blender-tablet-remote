@@ -687,7 +687,7 @@ class CadRuntime:
                                       plane=_plane_public(session) if session and session['operation']=='PLANE' else None,
                                      can_confirm=bool(session and session.get('candidate')),
                                      can_close=bool(session and session.get('can_close'))),
-                        overlay=self.overlay(doc),error=None)
+                        overlay=self.overlay(doc),error=session.get('error') if session else None)
         except CommandError as exc:
             return dict(version=1,workspace=self.workspace,isolated=bool(self.workspace),document=None,active_sketch_id=None,
                         rollback_id=None,
