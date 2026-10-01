@@ -1,10 +1,28 @@
 package com.blendertablet.remote.ui
 
 import com.blendertablet.remote.model.*
+import com.blendertablet.remote.network.CadParser
+import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 
 class CadFeedbackTest {
+    @Test fun advertisedAngleReachesTheRailForASelectedConstructionLineAndSide() {
+        val capabilities = CadParser.capabilities(JSONObject("""{"version":2,"length_unit":"METERS",
+            "constraints":["DISTANCE","DISTANCE_X","DISTANCE_Y","RADIUS","ANGLE"]}"""))
+        val cad = CadParser.state(JSONObject("""{"version":1,"active_sketch_id":"s",
+            "document":{"sketches":[{"id":"s","entities":[
+                {"id":"vertical","type":"LINE","construction":true},
+                {"id":"side","type":"LINE","construction":false}]}]},
+            "selection":{"kind":"ENTITY","id":"side","part":"BODY","items":[
+                {"id":"vertical","part":"BODY"},{"id":"side","part":"BODY"}]},
+            "dimension_options":{"ANGLE":{"value":4.207751420066274,"constraint_id":null}}}"""))
+        val rail = cadConstraintGroups(capabilities.constraints).flatten()
+        assertTrue("The advertised angle must be visible in the rail", "ANGLE" in rail)
+        assertTrue(cadConstraintEnabled(cad, "ANGLE"))
+        assertEquals(4.207751420066274, cad.dimensionOptions.getValue("ANGLE").value, 1e-12)
+    }
+
     @Test fun angleDimensionNeedsTwoDistinctStraightLines() {
         val lines = listOf(CadEntity("a", "LINE", emptyMap()), CadEntity("b", "LINE", emptyMap()), CadEntity("c", "CIRCLE", emptyMap()))
         val sketch = CadSketch("s", "Boceto", "XY", lines, emptyList())

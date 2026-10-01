@@ -435,6 +435,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   cada segmento apunta desde la intersección de ambas rectas hacia su extremo más
   lejano, así una esquina compartida mide su ángulo interior. Vive en el grupo de
   cotas del rail, se ofrece con el valor actual y se dibuja como arco con flechas.
+  Android conserva `ANGLE` al leer las capacidades; la prueba recorre anuncio,
+  estado y catálogo del rail para evitar ocultarlo aunque el backend lo ofrezca.
 - Las cotas CAD distinguen distancia diagonal, horizontal y vertical (`DISTANCE`,
   `DISTANCE_X`, `DISTANCE_Y`). Las dos últimas miden la separación absoluta en los
   ejes del croquis, admiten cero y conservan cantidades independientes. Pueden usar
