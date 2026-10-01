@@ -551,7 +551,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   diseño elegidas (nunca índices), `width` y `segments` (chaflán = 1). Se evalúan con
   `bmesh.ops.bevel` sobre el sólido compacto tras disolver la teselación coplanar; una
   arista coincide si está en la recta de un segmento guardado y lo solapa, así sobrevive
-  a cambios de longitud. Sin coincidencia → error explícito. En modo Aristas la
+  a cambios de longitud. Sin coincidencia → error explícito. Antes del bisel se sueldan
+  duplicados y los vértices intermedios de cada tramo recto se llevan a su extremo;
+  el bisel no usa clamp (en círculos teselados anula el ancho) y un resultado que se
+  cruza consigo mismo se rechaza pidiendo reducir el ancho. En modo Aristas la
   selección del sólido se acumula; Redondear/Chaflán abren una sesión `cad.finish.*`
   excluyente, con preview desde el baseline y un undo. No sirven de apoyo de bocetos.
 - Un boceto sobre la cara superior sigue el plano/altura de su operación soporte.
@@ -766,7 +769,11 @@ no quedan archivos o referencias temporales.
   superficies que separa. Así líneas y arcos tangentes (ranura, rectángulo
   redondeado) son caras, aristas y puntos distintos. No se propaga nada por los
   booleanos: las caras cortadas siguen sobre su superficie. Redondeos, solevado,
-  helicoidal y flancos de engranaje quedan sin etiqueta y usan la heurística.
+  helicoidal y flancos de engranaje quedan sin etiqueta y usan la heurística. El
+  Barrido etiqueta sus tapas y, en cada línea recta del recorrido, los cilindros y
+  planos del perfil (las curvas no). Un cilindro admite vértices de corte hundidos
+  hasta la sagita de su teselación (2,2 ‰ del radio), así la unión de un tubo con
+  una cara plana es una sola arista circular.
 - La primera selección CAD agrupa contornos suaves mediante uniones de conjuntos:
   calcula una vez qué segmentos terminan en esquinas y materializa cada grupo al
   final. No reinicia un recorrido global ni copia el contorno creciente por cada
@@ -849,7 +856,9 @@ no quedan archivos o referencias temporales.
 - Barrido (`SWEEP`) guarda `sketch_id/profile_id` y `path_sketch_id`: el recorrido es la
   única cadena abierta de líneas/arcos no constructivos de otro croquis, acotable y
   asociativa. El perfil (huecos incluidos) conserva su pose respecto al inicio y gira
-  por transporte paralelo; los extremos usan la tangente exacta del arco. Se suma al
+  por transporte paralelo con la tangente analítica de cada vértice: las uniones
+  tangentes no se inglean (los tramos rectos quedan cilindros exactos) y solo las
+  esquinas reales se estiran a lo ancho del giro. Se suma al
   cuerpo y no sirve de apoyo. Android: perfil → Barrido → tocar el croquis del
   recorrido en la pila (que se abre sola).
 - Revolución (`REVOLVE`) guarda `sketch_id/profile_id`, `axis` (`X`/`Y` del croquis

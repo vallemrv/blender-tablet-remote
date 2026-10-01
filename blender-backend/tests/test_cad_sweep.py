@@ -100,6 +100,38 @@ class SweepCommandTests(CadTests):
         cad.sweep_create(dict(sketch_id=ring, path_sketch_id=path, **OWNER))
         self.assertAlmostEqual(volume(self.obj()), math.pi*(.022**2-.014**2)*.04, delta=5e-8)
 
+    def test_tube_meets_a_flange_in_one_circular_edge_that_takes_a_fillet(self):
+        from blender_tablet_remote.commands.snap import _cad_mesh
+        from blender_tablet_remote.cad.kernel import finish_edges
+        flange = self.draw('CIRCLE', (0, 0), (.04, 0))
+        self.extrude(flange, .007)
+        cad.sketch_create(dict(plane='XY', **OWNER))
+        self.draw('CIRCLE', (0, 0), (.022, 0)); self.draw('CIRCLE', (0, 0), (.014, 0))
+        ring = runtime.active_sketch_id
+        cad.sketch_finish(OWNER)
+        cad.sketch_create(dict(plane='XZ', **OWNER))
+        self.draw('LINE', (0, 0), (0, .04))
+        path = runtime.active_sketch_id
+        cad.sketch_finish(OWNER)
+        cad.sweep_create(dict(sketch_id=ring, path_sketch_id=path, **OWNER))
+        obj = self.obj(); scale = bpy.context.scene.unit_settings.scale_length
+        points, edge_regions = _cad_mesh(obj)[1], _cad_mesh(obj)[8]
+        on_ring = lambda e: all(abs(points[i].z*scale-.007) < 1e-6 and abs(math.hypot(points[i].x, points[i].y)*scale-.022) < 1e-5 for i in e)
+        regions = {id(edge_regions[e]): edge_regions[e] for e in edge_regions if on_ring(e)}
+        self.assertEqual(len(regions), 1)   # one design edge, not its tessellation
+        edge = [[list(points[a]*scale), list(points[b]*scale)] for a, b in next(iter(regions.values()))]
+        solid = runtime.doc()['features'][-1]['id']
+        from blender_tablet_remote.cad.evaluation import evaluator
+        base = evaluator.evaluate(runtime.doc(), scale=1.)['solids'][solid][1]
+        def closed(data):
+            bm = bmesh.new(); vs = [bm.verts.new(v) for v in data[0]]
+            for f in data[1]: bm.faces.new([vs[i] for i in f])
+            try: return bm.calc_volume()
+            finally: bm.free()
+        added = closed(finish_edges(base, [edge], .004, 4))-closed(base)
+        # Concave R4 around a Ø44 tube: (1-π/4)·r²·2π·(22 mm + ~r/3), within tessellation error.
+        self.assertAlmostEqual(added/((1-math.pi/4)*.004**2*2*math.pi*.0233), 1, delta=.12)
+
 
 if __name__ == '__main__':
     suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(case)

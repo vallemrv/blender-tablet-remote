@@ -32,11 +32,58 @@ def _sides(e):
     return [], []   # GEAR flanks and anything else keep the mesh heuristics
 
 
+def _sweep_surfaces(doc, feature, scale):
+    """End caps and, along each straight path line, the planes/cylinders of the profile.
+
+    The bends stay unlabelled (tori are not design surfaces here); the straight
+    runs give the tube its true cylinder, so its junction with a flat face is a
+    single circular edge.
+    """
+    from .kernel import sweep_path, sweep_frames, world as at
+    sketch, _ = model.profile(doc, feature['profile_id'])
+    path_sketch = model.find(doc, 'sketches', feature['path_sketch_id'])
+    path, tangents, directions, matrices, _, _ = sweep_frames(sketch, sweep_path(path_sketch))
+    f = model.frame(sketch)
+    origin, fn = Vector(f['origin']), Vector(f['normal'])
+    start = path[0]
+    result = [('PLANE', fn.copy(), origin.dot(fn)/scale)]
+    end_normal = (matrices[-1] @ fn).normalized()
+    end_point = path[-1]+matrices[-1] @ (origin-start)
+    result.append(('PLANE', end_normal, end_point.dot(end_normal)/scale))
+    lines = [(Vector(at(path_sketch, e['x'], e['y'])), Vector(at(path_sketch, e['x2'], e['y2'])))
+             for e in path_sketch['entities'] if e['type'] == 'LINE' and not e.get('construction', False)]
+    entities = []
+    for e in model.closed_entities(sketch):
+        members = e.get('members')
+        entities.extend(model.find(sketch, 'entities', m) for m in members) if members else entities.append(e)
+    tolerance = max((b-a).length for a, b in zip(path, path[1:]))*1e-6
+    for k, tangent in enumerate(tangents):
+        a, b = path[k], path[k+1]
+        if not any(min((a-p).length+(b-q).length, (a-q).length+(b-p).length) <= tolerance for p, q in lines):
+            continue
+        matrix = directions[k].rotation_difference(tangent).to_matrix() @ matrices[k]
+        place = lambda x, y: a+matrix @ (Vector(at(sketch, x, y))-start)
+        for e in entities:
+            sides, arcs = _sides(e)
+            for _, p, q in sides:
+                p, q = place(*p), place(*q)
+                if (q-p).length < 1e-12: continue
+                normal = (q-p).normalized().cross(tangent).normalized()
+                result.append(('PLANE', normal, p.dot(normal)/scale))
+            for center, radius in arcs:
+                result.append(('CYLINDER', place(*center)/scale, tangent.copy(), radius/scale))
+    return result
+
+
 def surfaces(doc, body_id, scale):
     """Analytic surfaces in Blender units: ('PLANE', normal, offset) or ('CYLINDER', point, axis, radius)."""
     result = []
     from . import mirror
     for feature in doc['features']:
+        if feature.get('body_id') == body_id and feature['type'] == 'SWEEP' and feature['enabled']:
+            try: result.extend(_sweep_surfaces(doc, feature, scale))
+            except Exception: pass
+            continue
         if feature.get('body_id') != body_id or not mirror.active(doc,feature) or feature['type'] not in ('EXTRUDE', 'CUT', 'MIRROR'):
             continue
         first_surface=len(result)
@@ -115,7 +162,10 @@ def label_faces(points, faces, normals, found, tolerance):
                 def distance(v):
                     w = v-point
                     return (w-axis*w.dot(axis)).length
-                if all(abs(distance(v)-radius) <= tolerance for v in vertices):
+                # Boolean cuts add vertices on the chords of the tessellated circle,
+                # up to its sagitta inside the radius (slot caps: 7.5° steps).
+                sag = max(tolerance, radius*2.2e-3)
+                if all(-sag <= distance(v)-radius <= tolerance for v in vertices):
                     label = k; break
         labels.append(label)
     return labels

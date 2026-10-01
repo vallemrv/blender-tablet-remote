@@ -279,6 +279,17 @@ def cut_mesh(base, cutter, *, operation='DIFFERENCE'):
             if mesh.users==0: bpy.data.meshes.remove(mesh)
 
 
+def _self_intersects(bm):
+    """True when two faces that share no vertex cross each other."""
+    from mathutils.bvhtree import BVHTree
+    bm.faces.ensure_lookup_table()
+    tree = BVHTree.FromBMesh(bm, epsilon=0.)
+    for a, b in tree.overlap(tree):
+        if a < b and not (set(bm.faces[a].verts) & set(bm.faces[b].verts)):
+            return True
+    return False
+
+
 def finish_edges(solid, edges, width, segments):
     """Fillet (segments > 1) or chamfer (1) the design edges on a compact solid.
 
@@ -293,31 +304,62 @@ def finish_edges(solid, edges, width, segments):
     extent = max(max(v[i] for v in vertices)-min(v[i] for v in vertices) for i in range(3))
     tolerance = extent*1e-6+1e-9
     lines = [[(Vector(a), Vector(b)) for a, b in edge] for edge in edges]
-    def on(edge, segments):
+    # Spatial index of the stored segments: each mesh edge only tests its neighbours.
+    from mathutils.kdtree import KDTree
+    flat = [(k, a, b) for k, segments_of in enumerate(lines) for a, b in segments_of]
+    index = KDTree(len(flat))
+    for i, (_, a, b) in enumerate(flat): index.insert((a+b)*.5, i)
+    index.balance()
+    reach = max(((b-a).length*.5 for _, a, b in flat), default=0.)+tolerance
+    def owner(edge):
+        """Design edge whose stored segment line holds this mesh edge, or None."""
         p, q = edge.verts[0].co, edge.verts[1].co
-        for a, b in segments:
+        found = {i for point in (p, q, (p+q)*.5) for _, i, _ in index.find_range(point, reach+(q-p).length)}
+        for i in found:
+            k, a, b = flat[i]
             (cp, tp), (cq, tq) = intersect_point_line(p, a, b), intersect_point_line(q, a, b)
             overlap = min(max(tp, tq), 1.) - max(min(tp, tq), 0.)
-            if (cp-p).length <= tolerance and (cq-q).length <= tolerance and overlap > 1e-6: return True
-        return False
+            if (cp-p).length <= tolerance and (cq-q).length <= tolerance and overlap > 1e-6: return k
+        return None
     bm = bmesh.new()
     try:
         verts = [bm.verts.new(v) for v in vertices]
         for face in faces: bm.faces.new([verts[i] for i in face])
         bm.normal_update()
-        # Coplanar boolean tessellation is not a design edge; merge it first.
+        # Boolean seams leave duplicate vertices; coplanar tessellation is not a design edge.
+        bmesh.ops.remove_doubles(bm, verts=list(bm.verts), dist=tolerance)
         bmesh.ops.dissolve_limit(bm, angle_limit=1e-4, verts=list(bm.verts), edges=list(bm.edges))
+        # A vertex in the middle of a straight run of a design edge (where another
+        # face was split) leaves slivers the bevel cannot offset: slide it to the
+        # nearer end of that run. Faces stay planar and the edge keeps its line.
+        pending = list({v for e in bm.edges if owner(e) is not None for v in e.verts})
+        while pending:
+            vert = pending.pop()
+            if not vert.is_valid: continue
+            run = [e for e in vert.link_edges if owner(e) is not None]
+            if len(run) != 2: continue
+            a, b = (e.other_vert(vert) for e in run)
+            # Straightness by distance to the chord a-b: tiny float32 pieces near
+            # a corner have meaningless directions but sit on the line.
+            foot, t = intersect_point_line(vert.co, a.co, b.co)
+            if not 0. < t < 1. or (foot-vert.co).length > tolerance*10: continue
+            target = a if (vert.co-a.co).length <= (vert.co-b.co).length else b
+            bmesh.ops.pointmerge(bm, verts=[vert, target], merge_co=target.co.copy())
+            pending.append(target)
         chosen = set()
-        for segments_of in lines:
-            found = [e for e in bm.edges if on(e, segments_of)]
-            if not found:
-                raise CommandError('Una arista del redondeo ya no existe; edita o borra la operación', code='cad_reference_missing')
-            chosen.update(found)
+        hit = set()
+        for e in bm.edges:
+            k = owner(e)
+            if k is not None: chosen.add(e); hit.add(k)
+        if len(hit) != len(lines):
+            raise CommandError('Una arista del redondeo ya no existe; edita o borra la operación', code='cad_reference_missing')
+        # No clamp: on a tessellated circle it shrinks the width to the ~1 mm chord
+        # length and the fillet vanishes. A width that does not fit is caught below.
         bmesh.ops.bevel(bm, geom=list(chosen)+list({v for e in chosen for v in e.verts}), offset=width,
                         offset_type='OFFSET', profile_type='SUPERELLIPSE', segments=segments,
-                        profile=.5, affect='EDGES', clamp_overlap=True, loop_slide=True)
+                        profile=.5, affect='EDGES', clamp_overlap=False, loop_slide=True)
         bm.normal_update()
-        if not all(e.is_manifold for e in bm.edges) or bm.calc_volume() <= 1e-18:
+        if not all(e.is_manifold for e in bm.edges) or bm.calc_volume() <= 1e-18 or _self_intersects(bm):
             raise CommandError('El redondeo no cabe en esas aristas; reduce el ancho', code='cad_finish_invalid')
         bm.verts.index_update()
         return [tuple(v.co) for v in bm.verts], [tuple(v.index for v in f.verts) for f in bm.faces]
@@ -535,7 +577,12 @@ def revolve(sketch, source, axis, angle):
 
 
 def sweep_path(sketch):
-    """World points of the single open chain of lines/arcs drawn in a path sketch."""
+    """Open chain of lines/arcs in a path sketch: world points and exact tangents.
+
+    Each vertex carries the analytic tangent of its line or arc. Where two
+    entities meet tangentially that tangent is shared; at a real corner it is
+    None and the sweep mitres the section there.
+    """
     import math
     edges = [e for e in sketch['entities'] if not e.get('construction', False) and e['type'] in ('LINE', 'ARC')]
     if not edges:
@@ -545,40 +592,66 @@ def sweep_path(sketch):
     span = max(max(abs(c) for p in outline(e) for c in p) for e in edges)
     tolerance = max(span*1e-6, 1e-9)
     near = lambda a, b: math.dist(a, b) <= tolerance
+    def samples(e, reverse):
+        points = outline(e)
+        if e['type'] == 'LINE':
+            d = (e['x2']-e['x'], e['y2']-e['y']); length = math.hypot(*d)
+            tangents = [(d[0]/length, d[1]/length)]*len(points)
+        else:
+            sign = 1. if e['sweep'] > 0 else -1.
+            tangents = [(-(y-e['y'])/e['radius']*sign, (x-e['x'])/e['radius']*sign) for x, y in points]
+        pairs = list(zip(points, tangents))
+        return [(p, (-t[0], -t[1])) for p, t in reversed(pairs)] if reverse else pairs
+    def joint(a, b):
+        # Shared tangent where the entities meet smoothly, None at a corner.
+        return a if a is not None and b is not None and a[0]*b[0]+a[1]*b[1] > 1-1e-6 else None
     remaining = {e['id']: e for e in edges}
-    points = outline(remaining.pop(edges[0]['id']))
-    ends = [edges[0]['type'], edges[0]['type']]   # entity type at the start and end
+    chain = samples(remaining.pop(edges[0]['id']), False)
     grown = True
     while remaining and grown:
         grown = False
         for e in list(remaining.values()):
-            path = outline(e)
             for end, reverse in ((-1, False), (-1, True), (0, False), (0, True)):
-                piece = list(reversed(path)) if reverse else path
-                if end == -1 and near(points[-1], piece[0]):
-                    points.extend(piece[1:]); ends[1] = e['type']
-                elif end == 0 and near(points[0], piece[-1]):
-                    points[:0] = piece[:-1]; ends[0] = e['type']
+                piece = samples(e, reverse)
+                if end == -1 and near(chain[-1][0], piece[0][0]):
+                    chain[-1] = (chain[-1][0], joint(chain[-1][1], piece[0][1])); chain.extend(piece[1:])
+                elif end == 0 and near(chain[0][0], piece[-1][0]):
+                    chain[0] = (chain[0][0], joint(piece[-1][1], chain[0][1])); chain[:0] = piece[:-1]
                 else:
                     continue
                 remaining.pop(e['id']); grown = True
                 break
     if remaining:
         raise CommandError('El recorrido debe ser una sola cadena de líneas y arcos unidos por sus extremos', code='cad_profile_invalid')
-    if near(points[0], points[-1]):
+    if near(chain[0][0], chain[-1][0]):
         raise CommandError('El recorrido es cerrado; el barrido usa un recorrido abierto', code='cad_profile_invalid')
-    result = [Vector(world(sketch, x, y)) for x, y in points]
-    result = [p for i, p in enumerate(result) if i == 0 or (p-result[i-1]).length > tolerance]
-    def end_tangent(a, b, c, kind):
-        # A uniformly sampled arc leaves its end chord turned by half a step.
-        chord = (b-a).normalized()
-        if kind != 'ARC' or c is None: return chord
-        middle = (chord+(c-b).normalized()).normalized()
-        return (chord*2*chord.dot(middle)-middle).normalized()
-    third = lambda i: result[i] if 0 <= i < len(result) else None
-    start = end_tangent(result[0], result[1], third(2), ends[0])
-    finish = -end_tangent(result[-1], result[-2], third(len(result)-3), ends[1])
-    return result, start, finish
+    origin = Vector(world(sketch, 0, 0))
+    points, tangents = [], []
+    for (x, y), t in chain:
+        p = Vector(world(sketch, x, y))
+        if points and (p-points[-1]).length <= tolerance: continue
+        points.append(p)
+        tangents.append(None if t is None else (Vector(world(sketch, *t))-origin).normalized())
+    return points, tangents
+
+
+def sweep_frames(sketch, sampled):
+    """Path points, chord tangents, section tangents, rotations and mitred corners per vertex."""
+    path, exact = sampled
+    if len(path) < 2:
+        raise CommandError('El recorrido es demasiado corto', code='cad_profile_invalid')
+    tangents = [(b-a).normalized() for a, b in zip(path, path[1:])]
+    first = exact[0] or tangents[0]; last = exact[-1] or tangents[-1]
+    facing = Vector(frame(sketch)['normal']).dot(first)
+    if abs(facing) < 1e-3:
+        raise CommandError('El perfil debe cortar el recorrido; dibújalo en un plano transversal a su inicio', code='cad_profile_invalid')
+    # Exact tangents keep straight runs truly cylindrical; corners use the bisector.
+    directions = [first]+[exact[i] or (tangents[i-1]+tangents[i]).normalized() for i in range(1, len(path)-1)]+[last]
+    corners = [False]+[exact[i] is None for i in range(1, len(path)-1)]+[False]
+    matrices = [first.rotation_difference(first).to_matrix()]
+    for i in range(1, len(path)):
+        matrices.append(directions[i-1].rotation_difference(directions[i]).to_matrix() @ matrices[-1])
+    return path, tangents, directions, matrices, facing, corners
 
 
 def sweep(sketch, source, sampled):
@@ -591,28 +664,17 @@ def sweep(sketch, source, sampled):
     larger than the curvature allows is rejected.
     """
     from mathutils.geometry import tessellate_polygon
-    path, first, last = sampled
     rings2d = region(sketch, source)
     def area(ring): return sum(a[0]*b[1]-b[0]*a[1] for a, b in zip(ring, ring[1:]+ring[:1]))
     rings2d = [ring if (area(ring) > 0) == (k == 0) else list(reversed(ring)) for k, ring in enumerate(rings2d)]
-    basis = frame(sketch)
-    normal = Vector(basis['normal'])
     profile = [Vector(world(sketch, x, y)) for ring in rings2d for x, y in ring]
-    if len(path) < 2:
-        raise CommandError('El recorrido es demasiado corto', code='cad_profile_invalid')
-    tangents = [(b-a).normalized() for a, b in zip(path, path[1:])]
-    facing = normal.dot(first)
-    if abs(facing) < 1e-3:
-        raise CommandError('El perfil debe cortar el recorrido; dibújalo en un plano transversal a su inicio', code='cad_profile_invalid')
-    # Section tangents: exact at both ends, chord bisectors at interior vertices.
-    directions = [first]+[(a+b).normalized() for a, b in zip(tangents, tangents[1:])]+[last]
-    matrix = first.rotation_difference(first).to_matrix()
+    path, tangents, directions, matrices, facing, corners = sweep_frames(sketch, sampled)
     start = path[0]
     sections = []
     for i, point in enumerate(path):
-        if i: matrix = directions[i-1].rotation_difference(directions[i]).to_matrix() @ matrix
+        matrix = matrices[i]
         bend = None; stretch = 1.
-        if 0 < i < len(path)-1:
+        if corners[i]:
             before, after = tangents[i-1], tangents[i]
             stretch = 1./max(before.dot(directions[i]), 1e-3)
             bend = after-before
