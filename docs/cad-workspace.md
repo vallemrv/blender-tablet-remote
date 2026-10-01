@@ -91,7 +91,9 @@ Para enlazar dos arcos sin una esquina, une sus extremos con **Coincidente** y
 selecciona los dos contornos completos para aplicar **Tangente**. También admite
 arco–círculo y círculo–círculo. El contacto interior o exterior se elige según la
 posición inicial y se conserva al editar. La tangencia no añade coincidencias ni
-cotas de radio automáticamente. Si hay ángulos fijados incompatibles, se rechaza
+cotas de radio automáticamente. Al aplicarla conserva los radios de los dos
+contornos elegidos y desplaza los centros que estén libres; las coincidencias
+existentes ajustan sus extremos. Si hay ángulos fijados incompatibles, se rechaza
 el cambio completo; retira esas cotas antes de dejar que el contacto determine el arco.
 
 Toca directamente una **cota** del dibujo con el cursor para editarla: la bandeja

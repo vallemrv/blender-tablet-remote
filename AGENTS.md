@@ -434,6 +434,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   persiste como `mode:EXTERNAL/INTERNAL`; editar o arrastrar conserva esa rama.
   Coincidente une los extremos del contorno; Tangente conserva su contacto suave,
   sin fijar automáticamente centros, radios o ángulos. Un conflicto es atómico.
+  Al añadir tangencia entre curvas se conservan los radios de las dos seleccionadas
+  como objetivos de esa edición, desplazando sus centros libres y ajustando los
+  extremos unidos. No añade candados de radio persistentes ni acepta radios negativos.
 - En el boceto solo las cotas (reglas con valor) se tocan y arrastran, una cada vez
   (`CONSTRAINT`); puntos/aristas siguen siendo multiselección. Las reglas sin valor
   (H, V, ⊥, =…) son marcas discretas, no seleccionables, solo junto a la geometría

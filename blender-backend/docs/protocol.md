@@ -1443,6 +1443,9 @@ línea–curva conserva su comportamiento. Las coincidencias de extremos son reg
 separadas. Guardar/cargar y editar radios conservan el modo; los conflictos no
 modifican el documento ni crean undo. Android habilita Tangente para dos figuras
 completas distintas (`BODY`), no para centros/extremos ni para dos líneas.
+Al añadir la tangencia entre curvas, los radios de las dos seleccionadas son
+objetivos exactos de esa edición: el solver desplaza los centros libres y ajusta
+los extremos coincidentes. No se persisten restricciones RADIUS adicionales.
 También anuncia `construction`, `datum_planes`, `bodies`, `origin`, `mesh_copy`,
 `smart_cursor`, `selection_delete`, `editable_dimensions`, `fillet_remove`,
 `solid_selection`, `face_sketch`, `project_reference` y `history_order`.

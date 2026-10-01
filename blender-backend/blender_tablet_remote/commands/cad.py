@@ -1419,6 +1419,7 @@ def points_weld(payload):
 def constraint_add(payload):
     typ=str(payload.get('type','')).upper()
     def change(doc):
+        tangent_goals=[]
         sketch=model.find(doc,'sketches',runtime.active_sketch_id)
         source=payload.get('refs') if 'refs' in payload else [r for r in _refs() if r['kind']=='ENTITY']
         if not isinstance(source,list) or not all(isinstance(r,dict) and isinstance(r.get('id'),str) and isinstance(r.get('part','BODY'),str) for r in source):
@@ -1500,9 +1501,14 @@ def constraint_add(payload):
                 ra,rb=geometry.radius(sketch,refs[0]),geometry.radius(sketch,refs[1])
                 distance=math.hypot(a['x']-b['x'],a['y']-b['y'])
                 c['mode']='INTERNAL' if abs(distance-abs(ra-rb))<abs(distance-(ra+rb)) else 'EXTERNAL'
+                # Applying tangency positions the selected curves; it must not
+                # collapse their radii to satisfy the new contact. These are
+                # goals for this edit, not additional persistent radius locks.
+                tangent_goals=[dict(constraint=dict(type='RADIUS',refs=[ref],value=value))
+                               for ref,value in zip(refs,(ra,rb))]
             sketch.setdefault('constraints',[]).append(c)
         if typ in dimensions.NUMERIC: dimensions.solve_dimension(sketch,c)
-        else: geometry.solve(sketch)
+        else: geometry.solve(sketch,tangent_goals)
     return (yield from runtime.transaction_steps(payload,change,'CAD restringir boceto'))
 
 

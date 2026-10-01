@@ -17,6 +17,37 @@ from blender_tablet_remote.errors import CommandError
 
 
 class TangentArcTests(CadTests):
+    def test_second_tangency_moves_free_centers_without_collapsing_selected_radii(self):
+        # Reduced from the mouth sketch: only coincident ends and the first
+        # tangency, deliberately no radius locks. The old solve made a radius negative.
+        body=dict(id='body',type='ARC',x=0.,y=0.,radius=.048455131122828704,
+                  start=141.7561620602719,sweep=90.00000000000054)
+        ear=dict(id='ear',type='ARC',x=-.001954165553687343,y=.03144453198521507,
+                 radius=.02593250497740575,start=62.87070204391775,sweep=104.32248275714194)
+        blend=dict(id='blend',type='ARC',x=-.036435895156433466,y=.03928288952217848,
+                   radius=.009428907964871638,start=-99.89298086846559,sweep=87.08624013933915)
+        doc=runtime.doc();s=doc['sketches'][0]
+        s['entities']=[body,ear,blend]
+        s['constraints']=[
+            dict(id='origin',type='COINCIDENT',refs=[dict(id='body',part='CENTER'),dict(id='ORIGIN',part='POINT')]),
+            dict(id='join1',type='COINCIDENT',refs=[dict(id='blend',part='START'),dict(id='body',part='START')]),
+            dict(id='join2',type='COINCIDENT',refs=[dict(id='blend',part='END'),dict(id='ear',part='END')]),
+            dict(id='first',type='TANGENT',mode='EXTERNAL',refs=[dict(id='blend',part='BODY'),dict(id='ear',part='BODY')]),
+        ]
+        runtime.persist(doc)
+        with patch('blender_tablet_remote.cad.runtime.undo_push') as undo:
+            cad.constraint_add(dict(type='TANGENT',refs=[dict(id='blend'),dict(id='body')],**OWNER))
+            undo.assert_called_once()
+        solved=runtime.doc()['sketches'][0]
+        for e in (body,blend):
+            self.assertAlmostEqual(model.find(solved,'entities',e['id'])['radius'],e['radius'],places=10)
+        moved=model.find(solved,'entities','blend')
+        self.assertGreater(math.hypot(moved['x']-blend['x'],moved['y']-blend['y']),.001)
+        for c in solved['constraints']:
+            self.assertLess(max(abs(v) for v in geometry.residual(solved,c,1.)),1e-7)
+        self.assertEqual(len(solved['constraints']),5)
+        self.assertFalse(any(c['type']=='RADIUS' for c in solved['constraints']))
+
     def test_closed_mouth_arcs_keep_coincident_ends_radii_and_tangency_after_drag(self):
         # R27 centre, R15 ears 50 mm apart, four concave R10 connections.
         boss_r, ear_r, blend_r, offset = .027, .015, .010, .025
