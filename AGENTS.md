@@ -705,6 +705,10 @@ no quedan archivos o referencias temporales.
   la cota que gobierna esa medida. Añadir una cota equivalente reutiliza su ID;
   lados opuestos de rectángulos e igualdades explícitas comparten medida. Los
   duplicados antiguos se muestran como una cota y se fusionan al editar/quitar.
+- Editar Longitud de una línea impone solo su distancia, sin fijar coordenadas ni
+  un extremo implícito. Punto medio conserva el centro y reparte el cambio; un
+  extremo fijado explícitamente permanece fijo. Se reutiliza la cota y se crea
+  un undo; un conflicto real conserva geometría y restricciones anteriores.
 - El cuadrado anuncia un único Lado: Igualdad mantiene sus lados iguales, no fija
   su tamaño. Los campos distinguen «sin cota» de «cota», con Fijar medida/Quitar cota;
   quitar la medida conserva la figura y la igualdad. La bandeja usa los descriptores

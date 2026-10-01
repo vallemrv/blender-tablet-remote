@@ -16,6 +16,41 @@ from blender_tablet_remote.errors import CommandError
 
 
 class DimensionTests(CadTests):
+    def test_line_length_edit_keeps_fixed_midpoint_and_reuses_dimension(self):
+        line=self.draw('LINE',(0,-.04),(0,.04))
+        cad.entity_set(dict(entity_id=line,values={'length':.08},constrain=True,**OWNER))
+        cad.constraint_add(dict(type='VERTICAL',refs=[dict(id=line,part='BODY')],**OWNER))
+        cad.constraint_add(dict(type='MIDPOINT',refs=[dict(id=line,part='BODY'),dict(id='ORIGIN',part='POINT')],**OWNER))
+        before=runtime.doc()['sketches'][0]
+        identifier=next(c['id'] for c in before['constraints'] if c['type']=='DISTANCE')
+        with patch('blender_tablet_remote.cad.runtime.undo_push') as undo:
+            cad.entity_set(dict(entity_id=line,values={'length':.1},constrain=True,**OWNER))
+            undo.assert_called_once()
+        sketch,e=model.entity(runtime.doc(),line)
+        self.assertAlmostEqual(e['y'],-.05,places=8)
+        self.assertAlmostEqual(e['y2'],.05,places=8)
+        self.assertAlmostEqual(e['x'],0,places=8)
+        self.assertAlmostEqual(e['x2'],0,places=8)
+        self.assertEqual(dimensions.bindings(sketch,e)['length'],[identifier])
+        self.assertAlmostEqual(model.find(sketch,'constraints',identifier)['value'],.1)
+        self.assertTrue(any(c['type']=='MIDPOINT' for c in sketch['constraints']))
+
+    def test_line_length_respects_an_explicitly_fixed_end_and_rejects_two_fixed_ends(self):
+        line=self.draw('LINE',(0,0),(.04,.03))
+        cad.constraint_add(dict(type='FIX',refs=[dict(id=line,part='END')],**OWNER))
+        cad.entity_set(dict(entity_id=line,values={'length':.1},constrain=True,**OWNER))
+        sketch,e=model.entity(runtime.doc(),line)
+        self.assertAlmostEqual(e['x2'],.04,places=8)
+        self.assertAlmostEqual(e['y2'],.03,places=8)
+        self.assertAlmostEqual(math.dist(*geometry.line(sketch,dict(id=line))),.1,places=8)
+        cad.constraint_add(dict(type='FIX',refs=[dict(id=line,part='START')],**OWNER))
+        before=model.dumps(runtime.doc())
+        with patch('blender_tablet_remote.cad.runtime.undo_push') as undo:
+            with self.assertRaises(CommandError):
+                cad.entity_set(dict(entity_id=line,values={'length':.12},constrain=True,**OWNER))
+            undo.assert_not_called()
+        self.assertEqual(model.dumps(runtime.doc()),before)
+
     def test_confirmed_fields_lock_only_edited_measures_in_one_undo(self):
         entity=self.rect()
         with patch('blender_tablet_remote.cad.runtime.undo_push') as undo:

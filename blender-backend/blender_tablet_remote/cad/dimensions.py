@@ -144,14 +144,9 @@ def set_values(sketch, entity, changes):
     goals=[]
     for field,value in changes.items():
         if field=='length' and entity['type']=='LINE':
-            if any((entity['id'],role) in geometry.rounding_links(sketch) for role in ('START','END')):
-                goals.append(dict(constraint=dict(type='DISTANCE',refs=[dict(id=entity['id'],part='BODY')],value=model.number(value,positive=True))))
-                continue
-            if value<1e-7: raise BadPayload('La longitud debe ser positiva')
-            dx,dy=entity['x2']-entity['x'],entity['y2']-entity['y']
-            length=math.hypot(dx,dy)
-            goals.extend(dict(id=entity['id'],field=k,value=v) for k,v in
-                         [('x',entity['x']),('y',entity['y']),('x2',entity['x']+dx/length*value),('y2',entity['y']+dy/length*value)])
+            # Length is one scalar constraint. Fixing four coordinates would
+            # invent an anchored endpoint and conflict with a fixed midpoint.
+            goals.append(dict(constraint=dict(type='DISTANCE',refs=[dict(id=entity['id'],part='BODY')],value=model.number(value,positive=True))))
         else: goals.append(dict(id=entity['id'],field=field,value=value))
     for arc in sketch['entities']:
         target=root((arc['id'],'radius'))
