@@ -89,6 +89,17 @@ class SweepCommandTests(CadTests):
         with self.assertRaises(CommandError):
             cad.sweep_create(dict(profile_id='profile_'+circle, path_sketch_id=profile_sketch, **OWNER))
 
+    def test_whole_ring_sketch_sweeps_its_outer_contour_with_the_hole(self):
+        self.draw('CIRCLE', (0, 0), (.022, 0)); self.draw('CIRCLE', (0, 0), (.014, 0))
+        ring = runtime.active_sketch_id
+        cad.sketch_finish(OWNER)
+        cad.sketch_create(dict(plane='XZ', **OWNER))
+        self.draw('LINE', (0, 0), (0, .04))
+        path = runtime.active_sketch_id
+        cad.sketch_finish(OWNER)
+        cad.sweep_create(dict(sketch_id=ring, path_sketch_id=path, **OWNER))
+        self.assertAlmostEqual(volume(self.obj()), math.pi*(.022**2-.014**2)*.04, delta=5e-8)
+
 
 if __name__ == '__main__':
     suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(case)

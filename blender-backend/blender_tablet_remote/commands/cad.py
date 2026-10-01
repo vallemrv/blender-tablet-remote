@@ -783,7 +783,16 @@ def loft_create(payload):
 def sweep_create(payload):
     """Sweep one closed contour along the open line/arc chain of another sketch; one undo."""
     def change(doc):
-        sketch,identifier=_loft_profile(doc,dict(from_sketch_id=payload.get('sketch_id'),from_profile_id=payload.get('profile_id')),'from')
+        if payload.get('sketch_id'):
+            # A whole sketch sweeps its single outer contour; inner ones stay as holes (a tube).
+            sketch=model.find(doc,'sketches',payload['sketch_id'])
+            _require_reachable(doc,sketch['id'])
+            closed=[(e,model.outline(e)) for e in model.closed_entities(sketch)]
+            roots=[e for e,ring in closed if not any(o['id']!=e['id'] and model.contains(other,ring[0]) for o,other in closed)]
+            if len(roots)!=1: raise BadPayload(sketch['name']+' tiene varios contornos exteriores; elige uno de sus perfiles')
+            identifier='profile_'+roots[0]['id']
+        else:
+            sketch,identifier=_loft_profile(doc,dict(from_profile_id=payload.get('profile_id')),'from')
         path=model.find(doc,'sketches',payload.get('path_sketch_id'))
         _require_reachable(doc,path['id'])
         if path['id']==sketch['id']: raise BadPayload('El recorrido debe estar en otro croquis')
