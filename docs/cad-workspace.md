@@ -80,11 +80,19 @@ de perfiles seleccionado para poder extruirlo.
   consume la última preview válida, sin repetir el sondeo.
 
 Restricciones disponibles: coincidencia entre puntos, horizontal, vertical,
-paralela, colineal, perpendicular, tangencia entre línea y círculo/arco, igualdad de
+paralela, colineal, perpendicular, tangencia entre línea y círculo/arco o entre dos
+arcos/círculos, igualdad de
 longitudes o radios, distancia diagonal/horizontal/vertical, radio, punto medio, simetría respecto al
 último de tres puntos, simetría respecto a una línea (eje) y fijación estricta de
 la selección. El origen (0,0) se puede seleccionar tocándolo en la vista y usar
 como referencia fija.
+
+Para enlazar dos arcos sin una esquina, une sus extremos con **Coincidente** y
+selecciona los dos contornos completos para aplicar **Tangente**. También admite
+arco–círculo y círculo–círculo. El contacto interior o exterior se elige según la
+posición inicial y se conserva al editar. La tangencia no añade coincidencias ni
+cotas de radio automáticamente. Si hay ángulos fijados incompatibles, se rechaza
+el cambio completo; retira esas cotas antes de dejar que el contacto determine el arco.
 
 Toca directamente una **cota** del dibujo con el cursor para editarla: la bandeja
 muestra su valor y una papelera para quitarla. Se selecciona una cada vez; los

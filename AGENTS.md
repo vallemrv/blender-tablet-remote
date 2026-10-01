@@ -429,6 +429,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   toque sin cambios no crea undo. El redondeo recorta dos líneas conectadas y
   añade un arco con coincidencias, tangencias y radio. Las uniones de línea usan
   la política pegajosa común de `commands/snap.py`.
+- Tangente admite línea–arco/círculo y dos arcos/círculos distintos. Entre curvas
+  el backend elige el contacto exterior o interior más cercano al dibujo y lo
+  persiste como `mode:EXTERNAL/INTERNAL`; editar o arrastrar conserva esa rama.
+  Coincidente une los extremos del contorno; Tangente conserva su contacto suave,
+  sin fijar automáticamente centros, radios o ángulos. Un conflicto es atómico.
 - En el boceto solo las cotas (reglas con valor) se tocan y arrastran, una cada vez
   (`CONSTRAINT`); puntos/aristas siguen siendo multiselección. Las reglas sin valor
   (H, V, ⊥, =…) son marcas discretas, no seleccionables, solo junto a la geometría

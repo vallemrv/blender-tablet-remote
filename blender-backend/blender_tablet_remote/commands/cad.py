@@ -1493,7 +1493,14 @@ def constraint_add(payload):
                 sketch.setdefault('constraints',[]).append(fixed)
         elif typ in dimensions.NUMERIC:
             c=dimensions.put(sketch,c)
-        else: sketch.setdefault('constraints',[]).append(c)
+        else:
+            if typ=='TANGENT' and len(refs)==2 and all(geometry.get_entity(sketch,r)['type'] in ('ARC','CIRCLE') for r in refs):
+                # Keep the side the arcs are drawn on: touching from outside or one inside the other.
+                (a,b)=(geometry.get_entity(sketch,r) for r in refs)
+                ra,rb=geometry.radius(sketch,refs[0]),geometry.radius(sketch,refs[1])
+                distance=math.hypot(a['x']-b['x'],a['y']-b['y'])
+                c['mode']='INTERNAL' if abs(distance-abs(ra-rb))<abs(distance-(ra+rb)) else 'EXTERNAL'
+            sketch.setdefault('constraints',[]).append(c)
         if typ in dimensions.NUMERIC: dimensions.solve_dimension(sketch,c)
         else: geometry.solve(sketch)
     return (yield from runtime.transaction_steps(payload,change,'CAD restringir boceto'))

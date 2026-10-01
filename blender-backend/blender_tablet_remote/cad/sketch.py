@@ -190,10 +190,21 @@ def residual(sketch, c, scale):
         lengths = [np.linalg.norm(b-a) for a,b in [measure_line(sketch,r) for r in refs]]
         return [(lengths[0]-lengths[1])/scale]
     if typ == 'TANGENT':
-        curve = next((r for r in refs if get_entity(sketch,r)['type'] in ('ARC','CIRCLE')),None)
+        if refs[0]['id'] == refs[1]['id']:
+            raise BadPayload('Tangencia: selecciona dos figuras distintas')
+        curves = [r for r in refs if get_entity(sketch,r)['type'] in ('ARC','CIRCLE')]
+        if len(curves) == 2:
+            # Two circles touch from outside (centres r1+r2 apart) or one
+            # inside the other (|r1-r2|); the side was fixed when it was added.
+            es = [get_entity(sketch,r) for r in curves]
+            distance = np.linalg.norm(np.array((es[0]['x'],es[0]['y']))-np.array((es[1]['x'],es[1]['y'])))
+            r0, r1 = radius(sketch,curves[0]), radius(sketch,curves[1])
+            target = abs(r0-r1) if c.get('mode') == 'INTERNAL' else r0+r1
+            return [(distance-target)/scale]
+        curve = curves[0] if curves else None
         straight = next((r for r in refs if get_entity(sketch,r)['type']=='LINE'),None)
         if curve is None or straight is None:
-            raise BadPayload('Tangencia: selecciona una línea y un arco o círculo')
+            raise BadPayload('Tangencia: selecciona una línea y un arco/círculo, o dos arcos/círculos')
         a,b = line(sketch,straight)
         e = get_entity(sketch,curve)
         d = b-a; center = np.array((e['x'],e['y']))
@@ -262,6 +273,8 @@ def validate_constraints(sketch):
             get_entity(sketch,ref)
         if typ in ('DISTANCE','RADIUS'):
             model.number(c.get('value'),positive=True)
+        if typ == 'TANGENT' and c.get('mode','EXTERNAL') not in ('EXTERNAL','INTERNAL'):
+            raise BadPayload('Tangencia entre arcos: por fuera o por dentro')
         if typ == 'ANGLE' and len(refs) == 1 and not .01 <= model.number(c.get('value')) < 360:
             raise BadPayload('El ángulo del arco debe estar entre 0,01° y 360°')
         if typ == 'ANGLE' and len(refs) == 2 and not 0 <= model.number(c.get('value')) <= 180:

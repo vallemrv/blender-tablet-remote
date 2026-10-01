@@ -937,7 +937,8 @@ internal fun cadConstraintEnabled(cad: CadState, type: String): Boolean {
         "DISTANCE", "DISTANCE_X", "DISTANCE_Y" -> (refs.size == 1 && lines) || (refs.size == 2 && points)
         "RADIUS" -> refs.size == 1 && entities[0].type in listOf("CIRCLE", "ARC", "SLOT")
         "ANGLE" -> refs.size == 2 && refs.distinct().size == 2 && lines
-        "TANGENT" -> refs.size == 2 && entities.any { it.type == "LINE" } && entities.any { it.type in listOf("CIRCLE", "ARC") }
+        "TANGENT" -> refs.size == 2 && refs.map { it.id }.distinct().size == 2 && refs.all { it.part == "BODY" } &&
+            entities.any { it.type in listOf("CIRCLE", "ARC") } && entities.all { it.type in listOf("LINE", "CIRCLE", "ARC") }
         else -> false
     }
 }
@@ -1001,7 +1002,7 @@ internal fun cadLabel(type: String) = when (type) {
     "COLLINEAR" -> "Colineal (misma recta)"
     "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "SLOT" -> "Ranura"; "GEAR" -> "Engranaje"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "POINT" -> "Punto"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
-    "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad (tamaño del primero; en arcos también el ángulo, salvo redondeos)"; "EQUAL_ANGLE" -> "Igualdad de ángulo"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "ANGLE" -> "Ángulo"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
+    "TANGENT" -> "Tangente (línea y arco, o dos arcos/círculos)"; "EQUAL" -> "Igualdad (tamaño del primero; en arcos también el ángulo, salvo redondeos)"; "EQUAL_ANGLE" -> "Igualdad de ángulo"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "ANGLE" -> "Ángulo"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
     "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; "REVOLVE" -> "Revolución"; "SWEEP" -> "Barrido"; else -> type
 }
 

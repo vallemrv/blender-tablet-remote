@@ -7,6 +7,26 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadFeedbackTest {
+    @Test fun tangentRailAcceptsDistinctArcAndCircleBodiesWithoutSelectingTheirPoints() {
+        val caps = CadParser.capabilities(JSONObject("""{"version":2,"length_unit":"METERS","constraints":["TANGENT"]}"""))
+        val cad = CadParser.state(JSONObject("""{"version":1,"active_sketch_id":"s","document":{"sketches":[
+            {"id":"s","entities":[{"id":"a","type":"ARC"},{"id":"b","type":"ARC"},
+            {"id":"c","type":"CIRCLE"},{"id":"d","type":"CIRCLE"},{"id":"l","type":"LINE"},
+            {"id":"m","type":"LINE"}]}]}}"""))
+        assertTrue("TANGENT" in cadConstraintGroups(caps.constraints).flatten())
+        fun enabled(vararg refs: CadSelection) = cadConstraintEnabled(cad.copy(selection = refs.toList()), "TANGENT")
+        for ((a, b) in listOf("a" to "b", "a" to "c", "c" to "d", "l" to "a", "l" to "c")) {
+            assertTrue(enabled(CadSelection(a), CadSelection(b)))
+            assertTrue(enabled(CadSelection(b), CadSelection(a)))
+        }
+        assertFalse(enabled(CadSelection("a")))
+        assertFalse(enabled(CadSelection("a"), CadSelection("a")))
+        assertFalse(enabled(CadSelection("a", "START"), CadSelection("a", "END")))
+        assertFalse(enabled(CadSelection("a", "END"), CadSelection("b")))
+        assertFalse(enabled(CadSelection("l"), CadSelection("m")))
+        assertFalse(enabled(CadSelection("a"), CadSelection("b"), CadSelection("c")))
+    }
+
     @Test fun advertisedAngleReachesTheRailForASelectedConstructionLineAndSide() {
         val capabilities = CadParser.capabilities(JSONObject("""{"version":2,"length_unit":"METERS",
             "constraints":["DISTANCE","DISTANCE_X","DISTANCE_Y","RADIUS","ANGLE"]}"""))

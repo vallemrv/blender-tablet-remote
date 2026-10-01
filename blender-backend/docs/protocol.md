@@ -1435,6 +1435,14 @@ ni fija la guía. Usa `cad.constraint.add/delete` y el solver/undo comunes.
 `COLLINEAR` usa dos referencias de línea/lado del mismo croquis: ambos segmentos
 pertenecen a la misma recta infinita, con longitudes y posiciones longitudinales
 independientes. No une extremos ni fija la referencia; respeta FIX y las cotas.
+`TANGENT` acepta línea–arco/círculo y dos arcos/círculos distintos del mismo boceto.
+Con dos curvas, `cad.constraint.add` persiste `mode:EXTERNAL|INTERNAL`, elegido
+por cercanía al contacto inicial: distancia entre centros igual a la suma o a la
+diferencia absoluta de radios. Sin `mode` se interpreta `EXTERNAL`; la tangencia
+línea–curva conserva su comportamiento. Las coincidencias de extremos son reglas
+separadas. Guardar/cargar y editar radios conservan el modo; los conflictos no
+modifican el documento ni crean undo. Android habilita Tangente para dos figuras
+completas distintas (`BODY`), no para centros/extremos ni para dos líneas.
 También anuncia `construction`, `datum_planes`, `bodies`, `origin`, `mesh_copy`,
 `smart_cursor`, `selection_delete`, `editable_dimensions`, `fillet_remove`,
 `solid_selection`, `face_sketch`, `project_reference` y `history_order`.
