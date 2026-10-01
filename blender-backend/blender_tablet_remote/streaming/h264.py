@@ -1,7 +1,7 @@
 """Framing HTTP de access units H.264 para MediaCodec.
 
-No toca Blender: el encoder publica AUs completos en un buffer latest-frame-wins y
-los threads HTTP solo empaquetan el último. El header estable está en protocol.md §11.
+No toca Blender: el encoder publica AUs completos en colas por cliente y los
+threads HTTP conservan sus referencias. El header estable está en protocol.md §11.
 """
 
 from __future__ import annotations

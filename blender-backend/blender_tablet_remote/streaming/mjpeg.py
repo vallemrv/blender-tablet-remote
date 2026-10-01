@@ -37,12 +37,16 @@ FIRST_FRAME_WAIT = 5.0
 # HTTP se bloquee pronto; cuando vuelve a poder escribir, wait_newer() salta al frame
 # más reciente. El kernel suele duplicar este valor internamente (64 KiB efectivos).
 CLIENT_SEND_BUFFER = 32 * 1024
+CLIENT_WRITE_TIMEOUT = 1.0
 
 
 def _tune_client_socket(client) -> None:
     """Mantiene baja la latencia del socket aun si el SO_SNDBUF global es enorme."""
     client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
     client.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, CLIENT_SEND_BUFFER)
+    # Android may suspend a socket without closing it. A blocked writer must not
+    # keep a phantom viewer (and its encoder) alive indefinitely.
+    client.settimeout(CLIENT_WRITE_TIMEOUT)
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -175,13 +179,15 @@ class _Handler(BaseHTTPRequestHandler):
                 # renunciar al GOP: las referencias P ya no son fiables.
                 if gap:
                     waiting_keyframe = True
+                if time.time() - stamp > .25:
+                    waiting_keyframe = True
+                    continue
                 flags = flags_for(data)
                 if waiting_keyframe and (flags & (FLAG_KEYFRAME | FLAG_CONFIG)) != (FLAG_KEYFRAME | FLAG_CONFIG):
                     continue
                 waiting_keyframe = False
                 width, height = self._server.resolution_provider()
-                self.wfile.write(pack_header(seq, stamp, len(data), width, height, flags))
-                self.wfile.write(data)
+                self.wfile.write(pack_header(seq, stamp, len(data), width, height, flags) + data)
                 self.wfile.flush()
         except (OSError, ValueError):
             pass

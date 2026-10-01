@@ -22,29 +22,35 @@ from __future__ import annotations
 
 import collections
 import threading
+import time
 
-# ~2,5 s de vídeo a 24 fps. Suficiente para absorber un tirón del planificador sin
-# convertirse en latencia acumulada: si un cliente se queda tan atrás, mejor cortar
-# por lo sano y reengancharlo en el siguiente keyframe.
+# Absorbe ráfagas del planificador sin perder AUs; MAX_QUEUE_AGE limita además
+# el tiempo pendiente, antes de llegar a estos 60 paquetes.
 QUEUE_CAPACITY = 60
+# Bursts may use the full capacity, but never replay a stalled client's old video.
+MAX_QUEUE_AGE = .25
 
 
 class FrameQueue:
     """Cola de un consumidor. La llena `FrameBuffer.publish` desde el encoder."""
 
-    def __init__(self, capacity: int = QUEUE_CAPACITY) -> None:
+    def __init__(self, capacity: int = QUEUE_CAPACITY, max_age: float = MAX_QUEUE_AGE) -> None:
         self._items: collections.deque = collections.deque()
         self._cond = threading.Condition()
         self._capacity = capacity
+        self._max_age = max_age
         self._gap = False
         self._closed = False
 
     def push(self, item: tuple[bytes, int, float]) -> None:
         with self._cond:
-            if len(self._items) >= self._capacity:
+            if self._closed:
+                return
+            now = time.monotonic()
+            if len(self._items) >= self._capacity or self._expired(now):
                 self._items.clear()
                 self._gap = True
-            self._items.append(item)
+            self._items.append((item, now))
             self._cond.notify()
 
     def pop(self, timeout: float = 2.0) -> tuple[tuple[bytes, int, float] | None, bool]:
@@ -54,12 +60,21 @@ class FrameQueue:
                 self._cond.wait(timeout)
             if not self._items:
                 return None, False
+            if self._expired(time.monotonic()):
+                newest = self._items[-1]
+                self._items.clear()
+                self._items.append(newest)
+                self._gap = True
             gap, self._gap = self._gap, False
-            return self._items.popleft(), gap
+            return self._items.popleft()[0], gap
+
+    def _expired(self, now: float) -> bool:
+        return bool(self._items and now - self._items[0][1] > self._max_age)
 
     def close(self) -> None:
         with self._cond:
             self._closed = True
+            self._items.clear()
             self._cond.notify_all()
 
 

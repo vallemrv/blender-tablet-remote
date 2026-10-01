@@ -1371,8 +1371,16 @@ El encoder usa baseline, cero B-frames/lookahead, AUD y un GOP corto de 4–6 fr
 repitiendo SPS/PPS en cada IDR. `CONFIG` indica que el payload contiene SPS/PPS;
 `KEYFRAME`, un IDR. Si el emisor descarta AUs por backpressure, no entrega más deltas
 y espera al siguiente registro `CONFIG|KEYFRAME` (como máximo un GOP).
-Tras conectar, el servidor espera el próximo keyframe: nunca empieza por un delta
-indecodificable. Ante backpressure salta al access unit más reciente; no acumula cola.
+Tras conectar, el servidor espera SPS/PPS + IDR: nunca empieza por un delta
+indecodificable. Cada cliente conserva una cola de hasta 60 AUs para absorber ráfagas;
+si se llena o supera 250 ms, abandona el GOP y espera un IDR fresco. Una escritura
+TCP bloqueada durante un segundo cierra ese cliente y retira su demanda de captura.
+Android crea un decoder por conexión, invalida el trabajo anterior por generación y
+limita su cola a seis AUs/150 ms antes del hilo de MediaCodec. Un salto de secuencia
+o saturación vacía el codec y espera otro IDR; solo se omiten salidas ya decodificadas
+al presentar la más reciente. La salida se drena también entre paquetes. Al pasar a
+segundo plano se cancelan los HTTP de ambos formatos; al volver se reintenta H.264,
+recreando su Surface si se había activado MJPEG. El framing y sus flags no cambian.
 
 Cada parte del multipart lleva dos cabeceras propias además de `Content-Length`:
 
