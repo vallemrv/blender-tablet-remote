@@ -532,3 +532,124 @@ def revolve(sketch, source, axis, angle):
                  for f in faces for i in range(1, len(f)-1))
     if volume < 0: faces = [tuple(reversed(f)) for f in faces]
     return vertices, faces
+
+
+def sweep_path(sketch):
+    """World points of the single open chain of lines/arcs drawn in a path sketch."""
+    import math
+    edges = [e for e in sketch['entities'] if not e.get('construction', False) and e['type'] in ('LINE', 'ARC')]
+    if not edges:
+        raise CommandError('El croquis del recorrido no tiene líneas ni arcos', code='cad_profile_invalid')
+    if any(not e.get('construction', False) and e['type'] not in ('LINE', 'ARC', 'POINT') for e in sketch['entities']):
+        raise CommandError('El recorrido solo admite líneas y arcos; pasa el resto a construcción', code='cad_profile_invalid')
+    span = max(max(abs(c) for p in outline(e) for c in p) for e in edges)
+    tolerance = max(span*1e-6, 1e-9)
+    near = lambda a, b: math.dist(a, b) <= tolerance
+    remaining = {e['id']: e for e in edges}
+    points = outline(remaining.pop(edges[0]['id']))
+    ends = [edges[0]['type'], edges[0]['type']]   # entity type at the start and end
+    grown = True
+    while remaining and grown:
+        grown = False
+        for e in list(remaining.values()):
+            path = outline(e)
+            for end, reverse in ((-1, False), (-1, True), (0, False), (0, True)):
+                piece = list(reversed(path)) if reverse else path
+                if end == -1 and near(points[-1], piece[0]):
+                    points.extend(piece[1:]); ends[1] = e['type']
+                elif end == 0 and near(points[0], piece[-1]):
+                    points[:0] = piece[:-1]; ends[0] = e['type']
+                else:
+                    continue
+                remaining.pop(e['id']); grown = True
+                break
+    if remaining:
+        raise CommandError('El recorrido debe ser una sola cadena de líneas y arcos unidos por sus extremos', code='cad_profile_invalid')
+    if near(points[0], points[-1]):
+        raise CommandError('El recorrido es cerrado; el barrido usa un recorrido abierto', code='cad_profile_invalid')
+    result = [Vector(world(sketch, x, y)) for x, y in points]
+    result = [p for i, p in enumerate(result) if i == 0 or (p-result[i-1]).length > tolerance]
+    def end_tangent(a, b, c, kind):
+        # A uniformly sampled arc leaves its end chord turned by half a step.
+        chord = (b-a).normalized()
+        if kind != 'ARC' or c is None: return chord
+        middle = (chord+(c-b).normalized()).normalized()
+        return (chord*2*chord.dot(middle)-middle).normalized()
+    third = lambda i: result[i] if 0 <= i < len(result) else None
+    start = end_tangent(result[0], result[1], third(2), ends[0])
+    finish = -end_tangent(result[-1], result[-2], third(len(result)-3), ends[1])
+    return result, start, finish
+
+
+def sweep(sketch, source, sampled):
+    """Move a closed contour (holes allowed) along a polyline path.
+
+    The profile keeps its pose relative to the path start: every section is the
+    start section turned by the parallel transport of the path tangent. Interior
+    vertices use the bisector plane, stretched across the bend, so walls keep
+    their thickness through each joint. Sections must keep advancing; a profile
+    larger than the curvature allows is rejected.
+    """
+    from mathutils.geometry import tessellate_polygon
+    path, first, last = sampled
+    rings2d = region(sketch, source)
+    def area(ring): return sum(a[0]*b[1]-b[0]*a[1] for a, b in zip(ring, ring[1:]+ring[:1]))
+    rings2d = [ring if (area(ring) > 0) == (k == 0) else list(reversed(ring)) for k, ring in enumerate(rings2d)]
+    basis = frame(sketch)
+    normal = Vector(basis['normal'])
+    profile = [Vector(world(sketch, x, y)) for ring in rings2d for x, y in ring]
+    if len(path) < 2:
+        raise CommandError('El recorrido es demasiado corto', code='cad_profile_invalid')
+    tangents = [(b-a).normalized() for a, b in zip(path, path[1:])]
+    facing = normal.dot(first)
+    if abs(facing) < 1e-3:
+        raise CommandError('El perfil debe cortar el recorrido; dibújalo en un plano transversal a su inicio', code='cad_profile_invalid')
+    # Section tangents: exact at both ends, chord bisectors at interior vertices.
+    directions = [first]+[(a+b).normalized() for a, b in zip(tangents, tangents[1:])]+[last]
+    matrix = first.rotation_difference(first).to_matrix()
+    start = path[0]
+    sections = []
+    for i, point in enumerate(path):
+        if i: matrix = directions[i-1].rotation_difference(directions[i]).to_matrix() @ matrix
+        bend = None; stretch = 1.
+        if 0 < i < len(path)-1:
+            before, after = tangents[i-1], tangents[i]
+            stretch = 1./max(before.dot(directions[i]), 1e-3)
+            bend = after-before
+            bend = bend.normalized() if bend.length > 1e-12 else None
+        section = []
+        for p in profile:
+            q = matrix @ (p-start)
+            if bend is not None: q += bend*(q.dot(bend)*(stretch-1.))
+            section.append(point+q)
+        sections.append(section)
+    for i, tangent in enumerate(tangents):
+        if any((b-a).dot(tangent) <= 0 for a, b in zip(sections[i], sections[i+1])):
+            raise CommandError('El perfil es demasiado grande para la curvatura del recorrido', code='cad_profile_invalid')
+    m = len(profile); sigma = 1. if facing > 0 else -1.
+    vertices = [tuple(p) for section in sections for p in section]
+    faces = []
+    offset = 0
+    for ring in rings2d:
+        n = len(ring)
+        for k in range(len(sections)-1):
+            a, b = k*m+offset, (k+1)*m+offset
+            for j in range(n):
+                quad = (a+j, a+(j+1) % n, b+(j+1) % n, b+j)
+                faces.append(quad if sigma > 0 else tuple(reversed(quad)))
+        offset += n
+    flat = [p for ring in rings2d for p in ring]
+    last = (len(sections)-1)*m
+    for tri in tessellate_polygon([[Vector((x, y, 0.)) for x, y in ring] for ring in rings2d]):
+        (x0, y0), (x1, y1), (x2, y2) = (flat[i] for i in tri)
+        if (x1-x0)*(y2-y0)-(y1-y0)*(x2-x0) < 0: tri = tuple(reversed(tri))
+        faces.append(tuple(reversed(tri)) if sigma > 0 else tuple(tri))
+        end = tuple(i+last for i in tri)
+        faces.append(end if sigma > 0 else tuple(reversed(end)))
+    volume = sum(Vector(vertices[f[0]]).dot(Vector(vertices[f[i]]).cross(Vector(vertices[f[i+1]])))
+                 for f in faces for i in range(1, len(f)-1))
+    if abs(volume) < 1e-18:
+        raise CommandError('El barrido no encierra volumen', code='cad_profile_invalid')
+    if volume < 0: faces = [tuple(reversed(f)) for f in faces]
+    return vertices, faces
+

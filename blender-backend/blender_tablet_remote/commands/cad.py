@@ -99,7 +99,7 @@ def _new_sketch(doc,payload):
     if support_id:
         feature=model.find(doc,'features',support_id)
         if feature.get('mirror'): raise BadPayload('Usa Boceto en cara sobre el resultado de la simetría')
-        if feature['type'] in model.FINISHES + ('LOFT','HELIX','REVOLVE') or feature.get('extent')=='TO_FACE':
+        if feature['type'] in model.FINISHES + ('LOFT','HELIX','REVOLVE','SWEEP') or feature.get('extent')=='TO_FACE':
             raise BadPayload('Esta operación no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
         source,_=model.profile(doc,feature['profile_id'])
         plane_local=source['plane']
@@ -775,6 +775,28 @@ def loft_create(payload):
         created.append(feature['id'])
     created=[]
     yield from runtime.transaction_steps(payload,change,'CAD solevado')
+    runtime.selection=dict(kind='FEATURE',id=created[0])
+    return runtime.status()
+
+
+@command('cad.sweep.create')
+def sweep_create(payload):
+    """Sweep one closed contour along the open line/arc chain of another sketch; one undo."""
+    def change(doc):
+        sketch,identifier=_loft_profile(doc,dict(from_sketch_id=payload.get('sketch_id'),from_profile_id=payload.get('profile_id')),'from')
+        path=model.find(doc,'sketches',payload.get('path_sketch_id'))
+        _require_reachable(doc,path['id'])
+        if path['id']==sketch['id']: raise BadPayload('El recorrido debe estar en otro croquis')
+        feature=dict(id=model.uid('feature'),name='Barrido '+str(len(doc['features'])+1),type='SWEEP',order=model.next_order(doc),
+                     sketch_id=sketch['id'],profile_id=identifier,path_sketch_id=path['id'],enabled=True,body_id=sketch['body_id'])
+        doc['features'].append(feature)
+        bar=runtime.bar(doc)
+        if bar:
+            model.insert_after(doc,feature,bar)
+            runtime.rollback_id=feature['id']
+        created.append(feature['id'])
+    created=[]
+    yield from runtime.transaction_steps(payload,change,'CAD barrido')
     runtime.selection=dict(kind='FEATURE',id=created[0])
     return runtime.status()
 
@@ -1545,7 +1567,7 @@ def sketch_delete(payload):
     identifier=payload.get('sketch_id')
     def change(doc):
         _require_reachable(doc,identifier)
-        if any(identifier in (f['sketch_id'],f.get('to_sketch_id')) for f in doc['features']) or any(p.get('reference_sketch_id')==identifier for p in doc.get('planes',[])):
+        if any(identifier in (f['sketch_id'],f.get('to_sketch_id'),f.get('path_sketch_id')) for f in doc['features']) or any(p.get('reference_sketch_id')==identifier for p in doc.get('planes',[])):
             raise CommandError('Elimina primero las operaciones del boceto',code='cad_dependency')
         removed=model.find(doc,'sketches',identifier)
         doc['sketches'].remove(removed)

@@ -68,6 +68,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             (if (from.first == "SKETCH") "from_sketch_id" else "from_profile_id") to from.second,
             (if (kind == "SKETCH") "to_sketch_id" else "to_profile_id") to id))
     }
+    // Barrido: the profile waits for the path sketch, tapped in the stack. A path
+    // has no closed profile, so the tap creates the sweep instead of selecting it.
+    var sweepFrom by remember(cad.activeSketchId) { mutableStateOf<Pair<String, String>?>(null) }
     var editingConstraint by remember(cad.activeSketchId) { mutableStateOf<CadConstraint?>(null) }
     LaunchedEffect(cad.selectionKind, cad.selectionId, cad.revision) {
         editingConstraint = cad.selectedConstraint
@@ -167,6 +170,11 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             if ("LOFT" in capabilities.features) CadAction("LOFT", "Solevado: une este perfil con el de otro croquis", selected = loftFrom != null,
                 enabled = connected && !cad.sessionActive && (loftFrom != null || cad.selectionKind in listOf("PROFILE", "SKETCH"))) {
                 loftFrom = if (loftFrom != null) null else cad.selectionKind!! to cad.selectionId!!
+            }
+            if ("SWEEP" in capabilities.features) CadAction("SWEEP", "Barrido: lleva este perfil por las líneas y arcos de otro croquis", selected = sweepFrom != null,
+                enabled = connected && !cad.sessionActive && (sweepFrom != null || cad.selectionKind in listOf("PROFILE", "SKETCH"))) {
+                sweepFrom = if (sweepFrom != null) null else cad.selectionKind!! to cad.selectionId!!
+                if (sweepFrom != null) onStackOpen(true)
             }
             if ("REVOLVE" in capabilities.features) CadAction("REVOLVE", "Revolución: gira el perfil alrededor de un eje del croquis (puede apoyarse en él)",
                 enabled = connected && !cad.sessionActive && cad.selectionKind in listOf("PROFILE", "SKETCH")) {
@@ -287,7 +295,14 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             val sketch = cad.sketches.firstOrNull { it.id == node.id }
                             if (sketch != null) {
                                 CadStackNodeRow("SKETCH", sketch.name, selectedSketch?.id == sketch.id, dimmed, nodeEnabled,
-                                    tap = { command("cad.history.rollback", "node_id" to node.id) },
+                                    tap = {
+                                        val from = sweepFrom
+                                        if (from != null && sketch.id != from.second) {
+                                            sweepFrom = null
+                                            command("cad.sweep.create", (if (from.first == "SKETCH") "sketch_id" else "profile_id") to from.second,
+                                                "path_sketch_id" to sketch.id)
+                                        } else command("cad.history.rollback", "node_id" to node.id)
+                                    },
                                     actions = listOf(
                                         CadNodeAction("Renombrar croquis") { renamingSketch = sketch },
                                         CadNodeAction("Editar boceto") { editSketch(sketch.id) },
@@ -451,6 +466,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 mirrorSource != null -> "Simetría de ${mirrorSource!!.name}: elige el plano y su posición · ✓ crea la operación vinculada"
                 feature?.isMirror == true -> "${feature.name} · perfil y profundidad siguen a la operación fuente"
                 editingConstraint != null -> "${cadLabel(editingConstraint!!.type)} · escribe el valor · arrastra la cota para colocarla sin mover el dibujo"
+                sweepFrom != null -> "Barrido: elige en la pila el croquis del recorrido (una cadena abierta de líneas y arcos) · vuelve a pulsar Barrido para cancelar"
+                feature?.type == "SWEEP" -> "${feature.name} · el perfil recorre las líneas y arcos del otro croquis · editarlo actualiza el barrido"
                 loftFrom != null -> "Solevado: toca el perfil del otro croquis (o elígelo en la pila) · vuelve a pulsar Solevado para cancelar"
                 feature?.type == "REVOLVE" -> "${feature.name} · el perfil gira alrededor del eje elegido; puede apoyarse en él (conos, cúpulas) pero no cruzarlo"
                 feature?.type == "HELIX" -> "${feature.name} · altura ${formatToolDistance(feature.pitch * feature.turns * lengthFactor(unit), 2)} ${unit.short} · el paso debe superar la altura del perfil · el eje es X, Y o una línea del croquis"
@@ -737,7 +754,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             }
                             CadAction("VISIBLE", if (feature.enabled) "Ocultar" else "Mostrar", selected = feature.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled) }
                             CadAction("DELETE", "Borrar operación", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
-                        } else if (feature?.type == "LOFT") {
+                        } else if (feature?.type == "LOFT" || feature?.type == "SWEEP") {
                             CadAction("VISIBLE", if (feature.enabled) "Ocultar" else "Mostrar", selected = feature.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled) }
                             CadAction("DELETE", "Borrar operación", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
                         } else if (offsetPlane != null) {
@@ -974,7 +991,7 @@ internal fun cadLabel(type: String) = when (type) {
     "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "SLOT" -> "Ranura"; "GEAR" -> "Engranaje"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "POINT" -> "Punto"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
     "TANGENT" -> "Tangente"; "EQUAL" -> "Igualdad (tamaño del primero; en arcos también el ángulo, salvo redondeos)"; "EQUAL_ANGLE" -> "Igualdad de ángulo"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "ANGLE" -> "Ángulo"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
-    "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; "REVOLVE" -> "Revolución"; else -> type
+    "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; "REVOLVE" -> "Revolución"; "SWEEP" -> "Barrido"; else -> type
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

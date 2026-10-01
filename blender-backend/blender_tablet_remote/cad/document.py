@@ -181,6 +181,15 @@ def loads(raw):
                     raise ValueError('invalid loft')
                 seen_features.add(feature['id'])
                 continue
+            if feature.get('type') == 'SWEEP':
+                sketch, _ = profile(doc, feature['profile_id'])
+                path = find(doc, 'sketches', feature.get('path_sketch_id'))
+                feature.setdefault('body_id', sketch['body_id'])
+                find(doc,'bodies',feature['body_id'])
+                if sketch['id'] != feature['sketch_id'] or path['id'] == sketch['id'] or not isinstance(feature['enabled'], bool):
+                    raise ValueError('invalid sweep')
+                seen_features.add(feature['id'])
+                continue
             if feature.get('type') in ('HELIX', 'REVOLVE'):
                 sketch, _ = profile(doc, feature['profile_id'])
                 feature.setdefault('body_id', sketch['body_id'])
@@ -428,7 +437,7 @@ def resolve_supports(doc):
     def supported(feature_id):
         f=find(doc,'features',feature_id)
         if f.get('mirror'): raise BadPayload('Usa Boceto en cara sobre el resultado de la simetría')
-        if f['type'] in FINISHES + ('LOFT','HELIX','REVOLVE'):
+        if f['type'] in FINISHES + ('LOFT','HELIX','REVOLVE','SWEEP'):
             raise BadPayload('Un redondeo o solevado no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
         if f.get('extent')=='TO_FACE':
             raise BadPayload('Una extrusión hasta cara no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
@@ -472,7 +481,7 @@ def resolve_supports(doc):
 
 def sketch_visible(doc, sketch):
     return bool(sketch.get('visible',True) and (sketch.get('visibility_explicit',False) or
-        not any(sketch['id'] in (f['sketch_id'],f.get('to_sketch_id')) and f['enabled'] for f in doc['features'])))
+        not any(sketch['id'] in (f['sketch_id'],f.get('to_sketch_id'),f.get('path_sketch_id')) and f['enabled'] for f in doc['features'])))
 
 
 def history(doc):

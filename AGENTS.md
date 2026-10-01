@@ -842,6 +842,12 @@ no quedan archivos o referencias temporales.
   vuelta) y se suma al cuerpo. Rechaza perfiles que toquen/crucen el eje y pasos
   menores o iguales que la altura axial del perfil (vueltas solapadas). Crear elige
   el primer eje Y/X no cruzado; la línea de eje no se borra mientras la use.
+- Barrido (`SWEEP`) guarda `sketch_id/profile_id` y `path_sketch_id`: el recorrido es la
+  única cadena abierta de líneas/arcos no constructivos de otro croquis, acotable y
+  asociativa. El perfil (huecos incluidos) conserva su pose respecto al inicio y gira
+  por transporte paralelo; los extremos usan la tangente exacta del arco. Se suma al
+  cuerpo y no sirve de apoyo. Android: perfil → Barrido → tocar el croquis del
+  recorrido en la pila (que se abre sola).
 - Revolución (`REVOLVE`) guarda `sketch_id/profile_id`, `axis` (`X`/`Y` del croquis
   o id de una línea del mismo croquis) y `angle` (0–360°). Gira el contorno y se suma
   al cuerpo. El perfil puede apoyarse en el eje (conos, cúpulas: esos puntos se

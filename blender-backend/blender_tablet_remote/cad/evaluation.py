@@ -1,6 +1,6 @@
 """CAD evaluation on plain snapshots; run by the auxiliary Blender main thread."""
 from . import document as model
-from .kernel import kernel, ExtrusionPreviewCache, finish_edges, loft, helix, revolve, operand as extrusion_operand
+from .kernel import kernel, ExtrusionPreviewCache, finish_edges, loft, helix, revolve, sweep, sweep_path, operand as extrusion_operand
 from ..errors import CommandError
 from . import mirror
 
@@ -18,6 +18,9 @@ def geometry_key(doc, limit, scale):
                 if node.get(key):
                     sketch, _ = model.profile(doc, node[key])
                     sketches[sketch['id']] = dict(frame=model.frame(sketch), entities=sketch['entities'])
+            if node.get('path_sketch_id'):
+                path = model.find(doc, 'sketches', node['path_sketch_id'])
+                sketches[path['id']] = dict(frame=model.frame(path), entities=path['entities'])
         if node['id'] == limit:
             break
     return model.dumps(dict(id=doc['id'], features=features, sketches=sketches, scale=scale))
@@ -76,6 +79,20 @@ class Evaluator:
                 cached=self._solids.get(identifier)
                 if cached is None or cached[0]!=model.dumps(signature):
                     operand=revolve(sketch,source,feature['axis'],feature['angle'])
+                    if previous: operand=kernel.union(solids[previous],operand)
+                    cached=(model.dumps(signature),operand)
+                    self._solids[identifier]=cached
+                solids[identifier]=cached[1]
+                keys[identifier]=hashlib.blake2b(repr(signature).encode(),digest_size=16).hexdigest()
+                tips[body]=identifier
+                continue
+            if feature['type']=='SWEEP':
+                sketch,source=model.profile(doc,feature['profile_id']); path=model.find(doc,'sketches',feature['path_sketch_id'])
+                signature=(doc['id'],'SWEEP',feature['profile_id'],
+                           model.dumps([dict(frame=model.frame(s),entities=s['entities']) for s in (sketch,path)]),keys.get(previous))
+                cached=self._solids.get(identifier)
+                if cached is None or cached[0]!=model.dumps(signature):
+                    operand=sweep(sketch,source,sweep_path(path))
                     if previous: operand=kernel.union(solids[previous],operand)
                     cached=(model.dumps(signature),operand)
                     self._solids[identifier]=cached
