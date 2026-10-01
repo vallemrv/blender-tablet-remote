@@ -300,6 +300,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   `mesh.vert_connect_path`; requiere modo Vértices y al menos dos seleccionados,
   divide las caras atravesadas y registra un único undo.
 - Los parámetros viven en una bandeja común.
+- El aviso de edición conjunta de varios arcos se muestra en la fila superior de
+  ayuda de la bandeja CAD, junto a las explicaciones; no ocupa la fila de campos.
 - Las nuevas herramientas deben describirse mediante catálogo/esquema siempre que sea
   posible, evitando nuevas ramas específicas en Compose.
 - Los componentes compartidos poseen disposición, estado, unidades y ciclo de sesión;

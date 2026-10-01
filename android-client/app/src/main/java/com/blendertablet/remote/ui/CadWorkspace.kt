@@ -460,9 +460,16 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     }
     val parameterScroll = rememberScrollState()
     val hasValues = depthPreview || finishPreview || planePreview || pendingDimension != null || editingConstraint != null || entity != null || feature != null || offsetPlane != null || offsetSource != null || mirrorSource != null
+    val arcSelectionHelp = entity?.let { selected ->
+        val otherArcs = cadOtherSelectedArcs(cad, selected)
+        if (otherArcs.isEmpty()) null else {
+            val roundings = selected.isFillet || cad.activeSketch?.entities.orEmpty().any { it.id in otherArcs && it.isFillet }
+            "${otherArcs.size + 1} arcos: " + if (roundings) "Radio se aplica a todos (Igualdad)" else "Radio y Ángulo se aplican a todos (Igualdad)"
+        }
+    }
     FloatingPanel(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { onTrayHeight(it.height) }.padding(Metrics.EdgeMargin)) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(cad.error ?: when {
+            val help = cad.error ?: when {
                 !connected -> "Reconectando · recuperando el documento de Blender"
                 planePreview -> cad.plane?.let { plane ->
                     (if (plane.planeId != null) "Colocar plano guardado" else "Plano ${if (plane.base == "FACE") "en la cara" else cadPlaneLabel(plane.base)}") +
@@ -509,7 +516,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 cad.selectionKind == "SKETCH" -> "${selectedSketch?.name.orEmpty()} completo · Extruir crea volumen y conserva los contornos interiores como huecos"
                 selectedSketch != null -> "${selectedSketch.name} · perfil seleccionado · Seleccionar todo elige el croquis completo para extruir"
                 else -> "Abre la pila (derecha) para editar un boceto · o crea uno en Planos, arriba, y selecciona un perfil para extruir"
-            }, color = Ink.Muted, fontSize = 12.sp)
+            }
+            Text(if (cad.error != null) help else listOfNotNull(help, arcSelectionHelp).joinToString(" · "),
+                color = Ink.Muted, fontSize = 12.sp)
             if (planePreview && planeMore) cad.plane?.let { plane ->
                 // Fila que se abre hacia arriba: inclinar y desplazar el plano por números.
                 val axes = cadPlaneAxes(plane.base.takeIf { it != "FACE" && plane.planeId == null })
@@ -610,13 +619,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             // El ángulo del arco/redondeo es una medida más, con su candado.
                             val measures = cadDisplayMeasures(selected, showDiameter)
                             val fields = measures.map { it.field to it.label }
-                            val otherArcs = cadOtherSelectedArcs(cad, selected)
-                            if (otherArcs.isNotEmpty()) {
-                                // El ángulo de un redondeo es automático: entonces solo se iguala el radio.
-                                val roundings = selected.isFillet || cad.activeSketch?.entities.orEmpty().any { it.id in otherArcs && it.isFillet }
-                                Text("${otherArcs.size + 1} arcos: " + if (roundings) "Radio se aplica a todos (Igualdad)" else "Radio y Ángulo se aplican a todos (Igualdad)",
-                                    color = Ink.Accent, fontSize = 11.sp)
-                            }
                             fields.forEach { (field, label) ->
                                 val measure = measures.firstOrNull { it.field == field }
                                 val degrees = measure?.constraintType == "ANGLE"
