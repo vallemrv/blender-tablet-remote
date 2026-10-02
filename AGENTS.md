@@ -667,8 +667,10 @@ no quedan archivos o referencias temporales.
   degenerados y disuelve divisiones casi coplanares, respetando contornos curvos,
   huecos, materiales y costuras. Retira las aristas sin caras y los vértices sueltos
   residuales de esa limpieza; nunca elimina bordes abiertos de la superficie.
-  Valida cierre, caras/aristas no nulas y volumen;
-  un error descarta la copia sin tocar el original. La limpieza ocurre solo al
+  Valida cierre, caras/aristas no nulas y volumen para aceptar la limpieza. Si no
+  puede conservar el sólido, entrega una copia independiente de la malla original,
+  aunque necesite reparación manual; nunca una limpieza parcial. Conserva atributos,
+  materiales y modificadores y permite Edit sin propiedad CAD. La limpieza ocurre solo al
   exportar/duplicar: nunca se realimenta a la pila CAD. Una malla compacta no
   garantiza biseles de cualquier ancho ni topología regular para Subdivisión.
 - Los comandos CAD suspenden su respuesta durante la evaluación y se reanudan

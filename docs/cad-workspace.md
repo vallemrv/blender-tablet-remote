@@ -519,8 +519,10 @@ cambiar un radio acotado se edita su cota o se quita el candado.
   coincidencias numéricas, elementos degenerados y divisiones casi coplanares.
   Mantiene los contornos curvos, huecos, materiales y costuras; no fuerza una
   retícula de cuadriláteros. Las caras planas pueden ser n-gons y las que tienen
-  huecos conservan los conectores necesarios. La copia se valida como sólido
-  cerrado con volumen conservado antes de entregarse; un fallo deja el original intacto.
+  huecos conservan los conectores necesarios. La limpieza se acepta si conserva
+  un sólido cerrado y su volumen. Si no lo consigue, se entrega una copia
+  independiente de la malla original para editarla o repararla manualmente.
+  Crear la copia no exige mejorar su topología y siempre conserva el CAD original.
   Los biseles siguen limitados por los detalles estrechos y el solapamiento;
   Subdivisión puede requerir topología específica. La copia no se realimenta
   a cortes posteriores ni modifica el documento CAD.

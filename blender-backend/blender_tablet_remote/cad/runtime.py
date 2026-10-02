@@ -28,7 +28,19 @@ def mesh_copy(obj):
         owned_mesh = obj.data.copy()
         owned_mesh.name = obj.data.name + ' · editable'
         copy.data = owned_mesh
-        clean_mesh(owned_mesh)
+        try:
+            clean_mesh(owned_mesh)
+        except CommandError as exc:
+            if exc.code != 'cad_mesh_invalid':
+                raise
+            # Cleanup is optional for an editable copy. If it cannot preserve
+            # the solid, use a fresh, independent copy of the available mesh.
+            # Never expose a partially cleaned result or modify the CAD source.
+            rejected_mesh = owned_mesh
+            owned_mesh = obj.data.copy()
+            copy.data = owned_mesh
+            bpy.data.meshes.remove(rejected_mesh)
+            owned_mesh.name = obj.data.name + ' · editable'
         copy.name=obj.name+' · malla'
         for key in (FEATURE_KEY,DOC_KEY,BODY_KEY,COPY_SOURCE_KEY):
             if key in copy: del copy[key]

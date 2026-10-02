@@ -32,25 +32,53 @@ class MeshCopyTests(CadTests):
                 self.assertEqual(before,([tuple(v.co) for v in data.vertices],[tuple(e.vertices) for e in data.edges],
                                          [tuple(f.vertices) for f in data.polygons]))
 
-    def test_cleanup_still_rejects_an_open_boundary_and_discards_the_copy(self):
-        from blender_tablet_remote.errors import CommandError
+    def test_open_boundary_still_produces_an_independent_editable_copy(self):
         vertices=[(0,0,0),(1,0,0),(1,1,0),(0,1,0),(0,0,1),(1,0,1),(1,1,1),(0,1,1)]
         faces=[(0,3,2,1),(0,1,5,4),(1,2,6,5),(2,3,7,6),(3,0,4,7)]
         data=bpy.data.meshes.new('Open box');data.from_pydata(vertices,[],faces);data.update()
         source=bpy.data.objects.new('Open box',data)
         counts=(len(bpy.data.objects),len(bpy.data.meshes))
-        with self.assertRaises(CommandError): mesh_copy(source)
-        self.assertEqual((len(bpy.data.objects),len(bpy.data.meshes)),counts)
+        result=mesh_copy(source)
+        self.assertNotEqual(result.data.as_pointer(),data.as_pointer())
+        self.assertEqual([tuple(v.co) for v in result.data.vertices],[tuple(v.co) for v in data.vertices])
+        self.assertEqual([tuple(f.vertices) for f in result.data.polygons],faces)
+        self.assertEqual((len(bpy.data.objects),len(bpy.data.meshes)),(counts[0]+1,counts[1]+1))
         self.assertEqual(len(data.polygons),5)
 
-    def test_cleanup_rejects_a_face_that_collapses_entirely_to_wire(self):
-        from blender_tablet_remote.errors import CommandError
+    def test_collapsed_face_can_be_copied_for_manual_repair(self):
         data=bpy.data.meshes.new('Collapsed face')
         data.from_pydata([(0,0,0),(.5,0,0),(1,0,0)],[],[(0,1,2)]);data.update()
         source=bpy.data.objects.new('Collapsed face',data)
         counts=(len(bpy.data.objects),len(bpy.data.meshes))
-        with self.assertRaises(CommandError): mesh_copy(source)
-        self.assertEqual((len(bpy.data.objects),len(bpy.data.meshes)),counts)
+        result=mesh_copy(source)
+        self.assertEqual((len(result.data.vertices),len(result.data.polygons)),(3,1))
+        self.assertEqual([tuple(v.co) for v in result.data.vertices],[tuple(v.co) for v in data.vertices])
+        self.assertEqual((len(bpy.data.objects),len(bpy.data.meshes)),(counts[0]+1,counts[1]+1))
+
+    def test_rejected_cleanup_uses_untouched_mesh_and_conversion_still_enters_edit(self):
+        from blender_tablet_remote.errors import CommandError
+        original,feature=self.body();before=model.dumps(runtime.doc())
+        coords=[tuple(v.co) for v in original.data.vertices]
+        faces=[tuple(f.vertices) for f in original.data.polygons]
+        counts=(len(bpy.data.objects),len(bpy.data.meshes))
+        def reject_after_mutation(mesh):
+            mesh.vertices[0].co.x=99
+            raise CommandError('No se pudo limpiar',code='cad_mesh_invalid')
+        with patch('blender_tablet_remote.cad.runtime.clean_mesh',side_effect=reject_after_mutation):
+            with patch.object(cad,'undo_push') as undo:
+                cad.convert(dict(feature_id=feature,**OWNER))
+                undo.assert_called_once()
+        result=bpy.context.object
+        self.assert_independent(original,result)
+        self.assertEqual((len(bpy.data.objects),len(bpy.data.meshes)),(counts[0]+1,counts[1]+1))
+        self.assertEqual([tuple(v.co) for v in result.data.vertices],coords)
+        self.assertEqual([tuple(f.vertices) for f in result.data.polygons],faces)
+        mode.mode_set(dict(mode='EDIT',**OWNER))
+        bm=bmesh.from_edit_mesh(result.data);bm.verts.ensure_lookup_table();bm.verts[0].co.x+=.01
+        bmesh.update_edit_mesh(result.data)
+        mode.mode_set(dict(mode='OBJECT',**OWNER))
+        self.assertEqual([tuple(v.co) for v in original.data.vertices],coords)
+        self.assertEqual(model.dumps(runtime.doc()),before)
 
     def test_duplicate_boolean_seam_is_cleaned_without_changing_source(self):
         from test_cad import volume

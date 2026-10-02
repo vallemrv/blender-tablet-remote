@@ -1728,12 +1728,13 @@ como huecos. Contornos abiertos no se pueden extruir; intersecciones/tangencias 
 valores no finitos o degenerados producen errores explícitos sin perder la última
 geometría válida. El kernel V1 genera malla nativa; no anuncia STEP, BREP ni solver
 general. Rectángulos conservan lados horizontales/verticales y círculos diámetro.
-El cuerpo CAD materializa la malla compacta del kernel. Solo la copia editable
-(`cad.convert` o duplicar una pieza CAD) genera quads por cara plana: un parche de Coons
-por cara sin hueco y un marco de cuatro parches alrededor de un hueco, con
-subdivisiones iguales en lados opuestos y vértices compartidos entre caras. Las
-caras sin esa disposición usan parches con centros y puntos medios compartidos.
-Se conserva la frontera sin grietas y los parches cóncavos se descomponen antes.
+El cuerpo CAD materializa la malla compacta del kernel. La copia editable
+(`cad.convert` o duplicar una pieza CAD) intenta limpiar coincidencias numéricas,
+degenerados y divisiones coplanares sin forzar quads. Si esa limpieza no conserva
+el sólido, crea una copia independiente de la malla original disponible, con sus
+atributos y modificadores, para edición manual. No publica una limpieza parcial
+ni exige topología mejorada para salir a Object y permitir Edit. El original y
+su documento paramétrico permanecen intactos.
 Esta malla de edición/exportación no es el operando de las operaciones
 siguientes, que usan la evaluación compacta del kernel para evitar crecimiento
 exponencial al encadenar vaciados.
