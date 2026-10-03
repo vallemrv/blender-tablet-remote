@@ -160,7 +160,13 @@ evaluator = Evaluator()
 def calculate(request):
     operation = request['operation']
     if operation == 'evaluate':
-        return evaluator.evaluate(request['doc'], limit=request.get('limit'), scale=request['scale'])
+        engine = evaluator
+        if request.get('kernel') == 'OCCT':
+            from . import occt
+            if not occt.load(request.get('occt_path')):
+                raise CommandError('OpenCascade no está instalado; elige el motor de malla en el add-on', code='cad_kernel_missing')
+            engine = occt.evaluator
+        return engine.evaluate(request['doc'], limit=request.get('limit'), scale=request['scale'])
     if operation == 'solve':
         from .sketch import solve
         sketch = request['sketch']

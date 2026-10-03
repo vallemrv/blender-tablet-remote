@@ -210,3 +210,11 @@ uv venv -p 3.13 .venv && uv pip install -p .venv/bin/python build123d==0.13.0
 ```
 
 `out/` recibe `resultado.json`, `codo.step` y los STL de cada tolerancia.
+
+### Integración (3 de octubre de 2026)
+
+El add-on incorpora este motor como `cad/occt.py`, elegido en Preferencias («Motor
+CAD», por defecto OpenCascade) e instalado con `blender-backend/tools/install_occt.sh`.
+Aplica los tres hallazgos: barrido por tramos exactos, aristas por geometría y
+booleanos difusos, que aquí se prueban primero con 1e-5 de la pieza. La suite CAD
+completa pasa con ambos motores y `tests/test_cad_occt.py` usa este codo como fixture.

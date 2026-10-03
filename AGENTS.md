@@ -139,12 +139,20 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   y se dibuja en el rectángulo del vídeo en Android; no persiste píxeles como geometría.
 - La vista CAD aísla temporalmente sus resultados y restaura la visibilidad previa
   al salir. Los `.blend` y estados de undo conservan la visibilidad de la escena.
-- El kernel CAD es nativo: extruye contornos simples y une/vacía sólidos cerrados
-  con el solver Manifold de Blender (mínimo 4.5). Evita que vaciados opuestos o
-  reflejados abran las tapas de booleanos anteriores. Conserva las validaciones
-  de cierre, volumen positivo y material retirado; no introduce otro kernel ni fallback.
+- El kernel CAD está en migración a OpenCascade (`cad/occt.py`, preferencia «Motor CAD»,
+  por defecto OpenCascade). OCP vive en un directorio privado
+  (`~/.local/share/blender-tablet-remote/occt`, `tools/install_occt.sh`) que solo
+  carga el proceso que evalúa; sin él se usa el kernel de malla. OpenCascade construye
+  sólidos exactos (barrido por tramos extruidos/revolucionados, helicoidal con pipe
+  binormal, solevado reglado, redondeo/chaflán BREP) y publica el mismo contrato de
+  mallas en metros: caras planas sin huecos como un polígono, curvas en triángulos.
+  Los booleanos prueban primero una tolerancia difusa de 1e-5 de la pieza, porque el
+  documento trae ruido micrométrico; el exacto y otra mayor son reservas. Las aristas
+  guardadas se emparejan por geometría (rectas sobre su recta infinita con solape).
+  El kernel de malla sigue igual con la preferencia «Malla de Blender», solo mientras
+  dura la migración; la suite CAD se ejecuta en ambos (`BTR_CAD_KERNEL=OCCT`).
   El solver NumPy resuelve las restricciones anunciadas, hasta 300 parámetros.
-  No anuncia BREP, STEP, el solver completo de FreeCAD, Shell ni fillet de sólidos. La evaluación de
+  No anuncia STEP, el solver completo de FreeCAD ni Shell. La evaluación de
   OCP/CadQuery, build123d y FreeCAD vive en `docs/cad-kernel-evaluation.md`.
 
 ## Sistema de trabajo

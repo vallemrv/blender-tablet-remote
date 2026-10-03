@@ -114,6 +114,7 @@ object CadParser {
             }.toMap(),
             construction = j.optBoolean("construction"), showScene = j.optBoolean("show_scene"), section = j.optBoolean("section"), activeBodyId = j.id("active_body_id"),
             rollbackId = j.id("rollback_id"),
+            kernel = j.optJSONObject("kernel")?.optString("label")?.takeIf { it.isNotEmpty() },
             bodies = objects(document?.optJSONArray("bodies")).map { CadBody(it.optString("id"),it.optString("name")) },
             planes = objects(document?.optJSONArray("planes")).map { p -> CadPlane(p.optString("id"),p.optString("name"),
                 (0..2).map { p.optJSONArray("translation")?.optDouble(it,0.0) ?: 0.0 },

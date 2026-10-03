@@ -60,6 +60,12 @@ def archive_copy_sources(objects):
         obj.hide_set(True);obj.hide_render=True
 
 
+
+def _kernel_public():
+    from .occt import choice
+    engine = choice()[0]
+    return dict(id=engine, label='OpenCascade' if engine == 'OCCT' else 'Malla de Blender')
+
 class CadRuntime:
     def __init__(self):
         self.workspace = False
@@ -240,13 +246,16 @@ class CadRuntime:
         model.resolve_supports(doc)
         scale = max(float(bpy.context.scene.unit_settings.scale_length), 1e-12)
         from .evaluation import geometry_key
-        key = geometry_key(doc, limit, scale)
+        from .occt import choice
+        engine, occt_path = choice()
+        key = engine + geometry_key(doc, limit, scale)
         cached = self._evaluations.get(key)
         if cached is None and not any(f['enabled'] for f in doc['features']):
             cached = dict(display={}, tips={}, solids={}, profiles={})
         if cached is None:
             epoch, scene, raw = self._epoch, bpy.context.scene.as_pointer(), bpy.context.scene.get(model.KEY)
-            cached = yield Calculation(operation='evaluate', doc=copy.deepcopy(doc), limit=limit, scale=scale)
+            cached = yield Calculation(operation='evaluate', doc=copy.deepcopy(doc), limit=limit, scale=scale,
+                                       kernel=engine, occt_path=occt_path)
             if (epoch != self._epoch or scene != bpy.context.scene.as_pointer()
                     or raw != bpy.context.scene.get(model.KEY)):
                 raise CommandError('Cálculo CAD cancelado', code='cad_cancelled')
@@ -417,8 +426,9 @@ class CadRuntime:
         cancel_tool()
         baseline = self.doc()
         from .evaluation import geometry_key
+        from .occt import choice
         scale = max(float(bpy.context.scene.unit_settings.scale_length), 1e-12)
-        key = geometry_key(baseline, self.bar(baseline), scale)
+        key = choice()[0] + geometry_key(baseline, self.bar(baseline), scale)
         cached = self._evaluations.get(key)
         if cached is None:
             # On the first session after loading, restoring the published solid
@@ -699,7 +709,8 @@ class CadRuntime:
                                       plane=_plane_public(session) if session and session['operation']=='PLANE' else None,
                                      can_confirm=bool(session and session.get('candidate')),
                                      can_close=bool(session and session.get('can_close'))),
-                        overlay=self.overlay(doc),error=session.get('error') if session else None)
+                        overlay=self.overlay(doc),error=session.get('error') if session else None,
+                        kernel=_kernel_public())
         except CommandError as exc:
             return dict(version=1,workspace=self.workspace,isolated=bool(self.workspace),document=None,active_sketch_id=None,
                         rollback_id=None,

@@ -279,6 +279,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             DropdownMenuItem(text = { Text("Nuevo cuerpo") }, onClick = { bodiesOpen = false; command("cad.body.create") })
                         }
                     }
+                    cad.kernel?.let { Text("Motor · $it", color = Ink.Muted, fontSize = 12.sp) }
                     bodyHistory.forEachIndexed { index, node ->
                         if (barPos != null && index == viewIndex) CadRollbackBar()
                         val dimmed = behindBar(node.id)

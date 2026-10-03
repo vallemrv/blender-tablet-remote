@@ -22,6 +22,8 @@ from blender_tablet_remote.commands import cad, mode, sessions
 from blender_tablet_remote.errors import CommandError
 
 OWNER = {'_client_id':'test'}
+# BTR_CAD_KERNEL=OCCT runs the same suite on the OpenCascade kernel.
+KERNEL = os.environ.get('BTR_CAD_KERNEL', 'NATIVE')
 
 
 def volume(obj):

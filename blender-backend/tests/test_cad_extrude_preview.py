@@ -8,7 +8,7 @@ from unittest.mock import patch
 import bpy
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_cad import CadTests, OWNER, volume
+from test_cad import CadTests, OWNER, KERNEL, volume
 from blender_tablet_remote.cad import document as model
 from blender_tablet_remote.cad.kernel import kernel, ExtrusionPreviewCache
 from blender_tablet_remote.cad.runtime import runtime
@@ -32,8 +32,9 @@ class ExtrudePreviewTests(CadTests):
         cad.sketch_create(dict(support_id=runtime.doc()['features'][-1]['id'], **OWNER))
         rim = self.draw('RECTANGLE', (.01, .01), (.07, .03))
         cad.extrude_begin(dict(profile_id='profile_'+rim, depth=.004, **OWNER))
-        from blender_tablet_remote.cad import kernel as kernel_module
-        with patch.object(kernel_module, 'cut_mesh', wraps=kernel_module.cut_mesh) as boolean:
+        from blender_tablet_remote.cad import kernel as kernel_module, occt
+        target, name = (occt, '_boolean') if KERNEL == 'OCCT' else (kernel_module, 'cut_mesh')
+        with patch.object(target, name, wraps=getattr(target, name)) as boolean:
             cad.extrude_update(dict(gesture_u=0, gesture_v=-.4, baseline_depth=.004, **OWNER))
             self.assertEqual(boolean.call_count, 0)
             self.assertTrue(any(o.get(PRISM_KEY) for o in bpy.data.objects))
@@ -71,6 +72,7 @@ class ExtrudePreviewTests(CadTests):
             self.draw('CIRCLE', (x, y), (x + .01, y))
         return outer
 
+    @unittest.skipIf(KERNEL == 'OCCT', 'reutiliza la teselación del motor de malla')
     def test_four_holes_depth_changes_reuse_tessellation_and_confirm_one_solid(self):
         outer = self.plate()
         bpy.context.scene.unit_settings.scale_length = .001

@@ -2082,7 +2082,9 @@ anteriores se normalizan sin cambiar IDs. Android presenta esa secuencia como un
 de operaciones: tocar un nodo mueve la barra de retroceso a ese punto y muestra el
 modelo tal como estaba justo después de él; los nodos posteriores quedan atenuados.
 `cad.history.rollback {node_id|null}` fija la barra y `null` restituye el modelo
-completo; el estado la anuncia en `rollback_id`. La navegación por la pila no crea
+completo; el estado la anuncia en `rollback_id`. El estado CAD incluye también
+`kernel:{id:"OCCT"|"NATIVE",label}`, el motor que evalúa los sólidos según las
+preferencias del add-on; Android lo muestra en la pila. La navegación por la pila no crea
 undo. El rebuild solo evalúa las operaciones hasta la barra: las demás conservan su
 objeto oculto, sus bocetos dejan de proyectarse y seleccionarlas, activarlas,
 editarlas o borrarlas responde `cad_rollback`. Crear un boceto u operación con la

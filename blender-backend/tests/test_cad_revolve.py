@@ -10,7 +10,7 @@ import bpy
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0,str(Path(__file__).resolve().parent))
-from test_cad import CadTests, OWNER, volume
+from test_cad import CadTests, OWNER, KERNEL, volume
 from blender_tablet_remote.cad import document as model
 from blender_tablet_remote.cad.kernel import revolve
 from blender_tablet_remote.cad.runtime import runtime
@@ -31,8 +31,11 @@ class RevolveTests(CadTests):
             state=cad.revolve_create(dict(profile_id='profile_'+rectangle,**OWNER)); undo.assert_called_once()
         feature=model.find(runtime.doc(),'features',state['selection']['id'])
         self.assertEqual((feature['type'],feature['axis'],feature['angle']),('REVOLVE','Y',360.))
-        polygon=64*.5*math.sin(math.tau/64)/math.pi       # tessellated circle / true circle
-        self.assertAlmostEqual(volume(self.obj()),math.pi*.02**2*.03*polygon,places=9)
+        if KERNEL=='OCCT':   # exact cylinder; only the display tessellation deviates
+            self.assertAlmostEqual(volume(self.obj())/(math.pi*.02**2*.03),1,delta=1e-3)
+        else:
+            polygon=64*.5*math.sin(math.tau/64)/math.pi       # tessellated circle / true circle
+            self.assertAlmostEqual(volume(self.obj()),math.pi*.02**2*.03*polygon,places=9)
         sketch,source=model.profile(runtime.doc(),'profile_'+rectangle)
         self.assertTrue(closed(revolve(sketch,source,'Y',360.)))
 

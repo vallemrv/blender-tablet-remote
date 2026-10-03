@@ -8,7 +8,7 @@ import bpy
 import bmesh
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_cad import CadTests, OWNER, volume
+from test_cad import CadTests, OWNER, KERNEL, volume
 from blender_tablet_remote.cad import document as model
 from blender_tablet_remote.cad.kernel import sweep, sweep_path
 from blender_tablet_remote.cad.runtime import runtime
@@ -121,6 +121,14 @@ class SweepCommandTests(CadTests):
         self.assertEqual(len(regions), 1)   # one design edge, not its tessellation
         edge = [[list(points[a]*scale), list(points[b]*scale)] for a, b in next(iter(regions.values()))]
         solid = runtime.doc()['features'][-1]['id']
+        if KERNEL == 'OCCT':
+            from blender_tablet_remote.cad import occt
+            occt.evaluator.evaluate(runtime.doc(), scale=1.)
+            shape = occt.evaluator._shapes[solid][1]
+            added = (occt._volume(occt.finish_edges(shape, [edge], .004, 4))-occt._volume(shape))/occt.MM**3
+            self.assertAlmostEqual(added/((1-math.pi/4)*.004**2*2*math.pi*.0233), 1, delta=.12)
+            with self.assertRaises(CommandError): occt.finish_edges(shape, [edge], .03, 4)
+            return
         from blender_tablet_remote.cad.evaluation import evaluator
         base = evaluator.evaluate(runtime.doc(), scale=1.)['solids'][solid][1]
         def closed(data):

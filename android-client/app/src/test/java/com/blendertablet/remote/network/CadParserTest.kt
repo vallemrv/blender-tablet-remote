@@ -318,4 +318,8 @@ class CadParserTest {
         assertEquals("s",cad.history.last().sketchId)
     }
 
+    @Test fun kernelLabelIsReadAndOptional() {
+        assertEquals("OpenCascade", CadParser.state(JSONObject("""{"version":1,"kernel":{"id":"OCCT","label":"OpenCascade"}}""")).kernel)
+        assertNull(CadParser.state(JSONObject("""{"version":1}""")).kernel)
+    }
 }

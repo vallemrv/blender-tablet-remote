@@ -95,6 +95,8 @@ data class CadState(
     val dimensionOptions: Map<String, CadDimensionOption> = emptyMap(),
     val surface: CadSurface = CadSurface(), val history: List<CadHistoryNode> = emptyList(),
     val rollbackId: String? = null,
+    /** Motor que calcula los sólidos: OpenCascade o la malla de Blender. */
+    val kernel: String? = null,
 ) {
     val activeSketch get() = sketches.firstOrNull { it.id == activeSketchId }
     val selectedConstraint get() = activeSketch?.constraints?.firstOrNull { selectionKind == "CONSTRAINT" && it.id == selectionId }
