@@ -138,6 +138,13 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             RailDivider()
             capabilities.entities.forEach { type ->
                 CadAction(type, cadLabel(type), selected = state.cadTool == type, enabled = !cad.sessionActive || cad.operation == type) { vm.cadTool(type) }
+                // Subdividir creates a point too: it lives right below Punto.
+                if (type == "POINT" && capabilities.midpointPoints) CadAction("SUBDIVIDE",
+                    "Subdividir: crear punto medio de una arista o entre dos puntos",
+                    enabled = connected && !cad.sessionActive && cad.surface.mode == "PROFILE" && cadMidpointCreationEnabled(cad)) {
+                    vm.cadTool(null)
+                    command("cad.points.midpoint")
+                }
             }
             if (capabilities.sketchEditing) CadAction("FILLET", "Redondear esquinas seleccionadas", selected = pendingDimension == "FILLET",
                 enabled = !cad.sessionActive && cad.selection.any { it.id != "ORIGIN" }) { pendingDimension = "FILLET" }
@@ -820,8 +827,13 @@ fun CadSelectionActions(state: AppUiState, vm: MainViewModel) {
     val cad = state.blender.cad
     val enabled = state.connection == ConnectionStatus.CONNECTED && !cad.sessionActive && cad.surface.mode == "PROFILE"
     val entities = cad.activeSketch?.entities.orEmpty().filter { e -> cad.selection.any { it.id == e.id } }
-    IconAction(AppIcons.cad("SELECT_ALL"), "Seleccionar todo el croquis", enabled = enabled && cad.selectionSketch?.entities?.isNotEmpty() == true) { vm.selectAll() }
-    IconAction(AppIcons.cad("DESELECT_ALL"), "Deseleccionar todo", enabled = enabled && cad.selectionId != null) { vm.deselectAll() }
+    // One toggle: with a selection it clears it, otherwise it selects the whole sketch.
+    val selected = cad.selectionId != null
+    IconAction(AppIcons.cad(if (selected) "DESELECT_ALL" else "SELECT_ALL"),
+        if (selected) "Deseleccionar todo" else "Seleccionar todo el croquis",
+        enabled = enabled && (selected || cad.selectionSketch?.entities?.isNotEmpty() == true)) {
+        if (selected) vm.deselectAll() else vm.selectAll()
+    }
     if (cad.activeSketchId == null) return
     IconAction(AppIcons.cad("DELETE"), "Borrar selección", enabled = enabled && cad.selection.any { it.id != "ORIGIN" }) { vm.delete() }
     val construction = if (entities.isEmpty()) cad.construction else entities.all { it.construction }
@@ -832,18 +844,17 @@ fun CadSelectionActions(state: AppUiState, vm: MainViewModel) {
     IconAction(AppIcons.cad("WELD"), "Soldar extremos en el último punto seleccionado", enabled = enabled && cadWeldEnabled(cad)) {
         vm.cadCommand("cad.points.weld")
     }
-    if (state.blender.features.cad.midpointPoints) IconAction(AppIcons.cad("SUBDIVIDE"),
-        "Subdividir: crear punto medio de una arista o entre dos puntos", enabled = enabled && cadMidpointCreationEnabled(cad)) {
-        vm.cadTool(null)
-        vm.cadCommand("cad.points.midpoint")
-    }
-    if (state.blender.features.cad.referenceProfile) IconAction(AppIcons.cad("CLOSE_REFERENCE"),
+    // Only sketches holding projected curves need it; elsewhere it would be a dead icon.
+    if (state.blender.features.cad.referenceProfile && cadHasProjectedCurves(cad)) IconAction(AppIcons.cad("CLOSE_REFERENCE"),
         "Cerrar perfil proyectado · une extremos cercanos hasta el Paso y retira Construcción",
         enabled = enabled && cadCloseReferenceEnabled(cad)) {
         vm.cadTool(null)
         vm.cadCommand("cad.reference.close")
     }
 }
+
+internal fun cadHasProjectedCurves(cad: CadState): Boolean =
+    cad.activeSketch?.entities.orEmpty().any { it.reference && it.type != "POINT" }
 
 internal fun cadCloseReferenceEnabled(cad: CadState): Boolean {
     val entities = cad.activeSketch?.entities.orEmpty()

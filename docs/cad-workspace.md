@@ -34,7 +34,7 @@ de perfiles seleccionado para poder extruirlo.
   en la última posición visible. Es una referencia auxiliar para cotas y simetrías.
   Con Cursor, selecciona el punto y una arista y aplica **Punto medio**. Repite con
   ese mismo punto y otra arista para que ambas compartan centro.
-- **Subdividir**, junto a Soldar en las acciones del boceto, crea un punto medio
+- **Subdividir**, en el rail del croquis justo debajo de Punto, crea un punto medio
   asociado a una línea o lado recto seleccionado. También admite dos puntos:
   selecciona el punto medio recién creado y un extremo para obtener el cuarto,
   y repite para el octavo. Las relaciones se conservan al mover o acotar la línea.
@@ -187,8 +187,8 @@ En un círculo, **Radio/Diámetro** permite editar la misma medida con cualquier
 las dos representaciones; no crea dos cotas independientes.
 Al editar, **Boceto activo → Figuras** contiene solo las figuras de ese boceto.
 Sus filas seleccionan figuras completas y ofrecen papelera;
-**Cotas y reglas** es una pestaña separada. **Seleccionar todo**, **Deseleccionar
-todo** y **Borrar selección** están junto a Deshacer/Rehacer; el borrado permanece en las acciones del
+**Cotas y reglas** es una pestaña separada. **Seleccionar/Deseleccionar todo** (un solo
+botón) y **Borrar selección** están junto a Deshacer/Rehacer; el borrado permanece en las acciones del
 croquis y sus papeleras. Redondear se activa desde su rail. Estas acciones no se
 duplican en la bandeja de propiedades. El origen queda fuera de Seleccionar
 todo y no se borra. Borrar una arista de rectángulo conserva sus otros lados como
@@ -254,8 +254,10 @@ Para varios arcos iguales, selecciónalos y pulsa **Igualdad**: toman el radio y
 y una sola cota, en un único paso de undo. Si hay redondeos entre ellos, solo se
 iguala el radio.
 
-Junto a **Deshacer/Rehacer** hay un grupo con **Seleccionar todo**, **Deseleccionar
-todo**, **Borrar selección**, **Construcción** y **Soldar puntos**. Cada candado de **Fijar medida/Quitar
+Junto a **Deshacer/Rehacer** hay un grupo con **Seleccionar/Deseleccionar todo**,
+**Borrar selección**, **Construcción** y **Soldar puntos**. El primero es un único botón
+que alterna: sin selección selecciona todo; con selección la vacía. **Cerrar perfil
+proyectado** se añade al grupo solo cuando el croquis tiene curvas proyectadas. Cada candado de **Fijar medida/Quitar
 cota** está junto a su campo (Ancho, Alto, Lado, Radio o Longitud) en la bandeja
 inferior de la figura seleccionada. Los candados se deshabilitan mientras haya medidas
 en borrador. Construcción afecta a la selección, o al dibujo siguiente si no hay
@@ -386,8 +388,8 @@ vista era frontal, se ofrece una vista oblicua. Un dedo orbita en 3D; durante un
 preview de profundidad, el manejador de órbita y dos dedos permiten navegar.
 El botón **Vista 3D** vuelve a encuadrar. Nada de esto modifica la cámara del PC.
 Un croquis nuevo con varios perfiles queda seleccionado completo al finalizar;
-si solo tiene uno, se selecciona ese perfil. **Seleccionar todo/Deseleccionar todo**
-permanecen junto a Deshacer/Rehacer: en edición actúan sobre las figuras; en 3D,
+si solo tiene uno, se selecciona ese perfil. **Seleccionar/Deseleccionar todo**
+permanece junto a Deshacer/Rehacer: en edición actúan sobre las figuras; en 3D,
 sobre el croquis elegido. La pila contiene solo croquis y operaciones: las figuras
 pertenecen al croquis. Su menú ⋮ permite **Renombrar croquis**, **Editar boceto** y
 **Seleccionar croquis completo**. Renombrar conserva sus referencias y no reconstruye mallas.

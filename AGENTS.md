@@ -478,9 +478,12 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   puntos/rejilla; confirmar consume la última preview y crea un undo. Es auxiliar
   libre y no forma perfiles, tampoco al retirar Construcción. MIDPOINT admite
   punto+arista o tres puntos (último=medio); el mismo punto puede relacionar los
-  centros de varias aristas y servir de centro de simetría. Subdividir, junto a
-  Soldar en las acciones del boceto, crea un punto auxiliar con MIDPOINT sobre una
+  centros de varias aristas y servir de centro de simetría. Subdividir, en el rail
+  del croquis justo debajo de Punto, crea un punto auxiliar con MIDPOINT sobre una
   arista recta o entre dos puntos; permite mitades sucesivas sin partir el perfil.
+- La fila de acciones del boceto junto a Deshacer/Rehacer evita pulsaciones largas:
+  Seleccionar/Deseleccionar todo es un único botón que alterna según haya selección,
+  y Cerrar perfil proyectado solo aparece si el croquis activo tiene curvas proyectadas.
 - `ANGLE` con dos líneas/lados rectos es la cota de ángulo entre ellas (0–180°):
   cada segmento apunta desde la intersección de ambas rectas hacia su extremo más
   lejano, así una esquina compartida mide su ángulo interior. Vive en el grupo de
@@ -749,8 +752,8 @@ no quedan archivos o referencias temporales.
   el sondeo de BEGIN/última preview sin raycast nuevo. Un toque no modifica geometría
   ni crea undo; cancelar/dos dedos restaura también la selección anterior.
 - Dibujos abre siempre el árbol de bocetos/figuras, separado de la pestaña de
-  restricciones contextuales. Seleccionar todo/Deseleccionar todo, Borrar selección, Construcción y
-  Soldar puntos viven junto a Deshacer/Rehacer. Cada candado de medida está junto a
+  restricciones contextuales. Seleccionar/Deseleccionar todo (un botón), Borrar selección,
+  Construcción y Soldar puntos viven junto a Deshacer/Rehacer. Cada candado de medida está junto a
   su campo en la bandeja inferior. Redondear permanece en el rail del croquis y borrar
   en sus acciones/papeleras, sin duplicados en la bandeja de propiedades.
   Borrar un lado de rectángulo conserva los demás como líneas;

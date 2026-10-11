@@ -18,6 +18,10 @@ class CadFeedbackTest {
         assertTrue(cadCloseReferenceEnabled(cad.copy(selection=listOf(CadSelection("l"),CadSelection("a")))))
         assertFalse(cadCloseReferenceEnabled(cad.copy(selection=listOf(CadSelection("p","POINT")))))
         assertFalse(cadCloseReferenceEnabled(cad.copy(selection=listOf(CadSelection("drawn")))))
+        assertTrue(cadHasProjectedCurves(cad))
+        // Only projected points, or nothing projected: the action is not shown at all.
+        val pointsOnly = cad.copy(sketches = cad.sketches.map { s -> s.copy(entities = s.entities.filter { it.type == "POINT" || !it.reference }) })
+        assertFalse(cadHasProjectedCurves(pointsOnly))
     }
 
     @Test fun pointsAndRecursiveSubdivisionReachTheSketchControls() {
