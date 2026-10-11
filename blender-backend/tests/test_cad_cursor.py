@@ -96,7 +96,7 @@ class CursorTests(CadTests):
 
     def test_constrained_drag_is_not_misinterpreted_as_toggle(self):
         a=self.rect(); cad._set_selection([ref(a)])
-        cad.constraint_add(dict(type='FIX',**OWNER))
+        cad.constraint_add(dict(type='FIX',**OWNER)); cad._set_selection([ref(a)])
         self.begin(ref(a,'P0'),(0,0)); self.update((.01,.02))
         with patch.object(cad,'undo_push') as undo: cad.drag_end(OWNER); undo.assert_not_called()
         self.assertEqual(cad._refs(),[ref(a)])

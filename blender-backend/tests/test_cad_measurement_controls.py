@@ -20,6 +20,7 @@ class MeasurementControlTests(DimensionTests):
         offers=runtime.status()['dimension_options']
         for kind,value in [('DISTANCE',.05),('DISTANCE_X',.03),('DISTANCE_Y',.04)]:
             self.assertAlmostEqual(offers[kind]['value'],value)
+            self.refs((line,'START'),(line,'END'))   # each rule clears the selection
             self.dimension(kind,value)
         sketch=runtime.doc()['sketches'][0]
         self.assertEqual(len(dimensions.visible_constraints(sketch)),3)

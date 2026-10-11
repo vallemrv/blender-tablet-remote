@@ -367,8 +367,8 @@ class SketchTests(CadTests):
         self.select_refs((a,'BODY')); self.rule('HORIZONTAL')
         sketch,e=model.entity(runtime.doc(),a)
         self.assertAlmostEqual(e['y'],e['y2'],places=9)
-        self.rule('DISTANCE',value=.05)
-        self.rule('FIX')
+        self.select_refs((a,'BODY')); self.rule('DISTANCE',value=.05)
+        self.select_refs((a,'BODY')); self.rule('FIX')
         raw=bpy.context.scene[model.KEY]
         with self.assertRaises(CommandError): cad.entity_set(dict(entity_id=a,values={'x2':.2},**OWNER))
         self.assertEqual(raw,bpy.context.scene[model.KEY])
@@ -387,10 +387,18 @@ class SketchTests(CadTests):
         self.assertLess(math.dist(pa['END'],pb['START']),1e-8)
         self.assertAlmostEqual(pa['START'][1],pa['END'][1],places=8)
 
+    def test_applying_a_rule_clears_the_selection(self):
+        a=self.draw('LINE',(0,0),(.04,.01))
+        self.select_refs((a,'BODY')); self.rule('HORIZONTAL')
+        self.assertIsNone(runtime.selection)
+        self.select_refs((a,'BODY')); self.rule('DISTANCE',value=.05)
+        self.assertIsNone(runtime.selection)
+
     def test_parallel_perpendicular_equal_and_radius(self):
         a=self.draw('LINE',(0,0),(.04,0))
         b=self.draw('LINE',(.01,.02),(.03,.05))
-        self.select_refs((a,'BODY'),(b,'BODY')); self.rule('PARALLEL'); self.rule('EQUAL')
+        self.select_refs((a,'BODY'),(b,'BODY')); self.rule('PARALLEL')
+        self.select_refs((a,'BODY'),(b,'BODY')); self.rule('EQUAL')
         sketch=runtime.doc()['sketches'][0]
         for c in sketch['constraints']: self.assertLess(max(abs(v) for v in geometry.residual(sketch,c,1)),1e-7)
         c=self.draw('CIRCLE',(.1,.1),(.11,.1))

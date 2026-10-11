@@ -1522,7 +1522,11 @@ def constraint_add(payload):
             sketch.setdefault('constraints',[]).append(c)
         if typ in dimensions.NUMERIC: dimensions.solve_dimension(sketch,c)
         else: geometry.solve(sketch,tangent_goals)
-    return (yield from runtime.transaction_steps(payload,change,'CAD restringir boceto'))
+    yield from runtime.transaction_steps(payload,change,'CAD restringir boceto')
+    # A rule applied to the selection ends that choice: the next one starts clean.
+    # Explicit refs (a measure written in the tray) keep the user's selection.
+    if 'refs' not in payload: _set_selection([])
+    return runtime.status()
 
 
 @command('cad.constraint.delete')
