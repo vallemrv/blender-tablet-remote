@@ -687,6 +687,12 @@ no quedan archivos o referencias temporales.
   Tocar un lado tras cerrar sustituye la selección del perfil por la del elemento;
   nunca mezcla PROFILE con ENTITY al editar. Los lados del polígono regular NGON
   cuentan como líneas para habilitar restricciones, incluidas Horizontal y Vertical.
+- Cerrar perfil proyectado (`cad.reference.close`, anunciado por `reference_profile`)
+  convierte las curvas proyectadas seleccionadas en perfiles, o todas sin selección.
+  Une extremos cercanos hasta el Paso; líneas/arcos comparten un punto geométrico y
+  los arcos conservan centro/radio. Actualiza los FIX de la copia y añade coincidencias
+  con IDs intactos y un undo. Huecos mayores, uniones ambiguas, cruces y conflictos
+  rechazan la transacción completa; no modifica el cuerpo del que se proyectó.
 - Los cuerpos son piezas independientes con un historial de croquis/operaciones. Los planos guardados
   admiten desplazamiento métrico y giro local XYZ en grados, con referencias a
   boceto/cara superior. Una cara arbitraria guarda su marco capturado, sin índices

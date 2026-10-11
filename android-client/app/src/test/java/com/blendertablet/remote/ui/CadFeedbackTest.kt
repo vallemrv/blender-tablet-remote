@@ -7,6 +7,19 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadFeedbackTest {
+    @Test fun projectedProfileClosureIsAdvertisedAndUsesOnlyProjectedCurves() {
+        val caps=CadParser.capabilities(JSONObject("""{"version":2,"length_unit":"METERS","reference_profile":true}"""))
+        assertTrue(caps.referenceProfile)
+        val cad=CadParser.state(JSONObject("""{"version":1,"active_sketch_id":"s","document":{"sketches":[
+            {"id":"s","entities":[{"id":"l","type":"LINE","reference":true,"construction":true},
+            {"id":"a","type":"ARC","reference":true,"construction":true},{"id":"p","type":"POINT","reference":true},
+            {"id":"drawn","type":"LINE","reference":false}]}]}}"""))
+        assertTrue(cadCloseReferenceEnabled(cad))
+        assertTrue(cadCloseReferenceEnabled(cad.copy(selection=listOf(CadSelection("l"),CadSelection("a")))))
+        assertFalse(cadCloseReferenceEnabled(cad.copy(selection=listOf(CadSelection("p","POINT")))))
+        assertFalse(cadCloseReferenceEnabled(cad.copy(selection=listOf(CadSelection("drawn")))))
+    }
+
     @Test fun pointsAndRecursiveSubdivisionReachTheSketchControls() {
         val caps = CadParser.capabilities(JSONObject("""{"version":2,"length_unit":"METERS",
             "entities":["POINT","LINE"],"midpoint_points":true,"constraints":["MIDPOINT","SYMMETRIC"]}"""))

@@ -402,7 +402,7 @@ FEATURES = {
     "materials": {"version": 2, "editable_layers": True, "paint_kinds": ["COLOR", "MATERIAL"], "recipe_format": "tablet-material", "recipe_version": 1, "paint": "UV_MASK", "mask_size": 1024, "max_layers": 8, "max_objects": 16},
     "scene_capture": {"version": 1, "mime": "image/png", "camera": "TABLET", "overlays": False},
     "cad": {"version": 2, "planes": ["XY", "XZ", "YZ"],
-            "offset_entities": ["SLOT", "CIRCLE", "RECTANGLE"], "feature_mirror": True,
+            "offset_entities": ["SLOT", "CIRCLE", "RECTANGLE"], "feature_mirror": True, "reference_profile": True,
             "entities": ["POINT", "LINE", "RECTANGLE", "CIRCLE", "ARC", "NGON", "SLOT", "GEAR", "POLYGON"], "midpoint_points": True, "features": ["EXTRUDE", "CUT", "LOFT", "HELIX", "REVOLVE", "SWEEP", "MIRROR"],
             "constraints": ["COINCIDENT", "POINT_ON_LINE", "HORIZONTAL", "VERTICAL", "PARALLEL", "COLLINEAR", "PERPENDICULAR",
                             "TANGENT", "EQUAL", "DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "ANGLE", "FIX", "MIDPOINT",

@@ -2066,6 +2066,17 @@ def project_reference(payload):
     return runtime.status()
 
 
+@command('cad.reference.close')
+def close_reference(payload):
+    from ..cad.projection import close_profile
+    def change(doc):
+        sketch=model.find(doc,'sketches',runtime.active_sketch_id)
+        selected={r['id'] for r in _refs() if r['kind']=='ENTITY'}
+        identifiers=selected or {e['id'] for e in sketch['entities'] if e.get('reference') and e['type']!='POINT'}
+        close_profile(sketch,identifiers,runtime.step)
+    return (yield from runtime.transaction_steps(payload,change,'CAD cerrar perfil proyectado'))
+
+
 @command('cad.view.roll')
 def view_roll(payload):
     """Spin the sketch view around its plane normal. Drawing stays on the plane."""

@@ -837,6 +837,19 @@ fun CadSelectionActions(state: AppUiState, vm: MainViewModel) {
         vm.cadTool(null)
         vm.cadCommand("cad.points.midpoint")
     }
+    if (state.blender.features.cad.referenceProfile) IconAction(AppIcons.cad("CLOSE_REFERENCE"),
+        "Cerrar perfil proyectado · une extremos cercanos hasta el Paso y retira Construcción",
+        enabled = enabled && cadCloseReferenceEnabled(cad)) {
+        vm.cadTool(null)
+        vm.cadCommand("cad.reference.close")
+    }
+}
+
+internal fun cadCloseReferenceEnabled(cad: CadState): Boolean {
+    val entities = cad.activeSketch?.entities.orEmpty()
+    val selected = cad.selection.map { it.id }.toSet()
+    val targets = entities.filter { if (selected.isEmpty()) it.reference && it.type != "POINT" else it.id in selected }
+    return targets.isNotEmpty() && targets.all { it.reference && it.type != "POINT" }
 }
 
 internal fun cadMidpointCreationEnabled(cad: CadState): Boolean {

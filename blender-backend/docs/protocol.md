@@ -1571,6 +1571,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.surface.clear` | `{}` | Limpia las referencias transitorias |
 | `cad.sketch.on_face` | `{offset?}` | Crea un boceto en la cara plana resaltada, sin repetir sondeo y con un undo; `offset` (m) lo separa por la normal: positivo hacia fuera |
 | `cad.reference.project` | `{}` | Copia las referencias seleccionadas a construcción fija en el boceto activo |
+| `cad.reference.close` | `{}` | Convierte las curvas proyectadas seleccionadas (o todas sin selección) en perfiles cerrados. Une extremos próximos hasta el Paso CAD, conserva centro/radio de los arcos, actualiza sus FIX y añade coincidencias; una transacción y undo. Huecos mayores, ramificaciones, cruces o conflictos rechazan todo |
 | `cad.view.solid` | `{}` | Sale del plano de boceto, restaura la vista 3D orbital y encuadra |
 
 
@@ -2098,6 +2099,10 @@ implícitos sin otros usuarios se retiran al borrar su boceto.
 activo, aunque estén a otra altura, y crea LINE o CIRCLE `construction:true,reference:true` con FIX.
 Se descartan proyecciones degeneradas y se respeta el límite del solver. Es una
 copia estática que permite cotas contra geometría existente, no asociación BREP.
+`features.cad.reference_profile:true` anuncia `cad.reference.close`. Este cierre
+explícito transforma las curvas proyectadas en perfiles sin cambiar sus IDs ni el
+cuerpo de origen; los arcos conservan sus círculos de soporte y se ajustan los
+extremos de las líneas. La distancia máxima de unión es el Paso CAD en metros.
 
 El documento público añade `history:[{id,kind,name,body_id,sketch_id?}]` en orden de
 creación. `kind` es SKETCH o FEATURE. Los nodos persistentes usan `order`; documentos

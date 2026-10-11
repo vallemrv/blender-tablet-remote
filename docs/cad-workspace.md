@@ -367,7 +367,16 @@ en una sola operación de deshacer.
 Un contorno circular llega como círculo. También sigue en **Planos y bocetos →
 Medir desde sólido**. No aparece permanentemente en la bandeja de
 propiedades. **Proyectar al plano** vuelve al cursor y usa esos puntos/aristas para acotar.
-La referencia no entra en la extrusión ni cambia las piezas originales. Es una
+
+Las proyecciones nacen como construcción, por lo que no generan un perfil para
+extruir. **Cerrar perfil proyectado**, en las acciones del boceto junto a Construcción,
+convierte las curvas seleccionadas en un contorno cerrado; sin selección intenta
+usar todas las curvas proyectadas. Corrige huecos entre extremos de hasta el Paso
+actual, extendiendo los arcos sin cambiar su centro ni su radio. Conserva los IDs,
+actualiza la fijación de la copia y añade coincidencias en un solo undo. Si el hueco
+es mayor o la unión es ambigua, selecciona un único contorno o dibuja la unión.
+Antes de convertirla, la referencia queda fuera de la extrusión. Las piezas originales
+se conservan. Es una
 copia fija, no un enlace topológico dinámico a cualquier arista del sólido.
 
 ## Vista 3D y árbol contextual
