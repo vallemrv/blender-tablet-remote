@@ -147,8 +147,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   binormal, solevado reglado, redondeo/chaflán BREP) y publica el mismo contrato de
   mallas en metros: caras planas sin huecos como un polígono, curvas en triángulos.
   Los booleanos prueban primero una tolerancia difusa de 1e-5 de la pieza, porque el
-  documento trae ruido micrométrico; el exacto y otra mayor son reservas. Las aristas
-  guardadas se emparejan por geometría (rectas sobre su recta infinita con solape).
+  documento trae ruido micrométrico; el exacto y otra mayor son reservas. Las caras
+  coplanares se unifican solo si el resultado sigue siendo válido; si la
+  limpieza invalida una unión válida, se conserva el BREP previo, también al extruir
+  perfiles individuales sobre planos de caras capturados.
+  Las aristas guardadas se emparejan por geometría (rectas sobre su recta infinita con solape).
   El kernel de malla sigue igual con la preferencia «Malla de Blender», solo mientras
   dura la migración; la suite CAD se ejecuta en ambos (`BTR_CAD_KERNEL=OCCT`).
   El solver NumPy resuelve las restricciones anunciadas, hasta 300 parámetros.

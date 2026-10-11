@@ -20,6 +20,7 @@ from blender_tablet_remote.errors import CommandError
 
 AVAILABLE = occt.load()
 ELBOW = json.loads((Path(__file__).parent/'fixtures'/'cad_elbow.json').read_text())
+INDIVIDUAL = model.loads((Path(__file__).parent/'fixtures'/'cad_individual_extrusions.json').read_text())
 
 
 def mesh_report(vertices, faces):
@@ -76,6 +77,33 @@ class OcctKernelTests(unittest.TestCase):
         _, result = self.evaluate(doc)
         vertices, faces = result['display'][body][1]
         self.assertEqual((len(vertices), sorted(len(f) for f in faces)), (8, [4]*6))
+
+    def test_individual_rectangles_join_a_body_on_a_captured_face(self):
+        # Real failing geometry: a pocketed case, dividers and three rectangles
+        # on a captured plane. Its nanometre offsets must survive face cleanup.
+        sketch = INDIVIDUAL['sketches'][-1]
+        body = sketch['body_id']
+        for extent in ('ONE', 'TO_FACE'):
+            doc = copy.deepcopy(INDIVIDUAL)
+            evaluator, baseline = self.evaluate(doc)
+            previous_volume = mesh_report(*baseline['display'][body][1])[2]
+            for i, entity in enumerate(model.closed_entities(sketch)[:2]):
+                with self.subTest(extent=extent, rectangle=i):
+                    feature = dict(id=f'individual{i}', name='Extrusión individual', type='EXTRUDE',
+                                   order=10+i, sketch_id=sketch['id'], profile_id='profile_'+entity['id'],
+                                   depth=.02, enabled=True, body_id=body, extent=extent)
+                    if extent == 'TO_FACE':
+                        feature['to_face'] = copy.deepcopy(INDIVIDUAL['features'][-1]['to_face'])
+                    doc['features'].append(feature)
+                    result = evaluator.evaluate(copy.deepcopy(doc))
+                    manifold, crossings, volume = mesh_report(*result['display'][body][1])
+                    self.assertTrue(manifold)
+                    self.assertEqual(crossings, 0)
+                    travel = .02 if extent == 'ONE' else model.frame(sketch)['normal'][2] * (
+                        feature['to_face']['origin'][2] - model.frame(sketch)['origin'][2])
+                    expected_added = entity['width']*entity['height']*travel
+                    self.assertAlmostEqual(volume-previous_volume, expected_added, delta=1e-10)
+                    previous_volume = volume
 
     def test_lateral_junction_takes_the_fillet_the_mesh_kernel_rejects(self):
         evaluator, result = self.evaluate(ELBOW)

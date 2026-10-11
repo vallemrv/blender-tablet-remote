@@ -1,0 +1,537 @@
+{
+  "version": 1,
+  "revision": 0,
+  "id": "doc_0d904cd068d645578d6b4bca125f82f0",
+  "sketches": [
+    {
+      "id": "sketch_471db380baac46beb0bc1a680b8816ff",
+      "name": "Boceto 1",
+      "plane": "XY",
+      "offset": 0,
+      "plane_id": "plane_0f64a3ebd2c7459d81a611d57d18b972",
+      "entities": [
+        {
+          "id": "entity_52fbe42df4e042c7b057c2970d5f2c43",
+          "type": "RECTANGLE",
+          "x": -0.05,
+          "y": -0.029999999997643967,
+          "construction": false,
+          "width": 0.1,
+          "height": 0.059999999994941
+        }
+      ],
+      "constraints": [],
+      "visible": false,
+      "order": 1,
+      "body_id": "body_d6f90da58c4a4ea08b596792618f6c50"
+    },
+    {
+      "id": "sketch_e90dbf976b764377b1d55f7a7a2ab952",
+      "name": "Boceto 2",
+      "plane": "XY",
+      "offset": 0,
+      "plane_id": "plane_a1e98d50d9cd4f4ab8f7e39965dfc176",
+      "entities": [
+        {
+          "id": "entity_ddf13f02486748d8b9af1d5201802f7d",
+          "type": "RECTANGLE",
+          "x": -0.045000000000000005,
+          "y": -0.025000000000109154,
+          "construction": false,
+          "width": 0.09000000000000001,
+          "height": 0.04999999999983281
+        }
+      ],
+      "constraints": [],
+      "visible": false,
+      "order": 3,
+      "body_id": "body_d6f90da58c4a4ea08b596792618f6c50"
+    },
+    {
+      "id": "sketch_e08cfb58a4dc433ab7494b7facb21dfd",
+      "name": "Boceto 3",
+      "plane": "XY",
+      "offset": 0,
+      "plane_id": "plane_615cfd0d522646a7ba9032bc3e75b86c",
+      "entities": [
+        {
+          "id": "entity_d48afd841d9b47a78007bb46a3631a5c",
+          "type": "RECTANGLE",
+          "x": -0.044999998062849045,
+          "y": -0.02499999850988388,
+          "construction": false,
+          "width": 0.025000000000058604,
+          "height": 0.05
+        },
+        {
+          "id": "entity_069fbe8f46d24ef19151811f69b2be54",
+          "type": "RECTANGLE",
+          "x": -0.005000001937150959,
+          "y": -0.010000000000000002,
+          "construction": false,
+          "width": 0.05,
+          "height": 0.020000000000000004
+        },
+        {
+          "id": "entity_ae4c8d669ea441c3aa99ce0c06134cb8",
+          "type": "RECTANGLE",
+          "x": -0.04149999806284904,
+          "y": -0.020000000000020335,
+          "construction": false,
+          "width": 0.01800000000000001,
+          "height": 0.04000000000000001
+        },
+        {
+          "id": "entity_82320572b9a9453b931f54841100b7cb",
+          "type": "RECTANGLE",
+          "x": -0.002500001937149591,
+          "y": -0.007500000000009168,
+          "construction": false,
+          "width": 0.04499999999999501,
+          "height": 0.015000000000009171
+        }
+      ],
+      "constraints": [],
+      "visible": false,
+      "order": 6,
+      "body_id": "body_d6f90da58c4a4ea08b596792618f6c50"
+    },
+    {
+      "id": "sketch_80057fb8f1a448588193e7eacdbcf246",
+      "name": "Boceto 4",
+      "plane": "XY",
+      "offset": 0,
+      "plane_id": "plane_181749d189af48709f161136cefa6120",
+      "entities": [
+        {
+          "id": "entity_3262c6b9edcf4e66b72545b4562e950c",
+          "type": "RECTANGLE",
+          "x": -0.014166669920086864,
+          "y": -0.01500000070777146,
+          "construction": false,
+          "width": 0.04999999888241291,
+          "height": 0.004999999999966305
+        },
+        {
+          "id": "entity_413e8b033778441bb53ed6ad96d2abb1",
+          "type": "RECTANGLE",
+          "x": -0.014166669920086862,
+          "y": 0.010000000707805157,
+          "construction": false,
+          "width": 0.04999999888241291,
+          "height": 0.004999999999966303
+        },
+        {
+          "id": "entity_59b039ee105847a8a6825f0d9067cc94",
+          "type": "RECTANGLE",
+          "x": -0.029166664928197864,
+          "y": -0.02499999850988388,
+          "construction": false,
+          "width": 0.005000000000035694,
+          "height": 0.04999999888241291
+        }
+      ],
+      "constraints": [],
+      "visible": false,
+      "order": 8,
+      "body_id": "body_d6f90da58c4a4ea08b596792618f6c50"
+    }
+  ],
+  "features": [
+    {
+      "id": "feature_2b60c447d9a84f24b7b3fc996d7a2f98",
+      "name": "Extrusión 1",
+      "type": "EXTRUDE",
+      "order": 2,
+      "sketch_id": "sketch_471db380baac46beb0bc1a680b8816ff",
+      "profile_id": "profile_entity_52fbe42df4e042c7b057c2970d5f2c43",
+      "depth": 0.02,
+      "enabled": true,
+      "body_id": "body_d6f90da58c4a4ea08b596792618f6c50",
+      "extent": "ONE"
+    },
+    {
+      "id": "feature_dae04a71b1d8407c99afbef87ba23f42",
+      "name": "Vaciado 2",
+      "type": "CUT",
+      "order": 4,
+      "sketch_id": "sketch_e90dbf976b764377b1d55f7a7a2ab952",
+      "profile_id": "profile_entity_ddf13f02486748d8b9af1d5201802f7d",
+      "depth": 0.018000000000000002,
+      "enabled": true,
+      "body_id": "body_d6f90da58c4a4ea08b596792618f6c50",
+      "extent": "ONE",
+      "target_id": "feature_2b60c447d9a84f24b7b3fc996d7a2f98"
+    },
+    {
+      "id": "feature_445b59b7032e405692b68acd001660d7",
+      "type": "FILLET",
+      "order": 5,
+      "name": "Redondeo 3",
+      "sketch_id": null,
+      "body_id": "body_d6f90da58c4a4ea08b596792618f6c50",
+      "enabled": true,
+      "edges": [
+        [
+          [
+            [
+              -0.04999999701976776,
+              0.029999999329447746,
+              0.0
+            ],
+            [
+              -0.04999999701976776,
+              0.029999999329447746,
+              0.020000001415610313
+            ]
+          ]
+        ],
+        [
+          [
+            [
+              -0.04999999701976776,
+              -0.029999999329447746,
+              0.0
+            ],
+            [
+              -0.04999999701976776,
+              -0.029999999329447746,
+              0.020000001415610313
+            ]
+          ]
+        ],
+        [
+          [
+            [
+              0.04999999701976776,
+              0.029999999329447746,
+              0.020000001415610313
+            ],
+            [
+              0.04999999701976776,
+              0.029999999329447746,
+              0.0
+            ]
+          ]
+        ],
+        [
+          [
+            [
+              0.04999999701976776,
+              -0.029999999329447746,
+              0.020000001415610313
+            ],
+            [
+              0.04999999701976776,
+              -0.029999999329447746,
+              0.0
+            ]
+          ]
+        ]
+      ],
+      "segments": 4,
+      "width": 0.005
+    },
+    {
+      "id": "feature_504d692bdd434c50889e2c9092362bc7",
+      "name": "Extrusión 4",
+      "type": "EXTRUDE",
+      "order": 7,
+      "sketch_id": "sketch_e08cfb58a4dc433ab7494b7facb21dfd",
+      "profile_id": "profile_sketch_e08cfb58a4dc433ab7494b7facb21dfd",
+      "depth": 0.013000000000000001,
+      "enabled": true,
+      "body_id": "body_d6f90da58c4a4ea08b596792618f6c50",
+      "extent": "ONE"
+    },
+    {
+      "id": "feature_1f14a675a78743648afde08b7f77cf3a",
+      "name": "Extrusión 5",
+      "type": "EXTRUDE",
+      "order": 9,
+      "sketch_id": "sketch_80057fb8f1a448588193e7eacdbcf246",
+      "profile_id": "profile_entity_59b039ee105847a8a6825f0d9067cc94",
+      "depth": 0.018000008538365364,
+      "enabled": true,
+      "body_id": "body_d6f90da58c4a4ea08b596792618f6c50",
+      "extent": "TO_FACE",
+      "to_face": {
+        "origin": [
+          -2.4252930219681446e-10,
+          -5.61171498159041e-10,
+          0.02000000886619091
+        ],
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "planes": [
+    {
+      "id": "plane_0f64a3ebd2c7459d81a611d57d18b972",
+      "name": "Plano 1",
+      "base": "XY",
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "frame": {
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "id": "plane_a1e98d50d9cd4f4ab8f7e39965dfc176",
+      "name": "Cara de Cuerpo 1",
+      "base": "XY",
+      "implicit": true,
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "support_id": "feature_2b60c447d9a84f24b7b3fc996d7a2f98",
+      "frame": {
+        "origin": [
+          0.0,
+          0.0,
+          0.02
+        ],
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "id": "plane_615cfd0d522646a7ba9032bc3e75b86c",
+      "name": "Cara de Cuerpo 1",
+      "base": "XY",
+      "implicit": true,
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0
+      ],
+      "face_frame": {
+        "origin": [
+          0.0,
+          0.0,
+          0.001999999862164259
+        ],
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "frame": {
+        "origin": [
+          0.0,
+          0.0,
+          0.001999999862164259
+        ],
+        "x": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "normal": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "id": "plane_181749d189af48709f161136cefa6120",
+      "name": "Cara de Cuerpo 1",
+      "base": "XY",
+      "implicit": true,
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0
+      ],
+      "face_frame": {
+        "origin": [
+          0.009166667237877846,
+          3.255209157781991e-10,
+          0.001999999862164259
+        ],
+        "x": [
+          1.0,
+          0.0,
+          -2.0210997567897697e-16
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "normal": [
+          2.0210997567897697e-16,
+          0.0,
+          1.0
+        ]
+      },
+      "frame": {
+        "origin": [
+          0.009166667237877846,
+          3.255209157781991e-10,
+          0.001999999862164259
+        ],
+        "x": [
+          1.0,
+          0.0,
+          -2.0210997567897697e-16
+        ],
+        "y": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "normal": [
+          2.0210997567897697e-16,
+          0.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "bodies": [
+    {
+      "id": "body_d6f90da58c4a4ea08b596792618f6c50",
+      "name": "Cuerpo 1"
+    }
+  ],
+  "history": [
+    {
+      "id": "sketch_471db380baac46beb0bc1a680b8816ff",
+      "kind": "SKETCH",
+      "name": "Boceto 1",
+      "body_id": "body_d6f90da58c4a4ea08b596792618f6c50"
+    },
+    {
+      "id": "feature_2b60c447d9a84f24b7b3fc996d7a2f98",
+      "kind": "FEATURE",
+      "name": "Extrusión 1",
+      "body_id": "body_d6f90da58c4a4ea08b596792618f6c50",
+      "sketch_id": "sketch_471db380baac46beb0bc1a680b8816ff"
+    },
+    {
+      "id": "sketch_e90dbf976b764377b1d55f7a7a2ab952",
+      "kind": "SKETCH",
+      "name": "Boceto 2",
+      "body_id": "body_d6f90da58c4a4ea08b596792618f6c50"
+    },
+    {
+      "id": "feature_dae04a71b1d8407c99afbef87ba23f42",
+      "kind": "FEATURE",
+      "name": "Vaciado 2",
+      "body_id": "body_d6f90da58c4a4ea08b596792618f6c50",
+      "sketch_id": "sketch_e90dbf976b764377b1d55f7a7a2ab952"
+    },
+    {
+      "id": "feature_445b59b7032e405692b68acd001660d7",
+      "kind": "FEATURE",
+      "name": "Redondeo 3",
+      "body_id": "body_d6f90da58c4a4ea08b596792618f6c50",
+      "sketch_id": null
+    },
+    {
+      "id": "sketch_e08cfb58a4dc433ab7494b7facb21dfd",
+      "kind": "SKETCH",
+      "name": "Boceto 3",
+      "body_id": "body_d6f90da58c4a4ea08b596792618f6c50"
+    },
+    {
+      "id": "feature_504d692bdd434c50889e2c9092362bc7",
+      "kind": "FEATURE",
+      "name": "Extrusión 4",
+      "body_id": "body_d6f90da58c4a4ea08b596792618f6c50",
+      "sketch_id": "sketch_e08cfb58a4dc433ab7494b7facb21dfd"
+    },
+    {
+      "id": "sketch_80057fb8f1a448588193e7eacdbcf246",
+      "kind": "SKETCH",
+      "name": "Boceto 4",
+      "body_id": "body_d6f90da58c4a4ea08b596792618f6c50"
+    },
+    {
+      "id": "feature_1f14a675a78743648afde08b7f77cf3a",
+      "kind": "FEATURE",
+      "name": "Extrusión 5",
+      "body_id": "body_d6f90da58c4a4ea08b596792618f6c50",
+      "sketch_id": "sketch_80057fb8f1a448588193e7eacdbcf246"
+    }
+  ]
+}

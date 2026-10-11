@@ -238,10 +238,17 @@ def _boolean(kind, base, tool):
         op.Build()
         if not op.IsDone() or op.Shape().IsNull():
             continue
-        candidate = _clean(op.Shape())
+        raw = op.Shape()
+        if not BRepCheck_Analyzer(raw).IsValid() or _volume(raw) <= 1e-9:
+            continue
+        candidate = _clean(raw)
         if not candidate.IsNull() and BRepCheck_Analyzer(candidate).IsValid() and _volume(candidate) > 1e-9:
             result = candidate
-            break
+        else:
+            # Unifying coplanar faces can invalidate an otherwise valid union
+            # along the micrometre offsets of captured sketch planes.
+            result = raw
+        break
     if result is None:
         raise CommandError('La operación produce un sólido vacío o geometría inválida', code=code)
     if kind == 'CUT':
