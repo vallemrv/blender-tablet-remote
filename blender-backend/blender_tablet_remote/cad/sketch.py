@@ -159,6 +159,8 @@ def residual(sketch, c, scale):
         mid = (p1+p2)*.5
         return [np.dot(mid-a,n)/scale, np.dot(p2-p1,d)/scale]
     if typ == 'MIDPOINT':
+        if len(refs) == 3:
+            return ((point(sketch,refs[0])+point(sketch,refs[1]))*.5-point(sketch,refs[2]))/scale
         a,b = line(sketch,refs[1])
         return (point(sketch,refs[0])-(a+b)*.5)/scale
     if typ == 'COINCIDENT':
@@ -266,7 +268,7 @@ def validate_constraints(sketch):
             for value in position: model.number(value)
         refs = c.get('refs')
         typ = c['type']
-        count = (3,) if typ in ('SYMMETRIC','SYMMETRIC_LINE') else (1,2) if typ in ('DISTANCE','DISTANCE_X','DISTANCE_Y') else (1,2) if typ == 'ANGLE' else (1,) if typ in ('FIX','HORIZONTAL','VERTICAL','RADIUS') else (2,)
+        count = (2,3) if typ == 'MIDPOINT' else (3,) if typ in ('SYMMETRIC','SYMMETRIC_LINE') else (1,2) if typ in ('DISTANCE','DISTANCE_X','DISTANCE_Y') else (1,2) if typ == 'ANGLE' else (1,) if typ in ('FIX','HORIZONTAL','VERTICAL','RADIUS') else (2,)
         if not isinstance(refs,list) or len(refs) not in count or (len(refs)==2 and refs[0]==refs[1]):
             raise BadPayload('Número de elementos incorrecto para la restricción')
         for ref in refs:

@@ -17,7 +17,7 @@ FIELDS = {'LINE': ('x','y','x2','y2'), 'RECTANGLE': ('x','y','width','height'),
           'NGON': ('x','y','flats','angle'),
           'SLOT': ('x','y','length','width','angle'), 'GEAR': ('x','y','module','angle'),
           'POINT': ('x','y')}
-# POINT only comes from projecting a solid vertex: a fixed reference to snap and dimension to.
+# POINT is sketch reference geometry; projection also creates fixed reference points.
 # SLOT is a straight slot: two semicircles of diameter `width` whose centers lie
 # `length` apart, joined by two tangent lines; (x,y) is its middle point.
 # GEAR is an involute spur gear: `module` is its size (pitch diameter = module ×
@@ -299,7 +299,8 @@ def profile(doc, identifier):
         if identifier == 'profile_' + sketch['id']:
             closed = closed_entities(sketch)
             covered = {member for item in closed for member in item.get('members', [item['id']])}
-            if not closed or any(e['id'] not in covered for e in sketch['entities'] if not e.get('construction', False)):
+            if not closed or any(e['id'] not in covered for e in sketch['entities']
+                                 if e['type'] != 'POINT' and not e.get('construction', False)):
                 raise CommandError('El croquis contiene geometría abierta: ciérrala o márcala como construcción antes de extruirlo completo', code='cad_profile_invalid')
             return sketch, dict(id=sketch['id'], type='SKETCH')
         for item in closed_entities(sketch):

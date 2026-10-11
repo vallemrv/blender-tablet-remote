@@ -495,6 +495,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 cad.surface.mode == "FACE" -> if (cad.surface.selection.size > 1) "Dos referencias para medir · quita una cara seleccionada para crear el boceto" else "Toca una cara: se resalta en el vídeo · Boceto en cara usa exactamente esa selección"
                 cad.surface.mode != "PROFILE" -> "Toca hasta dos referencias para medir · durante el boceto puedes proyectarlas para acotar desde ellas"
                 editing && state.cadTool == "ARC" -> "Arrastra centro → inicio del arco · sigue en Arco para el siguiente · arrastra un rombo para variar su ángulo"
+                editing && state.cadTool == "POINT" -> "Toca para crear un punto de referencia · Cursor permite elegirlo junto a una arista para Punto medio"
                 entity?.type == "ARC" && !entity.isFillet -> "Arrastra el rombo del extremo para variar el ángulo; centro, radio e inicio permanecen fijos"
                 editing && state.cadTool == "NGON" -> "Polígono regular: arrastra del centro a un vértice · elige los lados antes o después · Entre caras es la llave de la tuerca"
                 editing && state.cadTool == "SLOT" -> "Ranura: arrastra entre los centros de los extremos · Radio es la mitad del Ancho · Entre centros conserva la longitud recta"
@@ -831,6 +832,26 @@ fun CadSelectionActions(state: AppUiState, vm: MainViewModel) {
     IconAction(AppIcons.cad("WELD"), "Soldar extremos en el último punto seleccionado", enabled = enabled && cadWeldEnabled(cad)) {
         vm.cadCommand("cad.points.weld")
     }
+    if (state.blender.features.cad.midpointPoints) IconAction(AppIcons.cad("SUBDIVIDE"),
+        "Subdividir: crear punto medio de una arista o entre dos puntos", enabled = enabled && cadMidpointCreationEnabled(cad)) {
+        vm.cadTool(null)
+        vm.cadCommand("cad.points.midpoint")
+    }
+}
+
+internal fun cadMidpointCreationEnabled(cad: CadState): Boolean {
+    fun entity(ref: CadSelection) = cad.activeSketch?.entities?.firstOrNull { it.id == ref.id }
+    val refs = cad.selection
+    if (refs.size == 1) {
+        val e = entity(refs[0]) ?: return false
+        return (e.type == "LINE" && refs[0].part == "BODY") ||
+            (e.type in listOf("RECTANGLE", "NGON") && refs[0].part.startsWith("EDGE")) ||
+            (e.type == "SLOT" && refs[0].part == "AXIS")
+    }
+    return refs.size == 2 && refs.distinct().size == 2 && refs.all { ref ->
+        val e = if (ref.id == "ORIGIN") CadEntity("ORIGIN", "ORIGIN", emptyMap()) else entity(ref) ?: return false
+        cadPointPart(e, ref.part)
+    }
 }
 
 internal fun cadWeldEnabled(cad: CadState): Boolean = cad.selection.distinct().size >= 2 && cad.selection.all { ref ->
@@ -917,7 +938,7 @@ internal fun cadConstraintEnabled(cad: CadState, type: String): Boolean {
     val refs = cad.selection
     if (refs.isEmpty()) return false
     val entities = refs.map { ref -> if (ref.id == "ORIGIN") CadEntity("ORIGIN", "ORIGIN", emptyMap()) else cad.activeSketch?.entities?.firstOrNull { it.id == ref.id } ?: return false }
-    fun point(i: Int) = refs[i].part in listOf("START", "END", "CENTER", "RIM", "P0", "P1", "P2", "P3", "POINT")
+    fun point(i: Int) = cadPointPart(entities[i], refs[i].part)
     fun line(i: Int) = (entities[i].type == "LINE" && refs[i].part == "BODY") || (entities[i].type in listOf("RECTANGLE", "NGON") && refs[i].part.startsWith("EDGE"))
     val points = refs.indices.all(::point)
     val lines = refs.indices.all(::line)
@@ -926,7 +947,8 @@ internal fun cadConstraintEnabled(cad: CadState, type: String): Boolean {
         "FIX" -> refs.none { it.id == "ORIGIN" }
         "COINCIDENT" -> refs.size == 2 && points
         "POINT_ON_LINE" -> cadPointOnLineEnabled(refs, entities)
-        "MIDPOINT" -> refs.size == 2 && ((point(0) && line(1)) || (line(0) && point(1)))
+        "MIDPOINT" -> (refs.size == 2 && ((point(0) && line(1)) || (line(0) && point(1)))) ||
+            (refs.size == 3 && refs.distinct().size == 3 && points)
         "SYMMETRIC" -> refs.size == 3 && points
         "SYMMETRIC_LINE" -> refs.size == 3 && point(0) && point(1) && line(2)
         "HORIZONTAL", "VERTICAL" -> lines
@@ -942,24 +964,24 @@ internal fun cadConstraintEnabled(cad: CadState, type: String): Boolean {
     }
 }
 
+private fun cadPointPart(entity: CadEntity, part: String): Boolean = when (entity.type) {
+    "ORIGIN", "POINT" -> part == "POINT"
+    "LINE" -> part in listOf("START", "END")
+    "CIRCLE" -> part in listOf("CENTER", "RIM")
+    "ARC" -> part in listOf("CENTER", "START", "END")
+    "RECTANGLE" -> part in listOf("P0", "P1", "P2", "P3")
+    "NGON" -> part == "CENTER" || (part.startsWith("P") && part.removePrefix("P").toIntOrNull()
+        ?.let { it in 0 until (entity.values["sides"]?.toInt() ?: 6) } == true)
+    "SLOT" -> part in listOf("CENTER", "START", "END", "SIDE")
+    "GEAR" -> part == "CENTER"
+    else -> false
+}
+
 private fun cadPointOnLineEnabled(refs: List<CadSelection>, entities: List<CadEntity>): Boolean {
     if (refs.size != 2 || refs[0].id == refs[1].id) return false
     fun corner(part: String, prefix: String, count: Int): Boolean = part.startsWith(prefix) &&
         (part.removePrefix(prefix).toIntOrNull()?.let { it in 0 until count } == true)
-    fun point(i: Int): Boolean {
-        val part = refs[i].part
-        return when (entities[i].type) {
-            "ORIGIN", "POINT" -> part == "POINT"
-            "LINE" -> part in listOf("START", "END")
-            "CIRCLE" -> part in listOf("CENTER", "RIM")
-            "ARC" -> part in listOf("CENTER", "START", "END")
-            "RECTANGLE" -> corner(part, "P", 4)
-            "NGON" -> part == "CENTER" || corner(part, "P", entities[i].values["sides"]?.toInt() ?: 6)
-            "SLOT" -> part in listOf("CENTER", "START", "END", "SIDE")
-            "GEAR" -> part == "CENTER"
-            else -> false
-        }
-    }
+    fun point(i: Int) = cadPointPart(entities[i], refs[i].part)
     fun line(i: Int): Boolean = when (entities[i].type) {
         "LINE" -> refs[i].part == "BODY"
         "RECTANGLE" -> corner(refs[i].part, "EDGE", 4)
@@ -1001,7 +1023,7 @@ internal fun cadLabel(type: String) = when (type) {
     "COLLINEAR" -> "Colineal (misma recta)"
     "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "SLOT" -> "Ranura"; "GEAR" -> "Engranaje"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "POINT" -> "Punto"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
-    "TANGENT" -> "Tangente (línea y arco, o dos arcos/círculos)"; "EQUAL" -> "Igualdad (tamaño del primero; en arcos también el ángulo, salvo redondeos)"; "EQUAL_ANGLE" -> "Igualdad de ángulo"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "ANGLE" -> "Ángulo"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
+    "TANGENT" -> "Tangente (línea y arco, o dos arcos/círculos)"; "EQUAL" -> "Igualdad (tamaño del primero; en arcos también el ángulo, salvo redondeos)"; "EQUAL_ANGLE" -> "Igualdad de ángulo"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "ANGLE" -> "Ángulo"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio (punto + arista, o 3 puntos; último = medio)"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
     "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; "REVOLVE" -> "Revolución"; "SWEEP" -> "Barrido"; else -> type
 }
 

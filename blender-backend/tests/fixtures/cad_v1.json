@@ -13,6 +13,7 @@
     ],
     "feature_mirror": true,
     "entities": [
+      "POINT",
       "LINE",
       "RECTANGLE",
       "CIRCLE",
@@ -67,7 +68,8 @@
     "kernel": "BLENDER_NATIVE_MESH",
     "document_version": 1,
     "owned_sessions": true,
-    "persistent": true
+    "persistent": true,
+    "midpoint_points": true
   },
   "commands": [
     {
@@ -347,6 +349,10 @@
         "plane": "XZ",
         "offset": 0.0
       }
+    },
+    {
+      "command": "cad.points.midpoint",
+      "payload": {}
     }
   ],
   "state": {

@@ -1522,7 +1522,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.sketch.rename` | `{sketch_id,name}` | Nombre de 1–80 caracteres; conserva IDs y geometría, un undo |
 | `cad.sketch.finish` | `{}` | Sale del dibujo conservando perfiles seleccionables |
 | `cad.select` | `{kind:"ENTITY\\|PROFILE\\|SKETCH\\|FEATURE",id,part?,additive?}` o `{u,v,additive?}` | Geometría de boceto, perfil individual, croquis completo o feature; aditiva alterna pertenencia |
-| `cad.entity.begin` | `{type:"LINE\|RECTANGLE\|CIRCLE\|ARC\|NGON\|SLOT\|GEAR\|POLYGON",u,v,sides?,teeth?,pressure?}` | Inicia dibujo reversible; `sides` (3–32, def. 6) solo en NGON; `teeth` (6–150, def. 20) y `pressure` (14.5/20/25°, def. 20) solo en GEAR |
+| `cad.entity.begin` | `{type:"POINT\|LINE\|RECTANGLE\|CIRCLE\|ARC\|NGON\|SLOT\|GEAR\|POLYGON",u,v,sides?,teeth?,pressure?}` | Inicia dibujo reversible; POINT ya tiene candidato al bajar, UPDATE mueve ese único punto y confirmar consume la última preview. `sides` (3–32, def. 6) solo en NGON; `teeth` (6–150, def. 20) y `pressure` (14.5/20/25°, def. 20) solo en GEAR |
 | `cad.entity.update` | `{u,v}` | Actualiza extremo desde baseline; con `increment` el inicio cae en la rejilla del paso (o en un punto existente, con coincidencia) y tamaño/radio se redondean al paso |
 | `cad.polygon.begin` | `{u,v}` | Inicia o continúa la cadena de un polígono irregular; el primer vértice admite snap de extremos |
 | `cad.polygon.update` | `{u,v}` | Tramo provisional desde el último vértice, con snap a extremos incluidos los de la propia cadena |
@@ -1544,6 +1544,7 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.drag.update` | `{u,v}` | Reconstruye y resuelve geometría desde baseline; sobre una cota solo mueve su rótulo en el plano, sin snap, solver ni evaluación del sólido |
 | `cad.drag.end` | `{}` | Sin UPDATE alterna el elemento sondeado en BEGIN; con arrastre confirma el último candidato. Nunca vuelve a sondear |
 | `cad.points.weld` | `{}` | Une los puntos seleccionados mediante coincidencias persistentes; conserva el último punto (el origen manda si está incluido), resuelve restricciones y crea un único undo |
+| `cad.points.midpoint` | `{}` | Crea un POINT auxiliar en el medio de una arista recta seleccionada o entre dos puntos distintos; persiste MIDPOINT y un undo. Selecciona el nuevo punto para continuar subdividiendo con un extremo |
 | `cad.select_all` | `{action:"SELECT\\|DESELECT",sketch_id?}` | En boceto selecciona figuras (también construcción, nunca origen). En 3D selecciona el croquis indicado como SKETCH. DESELECT limpia; sin undo |
 | `cad.constraint.add` | `{type,value?,refs?}` | Restringe selección o referencias explícitas del boceto activo; una cota equivalente se actualiza conservando ID. `DISTANCE` con `value:0` entre dos puntos crea `COINCIDENT`. Sin `refs`, vacía la selección al terminar |
 | `cad.constraint.set` | `{constraint_id,value,sketch_id?}` | Cambia la cota canónica y resuelve dependientes; Radio de redondeo ajusta su contacto. Vacía la selección al terminar |
@@ -1680,10 +1681,16 @@ FIX guarda `points:{rol:[x,y]}` para los puntos/los extremos de una arista,
 y `values` únicamente al seleccionar la figura completa. Una selección múltiple
 crea una fijación por referencia dentro de un único undo. El origen reservado
 `{id:"ORIGIN",part:"POINT"}` existe en cada boceto, es siempre (0,0) y nunca es un
-parámetro del solver. MIDPOINT recibe punto + lado (en cualquier orden al crear);
+parámetro del solver. MIDPOINT recibe punto + lado (en cualquier orden al crear)
+o tres puntos, con el punto medio en último lugar;
 SYMMETRIC recibe tres puntos, con el centro en último lugar. COINCIDENT admite el
 origen. SYMMETRIC_LINE recibe dos puntos y una línea/lado como eje, en ese orden.
 La construcción participa en las restricciones y queda fuera de perfiles.
+`features.cad.entities` incluye POINT y `midpoint_points:true` anuncia la creación
+de puntos medios. Los POINT dibujados son auxiliares libres, admiten restricciones,
+arrastre y snap, y nunca forman perfiles, aunque se retire Construcción. Los puntos
+proyectados conservan sus referencias fijas. Un mismo punto admite MIDPOINT con
+varias aristas: sus centros quedan relacionados al resolver el boceto.
 `overlay` anuncia `construction` para líneas discontinuas y `label`, `label_point`,
 `label_offset` para etiquetas de geometría. Las cotas (reglas con `value`) publican
 `kind:DIMENSION`, `label_point`, `label_box:[left,top,right,bottom]`,

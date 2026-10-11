@@ -474,6 +474,13 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   Solo restringe la distancia perpendicular: el punto desliza por la recta y su
   prolongación. Respeta FIX/cotas sin fijar automáticamente la guía. Rechaza
   puntos sobre su propia figura, dos puntos, dos líneas o una guía curva.
+- Punto CAD (`POINT`) se dibuja con toque o arrastre reversible y conserva snap a
+  puntos/rejilla; confirmar consume la última preview y crea un undo. Es auxiliar
+  libre y no forma perfiles, tampoco al retirar Construcción. MIDPOINT admite
+  punto+arista o tres puntos (último=medio); el mismo punto puede relacionar los
+  centros de varias aristas y servir de centro de simetría. Subdividir, junto a
+  Soldar en las acciones del boceto, crea un punto auxiliar con MIDPOINT sobre una
+  arista recta o entre dos puntos; permite mitades sucesivas sin partir el perfil.
 - `ANGLE` con dos líneas/lados rectos es la cota de ángulo entre ellas (0–180°):
   cada segmento apunta desde la intersección de ambas rectas hacia su extremo más
   lejano, así una esquina compartida mide su ángulo interior. Vive en el grupo de

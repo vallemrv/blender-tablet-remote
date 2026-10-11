@@ -30,6 +30,15 @@ de perfiles seleccionado para poder extruirlo.
 
 - Dibujar una línea: arrastrar entre extremos. Acercarse a un extremo existente
   lo adquiere con la política táctil común y guarda una coincidencia persistente.
+- Punto: elige su icono en el rail y toca el plano; deslizar coloca el mismo punto
+  en la última posición visible. Es una referencia auxiliar para cotas y simetrías.
+  Con Cursor, selecciona el punto y una arista y aplica **Punto medio**. Repite con
+  ese mismo punto y otra arista para que ambas compartan centro.
+- **Subdividir**, junto a Soldar en las acciones del boceto, crea un punto medio
+  asociado a una línea o lado recto seleccionado. También admite dos puntos:
+  selecciona el punto medio recién creado y un extremo para obtener el cuarto,
+  y repite para el octavo. Las relaciones se conservan al mover o acotar la línea.
+  Los puntos auxiliares no parten el contorno ni impiden extruir el boceto completo.
 - Rectángulo: arrastrar entre esquinas. Para un cuadrado, selecciona dos lados
   contiguos y aplica Igualdad; cambiar su ancho también modifica su alto.
 - La bandeja muestra solo medidas (longitud, ancho/alto, radio y el ángulo del arco),

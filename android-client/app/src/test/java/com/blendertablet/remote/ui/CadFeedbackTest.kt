@@ -7,6 +7,26 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadFeedbackTest {
+    @Test fun pointsAndRecursiveSubdivisionReachTheSketchControls() {
+        val caps = CadParser.capabilities(JSONObject("""{"version":2,"length_unit":"METERS",
+            "entities":["POINT","LINE"],"midpoint_points":true,"constraints":["MIDPOINT","SYMMETRIC"]}"""))
+        assertTrue("POINT" in caps.entities)
+        assertTrue(caps.midpointPoints)
+        val cad = CadParser.state(JSONObject("""{"version":1,"active_sketch_id":"s","document":{"sketches":[
+            {"id":"s","entities":[{"id":"p","type":"POINT","x":0.02,"y":0,"construction":true},
+            {"id":"q","type":"POINT","x":0.01,"y":0,"construction":true},
+            {"id":"l","type":"LINE","x":0,"y":0,"x2":0.04,"y2":0}]}]}}"""))
+        fun selected(vararg refs: CadSelection) = cad.copy(selection = refs.toList())
+        assertTrue(cadMidpointCreationEnabled(selected(CadSelection("l"))))
+        assertTrue(cadMidpointCreationEnabled(selected(CadSelection("p", "POINT"), CadSelection("l", "START"))))
+        assertFalse(cadMidpointCreationEnabled(selected(CadSelection("p", "POINT"))))
+        assertFalse(cadMidpointCreationEnabled(selected(CadSelection("p", "POINT"), CadSelection("l"))))
+        assertFalse(cadMidpointCreationEnabled(selected(CadSelection("p", "POINT"), CadSelection("p", "POINT"))))
+        assertTrue(cadConstraintEnabled(selected(CadSelection("p", "POINT"), CadSelection("l")), "MIDPOINT"))
+        assertTrue(cadConstraintEnabled(selected(CadSelection("l", "START"), CadSelection("p", "POINT"), CadSelection("q", "POINT")), "MIDPOINT"))
+        assertTrue(cadConstraintEnabled(selected(CadSelection("l", "START"), CadSelection("l", "END"), CadSelection("p", "POINT")), "SYMMETRIC"))
+    }
+
     @Test fun manySolidEdgesHaveOneMeasurementSummaryAboveControls() {
         val cad = CadState(surface = CadSurface(mode = "EDGE",
             selection = (1..8).map { CadSurfaceItem("e$it", "EDGE", "Cuerpo", null, false) },

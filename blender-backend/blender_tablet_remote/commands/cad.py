@@ -192,7 +192,7 @@ STANDARD_MODULES = tuple(m/1000 for m in (.1,.2,.25,.3,.4,.5,.6,.8,1,1.25,1.5,2,
 @command('cad.entity.begin')
 def entity_begin(payload):
     typ = str(payload.get('type','')).upper()
-    if typ not in model.TYPES or typ == 'POINT':   # points only come from projection
+    if typ not in model.TYPES:
         raise BadPayload('Tipo de entidad CAD no compatible')
     sketch = model.find(runtime.doc(),'sketches',runtime.active_sketch_id)
     # Drawing follows the same aids as editing: an existing point attracts the
@@ -207,7 +207,21 @@ def entity_begin(payload):
     if typ=='GEAR': model.validate_entity(dict(type='GEAR',x=0,y=0,module=1,angle=0,**gear))
     session = runtime.begin(payload,typ)
     session.update(sketch_id=sketch['id'],start=start,entity_id=model.uid('entity'),anchor=anchor,sides=sides,gear=gear)
+    if typ == 'POINT':
+        _point_preview(session, start, anchor)
     return runtime.status()
+
+
+def _point_preview(session, position, anchor):
+    doc = copy.deepcopy(session['baseline'])
+    sketch = model.find(doc, 'sketches', session['sketch_id'])
+    e = dict(id=session['entity_id'], type='POINT', x=float(position[0]), y=float(position[1]), construction=True)
+    sketch['entities'].append(e)
+    if anchor:
+        sketch['constraints'].append(dict(id='join_'+e['id'], type='COINCIDENT',
+            refs=[dict(id=e['id'], part='POINT'), dict(id=anchor['entity_id'], part=anchor['part'])]))
+    session.update(preview=doc, candidate=e['id'], endpoint=anchor)
+    _set_selection([dict(kind='ENTITY', id=e['id'], part='POINT')])
 
 
 @command('cad.entity.update')
@@ -217,6 +231,12 @@ def entity_update(payload):
         raise CommandError('La sesión no es de dibujo',code='wrong_tool')
     doc = copy.deepcopy(session['baseline'])
     sketch = model.find(doc,'sketches',session['sketch_id'])
+    if session['operation'] == 'POINT':
+        anchor = _endpoint(payload, sketch, session.get('endpoint'))
+        position = (geometry.point(sketch, dict(id=anchor['entity_id'], part=anchor['part'])) if anchor
+                    else _on_grid(runtime.point(payload, sketch)))
+        _point_preview(session, position, anchor)
+        return runtime.status()
     x,y = session['start']
     x2,y2 = runtime.point(payload,sketch)
     endpoint=(_endpoint(payload,sketch,session.get('endpoint'))
@@ -1425,6 +1445,39 @@ def points_weld(payload):
     sketch=model.find(doc,'sketches',runtime.active_sketch_id)
     refs=[dict(id=r['id'],part=r.get('part','BODY')) for r in _refs() if r.get('kind')=='ENTITY']
     if geometry.weld_points(sketch,refs): yield from runtime.commit_steps(doc,'CAD soldar puntos')
+    return runtime.status()
+
+
+@command('cad.points.midpoint')
+def points_midpoint(payload):
+    created = []
+    def change(doc):
+        sketch = model.find(doc, 'sketches', runtime.active_sketch_id)
+        refs = [dict(id=r['id'], part=r.get('part','BODY')) for r in _refs() if r['kind']=='ENTITY']
+        if len(refs) == 1:
+            ref = refs[0]
+            entity = geometry.get_entity(sketch, ref)
+            if not ((entity['type']=='LINE' and ref['part']=='BODY') or
+                    (entity['type'] in ('RECTANGLE','NGON') and ref['part'].startswith('EDGE')) or
+                    (entity['type']=='SLOT' and ref['part']=='AXIS')):
+                raise BadPayload('Selecciona una arista recta o dos puntos distintos')
+            a, b = geometry.line(sketch, ref)
+        elif len(refs) == 2 and refs[0] != refs[1]:
+            a, b = (geometry.point(sketch, ref) for ref in refs)
+        else:
+            raise BadPayload('Selecciona una arista recta o dos puntos distintos')
+        if math.dist(a,b) < 1e-9:
+            raise BadPayload('Los extremos deben ser puntos distintos')
+        position = (a+b)*.5
+        identifier = model.uid('entity')
+        sketch['entities'].append(dict(id=identifier, type='POINT', x=float(position[0]), y=float(position[1]), construction=True))
+        point_ref = dict(id=identifier, part='POINT')
+        rule_refs = [point_ref, refs[0]] if len(refs)==1 else refs+[point_ref]
+        sketch['constraints'].append(dict(id=model.uid('constraint'), type='MIDPOINT', refs=rule_refs))
+        geometry.solve(sketch)
+        created.append(identifier)
+    yield from runtime.transaction_steps(payload, change, 'CAD subdividir con punto medio')
+    _set_selection([dict(kind='ENTITY', id=created[0], part='POINT')])
     return runtime.status()
 
 
