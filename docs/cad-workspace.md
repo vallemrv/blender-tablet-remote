@@ -150,8 +150,8 @@ total de la misma ranura. Para R15 escribe Radio = 15 mm (equivale a Ancho = 30 
 Entre centros sigue siendo la distancia recta entre los dos centros, no la longitud
 total exterior; la longitud total es Entre centros + Ancho.
 
-**Desfase por grosor.** En Figuras, abre ⋮ de una ranura, círculo o rectángulo y
-elige Desfase por grosor. En la bandeja selecciona Hacia dentro/Hacia fuera, escribe
+**Desfase por grosor.** Selecciona una ranura, círculo o rectángulo del boceto
+(en la vista o en Figuras) y pulsa Desfase en el rail del croquis, junto a Redondear. En la bandeja selecciona Hacia dentro/Hacia fuera, escribe
 Grosor y confirma. La nueva figura queda vinculada a la fuente. En una ranura
 comparte los centros de los extremos y el ángulo; cambia su ancho en dos veces
 el grosor. Una ranura interior de 15 mm y grosor exterior de 7,5 mm crea otra de

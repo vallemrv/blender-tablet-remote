@@ -141,6 +141,15 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             }
             if (capabilities.sketchEditing) CadAction("FILLET", "Redondear esquinas seleccionadas", selected = pendingDimension == "FILLET",
                 enabled = !cad.sessionActive && cad.selection.any { it.id != "ORIGIN" }) { pendingDimension = "FILLET" }
+            if (capabilities.offsetEntities.isNotEmpty()) {
+                val source = cadOffsetSource(cad, capabilities.offsetEntities)
+                CadAction("OFFSET", if (source != null) "Desfase por grosor: contorno concéntrico vinculado"
+                    else "Desfase: selecciona un círculo, rectángulo o ranura", selected = offsetSource != null,
+                    enabled = connected && !cad.sessionActive && (offsetSource != null || source != null)) {
+                    if (offsetSource != null) offsetSource = null
+                    else { vm.cadTool(null); offsetSource = source; offsetSide = "OUTWARD"; pendingDimension = null; editingConstraint = null }
+                }
+            }
             if (capabilities.sketchEditing) CadAction("PROJECT", "Proyectar punto, arista o cara al plano del croquis",
                 selected = cad.surface.mode != "PROFILE", enabled = !cad.sessionActive) {
                 if (cad.surface.mode != "PROFILE" && cad.surface.selection.isNotEmpty()) command("cad.reference.project")
@@ -248,18 +257,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             }
                             CadAction("DELETE", if (drawing.isFillet) "Quitar redondeo" else "Borrar figura", enabled = connected && !cad.sessionActive) {
                                 command(if (drawing.isFillet) "cad.fillet.remove" else "cad.entity.delete", "entity_id" to drawing.id)
-                            }
-                            if (drawing.type in capabilities.offsetEntities) {
-                                var menu by remember(drawing.id) { mutableStateOf(false) }
-                                Box {
-                                    IconAction(Icons.Default.MoreVert, "Acciones del contorno", enabled = connected && !cad.sessionActive) { menu = true }
-                                    DropdownMenu(menu, { menu = false }) {
-                                        DropdownMenuItem(text = { Text("Desfase por grosor") }, onClick = {
-                                            menu = false; vm.cadTool(null); offsetSource = drawing; offsetSide = "OUTWARD"
-                                            pendingDimension = null; editingConstraint = null
-                                        })
-                                    }
-                                }
                             }
                         }
                     } else (if (contextual && constraintsSelectionOnly) contextualConstraints else cad.activeSketch?.constraints.orEmpty()).forEach { c ->
@@ -1174,3 +1171,8 @@ private fun CadCountControl(label: String, value: Int, range: IntRange, enabled:
         StepperButton("+", enabled && value < range.last) { onChange(value + 1) }
     }
 }
+
+/** Única figura seleccionada del boceto que admite desfase vinculado, o null. */
+internal fun cadOffsetSource(cad: CadState, types: Collection<String>): CadEntity? =
+    cad.selection.map { it.id }.distinct().singleOrNull()
+        ?.let { id -> cad.activeSketch?.entities?.firstOrNull { it.id == id && it.type in types } }
