@@ -303,8 +303,10 @@ def _to_face(sketch, source, faces, to_face):
     facing = sum(a*b for a, b in zip(normal, plane_normal))
     if abs(facing) < 1e-6:
         raise CommandError('La cara es paralela a la dirección de extrusión', code='cad_profile_invalid')
+    profiles = model.closed_entities(sketch) if source['type'] == 'SKETCH' else [source]
+    points = [point for profile in profiles for point in model.outline(profile)]
     travels = []
-    for x, y in model.outline(source):
+    for x, y in points:
         start = [basis['origin'][i]+x*basis['x'][i]+y*basis['y'][i] for i in range(3)]
         travels.append(sum((to_face['origin'][i]-start[i])*plane_normal[i] for i in range(3))/facing)
     span = max(max(abs(t) for t in travels), 1e-9)
@@ -316,7 +318,7 @@ def _to_face(sketch, source, faces, to_face):
     prism = _prism(faces, [c*sign*length for c in normal])
     plane = BRepBuilderAPI_MakeFace(gp_Pln(gp_Pnt(*(c*MM for c in to_face['origin'])), gp_Dir(*plane_normal))).Face()
     # The half-space that keeps the profile itself.
-    x, y = model.outline(source)[0]
+    x, y = points[0]
     inside = [(basis['origin'][i]+x*basis['x'][i]+y*basis['y'][i])*MM for i in range(3)]
     keep = BRepPrimAPI_MakeHalfSpace(plane, gp_Pnt(*inside)).Solid()
     common = BRepAlgoAPI_Common(prism, keep)

@@ -581,7 +581,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Hasta cara (`extent:TO_FACE`) termina Extruir/Vaciar en el plano de una cara plana
   tocada, también inclinada respecto al perfil: evita vaciar el sobrante. Guarda el
   marco capturado (`to_face` en metros), nunca índices; el perfil debe quedar entero
-  a un lado. Se arma con el botón Hasta cara de la bandeja y el siguiente toque elige
+  a un lado. Con un croquis completo, OpenCascade comprueba todos sus contornos
+  cerrados y limita todas las regiones a la misma cara, incluidos los huecos.
+  Se arma con el botón Hasta cara de la bandeja y el siguiente toque elige
   la cara; Una dirección/Simetría o una profundidad escrita vuelven a la cota.
 - Redondeo/Chaflán (`FILLET`/`CHAMFER`) son nodos de la pila del cuerpo sin boceto
   (`sketch_id: null`): guardan `edges` como segmentos en metros de las aristas de

@@ -105,6 +105,25 @@ class OcctKernelTests(unittest.TestCase):
                     self.assertAlmostEqual(volume-previous_volume, expected_added, delta=1e-10)
                     previous_volume = volume
 
+    def test_all_three_rectangles_reach_a_face_in_one_extrusion(self):
+        doc = copy.deepcopy(INDIVIDUAL)
+        target = doc['features'].pop()['to_face']
+        sketch = doc['sketches'][-1]
+        body = sketch['body_id']
+        evaluator, baseline = self.evaluate(doc)
+        before = mesh_report(*baseline['display'][body][1])[2]
+        feature = dict(id='whole', name='Extrusión del boceto', type='EXTRUDE',
+                       order=10, sketch_id=sketch['id'], profile_id='profile_'+sketch['id'],
+                       depth=.018, enabled=True, body_id=body, extent='TO_FACE', to_face=target)
+        doc['features'].append(feature)
+        result = evaluator.evaluate(copy.deepcopy(doc))
+        manifold, crossings, volume = mesh_report(*result['display'][body][1])
+        self.assertTrue(manifold)
+        self.assertEqual(crossings, 0)
+        height = target['origin'][2] - model.frame(sketch)['origin'][2]
+        area = sum(e['width']*e['height'] for e in model.closed_entities(sketch))
+        self.assertAlmostEqual(volume-before, area*height, delta=1e-10)
+
     def test_lateral_junction_takes_the_fillet_the_mesh_kernel_rejects(self):
         evaluator, result = self.evaluate(ELBOW)
         shape = evaluator._shapes[next(iter(result['tips'].values()))][1]

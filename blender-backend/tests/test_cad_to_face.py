@@ -55,6 +55,42 @@ class ToFaceKernelTests(unittest.TestCase):
 
 
 class ToFaceCommandTests(CadTests):
+    def test_whole_sketch_with_three_regions_and_a_hole_ends_on_a_face(self):
+        self.rect()
+        self.draw('RECTANGLE', (.1, 0), (.12, .02))
+        self.draw('RECTANGLE', (.14, 0), (.16, .02))
+        self.draw('RECTANGLE', (.005, .005), (.015, .015))
+        sketch_id = runtime.active_sketch_id
+        cad.sketch_finish(OWNER)
+        cad.extrude_begin(dict(sketch_id=sketch_id, depth=.02, **OWNER))
+        face = dict(origin=[0., 0., .03], normal=[0., 0., 1.])
+        with patch.object(cad, '_face_target', return_value=face):
+            status = cad.extrude_update(dict(extent='TO_FACE', u=.5, v=.5, **OWNER))
+        self.assertTrue(status['session']['can_confirm'])
+        cad.confirm(OWNER)
+        feature = runtime.doc()['features'][-1]
+        self.assertEqual(feature['profile_id'], 'profile_'+sketch_id)
+        self.assertEqual(feature['extent'], 'TO_FACE')
+        expected = (.08*.045 + 2*.02*.02 - .01*.01)*.03
+        self.assertAlmostEqual(volume(self.obj()), expected, places=9)
+        runtime.rebuild(model.loads(model.dumps(runtime.doc())))
+        self.assertAlmostEqual(volume(self.obj()), expected, places=9)
+
+    def test_whole_sketch_checks_the_face_against_every_region(self):
+        self.rect()
+        self.draw('RECTANGLE', (.1, 0), (.12, .02))
+        sketch_id = runtime.active_sketch_id
+        cad.sketch_finish(OWNER)
+        cad.extrude_begin(dict(sketch_id=sketch_id, depth=.02, **OWNER))
+        before = model.dumps(runtime.doc())
+        # z = .11-x is above the first region and crosses the second one.
+        with patch.object(cad, '_face_target', return_value=dict(SLOPE, origin=[0., 0., .11])):
+            with self.assertRaisesRegex(CommandError, 'corta o toca'):
+                cad.extrude_update(dict(extent='TO_FACE', u=.5, v=.5, **OWNER))
+        self.assertEqual(model.dumps(runtime.doc()), before)
+        cad.cancel(OWNER)
+        self.assertFalse(runtime.doc()['features'])
+
     def test_session_and_edit_end_on_the_tapped_face_without_a_cut(self):
         rectangle = self.rect()
         cad.extrude_begin(dict(profile_id='profile_'+rectangle, depth=.02, **OWNER))
