@@ -512,8 +512,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   Quitar OFFSET desvincula sin borrar; borrar una fuente requiere retirar primero
   sus derivados. No es un desfase genérico de cadenas de líneas/arcos. Vive en el
   rail del croquis junto a Redondear y actúa sobre la única figura seleccionada.
-- Añadir una restricción desde la selección la vacía al terminar; una medida con
-  `refs` explícitas (candado de la bandeja) conserva la selección del usuario.
+- Añadir una restricción desde la selección o editar el valor de una cota existente
+  vacía la selección al terminar; una medida con `refs` explícitas (candado de la
+  bandeja) conserva la selección del usuario.
 - Simetría de operación (`cad.feature.mirror`, nodo `MIRROR`) refleja el operando
   de una Extrusión/Vaciado anterior del mismo cuerpo sobre XY/XZ/YZ del documento
   CAD y una posición métrica. Conserva el croquis fuente y hereda su profundidad y

@@ -393,6 +393,9 @@ class SketchTests(CadTests):
         self.assertIsNone(runtime.selection)
         self.select_refs((a,'BODY')); self.rule('DISTANCE',value=.05)
         self.assertIsNone(runtime.selection)
+        rule=next(c for c in runtime.doc()['sketches'][0]['constraints'] if c['type']=='DISTANCE')
+        self.select_refs((a,'BODY')); cad.constraint_set(dict(constraint_id=rule['id'],value=.06,**OWNER))
+        self.assertIsNone(runtime.selection)
 
     def test_parallel_perpendicular_equal_and_radius(self):
         a=self.draw('LINE',(0,0),(.04,0))

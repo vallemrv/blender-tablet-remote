@@ -1598,7 +1598,10 @@ def constraint_set(payload):
         updated=dict(c,value=_dimension_value(c['type'],payload.get('value')))
         c=dimensions.put(sketch,updated)
         dimensions.solve_dimension(sketch,c)
-    return (yield from runtime.transaction_steps(payload,change,'CAD editar restricción'))
+    yield from runtime.transaction_steps(payload,change,'CAD editar restricción')
+    # Like adding one, editing a rule's value ends that choice.
+    _set_selection([])
+    return runtime.status()
 
 
 @command('cad.sketch.delete')
