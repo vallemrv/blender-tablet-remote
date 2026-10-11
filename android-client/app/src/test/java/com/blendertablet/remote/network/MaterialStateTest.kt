@@ -8,6 +8,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MaterialStateTest {
+    @Test fun selectedPaintLayerIsIndependentOfRecipeAndSurvivesSnapshot() {
+        val state = MaterialParser.state(JSONObject("""{"paint_kind":"COLOR","active_layer":"lower",
+            "layers_editable":true,"layers":[
+            {"id":"lower","label":"Azul","kind":"COLOR","color":"#1234FF","visible":false,"opacity":0.3},
+            {"id":"upper","label":"Suciedad","kind":"MATERIAL","color":"#554433","visible":true,"opacity":1}]}"""))
+        assertEquals("COLOR", state.paintKind)
+        assertEquals("lower", state.activeLayer)
+        assertTrue(state.layersEditable)
+        assertFalse(state.layers.first().visible)
+        assertEquals(.3f, state.layers.first().opacity)
+        assertEquals("upper", state.layers.last().id)
+        assertNull(MaterialParser.state(JSONObject("""{"active_layer":null}""")).activeLayer)
+    }
+
     @Test fun lightingCursorAndAngleSurviveSnapshots() {
         val state = StateParser.state(JSONObject("""{"mode":"MATERIAL","material":{
             "active":true,"interaction":"LIGHTS","light_rotation":-90.5}}"""))

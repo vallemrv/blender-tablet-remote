@@ -1886,9 +1886,9 @@ protocolo ni se insertan en el documento CAD o `.blend`. Véanse las guías
 [de escultura](../../docs/sculpt-workspace.md) y
 [de referencias](../../docs/reference-images.md).
 
-## Materiales y captura de escena (v1)
+## Materiales (v2) y captura de escena (v1)
 
-`features.materials` anuncia `{version:1, recipe_format:"tablet-material",
+`features.materials` anuncia `{version:2, editable_layers:true, paint_kinds:["COLOR","MATERIAL"], recipe_format:"tablet-material",
 recipe_version:1, paint:"UV_MASK", mask_size:1024, max_layers:8, max_objects:16}`.
 `features.scene_capture` anuncia `{version:1, mime:"image/png", camera:"TABLET",
 overlays:false}`. Se añade `MATERIAL` a `enums.mode`; el modo nativo de Blender
@@ -1906,7 +1906,8 @@ continúa siendo Object. El snapshot de escena incluye `material` y anuncia
 | `material.apply` | `{}` | Asigna la receta/color/acabado a los objetos o zona seleccionados; `{material}`; un undo |
 | `material.select` | `{objects:[nombres]}` o `{u,v,additive?:bool}` | Cambia la selección sin salir ni crear undo; lista vacía permitida; `{material}` |
 | `material.group` | `{name}` | Guarda los vértices seleccionados en Edit como grupo en cada objeto; no sobrescribe grupos; un undo; `{material}` |
-| `material.stroke` | `{phase,stroke_id,points}` | `{finished:bool}`; fases `begin/update/end/cancel` |
+| `material.layer` | `{action:"new"\|"select"\|"set"\|"delete",layer_id?,visible?,opacity?,label?}` | `{material}`; un solo objeto; select/new sin undo, set/delete un undo |
+| `material.stroke` | `{phase,stroke_id,points}` | `{finished:bool,material?:estado}`; estado al cerrar; fases `begin/update/end/cancel` |
 | `material.lighting` | `{phase,gesture_id?,rotation?,energy?}` | `{material}`; giro e intensidad de la iluminación en `begin/update/end/cancel`, o `reset` sin ID; no crea undo |
 | `scene.capture` | `{}` | `{mime:"image/png",width,height,png_base64}` |
 
@@ -1925,7 +1926,22 @@ material), `finish`, `custom` (hay ajustes sueltos encima del acabado),
 `paint_blocked` (alguna selección supera el límite de caras base). Se recibe desde `scene.get_state` y los snapshots
 `scene.changed`; las respuestas de `material.stroke` no se interpretan como escenas.
 
-Settings: `preset` (ID del catálogo), `color` (`#RRGGBB` sRGB, o `null` para usar el
+El estado incluye `paint_kind:COLOR|MATERIAL` (inicial COLOR), `active_layer` (ID o null),
+`layers_editable` (un solo objeto) y `layers:[{id,label,kind,color,visible,opacity}]`,
+en orden de abajo arriba. `material.layer select` elige dónde pintar/borrar sin cambiar
+el contenido; `new` fuerza una capa nueva al siguiente trazo. `set` acepta visible
+booleano, opacity 0–1 y label de 1–48 caracteres. `delete` retira solo esa capa.
+Las capas ocultas no se pintan. Cambiar receta/color/intención deja de apuntar a la capa
+anterior. Color modifica solo Base Color de los shaders inferiores, manteniendo sus
+conexiones de acabado y relieve. Material mezcla la receta completa. Selección múltiple
+conserva el pincel por objeto; editar la pila requiere seleccionar uno solo.
+
+El atlas nuevo usa islas Smart Project y margen de filtrado; conserva UV existentes,
+selección y modo mediante una copia temporal. Las máscaras antiguas mantienen su atlas.
+Aplicar una base completa descarta la pintura y su UV privada; las siguientes pinceladas
+crean el nuevo atlas. Fuentes, máscaras e IDs de capa persisten en `.blend` y undo.
+
+Settings: `paint_kind` (COLOR/MATERIAL), `preset` (ID del catálogo), `color` (`#RRGGBB` sRGB, o `null` para usar el
 color propio del material), `finish`
 (`natural/polished/satin/matte/worn/metal/varnish/translucent`), `surface`
 (subconjunto de `{roughness,metallic,transmission,coat}` 0–1 e `ior` 1–3),

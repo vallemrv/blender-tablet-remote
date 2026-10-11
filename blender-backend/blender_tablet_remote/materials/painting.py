@@ -63,22 +63,7 @@ def surface_key(obj, mesh=None, *, include_uv=False):
 
 def _atlas(obj, cache=None, region=None):
     mesh = obj.data
-    uv = mesh.uv_layers.get(UV_NAME)
-    if uv is None:
-        uv = mesh.uv_layers.new(name=UV_NAME)
-        grid = math.ceil(math.sqrt(max(1, len(mesh.polygons))))
-        tile = 1 / grid
-        margin = min(2 / SIZE, tile * .15)
-        for poly in mesh.polygons:
-            axis = max(range(3), key=lambda i: abs(poly.normal[i]))
-            axes = [i for i in range(3) if i != axis]
-            points = np.array([[mesh.vertices[mesh.loops[l].vertex_index].co[a] for a in axes] for l in poly.loop_indices])
-            lo, hi = points.min(axis=0), points.max(axis=0)
-            span = max(float((hi-lo).max()), 1e-12)
-            origin = np.array([poly.index % grid, poly.index // grid]) * tile + margin
-            coords = origin + (points-lo) / span * (tile - margin*2)
-            for l, co in zip(poly.loop_indices, coords): uv.data[l].uv = co
-        mesh.update()
+    prepare_uv(obj)
     evaluated = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
     mesh = evaluated.data
     if len(mesh.polygons) > 200000:
@@ -120,80 +105,70 @@ def _atlas(obj, cache=None, region=None):
     return result
 
 
-def make_layer(obj, recipe, tint, erase=False):
-    """Append a top shader layer with a UV mask, preserving all preceding layers."""
+def make_layer(obj, recipe, tint, erase=False, **options):
+    from .layers import make_layer as create
     if len(obj.data.materials) != 1 or not obj.data.materials[0] or not obj.data.materials[0].get(KEY):
-        raise CommandError('Pulsa «Aplicar a todo» antes de pintar este objeto', code='paint_needs_base')
-    old = obj.data.materials[0]
-    source = compile_material(recipe, tint)
-    if (erase or old.get('tablet_top_recipe') == source[KEY]) and old.get('tablet_top_mask') in bpy.data.images:
-        # Immutable images across commits make global Blender undo/save reliable.
-        # Consecutive strokes of the same material share a logical layer, while
-        # each committed material points at its own packed image snapshot.
-        material = old.copy()
-        if old.use_raytrace_refraction or (not erase and source.use_raytrace_refraction):
-            configure_transmission(material)
-        previous = bpy.data.images[old['tablet_top_mask']]
-        image = previous.copy()
-        pixels = np.empty(SIZE*SIZE*4,dtype=np.float32)
-        previous.pixels.foreach_get(pixels)
-        image.pixels.foreach_set(pixels)
-        for node in material.node_tree.nodes:
-            if node.type == 'TEX_IMAGE' and node.image == previous: node.image = image
-        material['tablet_top_mask'] = image.name
-        obj.data.materials[0] = material
-        return material,image,pixels
-    if int(old.get('tablet_layers',0)) >= MAX_LAYERS:
-        raise CommandError('Máximo ocho capas. Deshaz la última o aplica un material a todo para comenzar de nuevo', code='paint_layer_limit')
-    material = old.copy()
-    material.name = old.name + ' · pintura'
-    material.use_raytrace_refraction = old.use_raytrace_refraction or source.use_raytrace_refraction
-    if material.use_raytrace_refraction: configure_transmission(material)
-    image = bpy.data.images.new('Pintura · '+obj.name, width=SIZE, height=SIZE, alpha=False, float_buffer=False)
-    image.colorspace_settings.name = 'Non-Color'
-    zeros = np.zeros(SIZE*SIZE*4, dtype=np.float32)
-    image.pixels.foreach_set(zeros)
-    image.pack()
+        raise CommandError('Aplica un material base antes de pintar', code='paint_needs_base')
+    return create(obj, recipe, tint, erase=erase, **options)
+
+
+def prepare_uv(obj):
+    """Unwrap an isolated copy: continuous charts, area-based packing, no user mode edits.
+
+    Existing painting UVs remain untouched so saved masks never move. User UVs
+    and face/vertex selection are copied back neither from nor to the helper.
+    """
+    mesh=obj.data
+    if mesh.uv_layers.get(UV_NAME): return
+    temp_mesh=mesh.copy(); temp=bpy.data.objects.new('.Tablet UV',temp_mesh)
+    bpy.context.scene.collection.objects.link(temp)
+    selected=list(bpy.context.selected_objects); active=bpy.context.view_layer.objects.active
+    uv_active=mesh.uv_layers.active_index
+    for item in selected: item.select_set(False)
+    temp.select_set(True); bpy.context.view_layer.objects.active=temp
     try:
-        nodes, links = material.node_tree.nodes, material.node_tree.links
-        output = next(n for n in nodes if n.type == 'OUTPUT_MATERIAL' and n.is_active_output)
-        baseline = output.inputs['Surface'].links[0].from_socket
-        # A shader group copied from the same compiler keeps advanced recipes identical.
-        group = bpy.data.node_groups.new('Pintura · '+recipe['label'], 'ShaderNodeTree')
-        group.interface.new_socket(name='Shader', in_out='OUTPUT', socket_type='NodeSocketShader')
-        mapping = {}
-        for n in source.node_tree.nodes:
-            if n.type == 'OUTPUT_MATERIAL': continue
-            clone = group.nodes.new(n.bl_idname); mapping[n] = clone
-            for prop in ('operation','blend_type','wave_type','bands_direction','rings_direction','noise_dimensions','normalize','distance','feature','voronoi_dimensions'):
-                if hasattr(n,prop): setattr(clone,prop,getattr(n,prop))
-            for i, sock in enumerate(n.inputs):
-                if hasattr(sock,'default_value'):
-                    try: clone.inputs[i].default_value = sock.default_value
-                    except (TypeError, ValueError): pass
-        gout = group.nodes.new('NodeGroupOutput')
-        for link in source.node_tree.links:
-            if link.to_node.type == 'OUTPUT_MATERIAL':
-                if link.to_socket.name=='Surface':
-                    group.links.new(mapping[link.from_node].outputs[link.from_socket.identifier],gout.inputs[0])
-            else:
-                group.links.new(mapping[link.from_node].outputs[link.from_socket.identifier],mapping[link.to_node].inputs[link.to_socket.identifier])
-        layer = nodes.new('ShaderNodeGroup'); layer.node_tree = group
-        uv = nodes.new('ShaderNodeUVMap'); uv.uv_map = UV_NAME
-        texture = nodes.new('ShaderNodeTexImage'); texture.image = image; texture.interpolation = 'Linear'; texture.extension='CLIP'
-        links.new(uv.outputs['UV'],texture.inputs['Vector'])
-        mix = nodes.new('ShaderNodeMixShader')
-        links.new(texture.outputs['Color'],mix.inputs[0]); links.new(baseline,mix.inputs[1]); links.new(layer.outputs[0],mix.inputs[2])
-        links.new(mix.outputs[0],output.inputs['Surface'])
-        material['tablet_layers'] = int(old.get('tablet_layers',0))+1
-        material['tablet_top_recipe'] = source[KEY]
-        material['tablet_top_mask'] = image.name
-        obj.data.materials[0] = material
-        return material, image, zeros
-    except Exception:
-        bpy.data.materials.remove(material)
-        bpy.data.images.remove(image)
-        raise
+        uv=temp_mesh.uv_layers.new(name=UV_NAME)
+        temp_mesh.uv_layers.active=uv
+        with bpy.context.temp_override(object=temp,active_object=temp,selected_objects=[temp],selected_editable_objects=[temp]):
+            bpy.ops.object.mode_set(mode='EDIT')
+            try:
+                bpy.ops.mesh.select_all(action='SELECT')
+                bpy.ops.uv.smart_project(angle_limit=math.radians(66),island_margin=.015,
+                                         area_weight=0.,correct_aspect=False,scale_to_bounds=True)
+            finally:
+                bpy.ops.object.mode_set(mode='OBJECT')
+        coords=np.empty(len(temp_mesh.loops)*2,dtype=np.float32)
+        temp_mesh.uv_layers[UV_NAME].data.foreach_get('uv',coords)
+        target=mesh.uv_layers.new(name=UV_NAME); target.data.foreach_set('uv',coords)
+        mesh.uv_layers.active_index=uv_active
+        mesh.update()
+    finally:
+        if temp.mode != 'OBJECT': bpy.ops.object.mode_set(mode='OBJECT')
+        temp.select_set(False)
+        for item in selected: item.select_set(True)
+        bpy.context.view_layer.objects.active=active
+        bpy.data.objects.remove(temp,do_unlink=True)
+        if temp_mesh.users==0: bpy.data.meshes.remove(temp_mesh)
+
+
+def publish_mask(image, pixels, indexes):
+    """Extend edge pixels into the UV gutter for linear filtering, never into another chart."""
+    size=image.size[0]
+    occupied=np.zeros(size*size,dtype=bool); occupied[indexes]=True; occupied=occupied.reshape(size,size)
+    values=pixels[::4].reshape(size,size).copy()
+    for _ in range(2):
+        count=np.zeros_like(values); total=np.zeros_like(values)
+        for axis in (0,1):
+            for shift in (-1,1):
+                valid=np.roll(occupied,shift,axis=axis)
+                if axis==0: valid[0 if shift==1 else -1,:]=False
+                else: valid[:,0 if shift==1 else -1]=False
+                total+=np.roll(values,shift,axis=axis)*valid; count+=valid
+        fill=~occupied & (count>0)
+        values[fill]=total[fill]/count[fill]; occupied|=fill
+    output=pixels.copy()
+    for channel in range(3): output[channel::4]=values.ravel()
+    image.pixels.foreach_set(output); image.update()
 
 
 def project_surface(indexes, positions, frame):

@@ -56,6 +56,8 @@ def settings(payload):
     grain_amount=recipes.number(payload.get('grain_amount',runtime.grain_amount),0,1,'grain_amount')
     grain_relief=recipes.number(payload.get('grain_relief',runtime.grain_relief),0,1,'grain_relief')
     recipes.grain_pattern(grain,grain_scale,grain_amount,grain_relief,tint or '#B8B8B8')
+    paint_kind=payload.get('paint_kind',runtime.paint_kind)
+    if paint_kind not in ('COLOR','MATERIAL'): raise BadPayload('Elige Color o Material')
     erase=payload.get('erase',runtime.erase)
     if not isinstance(erase,bool): raise BadPayload('erase requiere true o false')
     interaction=payload.get('interaction',runtime.interaction)
@@ -70,9 +72,19 @@ def settings(payload):
     if isolate!=runtime.isolate: runtime.frame=None
     if env!=runtime.environment: runtime.light_rotation=0.; runtime.light_energy=1.
     runtime.interaction=interaction; runtime.brush=brush; runtime.scope=scope; runtime.isolate=isolate
+    if any(key in payload for key in ('paint_kind','color','preset','finish','surface','grain','grain_scale','grain_amount','grain_relief')):
+        runtime.active_layer=None
+    runtime.paint_kind=paint_kind
     runtime.finish=finish; runtime.erase=erase; runtime.surface=overrides
     runtime.grain=grain; runtime.grain_scale=grain_scale; runtime.grain_amount=grain_amount; runtime.grain_relief=grain_relief
     runtime.preset=preset; runtime.tint=tint; runtime.radius=radius; runtime.strength=strength; runtime.environment=env
+    return {'material':runtime.status()}
+
+
+@command('material.layer')
+def layer(payload):
+    runtime.require(payload.get('_client_id'))
+    runtime.edit_layer(payload)
     return {'material':runtime.status()}
 
 
@@ -187,4 +199,6 @@ def stroke(payload):
         elif phase=='cancel': runtime.cancel()
     except Exception:
         runtime.cancel(); raise
-    return {'finished':runtime.stroke is None}
+    result={'finished':runtime.stroke is None}
+    if runtime.stroke is None: result['material']=runtime.status()
+    return result

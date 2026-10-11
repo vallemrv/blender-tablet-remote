@@ -7,7 +7,12 @@ data class MaterialPreset(val id: String, val label: String, val color: String =
 data class SurfaceControl(val id: String, val label: String, val low: String, val high: String,
     val min: Float = 0f, val max: Float = 1f)
 
+data class PaintLayer(val id: String, val label: String, val kind: String, val color: String,
+    val visible: Boolean = true, val opacity: Float = 1f)
+
 data class MaterialState(
+    val paintKind: String = "COLOR", val activeLayer: String? = null,
+    val layers: List<PaintLayer> = emptyList(), val layersEditable: Boolean = false,
     val objects: List<MaterialPreset> = emptyList(), val interaction: String = "PAINT", val isolate: Boolean = false,
     val scope: String = "ALL", val regions: List<MaterialPreset> = emptyList(),
     val brush: String = "ROUND", val brushes: List<MaterialPreset> = emptyList(),

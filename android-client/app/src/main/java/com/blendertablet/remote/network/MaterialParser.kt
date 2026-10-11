@@ -13,10 +13,17 @@ object MaterialParser {
                     it.optString("category", "base"), it.optString("hint"))
             }
         }
+        val layers = json.optJSONArray("layers")
         val controls = json.optJSONArray("surface_controls")
         val surface = json.optJSONObject("surface")
         val targets = json.optJSONArray("targets")
-        return MaterialState(objects = catalog("objects"), interaction = json.optString("interaction", "PAINT"), isolate = json.optBoolean("isolate"),
+        return MaterialState(paintKind = json.optString("paint_kind", "COLOR"),
+            activeLayer = json.optString("active_layer").takeUnless { it.isBlank() || it == "null" },
+            layersEditable = json.optBoolean("layers_editable"),
+            layers = if (layers == null) emptyList() else (0 until layers.length()).mapNotNull { layers.optJSONObject(it) }.map {
+                PaintLayer(it.optString("id"), it.optString("label"), it.optString("kind"), it.optString("color", "#B8B8B8"),
+                    it.optBoolean("visible", true), it.optDouble("opacity", 1.0).toFloat())
+            }, objects = catalog("objects"), interaction = json.optString("interaction", "PAINT"), isolate = json.optBoolean("isolate"),
             scope = json.optString("scope", "ALL"), regions = catalog("regions"), brush = json.optString("brush", "ROUND"), brushes = catalog("brushes"),
             paintBlocked = json.optBoolean("paint_blocked"), paintLimit = json.optInt("paint_limit", 20000),
             erase = json.optBoolean("erase"), finish = json.optString("finish", "natural"), finishes = catalog("finishes"), available = json.optBoolean("available"), active = json.optBoolean("active"),

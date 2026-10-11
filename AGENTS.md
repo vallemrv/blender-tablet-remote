@@ -619,9 +619,17 @@ no quedan archivos o referencias temporales.
   en `docs/material-recipe-v1.md`; guía en `docs/material-workspace.md`.
 - Elegir material/color/acabado configura el pincel; Aplicar a todo sustituye la
   base explícitamente con un undo. Los objetos enlazados ajenos conservan sus datos.
-- La pintura mezcla shaders mediante máscaras de 1024² empaquetadas y un atlas UV
-  privado; no reemplaza las UV existentes. Ocho capas de materiales distintos;
-  trazos consecutivos iguales continúan la superior. Borrar retira esa máscara.
+- Pintar inicia en Color: cambia solo Base Color y conserva metal, brillo, transmisión
+  y relieve. Material mezcla la receta completa. Capas permite seleccionar, ocultar,
+  ajustar opacidad y borrar una de hasta ocho capas; el pincel y Borrar actúan sobre
+  la elegida. Nueva capa fuerza otra al siguiente trazo, aunque tenga el mismo color.
+  Cada edición conserva fuentes e imágenes independientes para undo y objetos enlazados.
+- Las máscaras de 1024² se empaquetan en el `.blend`. El atlas privado usa Smart Project
+  sobre una copia temporal aislada, conserva las UV y selecciones del usuario, une
+  superficies coplanares y reparte espacio por área. Dos píxeles de margen extienden
+  la máscara sin pintar otras islas. Los atlas ya pintados se conservan para no mover
+  trazos; reaplicar una base retira solo el atlas privado y prepara uno nuevo al pintar.
+  Las capas de archivos anteriores se incorporan conservando shaders y máscaras.
 - Las previews de pintura tienen propietario/ID, copias de malla, material e imagen
   y un único undo al confirmar. END no pinta otra muestra. Cancelación, desconexión
   y save_pre restauran; un trazo vacío no crea undo. La cola Android ordena muestras
@@ -954,13 +962,13 @@ no quedan archivos o referencias temporales.
   rail izquierdo (modo Seleccionar/Pintar/Borrar y trazo), fila del ojo (objetos,
   aislar, zona, luz: iconos junto a Deshacer/Rehacer, sin franja propia bajo el menú,
   con el número de objetos como marca del icono), panel derecho con pestañas
-  Material/Acabado/Grano y bandeja
-  inferior (tamaño, intensidad y una sola línea de ayuda, la del obstáculo actual).
+  Material/Acabado/Grano/Capas y bandeja
+  inferior (Color/Material, tamaño, intensidad y una sola línea de ayuda, la del obstáculo actual).
   Lo que se usa durante el trazo vive en el rail, sin plegarse ni abrirse. El panel
   derecho ocupa el sitio, el margen y el gesto de apertura/cierre del inspector de
   modificadores: icono bajo el rail de modos, flecha de vuelta en su cabecera.
   Aplicar vive al pie de ese panel y no dentro de una pestaña: material, acabado y
-  grano son una sola receta y se asignan de una vez.
+  grano son una sola receta y se asignan de una vez. En Capas se oculta Aplicar.
 - Materiales permite Seleccionar/Pintar y una lista de objetos para piezas interiores.
   Selección vacía permite navegar, volver a seleccionar y salir. La profundidad incluye
   los oclusores visibles; Aislar selección sirve para pintar dentro de una carcasa.

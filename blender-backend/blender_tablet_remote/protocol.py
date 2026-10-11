@@ -399,7 +399,7 @@ for _mode, _actions in EDIT_CATALOG["groups"].items():
                                      payload={"tool": "SWEEP"}, selection=_selection(_mode, edges={"min": 1})))
 
 FEATURES = {
-    "materials": {"version": 1, "recipe_format": "tablet-material", "recipe_version": 1, "paint": "UV_MASK", "mask_size": 1024, "max_layers": 8, "max_objects": 16},
+    "materials": {"version": 2, "editable_layers": True, "paint_kinds": ["COLOR", "MATERIAL"], "recipe_format": "tablet-material", "recipe_version": 1, "paint": "UV_MASK", "mask_size": 1024, "max_layers": 8, "max_objects": 16},
     "scene_capture": {"version": 1, "mime": "image/png", "camera": "TABLET", "overlays": False},
     "cad": {"version": 2, "planes": ["XY", "XZ", "YZ"],
             "offset_entities": ["SLOT", "CIRCLE", "RECTANGLE"], "feature_mirror": True,

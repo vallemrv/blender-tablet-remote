@@ -1,12 +1,13 @@
 """Main-thread material workspace; temporary presentation never enters .blend."""
 from contextlib import contextmanager
+import copy
 import math
 import bpy
 from bpy.app.handlers import persistent
 import numpy as np
 from ..errors import BadPayload, CommandError
 from ..bpy_utils import undo_push
-from . import recipes, painting
+from . import recipes, painting, layers
 
 ENVIRONMENTS = [dict(id='studio',label='Estudio',light='studio.exr',intensity=1.,rotation=0.,background=.15),
     dict(id='day',label='Exterior',light='forest.exr',intensity=1.,rotation=.7,background=.35),
@@ -33,6 +34,9 @@ class Runtime:
         self.radius = .06
         self.strength = 1.
         self.erase = False
+        self.paint_kind = 'COLOR'
+        self.active_layer = None
+        self.fresh_layer = False
         self.finish = 'natural'
         self.surface = {}
         self.grain = 'none'
@@ -69,9 +73,12 @@ class Runtime:
         # que el archivo abierto ya no traiga esa receta no puede romper la escena.
         catalog = recipes.catalog()
         base = next((r for r in catalog if r['id']==self.preset), recipes.FALLBACK)
+        layer_state=self.layer_status(objects)
         return dict(available=True, active=self.active, targets=[o.name for o in self.objects()],
             objects=[dict(id=o.name,label=o.name) for o in bpy.context.view_layer.objects
                      if o.type=='MESH' and o.visible_get()],
+            paint_kind=self.paint_kind,active_layer=self.active_layer,
+            layers=layer_state,layers_editable=len(objects)==1,
             interaction=self.interaction,isolate=self.isolate,brush=self.brush,scope=self.scope,
             regions=[dict(id='ALL',label='Objeto completo'),dict(id='SELECTED',label='Caras seleccionadas en Edit')]+
                     [dict(id='GROUP:'+g,label=g) for g in sorted(groups)],
@@ -88,6 +95,51 @@ class Runtime:
             presets=[dict(id=r['id'],label=r['label'],color=r['color'],category='detail' if r['id'] in recipes.DETAIL_IDS else 'base') for r in catalog],
             environments=[dict(id=e['id'],label=e['label']) for e in ENVIRONMENTS],
             paint_ready=bool(self.objects()) and all(len(o.data.materials)==1 and o.data.materials[0] and o.data.materials[0].get(recipes.KEY) for o in self.objects()))
+
+    def layer_status(self, objects):
+        if len(objects)!=1 or len(objects[0].data.materials)!=1: return []
+        material=objects[0].data.materials[0]
+        entries=layers.entries(material)
+        if self.active_layer and not any(e['id']==self.active_layer for e in entries): self.active_layer=None
+        return [{k:e[k] for k in ('id','label','kind','color','visible','opacity')} for e in entries]
+
+    def edit_layer(self, payload):
+        self.cancel()
+        objects=self.objects()
+        if len(objects)!=1 or len(objects[0].data.materials)!=1:
+            raise CommandError('Elige un solo objeto para editar sus capas', code='material_selection')
+        obj=objects[0]; old=obj.data; source=old.materials[0]
+        stack=layers.entries(source); action=payload.get('action'); ident=payload.get('layer_id')
+        if action=='new':
+            self.active_layer=None; self.fresh_layer=True; self.erase=False; self.interaction='PAINT'
+            return
+        entry=next((e for e in stack if e['id']==ident),None)
+        if entry is None: raise CommandError('La capa ya no existe; elige otra', code='paint_layer_missing')
+        if action=='select':
+            self.active_layer=ident; self.fresh_layer=False; self.paint_kind=entry['kind']
+            self.interaction='PAINT'; self.erase=False
+            return
+        if action not in {'set','delete'}: raise BadPayload('Acción de capa desconocida')
+        original=copy.deepcopy(stack)
+        if action=='delete': stack.remove(entry)
+        else:
+            if 'visible' in payload:
+                if not isinstance(payload['visible'],bool): raise BadPayload('visible requiere true o false')
+                entry['visible']=payload['visible']
+            if 'opacity' in payload: entry['opacity']=recipes.number(payload['opacity'],0,1,'opacity')
+            if 'label' in payload:
+                label=payload['label']
+                if not isinstance(label,str) or not 1<=len(label.strip())<=48: raise BadPayload('Nombre de capa inválido')
+                entry['label']=label.strip()
+        if stack==original: return
+        templates=layers.sources(source,original)
+        material=layers.build(source,stack,templates); new=old.copy()
+        try:
+            new.materials[0]=material; obj.data=new
+            undo_push('Eliminar capa' if action=='delete' else 'Ajustar capa')
+        except Exception:
+            obj.data=old; bpy.data.meshes.remove(new); layers.dispose(material); raise
+        if action=='delete' and self.active_layer==ident: self.active_layer=None
 
     def validate_selection(self, objects=None):
         from ..cad.runtime import FEATURE_KEY
@@ -112,6 +164,7 @@ class Runtime:
         for obj in bpy.context.selected_objects: obj.select_set(False)
         for obj in objects: obj.select_set(True)
         bpy.context.view_layer.objects.active=objects[-1] if objects else None
+        self.active_layer=None; self.fresh_layer=False
         self.targets=names; self.scope='ALL'; self.frame=None; self.depth_signature=None
 
     def enter(self, owner):
@@ -124,6 +177,9 @@ class Runtime:
         self.active = True
         self.frame = None
         self.scope = 'ALL'
+        self.active_layer = None
+        self.fresh_layer = False
+        self.paint_kind = 'COLOR'
         self.isolate = False
         self.interaction = 'PAINT'
 
@@ -217,6 +273,7 @@ class Runtime:
     def apply(self):
         self.cancel()
         if self.scope != 'ALL':
+            self.active_layer=None
             self.begin({'stroke_id':'fill-region'}, fill=True)
             try:
                 for record in self.stroke['objects']:
@@ -224,17 +281,20 @@ class Runtime:
                     before=pixels[ids*4].copy()
                     for channel in range(3): pixels[ids*4+channel]=1
                     self.stroke['changed'] |= bool(np.any(before!=pixels[ids*4]))
-                    record['image'].pixels.foreach_set(pixels); record['image'].update()
+                    painting.publish_mask(record['image'],pixels,record['padding_indexes'])
                 self.end()
             except Exception:
                 self.cancel(); raise
             return
+        self.active_layer=None; self.fresh_layer=False
         material = recipes.compile_material(self.selected_recipe(), self.tint)
         previous = []
         try:
             for obj in self.objects():
                 old = obj.data; new = old.copy(); previous.append((obj,old,new))
                 obj.data=new; new.materials.clear(); new.materials.append(material)
+                paint_uv=new.uv_layers.get(painting.UV_NAME)
+                if paint_uv: new.uv_layers.remove(paint_uv)
                 for poly in new.polygons: poly.material_index=0
             undo_push('Aplicar material')
         except Exception:
@@ -245,6 +305,7 @@ class Runtime:
 
     def begin(self, payload, fill=False):
         self.cancel()
+        self.layer_status(self.objects())
         for obj in self.objects():
             if len(obj.data.materials) != 1 or not obj.data.materials[0] or not obj.data.materials[0].get(recipes.KEY):
                 raise CommandError('Aplica primero una base al objeto completo para pintar por zonas', code='paint_needs_base')
@@ -258,9 +319,12 @@ class Runtime:
                 old=obj.data; new=old.copy(); obj.data=new
                 record=dict(name=obj.name,old=old,new=new,material=None,image=None)
                 self.stroke['objects'].append(record)
+                padding_indexes,_=painting.atlas(obj,self.surface_cache)
                 indexes,positions=painting.atlas(obj,self.surface_cache,scope=self.scope)
-                material,image,pixels=painting.make_layer(obj,self.selected_recipe(),self.tint,erase=self.erase and not fill)
-                record.update(material=material,image=image,pixels=pixels,indexes=indexes)
+                material,image,pixels=painting.make_layer(obj,self.selected_recipe(),self.tint,erase=self.erase and not fill,
+                    kind='MATERIAL' if fill else self.paint_kind,active=None if fill else self.active_layer,
+                    fresh=fill or self.fresh_layer)
+                record.update(material=material,image=image,pixels=pixels,indexes=indexes,padding_indexes=padding_indexes)
                 record['projection']=None if fill else painting.project_surface(indexes,positions,self.stroke['frame'])
         except Exception:
             self.cancel(); raise
@@ -281,7 +345,7 @@ class Runtime:
             self.last_point=p
         for record in self.stroke['objects']:
             if painting.paint_projected(record['projection'],record['pixels'],samples,self.radius,self.strength,erase=self.erase,brush=self.brush):
-                record['image'].pixels.foreach_set(record['pixels']); record['image'].update()
+                painting.publish_mask(record['image'],record['pixels'],record['padding_indexes'])
                 self.stroke['changed']=True
 
     def end(self):
@@ -289,6 +353,9 @@ class Runtime:
         if not self.stroke['changed']:
             self.cancel(); return
         for record in self.stroke['objects']: record['image'].pack()
+        if len(self.stroke['objects'])==1:
+            self.active_layer=self.stroke['objects'][0]['material'].get('tablet_active_layer')
+        self.fresh_layer=False
         self.stroke=None; self.last_point=None
         undo_push('Pintar material')
 
@@ -343,10 +410,7 @@ class Runtime:
                 if obj and obj.data==r['new']: obj.data=r['old']
                 if r['new'].users==0: bpy.data.meshes.remove(r['new'])
                 if r['material'] and r['material'].users==0:
-                    groups=[n.node_tree for n in r['material'].node_tree.nodes if n.type=='GROUP']
-                    bpy.data.materials.remove(r['material'])
-                    for g in groups:
-                        if g.users==0: bpy.data.node_groups.remove(g)
+                    layers.dispose(r['material'])
                 if r['image'] and r['image'].users==0: bpy.data.images.remove(r['image'])
             except ReferenceError: pass
 

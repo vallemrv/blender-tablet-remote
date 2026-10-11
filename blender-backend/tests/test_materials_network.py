@@ -29,6 +29,7 @@ def requests():
                 return reply.get('result',{})
             caps=cmd('server.capabilities')
             assert caps['features']['materials']['recipe_version']==1
+            assert caps['features']['materials']['editable_layers']
             assert caps['features']['workspace_resume']
             cmd('server.resume',{'session_key':'network-resume-key-1234567890'})
             assert cmd('mode.set',{'mode':'MATERIAL'})['material']['active']
@@ -59,6 +60,25 @@ def requests():
             after=cmd('scene.capture')
             assert before['png_base64']!=after['png_base64']
             (out/'material-painted.png').write_bytes(base64.b64decode(after['png_base64']))
+            paint=cmd('material.state')['material']
+            assert paint['paint_kind']=='COLOR' and len(paint['layers'])==1
+            layer_id=paint['layers'][0]['id']
+            assert paint['active_layer']==layer_id
+            cmd('material.layer',{'action':'set','layer_id':layer_id,'visible':False,'opacity':.4})
+            hidden=cmd('scene.capture')
+            assert hidden['png_base64']!=after['png_base64']
+            cmd('history.undo')
+            restored=cmd('material.state')['material']['layers'][0]
+            assert restored['visible'] and restored['opacity']==1.
+            cmd('history.redo')
+            assert not cmd('material.state')['material']['layers'][0]['visible']
+            cmd('material.layer',{'action':'set','layer_id':layer_id,'visible':True})
+            cmd('material.layer',{'action':'select','layer_id':layer_id})
+            cmd('material.layer',{'action':'delete','layer_id':layer_id})
+            assert cmd('material.state')['material']['layers']==[]
+            cmd('history.undo')
+            assert cmd('material.state')['material']['layers'][0]['id']==layer_id
+
             with WSClient(port=19865,timeout=45) as other:
                 denied=other.command('material.apply')
                 assert not denied['ok'] and denied['code']=='session_owned'

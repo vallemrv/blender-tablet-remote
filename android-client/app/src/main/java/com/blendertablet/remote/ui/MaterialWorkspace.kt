@@ -63,6 +63,7 @@ fun BoxScope.MaterialWorkspace(state: AppUiState, vm: MainViewModel) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var colorsOpen by rememberSaveable { mutableStateOf(false) }
+    var colorInitial by rememberSaveable { mutableStateOf(material.color) }
     var saveOpen by remember { mutableStateOf(false) }
     var saveName by remember { mutableStateOf("") }
     var libraryOpen by rememberSaveable { mutableStateOf(true) }
@@ -103,7 +104,7 @@ fun BoxScope.MaterialWorkspace(state: AppUiState, vm: MainViewModel) {
     if (libraryOpen) MaterialLibrary(
         material = material,
         vm = vm,
-        onColor = { colorsOpen = true },
+        onColor = { colorInitial = material.color; colorsOpen = true },
         onImport = { importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
         onSave = {
             saveName = material.presets.firstOrNull { it.id == material.preset }?.label.orEmpty()
@@ -119,11 +120,11 @@ fun BoxScope.MaterialWorkspace(state: AppUiState, vm: MainViewModel) {
         material = material,
         stylusOnly = state.materialStylusOnly,
         vm = vm,
-        onColor = { colorsOpen = true },
+        onColor = { colorInitial = material.layers.firstOrNull { it.id == material.activeLayer }?.color ?: material.color; colorsOpen = true },
         modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(Metrics.EdgeMargin),
     )
 
-    if (colorsOpen) SimpleColorDialog(material.color, { colorsOpen = false }) {
+    if (colorsOpen) SimpleColorDialog(colorInitial, { colorsOpen = false }) {
         vm.materialSettings(mapOf("color" to it)); colorsOpen = false
     }
     if (saveOpen) AlertDialog(onDismissRequest = { saveOpen = false }, title = { Text("Guardar material") },
@@ -235,11 +236,11 @@ private fun MaterialToolRail(
         IconAction(AppIcons.material("SELECT"), "Tocar para elegir objetos", selected = material.interaction == "SELECT") {
             vm.materialSettings(mapOf("interaction" to "SELECT"))
         }
-        IconAction(AppIcons.material("PAINT"), "Pintar con el material elegido",
+        IconAction(AppIcons.material("PAINT"), "Pintar color o material",
             selected = painting && !material.erase, enabled = material.targets.isNotEmpty()) {
             vm.materialSettings(mapOf("interaction" to "PAINT", "erase" to false))
         }
-        IconAction(AppIcons.material("ERASE"), "Retirar la capa pintada",
+        IconAction(AppIcons.material("ERASE"), "Borrar en la capa elegida",
             selected = painting && material.erase, enabled = material.paintReady) {
             vm.materialSettings(mapOf("interaction" to "PAINT", "erase" to true))
         }
@@ -285,14 +286,14 @@ private fun MaterialLibrary(
 ) {
     var tab by rememberSaveable { mutableStateOf("material") }
     FloatingPanel(modifier.heightIn(max = 560.dp)) {
-        Column(Modifier.width(240.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.width(288.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 IconAction(Icons.AutoMirrored.Filled.ArrowBack, "Cerrar biblioteca", onClick = onClose)
                 Text("MATERIALES", color = Ink.Accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f).padding(start = 2.dp))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                listOf("material" to "Material", "finish" to "Acabado", "grain" to "Grano").forEach { (id, label) ->
+                listOf("material" to "Material", "finish" to "Acabado", "grain" to "Grano", "layers" to "Capas").forEach { (id, label) ->
                     PillButton(label, Modifier.weight(1f), selected = tab == id) { tab = id }
                 }
             }
@@ -301,18 +302,74 @@ private fun MaterialLibrary(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 when (tab) {
+                    "layers" -> LayersTab(material, vm)
                     "finish" -> FinishTab(material, vm)
                     "grain" -> GrainTab(material, vm)
                     else -> BaseTab(material, vm, onColor, onImport, onSave)
                 }
             }
-            ApplyButton(
-                label = if (material.scope == "ALL") "Aplicar a la selección" else "Aplicar a la zona",
+            if (tab != "layers") ApplyButton(
+                label = if (material.scope == "ALL") "Dar material a la selección" else "Dar material a la zona",
                 enabled = material.targets.isNotEmpty() &&
                     (material.scope == "ALL" || (material.paintReady && !material.paintBlocked)),
             ) { vm.materialCommand("material.apply") }
         }
     }
+}
+
+@Composable
+private fun ColumnScope.LayersTab(material: MaterialState, vm: MainViewModel) {
+    var renameId by remember { mutableStateOf<String?>(null) }
+    var renameText by remember { mutableStateOf("") }
+    if (!material.layersEditable) {
+        Text("Elige un solo objeto para ver y editar sus capas.", color = Ink.Muted, fontSize = 12.sp)
+        return
+    }
+    Text("Toca una capa para pintar o borrar en ella. Las de arriba cubren las de abajo.",
+        color = Ink.Muted, fontSize = 12.sp)
+    PillButton("Nueva capa", enabled = material.paintReady && material.layers.size < 8) {
+        vm.materialCommand("material.layer", mapOf("action" to "new"))
+    }
+    material.layers.asReversed().forEach { layer ->
+        val selected = material.activeLayer == layer.id
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+            .background(if (selected) Ink.Accent.copy(alpha = .12f) else Ink.PanelSolid)
+            .padding(8.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(16.dp).background(parseColor(layer.color), CircleShape))
+                Text(layer.label, color = if (selected) Ink.Accent else Ink.OnPanel, fontSize = 12.sp,
+                    modifier = Modifier.weight(1f).clickableNoRipple {
+                        vm.materialCommand("material.layer", mapOf("action" to "select", "layer_id" to layer.id))
+                    }.padding(8.dp))
+                Checkbox(layer.visible, onCheckedChange = {
+                    vm.materialCommand("material.layer", mapOf("action" to "set", "layer_id" to layer.id, "visible" to it))
+                })
+            }
+            if (selected) {
+                Text(if (layer.kind == "COLOR") "Color · conserva el acabado" else "Material completo",
+                    color = Ink.Faint, fontSize = 11.sp)
+                var opacity by remember(layer.id, layer.opacity) { mutableFloatStateOf(layer.opacity) }
+                Text("Opacidad · ${(opacity * 100).roundToInt()} %", color = Ink.Muted, fontSize = 11.sp)
+                Slider(value = opacity, onValueChange = { opacity = it }, onValueChangeFinished = {
+                    vm.materialCommand("material.layer", mapOf("action" to "set", "layer_id" to layer.id, "opacity" to opacity))
+                })
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    PillButton("Nombre") { renameId = layer.id; renameText = layer.label }
+                    PillButton("Eliminar") {
+                        vm.materialCommand("material.layer", mapOf("action" to "delete", "layer_id" to layer.id))
+                    }
+                }
+            }
+        }
+    }
+    if (renameId != null) AlertDialog(onDismissRequest = { renameId = null }, title = { Text("Nombre de la capa") },
+        text = { OutlinedTextField(renameText, { renameText = it.take(48) }, singleLine = true) },
+        confirmButton = { TextButton(enabled = renameText.isNotBlank(), onClick = {
+            vm.materialCommand("material.layer", mapOf("action" to "set", "layer_id" to renameId, "label" to renameText.trim()))
+            renameId = null
+        }) { Text("Guardar") } }, dismissButton = { TextButton(onClick = { renameId = null }) { Text("Cancelar") } })
+    Text("Base · material del objeto", color = Ink.Muted, fontSize = 12.sp)
+    if (material.layers.isEmpty()) Text("Aún no hay trazos. Elige Color y pinta sobre la base.", color = Ink.Faint, fontSize = 11.sp)
 }
 
 @Composable
@@ -337,7 +394,7 @@ private fun ColumnScope.BaseTab(
     }
     SectionLabel("DETALLE")
     PresetGrid(material.presets.filter { it.category == "detail" }, material.preset) { id ->
-        vm.materialSettings(mapOf("preset" to id, "color" to JSONObject.NULL, "finish" to "natural", "erase" to false))
+        vm.materialSettings(mapOf("preset" to id, "color" to JSONObject.NULL, "finish" to "natural", "erase" to false, "paint_kind" to "MATERIAL", "interaction" to "PAINT"))
     }
     SectionLabel("BIBLIOTECA")
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -450,6 +507,7 @@ private fun MaterialBrushTray(
         }
         return
     }
+    val activeLayer = material.layers.firstOrNull { it.id == material.activeLayer }
     FloatingPanel(modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(
@@ -457,19 +515,26 @@ private fun MaterialBrushTray(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                PillButton("Color", selected = material.paintKind == "COLOR") {
+                    vm.materialSettings(mapOf("paint_kind" to "COLOR", "erase" to false, "interaction" to "PAINT"))
+                }
+                PillButton("Material", selected = material.paintKind == "MATERIAL") {
+                    vm.materialSettings(mapOf("paint_kind" to "MATERIAL", "erase" to false, "interaction" to "PAINT"))
+                }
                 Row(
                     Modifier.clip(RoundedCornerShape(9.dp)).clickableNoRipple(onColor).padding(horizontal = 4.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(Modifier.size(26.dp).background(parseColor(material.color), CircleShape)
+                    Box(Modifier.size(26.dp).background(parseColor(activeLayer?.color ?: material.color), CircleShape)
                         .border(1.dp, Ink.Divider, CircleShape))
                     Spacer(Modifier.width(8.dp))
                     Column {
                         Text(
-                            material.presets.firstOrNull { it.id == material.preset }?.label ?: "Material",
+                            activeLayer?.label ?: if (material.paintKind == "COLOR") "Pintar color"
+                                else material.presets.firstOrNull { it.id == material.preset }?.label ?: "Material",
                             color = if (material.erase) Ink.Warn else Ink.Accent, fontSize = 13.sp,
                         )
-                        Text(surfaceSummary(material.surface), color = Ink.Faint, fontSize = 10.sp)
+                        Text(if (material.paintKind == "COLOR") "Conserva brillo y relieve" else "Cambia el material completo", color = Ink.Faint, fontSize = 10.sp)
                     }
                 }
                 MaterialSlider("Tamaño", material.radius, .005f.. .25f) { vm.materialSettings(mapOf("radius" to it)) }
@@ -491,8 +556,9 @@ private fun materialHint(material: MaterialState, stylusOnly: Boolean): String =
     material.targets.isEmpty() -> "Toca un objeto para elegirlo. La lista de arriba permite varios o piezas interiores."
     material.interaction == "SELECT" -> "Modo selección: el toque elige objetos. Vuelve al pincel del rail para pintar."
     !material.paintReady -> "Aplica una base a la selección para poder pintar encima."
-    material.erase -> "Borrar retira la capa superior por donde pasa el pincel y deja ver lo de debajo."
-    material.scope != "ALL" -> "Solo se pintan caras completas de la zona elegida; selecciónalas en Edit y guárdalas como zona."
+    material.layers.any { it.id == material.activeLayer && !it.visible } -> "La capa elegida está oculta. Muéstrala en Capas para pintar."
+    material.erase -> "Borrar retira pintura de la capa elegida en Capas; conserva las demás."
+    material.scope != "ALL" -> "El trazo queda dentro de la zona elegida. Puedes cambiarla en el icono Zona."
     stylusOnly -> "Lápiz pinta · dedo gira · dos dedos navegan. La presión modula la intensidad."
     else -> "Dedo o lápiz pintan · dos dedos navegan. El tinte se conserva al cambiar de material."
 }

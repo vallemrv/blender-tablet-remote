@@ -22,9 +22,9 @@ Materiales: los demás son superficies que la aplicación ya tenía:
   Cada desplegable enseña el valor activo con una marca.
 - **Panel derecho — la biblioteca.** Ocupa el sitio del inspector de modificadores,
   bajo el rail de modos: el icono de paleta lo abre y la flecha de su cabecera lo
-  cierra, igual que allí. Tres pestañas para tres preguntas distintas: **Material**
+  cierra, igual que allí. Cuatro pestañas: **Material**
   (base, color, detalle, guardar/importar), **Acabado** (cómo responde a la luz) y
-  **Grano** (qué textura tiene). Cada ficha lleva su color, así que el catálogo se
+  **Grano** (qué textura tiene) y **Capas** (qué pintura se edita). Cada ficha lleva su color, así que el catálogo se
   reconoce antes de leerlo. **Aplicar** está al pie del panel, fuera de las pestañas:
   las tres describen una sola receta y se asignan de una vez.
 - **Bandeja inferior — el pincel.** Material y tinte activos, Tamaño, Intensidad y una
@@ -61,12 +61,11 @@ Materiales: los demás son superficies que la aplicación ya tenía:
    elegido a la vez: material, color, acabado, ajustes finos y grano. Es una acción
    explícita que sustituye sus asignaciones de material anteriores; admite Deshacer.
    Los objetos enlazados que quedaron fuera del grupo conservan su malla y materiales.
-7. Después elige otro material/color y pinta con el lápiz. El pincel mezcla el
-   material completo, incluidas sus texturas, con la base. Tamaño e Intensidad
-   controlan la marca. El rail `TRAZO` ofrece Redondo, Aerógrafo (borde suave) y Salpicado
+7. En la bandeja elige **Color** (inicial) para pintar conservando el brillo, metal,
+   transparencia y relieve de la base, o **Material** para mezclar la receta completa.
+   Elige el color y pinta con el lápiz. Tamaño e Intensidad controlan la marca. El rail `TRAZO` ofrece Redondo, Aerógrafo (borde suave) y Salpicado
    (gotas separadas); funcionan con cualquier material de base o detalle. La presión del lápiz modula la intensidad; presión cero
-   no pinta. **Borrar**, el tercer modo del rail, retira la capa superior por donde pasa el pincel
-   y deja ver lo que había debajo.
+   no pinta. **Borrar**, el tercer modo del rail, retira pintura de la capa elegida por donde pasa el pincel y deja ver lo que había debajo.
 8. Un dedo gira la vista y dos dedos navegan. Desactiva **Solo lápiz** para pintar
    también con el dedo. Deshacer/Rehacer recorre trazos completos. Cancelar o
    recibir una palma restaura el trazo. Soltar confirma lo ya dibujado.
@@ -140,18 +139,26 @@ un undo. Es una imagen del viewport, no un render final de Cycles.
   1024 × 1024 empaquetadas dentro del `.blend`. No hay archivos de textura externos
   que se pierdan al mover el proyecto.
 - El atlas de pintura usa una capa UV privada `TabletPaintUV`; conserva las UV
-  existentes y no necesita que el usuario despliegue la malla. Cada cara base recibe
-  una región del atlas. Muchas caras reducen la resolución disponible por cara.
+  existentes y no necesita que el usuario despliegue la malla. Smart Project agrupa
+  caras en islas y reparte espacio por superficie, sobre una copia temporal que no
+  modifica la selección ni la geometría del usuario. Un margen de dos píxeles evita
+  líneas vacías de filtrado en los bordes. Los atlas ya pintados se conservan para no
+  desplazar trazos; aplicar de nuevo una base elimina ese atlas privado, y el próximo
+  trazo crea el nuevo reparto.
 - Se admiten hasta 16 objetos seleccionados, 20 000 caras base y 200 000 caras evaluadas
   por objeto para pintar. Los materiales procedurales completos no necesitan ese atlas.
 - Los modificadores que mantienen UV se evalúan antes de proyectar la pintura.
   La repetición de UV de un modificador como Mirror o Array comparte la pintura entre
   sus copias, igual que una textura normal de Blender. Geometría generada sin UV no
   puede recibir una máscara de este sistema.
-- Hay hasta ocho capas sucesivas de materiales distintos. Trazos consecutivos con
-  el mismo material/color/acabado continúan la capa superior y no consumen otra.
-  Borrar actúa sobre esa capa superior. Aplicar a la selección comienza una nueva base sin
-  capas; Deshacer permite recuperar el trabajo anterior.
+- Hay hasta ocho capas de Color o Material. **Capas** muestra la pila del objeto
+  seleccionado: toca su nombre para pintar/borrar en ella, marca o desmarca para
+  mostrarla/ocultarla y ajusta Opacidad. Nombre permite identificarla; Eliminar retira solo esa capa. Nueva capa
+  prepara otra para el siguiente trazo; sin ello, los trazos iguales continúan la
+  superior. Las capas ocultas no reciben pintura. Aplicar a la selección comienza
+  una nueva base sin capas; Deshacer permite recuperar el trabajo anterior.
+  La edición de capas requiere un solo objeto; se conserva pintura sobre varios.
+  Cambiar color o receta prepara el siguiente pincel sin recolorear trazos anteriores.
 - La intensidad es un objetivo de cobertura: repasar con el mismo pincel no oscurece
   arbitrariamente por recibir más paquetes de red. Borrar reduce esa cobertura.
 - Cada trazo usa imágenes y asignaciones independientes de sus versiones confirmadas,
@@ -201,7 +208,7 @@ La biblioteca guía **Base → Color → Acabado → Grano → Detalle**. La apa
 compone siempre en el mismo orden: receta del catálogo, acabado encima y ajustes
 finos encima de todo. El tinte, el acabado y los ajustes se conservan al cambiar de
 preset; **Aplicar a la selección** fija la base explícitamente.
-Óxido, Suciedad y Arañazos configuran un pincel con su propio color y acabado
+Óxido, Suciedad y Arañazos activan el pincel Material con su propio color y acabado
 natural en el mismo gesto. Pintar los mezcla sobre la base mediante máscaras;
 seleccionarlos no sustituye el material aplicado a todo el objeto.
 
