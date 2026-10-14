@@ -7,6 +7,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadFeedbackTest {
+    @Test fun filletCornersSupportDimensionsSymmetryAndMidpoints() {
+        val cad = CadParser.state(JSONObject("""{"version":1,"active_sketch_id":"s","document":{"sketches":[
+            {"id":"s","entities":[{"id":"a","type":"ARC","is_fillet":true},
+            {"id":"b","type":"ARC","is_fillet":true},{"id":"c","type":"ARC","is_fillet":false},
+            {"id":"l","type":"LINE"}]}]}}"""))
+        val corners = cad.copy(selection = listOf(CadSelection("a", "CORNER"), CadSelection("b", "CORNER")))
+        for (type in listOf("DISTANCE", "DISTANCE_X", "DISTANCE_Y")) assertTrue(cadConstraintEnabled(corners, type))
+        assertTrue(cadMidpointCreationEnabled(corners))
+        assertTrue(cadConstraintEnabled(corners.copy(selection = corners.selection + CadSelection("ORIGIN", "POINT")), "SYMMETRIC"))
+        assertTrue(cadConstraintEnabled(corners.copy(selection = corners.selection + CadSelection("l")), "SYMMETRIC_LINE"))
+        assertTrue(cadConstraintEnabled(corners.copy(selection = listOf(CadSelection("a", "CORNER"), CadSelection("l"))), "POINT_ON_LINE"))
+        assertFalse(cadConstraintEnabled(corners.copy(selection = listOf(CadSelection("c", "CORNER"), CadSelection("ORIGIN", "POINT"))), "DISTANCE"))
+    }
+
     @Test fun projectedProfileClosureIsAdvertisedAndUsesOnlyProjectedCurves() {
         val caps=CadParser.capabilities(JSONObject("""{"version":2,"length_unit":"METERS","reference_profile":true}"""))
         assertTrue(caps.referenceProfile)

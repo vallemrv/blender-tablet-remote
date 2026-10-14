@@ -1578,7 +1578,12 @@ es +Z para XY, −Y para XZ y +X para YZ.
 
 `selection.items` contiene `{kind,id,part}`; `selection.kind/id/part` conserva el
 último elemento para el inspector. Roles: LINE START/END/BODY; RECTANGLE P0..P3 y
-EDGE0..EDGE3/BODY; CIRCLE CENTER/RIM/BODY; ARC CENTER/START/END/BODY. El sondeo da
+EDGE0..EDGE3/BODY; CIRCLE CENTER/RIM/BODY; ARC CENTER/START/END/BODY y CORNER
+solo en redondeos. CORNER es la intersección de los lados rectos prolongados,
+derivada sin añadir geometría al perfil. Participa en selección, snap, arrastre,
+cotas y simetría; se reconoce también en documentos anteriores. Redondear remapea
+las referencias a la esquina original a CORNER; quitar el redondeo las devuelve
+al extremo de línea restaurado, incluidas las fijaciones de puntos. El sondeo da
 prioridad a puntos dentro de su radio, corrige el aspecto y luego prueba aristas.
 `overlay[].handles` contiene `{part,point:[u,v],selected}`; `selected_parts` enumera
 los roles seleccionados. Los perfiles de cadenas usan IDs derivados de sus miembros,

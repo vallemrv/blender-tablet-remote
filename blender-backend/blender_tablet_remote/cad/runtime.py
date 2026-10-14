@@ -604,7 +604,7 @@ class CadRuntime:
                 selected = whole_sketch or any(ref['id'] in (e['id'],'profile_'+e['id']) for ref in refs)
                 handle_points = []
                 if self.active_sketch_id:
-                    for role,p in sketch_geometry.handles(e).items():
+                    for role,p in sketch_geometry.handles(e,sketch).items():
                         projected=project(p)
                         if projected is not None:
                             handle_points.append(dict(part=role,point=projected,

@@ -321,6 +321,11 @@ editar su Radio; no se ofrecen ángulos que contradigan sus tangencias. Su papel
 extrusiones que lo utilizan. Los lados recortados muestran **Lado completo**:
 la longitud y sus igualdades se miden hasta las esquinas virtuales. Así, variar
 el radio no obliga a cambiar la cota de un cuadrado para compensar el recorte.
+Cada redondeo conserva además un punto seleccionable en la **esquina exterior
+original**, junto al centro y los extremos del arco. Permite acotar entre esquinas,
+aplicar simetría o crear un punto medio entre ellas. Sigue los lados al editar el
+boceto, también en archivos anteriores; quitar el redondeo conserva las cotas y
+reglas de esa esquina sobre el vértice restaurado.
 Un radio que no cabe o un cambio incompatible con otras reglas se rechaza sin
 alterar el documento. Estas transacciones conservan un único undo.
 

@@ -19,7 +19,7 @@ def anchors(sketch, constraint):
     points=[]
     for ref in constraint['refs']:
         e=geometry.get_entity(sketch,ref)
-        if ref.get('part') in geometry.handles(e): points.append(tuple(geometry.point(sketch,ref)))
+        if ref.get('part') in geometry.handles(e,sketch): points.append(tuple(geometry.point(sketch,ref)))
         elif e['type']=='LINE' or (e['type'] in ('RECTANGLE','NGON') and ref.get('part','').startswith('EDGE')) or (e['type']=='SLOT' and ref.get('part')=='AXIS'):
             points.extend(tuple(p) for p in geometry.line(sketch,ref))
         elif e['type']=='RECTANGLE': points.extend(model.outline(e))
@@ -28,7 +28,7 @@ def anchors(sketch, constraint):
 
 
 def spacing(sketch):
-    points=[p for e in sketch['entities'] for p in geometry.handles(e).values()]
+    points=[p for e in sketch['entities'] for p in geometry.handles(e,sketch).values()]
     if not points: return .001
     span=max(max(p[i] for p in points)-min(p[i] for p in points) for i in (0,1))
     return max(span*.07,1e-7)

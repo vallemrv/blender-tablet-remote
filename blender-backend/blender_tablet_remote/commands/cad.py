@@ -1493,7 +1493,7 @@ def constraint_add(payload):
         refs=[dict(id=r['id'],part=r.get('part','BODY')) for r in source]
         if typ=='POINT_ON_LINE': refs=geometry.point_line_refs(sketch,refs)
         if typ=='DISTANCE' and len(refs)==2 and payload.get('value') in (0,0.) and all(
-                r['part'] in geometry.handles(geometry.get_entity(sketch,r)) for r in refs):
+                r['part'] in geometry.handles(geometry.get_entity(sketch,r),sketch) for r in refs):
             # Zero distance between two points is a coincidence, not an out-of-range length.
             if any(rule['type']=='COINCIDENT' and rule['refs'] in (refs,refs[::-1]) for rule in sketch.get('constraints',[])):
                 raise BadPayload('Esos puntos ya están unidos')
@@ -1514,7 +1514,7 @@ def constraint_add(payload):
                         (entity['type'] in ('RECTANGLE','NGON') and part.startswith('EDGE') and part[4:].isdigit())):
                     raise BadPayload('Horizontal/Vertical requiere líneas o lados rectos completos')
                 rule=dict(id=model.uid('constraint'),type=typ,refs=[ref])
-                geometry.validate_constraints(dict(sketch,constraints=[rule]))
+                geometry.validate_constraints(sketch,[rule])
                 key=(typ,ref['id'],part)
                 if key not in existing:
                     sketch.setdefault('constraints',[]).append(rule);existing.add(key)
@@ -1539,23 +1539,23 @@ def constraint_add(payload):
             value=geometry.radius(sketch,first) if curves else math.dist(*geometry.measure_line(sketch,first))
             for ref in unique[1:]:
                 rule=dict(id=model.uid('constraint'),type='EQUAL',refs=[first,ref])
-                geometry.validate_constraints(dict(sketch,constraints=[rule]))
+                geometry.validate_constraints(sketch,[rule])
                 root=dimensions.groups(sketch)
                 if root(dimensions.quantity(sketch,first)) != root(dimensions.quantity(sketch,ref)):
                     sketch.setdefault('constraints',[]).append(rule)
             geometry.solve(sketch,[dict(constraint=dict(type='RADIUS' if curves else 'DISTANCE',refs=[first],value=value))])
             return
         if typ=='MIDPOINT' and len(refs)==2:
-            refs.sort(key=lambda r: 0 if r.get('part') in geometry.handles(geometry.get_entity(sketch,r)) else 1)
+            refs.sort(key=lambda r: 0 if r.get('part') in geometry.handles(geometry.get_entity(sketch,r),sketch) else 1)
         if typ=='FIX':
             if not refs or any(r['id']=='ORIGIN' for r in refs): raise BadPayload('Selecciona geometría; el origen ya está fijo')
             for ref in refs:
                 e=geometry.get_entity(sketch,ref); part=ref.get('part','BODY')
                 fixed=dict(id=model.uid('constraint'),type='FIX',refs=[ref])
-                if part in geometry.handles(e): fixed['points']={part:list(geometry.handles(e)[part])}
+                if part in geometry.handles(e,sketch): fixed['points']={part:list(geometry.handles(e,sketch)[part])}
                 elif e['type'] in ('RECTANGLE','NGON') and part.startswith('EDGE'):
                     index=int(part[4:]); roles=['P'+str(index),'P'+str((index+1)%e.get('sides',4))]
-                    fixed['points']={role:list(geometry.handles(e)[role]) for role in roles}
+                    fixed['points']={role:list(geometry.handles(e,sketch)[role]) for role in roles}
                 else: fixed['values']={k:e[k] for k in model.FIELDS[e['type']]}
                 sketch.setdefault('constraints',[]).append(fixed)
         elif typ in dimensions.NUMERIC:

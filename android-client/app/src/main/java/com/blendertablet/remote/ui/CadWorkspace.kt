@@ -992,7 +992,7 @@ private fun cadPointPart(entity: CadEntity, part: String): Boolean = when (entit
     "ORIGIN", "POINT" -> part == "POINT"
     "LINE" -> part in listOf("START", "END")
     "CIRCLE" -> part in listOf("CENTER", "RIM")
-    "ARC" -> part in listOf("CENTER", "START", "END")
+    "ARC" -> part in listOf("CENTER", "START", "END") || (part == "CORNER" && entity.isFillet)
     "RECTANGLE" -> part in listOf("P0", "P1", "P2", "P3")
     "NGON" -> part == "CENTER" || (part.startsWith("P") && part.removePrefix("P").toIntOrNull()
         ?.let { it in 0 until (entity.values["sides"]?.toInt() ?: 6) } == true)
@@ -1148,7 +1148,7 @@ private fun CadConstraintRow(c: CadConstraint, sketch: CadSketch, unit: LengthUn
 }
 
 private fun cadPartLabel(part: String) = when (part) {
-    "BODY" -> "completa"; "START" -> "inicio"; "END" -> "final"; "CENTER" -> "centro"; "RIM" -> "radio"
+    "BODY" -> "completa"; "START" -> "inicio"; "END" -> "final"; "CENTER" -> "centro"; "CORNER" -> "esquina"; "RIM" -> "radio"
     else -> if (part.startsWith("EDGE")) "lado ${part.removePrefix("EDGE").toIntOrNull()?.plus(1)}" else part
 }
 

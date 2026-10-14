@@ -88,7 +88,7 @@ def matching(sketch, constraint):
 
 def put(sketch, constraint):
     """Update the existing dimension, merging older duplicate measurements."""
-    geometry.validate_constraints(dict(sketch,constraints=[constraint]))
+    geometry.validate_constraints(sketch,[constraint])
     existing=matching(sketch,constraint)
     if existing:
         chosen=next((c for c in existing if c['id']==constraint['id']),existing[0])
@@ -224,7 +224,7 @@ def offers(sketch, refs):
                 value=abs(float(b[0 if typ=='DISTANCE_X' else 1]-a[0 if typ=='DISTANCE_X' else 1]))
             elif value<1e-7 and typ!='ANGLE': continue
             c=dict(id='offer',type=typ,refs=refs,value=value)
-            geometry.validate_constraints(dict(sketch,constraints=[c]))
+            geometry.validate_constraints(sketch,[c])
             existing=matching(sketch,c)
             result[typ]=dict(value=existing[0]['value'] if existing else value,
                              constraint_id=existing[0]['id'] if existing else None)

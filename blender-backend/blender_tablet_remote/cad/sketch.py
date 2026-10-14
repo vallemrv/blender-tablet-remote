@@ -14,7 +14,7 @@ CONSTRAINTS = ('COINCIDENT', 'POINT_ON_LINE', 'HORIZONTAL', 'VERTICAL', 'PARALLE
                'SYMMETRIC', 'SYMMETRIC_LINE', 'OFFSET', 'ANGLE', 'EQUAL_ANGLE')
 
 
-def handles(e):
+def handles(e, sketch=None):
     typ = e['type']
     if typ in ('ORIGIN', 'POINT'): return {'POINT': (e.get('x',0.), e.get('y',0.))}
     if typ == 'LINE':
@@ -32,8 +32,16 @@ def handles(e):
     if typ == 'ARC':
         # Only the two ends: the solver asks for them on every residual evaluation.
         start,end=math.radians(e['start']),math.radians(e['start']+e['sweep'])
-        return {'CENTER': (e['x'],e['y']), 'START': (e['x']+e['radius']*math.cos(start),e['y']+e['radius']*math.sin(start)),
-                'END': (e['x']+e['radius']*math.cos(end),e['y']+e['radius']*math.sin(end))}
+        points = {'CENTER': (e['x'],e['y']), 'START': (e['x']+e['radius']*math.cos(start),e['y']+e['radius']*math.sin(start)),
+                  'END': (e['x']+e['radius']*math.cos(end),e['y']+e['radius']*math.sin(end))}
+        if sketch is not None:
+            fillets = sketch.get('_fillet_sides')
+            sides = fillets.get(e['id']) if fillets is not None else fillet_sides(sketch,e)
+            if sides:
+                # The same sharp intersection used by complete-side dimensions.
+                # It adds no independent geometry or solver parameters.
+                points['CORNER'] = tuple(_fillet_corner(sketch,sides))
+        return points
     return {'CENTER': (e['x'],e['y']), 'RIM': (e['x']+e['diameter']/2,e['y'])}
 
 
@@ -50,7 +58,7 @@ def get_entity(sketch, ref):
 def point(sketch, ref):
     e = get_entity(sketch, ref)
     role = ref.get('part')
-    points = handles(e)
+    points = handles(e, sketch if role=='CORNER' else None)
     if role not in points:
         raise BadPayload('Selecciona un punto del boceto')
     return np.array(points[role], dtype=float)
@@ -82,7 +90,7 @@ def point_line_refs(sketch, refs):
         straight = ((e['type'] == 'LINE' and part == 'BODY') or
                     (e['type'] in ('RECTANGLE', 'NGON') and part.startswith('EDGE') and part[4:].isdigit()) or
                     (e['type'] == 'SLOT' and part == 'AXIS'))
-        if point_ref.get('part') in handles(p) and straight:
+        if point_ref.get('part') in handles(p, sketch) and straight:
             line(sketch, line_ref)  # Validate the side index as well as its role.
             return [point_ref, line_ref]
     raise BadPayload('Selecciona un punto y una línea, lado recto o eje de ranura')
@@ -146,7 +154,7 @@ def residual(sketch, c, scale):
     if typ == 'FIX':
         e = get_entity(sketch, refs[0])
         if 'points' in c:
-            return [(handles(e)[role][i]-p[i])/scale for role,p in c['points'].items() for i in (0,1)]
+            return [(point(sketch,dict(id=e['id'],part=role))[i]-p[i])/scale for role,p in c['points'].items() for i in (0,1)]
         return [(e[k]-v)/(1 if k in model.ANGULAR else scale) for k,v in c['values'].items()]
     if typ == 'SYMMETRIC':
         return ((point(sketch,refs[0])+point(sketch,refs[1]))*.5-point(sketch,refs[2]))/scale
@@ -255,9 +263,9 @@ def line_angle(sketch, refs):
     return vertex, ua, ub, degrees
 
 
-def validate_constraints(sketch):
+def validate_constraints(sketch, constraints=None):
     ids = set()
-    for c in sketch.get('constraints',[]):
+    for c in sketch.get('constraints',[]) if constraints is None else constraints:
         if c.get('type') not in CONSTRAINTS or not isinstance(c.get('id'),str) or c['id'] in ids:
             raise BadPayload('Restricción CAD no válida')
         ids.add(c['id'])
@@ -286,7 +294,7 @@ def validate_constraints(sketch):
         if typ == 'FIX':
             e = get_entity(sketch,refs[0])
             if 'points' in c:
-                if not isinstance(c['points'],dict) or not c['points'] or not set(c['points']) <= set(handles(e)) or e['type']=='ORIGIN':
+                if not isinstance(c['points'],dict) or not c['points'] or not set(c['points']) <= set(handles(e,sketch)) or e['type']=='ORIGIN':
                     raise BadPayload('Fijación de puntos inválida')
                 for p in c['points'].values():
                     if not isinstance(p,(list,tuple)) or len(p)!=2: raise BadPayload('Punto fijo inválido')
@@ -310,6 +318,7 @@ def solve(sketch, goals=(), *, drag=False):
     validate_constraints(sketch)
     work = copy.deepcopy(sketch)
     work['_rounding_links']=rounding_links(work)
+    work['_fillet_sides']={e['id']:sides for e in work['entities'] if (sides:=fillet_sides(work,e)) is not None}
     # Fully fixed drawings (projected references, FIX of the whole figure) are
     # constants: they never count towards the parameter limit.
     fixed = {c['refs'][0]['id'] for c in work.get('constraints',[]) if c['type']=='FIX' and 'values' in c}
@@ -338,8 +347,9 @@ def solve(sketch, goals=(), *, drag=False):
     links=work['_rounding_links']
     def reads(c):
         ids={r['id'] for r in c['refs']}
-        return ids|{links[(i,role)]['id'] for i in ids for role in ('START','END') if (i,role) in links}
-    depends=[reads(c) for c in work.get('constraints',[])]+[reads(g['constraint']) if 'constraint' in g else {g['id']} for g in goals]
+        return ids|{links[(i,role)]['id'] for i in ids for role in ('START','END') if (i,role) in links}|{
+            side['id'] for i in ids for side in work['_fillet_sides'].get(i,[])}
+    depends=[reads(c) for c in work.get('constraints',[])]+[reads(g['constraint'] if 'constraint' in g else dict(refs=[g])) for g in goals]
     readers={}
     for n,ids in enumerate(depends):
         for i in ids: readers.setdefault(i,[]).append(n)
@@ -441,7 +451,7 @@ def move_goals(sketch, refs, dx, dy):
     for ref in refs:
         e=get_entity(sketch,ref); part=ref.get('part','BODY')
         if e['type']=='ORIGIN': continue
-        points=handles(e)
+        points=handles(e,sketch)
         single_handle=sum(r['id']==e['id'] for r in refs)==1
         if part in points:
             roles=[part]
@@ -677,10 +687,25 @@ def _fillet_pair(sketch, ref_a, ref_b, r):
     # Replace exactly the joined corner constraint; preserve all unrelated constraints.
     joined={(es[0]['id'],ra),(es[1]['id'],rb)}
     constraints[:]=[c for c in constraints if not(c['type']=='COINCIDENT' and {(v['id'],v.get('part')) for v in c['refs']}==joined)]
+    _remap_corner_refs(sketch,{key:dict(id=arc['id'],part='CORNER') for key in joined})
+    constraints=sketch['constraints']
     for e,role,arc_role in zip(es,(ra,rb),('START','END')):
         constraints.append(dict(id=model.uid('constraint'),type='COINCIDENT',refs=[dict(id=e['id'],part=role),dict(id=arc['id'],part=arc_role)]))
         constraints.append(dict(id=model.uid('constraint'),type='TANGENT',refs=[dict(id=e['id'],part='BODY'),dict(id=arc['id'],part='BODY')]))
     return arc
+
+
+def _remap_corner_refs(sketch, mapping):
+    """Keep point dimensions/fixes attached to the sharp corner when trimming it."""
+    result=[]
+    for c in sketch.get('constraints',[]):
+        if c['type']=='FIX' and 'points' in c and any((c['refs'][0]['id'],role) in mapping for role in c['points']):
+            for index,(role,p) in enumerate(c['points'].items()):
+                ref=mapping.get((c['refs'][0]['id'],role),dict(id=c['refs'][0]['id'],part=role))
+                result.append(dict(c,id=c['id'] if index==0 else model.uid('constraint'),refs=[dict(ref)],points={ref['part']:p}))
+        else:
+            result.append(dict(c,refs=[dict(mapping.get((r['id'],r.get('part')),r)) for r in c['refs']]))
+    sketch['constraints']=result
 
 
 def fillet_sides(sketch, arc):
@@ -735,6 +760,7 @@ def remove_fillet(sketch, arc):
     for e,ref in zip(es,sides):
         kx,ky=('x','y') if ref['part']=='START' else ('x2','y2')
         e[kx],e[ky]=map(float,corner)
+    _remap_corner_refs(sketch,{(arc['id'],'CORNER'):sides[0]})
     sketch['entities'].remove(arc)
     sketch['constraints']=[c for c in sketch.get('constraints',[]) if not any(r['id']==arc['id'] for r in c['refs'])]
     sketch['constraints'].append(dict(id=model.uid('constraint'),type='COINCIDENT',refs=sides))

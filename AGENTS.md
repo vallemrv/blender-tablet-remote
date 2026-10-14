@@ -783,6 +783,11 @@ no quedan archivos o referencias temporales.
   redondeo restituye la esquina y actualiza el perfil de las operaciones dependientes.
   Las medidas/igualdades de lados redondeados usan las esquinas virtuales, no los
   tramos recortados, para conservar el tamaño y la igualdad de un cuadrado.
+  Cada redondeo muestra también `CORNER`, la intersección exterior de sus lados,
+  junto al centro del arco. Es seleccionable, acotable y usable en simetría/snap;
+  se deriva de la geometría sin añadir entidades ni parámetros. El solver incluye
+  ambos lados en sus dependencias. Redondear y quitar redondeo remapean las cotas
+  y fijaciones de esa esquina; los archivos anteriores obtienen el punto al abrirse.
 - Cotas y reglas ofrece Editar y Quitar explícitos. El valor inicial de una nueva
   medida procede de la geometría; si ya existe se abre esa cota, no otra superpuesta.
 - Círculo muestra Radio durante el dibujo y tras confirmar. El estado público deriva
