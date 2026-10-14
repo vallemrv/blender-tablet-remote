@@ -8,7 +8,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from test_cad import CadTests, OWNER, volume
 from blender_tablet_remote.cad.runtime import runtime, BODY_KEY, FEATURE_KEY
-from blender_tablet_remote.cad.kernel import kernel
+from blender_tablet_remote.cad import occt
 from blender_tablet_remote.cad import document as model
 from blender_tablet_remote.commands import cad, snap, history
 
@@ -48,9 +48,8 @@ class BodyEfficiencyTests(CadTests):
     def test_other_body_stays_independent_and_new_sketch_does_not_rebuild_solids(self):
         first,second=self.stacked()
         original=self.obj(); mesh=original.data.as_pointer()
-        with patch.object(kernel,'extrude',side_effect=AssertionError('unchanged extrusion')), \
-             patch.object(kernel,'union',side_effect=AssertionError('unchanged union')), \
-             patch.object(kernel,'cut',side_effect=AssertionError('unchanged cut')):
+        with patch.object(occt,'operand',side_effect=AssertionError('unchanged extrusion')), \
+             patch.object(occt,'_boolean',side_effect=AssertionError('unchanged boolean')):
             cad.body_create(OWNER)
             cad.sketch_create(dict(plane='XY',**OWNER))
             circle=self.draw('CIRCLE',(0,0),(.004,0))

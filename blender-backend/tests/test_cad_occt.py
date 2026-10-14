@@ -1,8 +1,4 @@
-"""OpenCascade kernel. blender -b --factory-startup --python tests/test_cad_occt.py
-
-Skipped when OCP is not installed in its private directory. The whole CAD suite
-also runs on this kernel with BTR_CAD_KERNEL=OCCT.
-"""
+"""Required OpenCascade kernel and clear installation failures, with no fallback."""
 import copy
 import json
 import math
@@ -18,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from blender_tablet_remote.cad import document as model, occt
 from blender_tablet_remote.errors import CommandError
 
-AVAILABLE = occt.load()
+occt.load()
 ELBOW = json.loads((Path(__file__).parent/'fixtures'/'cad_elbow.json').read_text())
 INDIVIDUAL = model.loads((Path(__file__).parent/'fixtures'/'cad_individual_extrusions.json').read_text())
 
@@ -44,7 +40,6 @@ def ring(vertices, x, cy, cz, r):
     return [[list(a), list(b)] for a, b in zip(pts, pts[1:]+pts[:1])]
 
 
-@unittest.skipUnless(AVAILABLE, 'OpenCascade no instalado')
 class OcctKernelTests(unittest.TestCase):
     def evaluate(self, doc):
         evaluator = occt.Evaluator()
@@ -124,7 +119,7 @@ class OcctKernelTests(unittest.TestCase):
         area = sum(e['width']*e['height'] for e in model.closed_entities(sketch))
         self.assertAlmostEqual(volume-before, area*height, delta=1e-10)
 
-    def test_lateral_junction_takes_the_fillet_the_mesh_kernel_rejects(self):
+    def test_lateral_junction_takes_an_exact_fillet(self):
         evaluator, result = self.evaluate(ELBOW)
         shape = evaluator._shapes[next(iter(result['tips'].values()))][1]
         vertices = next(iter(result['display'].values()))[1][0]
@@ -154,19 +149,51 @@ class OcctKernelTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, 'cad_reference_missing')
 
 
-class KernelChoiceTests(unittest.TestCase):
-    def test_missing_ocp_falls_back_to_the_mesh_kernel(self):
-        with patch.dict(os.environ, {'BTR_CAD_KERNEL': 'OCCT'}), patch.object(occt, 'DEFAULT_PATH', '/nonexistent'):
-            self.assertEqual(occt.choice()[0], 'NATIVE')
+class RequiredKernelTests(unittest.TestCase):
+    def test_missing_ocp_reports_installer_and_never_evaluates(self):
+        from blender_tablet_remote.cad.jobs import calculate
+        with patch.object(occt, 'DEFAULT_PATH', '/nonexistent'), patch.object(occt.evaluator, 'evaluate') as evaluate:
+            for call in (occt.require_available, occt.load, lambda: calculate(dict(operation='evaluate',doc=ELBOW,scale=1.))):
+                with self.assertRaises(CommandError) as raised: call()
+                self.assertEqual(raised.exception.code, 'cad_kernel_missing')
+                self.assertIn('tools/install_occt.sh', raised.exception.message)
+            evaluate.assert_not_called()
 
-    def test_without_preferences_the_mesh_kernel_stays_the_default(self):
-        with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop('BTR_CAD_KERNEL', None)
-            self.assertEqual(occt.choice()[0], 'NATIVE')
+    def test_broken_ocp_reports_installer_instead_of_a_raw_import_error(self):
+        import builtins
+        original=builtins.__import__
+        def importing(name,*args,**kwargs):
+            if name=='OCP.BRepAlgoAPI': raise ImportError('incompatible native library')
+            return original(name,*args,**kwargs)
+        with patch('builtins.__import__',side_effect=importing), self.assertRaises(CommandError) as raised:
+            occt.load()
+        self.assertEqual(raised.exception.code,'cad_kernel_missing')
+        self.assertIn('tools/install_occt.sh',raised.exception.message)
+
+    def test_missing_ocp_blocks_entering_cad_without_modifying_the_scene(self):
+        import bpy
+        from blender_tablet_remote.commands import mode
+        from blender_tablet_remote.cad.runtime import runtime
+        mode.mode_set(dict(mode='OBJECT',_client_id='test'))
+        before=bpy.context.scene.get(model.KEY)
+        with patch.object(occt,'DEFAULT_PATH','/nonexistent'), self.assertRaises(CommandError) as raised:
+            mode.mode_set(dict(mode='CAD',_client_id='test'))
+        self.assertEqual(raised.exception.code,'cad_kernel_missing')
+        self.assertIn('tools/install_occt.sh',raised.exception.message)
+        self.assertFalse(runtime.workspace)
+        self.assertEqual(bpy.context.scene.get(model.KEY),before)
+
+    def test_default_capability_and_path_have_no_engine_selector(self):
+        from blender_tablet_remote.protocol import FEATURES
+        from blender_tablet_remote import BTRPreferences
+        self.assertEqual(FEATURES['cad']['kernel'],'OCCT')
+        self.assertTrue(FEATURES['cad']['kernel_required'])
+        self.assertNotIn('cad_kernel',BTRPreferences.__annotations__)
+        self.assertTrue(Path(occt.configured_path(),'OCP').is_dir())
 
 
 if __name__ == '__main__':
     suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(case)
-                               for case in (OcctKernelTests, KernelChoiceTests))
+                               for case in (OcctKernelTests, RequiredKernelTests))
     if not unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful():
         sys.exit(1)

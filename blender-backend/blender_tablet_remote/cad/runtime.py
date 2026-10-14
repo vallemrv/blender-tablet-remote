@@ -62,9 +62,7 @@ def archive_copy_sources(objects):
 
 
 def _kernel_public():
-    from .occt import choice
-    engine = choice()[0]
-    return dict(id=engine, label='OpenCascade' if engine == 'OCCT' else 'Malla de Blender')
+    return dict(id='OCCT', label='OpenCascade')
 
 class CadRuntime:
     def __init__(self):
@@ -104,7 +102,7 @@ class CadRuntime:
 
     def reset(self):
         from .worker import worker
-        from .evaluation import evaluator
+        from .occt import evaluator
         worker.stop()
         evaluator.__init__()
         epoch = self._epoch + 1
@@ -245,17 +243,16 @@ class CadRuntime:
         """Evaluate snapshots off-process; publish compact geometry on the pump."""
         model.resolve_supports(doc)
         scale = max(float(bpy.context.scene.unit_settings.scale_length), 1e-12)
-        from .evaluation import geometry_key
-        from .occt import choice
-        engine, occt_path = choice()
-        key = engine + geometry_key(doc, limit, scale)
+        from .occt import geometry_key, require_available
+        occt_path = require_available()
+        key = geometry_key(doc, limit, scale)
         cached = self._evaluations.get(key)
         if cached is None and not any(f['enabled'] for f in doc['features']):
             cached = dict(display={}, tips={}, solids={}, profiles={})
         if cached is None:
             epoch, scene, raw = self._epoch, bpy.context.scene.as_pointer(), bpy.context.scene.get(model.KEY)
             cached = yield Calculation(operation='evaluate', doc=copy.deepcopy(doc), limit=limit, scale=scale,
-                                       kernel=engine, occt_path=occt_path)
+                                       occt_path=occt_path)
             if (epoch != self._epoch or scene != bpy.context.scene.as_pointer()
                     or raw != bpy.context.scene.get(model.KEY)):
                 raise CommandError('Cálculo CAD cancelado', code='cad_cancelled')
@@ -439,10 +436,10 @@ class CadRuntime:
         cancel_transform()
         cancel_tool()
         baseline = self.doc()
-        from .evaluation import geometry_key
-        from .occt import choice
+        from .occt import geometry_key, require_available
+        require_available()
         scale = max(float(bpy.context.scene.unit_settings.scale_length), 1e-12)
-        key = choice()[0] + geometry_key(baseline, self.bar(baseline), scale)
+        key = geometry_key(baseline, self.bar(baseline), scale)
         cached = self._evaluations.get(key)
         if cached is None:
             # On the first session after loading, restoring the published solid

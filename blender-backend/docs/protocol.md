@@ -1484,7 +1484,8 @@ Sin coincidencia o con ambigüedad devuelve `cad_reference_missing`.
 
 `thickness` es positivo en metros; `side` es `INSIDE` (por defecto) o `OUTSIDE`.
 OpenCascade usa MakeThickSolidByJoin y verifica cierre, volumen y el espesor real
-del hueco interior. NATIVE devuelve `cad_kernel_unsupported` sin cambiar el documento.
+del hueco interior. Si falta OCP devuelve `cad_kernel_missing`, con la instrucción
+de ejecutar `blender-backend/tools/install_occt.sh`, sin cambiar el documento.
 La sesión publica `operation:SHELL`, `thickness`, `side`, `face_count`, `can_confirm`
 y `error`. Un grosor inviable deja `candidate:null`, conserva los campos, no crea
 undo y confirmar no cierra esa sesión inválida. Una actualización válida rehabilita
@@ -1493,7 +1494,7 @@ Cada actualización reconstruye desde ese baseline; la barra de retroceso determ
 la inserción del nodo y confirmar avanza hasta él. No tiene croquis fuente ni sirve
 como apoyo de un plano; se usa Boceto en cara para la superficie resultante.
 Android serializa sus comandos y conserva cambios de lado entre muestras de grosor;
-solo coalesce actualizaciones de Carcasa con los mismos campos.
+solo reemplaza actualizaciones pendientes de Carcasa con los mismos campos.
 
 Hasta cara (`extent:TO_FACE`) termina una Extrusión/Vaciado en el plano de una cara
 plana del sólido, sondeada una sola vez en el toque `u,v` mediante `commands/snap.py`.
@@ -2151,8 +2152,12 @@ de operaciones: tocar un nodo mueve la barra de retroceso a ese punto y muestra 
 modelo tal como estaba justo después de él; los nodos posteriores quedan atenuados.
 `cad.history.rollback {node_id|null}` fija la barra y `null` restituye el modelo
 completo; el estado la anuncia en `rollback_id`. El estado CAD incluye también
-`kernel:{id:"OCCT"|"NATIVE",label}`, el motor que evalúa los sólidos según las
-preferencias del add-on; Android lo muestra en la pila. La navegación por la pila no crea
+`kernel:{id:"OCCT",label:"OpenCascade"}`. Las capacidades anuncian
+`features.cad.kernel:"OCCT"` y `kernel_required:true`. OCP es obligatorio: si falta
+o no se puede cargar, devuelve `cad_kernel_missing` con un mensaje de instalación
+mediante `blender-backend/tools/install_occt.sh`; no hay fallback ni selector de
+motor. El worker recibe `occt_path` y no recibe un campo de elección de motor.
+La navegación por la pila no crea
 undo. El rebuild solo evalúa las operaciones hasta la barra: las demás conservan su
 objeto oculto, sus bocetos dejan de proyectarse y seleccionarlas, activarlas,
 editarlas o borrarlas responde `cad_rollback`. Crear un boceto u operación con la

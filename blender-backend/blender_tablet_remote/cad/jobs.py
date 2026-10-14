@@ -2,13 +2,27 @@
 from ..errors import CommandError
 
 
+def calculate(request):
+    """Only the evaluator process loads OCP; all commands share this dispatcher."""
+    operation = request['operation']
+    if operation == 'evaluate':
+        from . import occt
+        occt.load(request.get('occt_path'))
+        return occt.evaluator.evaluate(request['doc'], limit=request.get('limit'), scale=request['scale'])
+    if operation == 'solve':
+        from .sketch import solve
+        sketch = request['sketch']
+        solve(sketch, request['goals'], drag=True)
+        return sketch
+    raise ValueError('Unknown CAD calculation')
+
+
 class Calculation:
     def __init__(self, **request):
         self.request = request
 
     def run(self):
         # Direct Python callers use exactly the same evaluator, synchronously.
-        from .evaluation import calculate
         return calculate(self.request)
 
 

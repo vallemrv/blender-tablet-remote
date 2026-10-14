@@ -14,7 +14,7 @@ from test_cad import CadTests, OWNER, volume
 from blender_tablet_remote import bridge, commands
 from blender_tablet_remote.cad import document as model
 from blender_tablet_remote.cad.jobs import PendingCommand
-from blender_tablet_remote.cad.kernel import kernel
+from blender_tablet_remote.cad import occt
 from blender_tablet_remote.cad.runtime import runtime, mesh_copy, PRISM_KEY
 from blender_tablet_remote.cad.worker import worker
 from blender_tablet_remote.commands import cad
@@ -48,7 +48,8 @@ class AsyncCadTests(CadTests):
         first, hole = self.cut_profile()
         obj = self.obj()
         before = obj.as_pointer(), volume(obj)
-        with patch.object(kernel, 'cut', side_effect=AssertionError('Boolean on UI thread')):
+        with patch.object(occt, '_boolean', side_effect=AssertionError('Boolean on UI thread')), \
+             patch.object(occt, 'load', side_effect=AssertionError('OCP loading on UI thread')):
             result = self.wait(self.task('cad.extrude.begin', profile_id='profile_'+hole,
                                          operation='CUT', target_id=first, depth=.01))
             self.assertTrue(result['session']['can_confirm'])

@@ -9,14 +9,13 @@ import bpy
 from mathutils import Vector, Matrix
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0,str(Path(__file__).resolve().parent))
-from test_cad import CadTests, OWNER, KERNEL, volume
+from test_cad import CadTests, OWNER, volume
 from blender_tablet_remote.cad import document as model
 from blender_tablet_remote.cad.runtime import runtime
 from blender_tablet_remote.cad.surface import stamp
 from blender_tablet_remote.commands import cad, history
 from blender_tablet_remote.errors import CommandError
 
-occt_only=unittest.skipUnless(KERNEL=='OCCT','Shell requires OpenCascade')
 
 
 class ShellTests(CadTests):
@@ -37,7 +36,6 @@ class ShellTests(CadTests):
 
     def top(self): self.select_faces(((.02,.02,.04),(0,0,1)))
 
-    @occt_only
     def test_top_open_40mm_cube_has_exact_2mm_walls_and_one_undo(self):
         self.box();self.top();before=bpy.context.scene[model.KEY]
         with patch('blender_tablet_remote.commands.cad.undo_push') as undo:
@@ -55,7 +53,6 @@ class ShellTests(CadTests):
         restored=model.loads(model.dumps(runtime.doc()));runtime.rebuild(restored)
         self.assertAlmostEqual(volume(self.obj()),.04**3-.036**2*.038,places=10)
 
-    @occt_only
     def test_two_opposite_openings_and_post_confirmation_thickness_edit(self):
         self.box();self.select_faces(((.02,.02,0),(0,0,-1)),((.02,.02,.04),(0,0,1)))
         cad.shell_begin(OWNER);cad.confirm(OWNER)
@@ -64,7 +61,6 @@ class ShellTests(CadTests):
         cad.feature_set(dict(feature_id=feature['id'],thickness=.003,**OWNER))
         self.assertAlmostEqual(volume(self.obj()),(.04**2-.034**2)*.04,places=10)
 
-    @occt_only
     def test_impossible_thickness_keeps_controls_and_never_confirms_old_candidate(self):
         self.box();self.top();before=bpy.context.scene[model.KEY]
         state=cad.shell_begin(dict(thickness=.05,**OWNER))
@@ -81,7 +77,6 @@ class ShellTests(CadTests):
         self.assertEqual(bpy.context.scene[model.KEY],before)
         self.assertAlmostEqual(volume(self.obj()),.04**3,places=10)
 
-    @occt_only
     def test_base_height_change_follows_unique_parallel_face_and_missing_face_is_atomic(self):
         rectangle,base=self.box();self.top()
         cad.shell_begin(OWNER);cad.confirm(OWNER)
@@ -95,7 +90,6 @@ class ShellTests(CadTests):
         with self.assertRaises(CommandError):cad.feature_delete(dict(feature_id=base,**OWNER))
         self.assertEqual(bpy.context.scene[model.KEY],before)
 
-    @occt_only
     def test_outside_preserves_inner_volume_and_switching_rebuilds_from_baseline(self):
         self.box();self.top()
         cad.shell_begin(OWNER)
@@ -140,7 +134,6 @@ class ShellTests(CadTests):
             runtime.surface.select(dict(u=.5,v=.5))
         self.assertEqual(len(runtime.surface.items),2)
 
-    @occt_only
     def test_save_and_disconnect_restore_baseline_and_discard_pending_shell(self):
         import tempfile
         from blender_tablet_remote import bridge
@@ -159,7 +152,6 @@ class ShellTests(CadTests):
         self.assertEqual(model.dumps(runtime.doc()),before)
         self.assertAlmostEqual(volume(self.obj()),.04**3,places=10)
 
-    @occt_only
     def test_shell_inserts_at_rollback_and_keeps_future_operations(self):
         rectangle,base=self.box()
         cad.sketch_create(dict(plane='XY',offset=.04,**OWNER))
@@ -176,18 +168,6 @@ class ShellTests(CadTests):
         self.assertGreater(volume(self.obj()),.04**3-.036**2*.038)
         with self.assertRaises(CommandError):cad.sketch_create(dict(support_id=shell,**OWNER))
 
-    @unittest.skipUnless(KERNEL!='OCCT','Native rejection only')
-    def test_native_rejects_shell_without_preview_or_document_change(self):
-        self.box();self.top();before=bpy.context.scene[model.KEY]
-        with self.assertRaises(CommandError) as error:cad.shell_begin(OWNER)
-        self.assertEqual(error.exception.code,'cad_kernel_unsupported')
-        self.assertIsNone(runtime.session);self.assertEqual(bpy.context.scene[model.KEY],before)
-        doc=runtime.doc();doc['features'].append(dict(id=model.uid('feature'),type='SHELL',name='Carcasa',order=model.next_order(doc),
-            body_id=doc['bodies'][0]['id'],sketch_id=None,enabled=True,thickness=.002,side='INSIDE',faces=[dict(origin=[.02,.02,.04],normal=[0,0,1])]))
-        with self.assertRaises(CommandError) as error:runtime.rebuild(model.loads(model.dumps(doc)))
-        self.assertEqual(error.exception.code,'cad_kernel_unsupported')
-
-    @occt_only
     @unittest.skipIf(bpy.app.background,'GUI undo stack required')
     def test_native_undo_redo_restore_shell(self):
         self.box();self.top();cad.shell_begin(OWNER);cad.confirm(OWNER)

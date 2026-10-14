@@ -1,5 +1,10 @@
 # Evaluación del kernel CAD
 
+> Nota de continuidad (15/10/2026): la migración terminó. OpenCascade es el único
+> motor CAD y OCP es obligatorio; el evaluador de malla y el selector de motor se
+> retiraron. Las comparaciones y mediciones siguientes documentan estados históricos.
+
+
 Fecha de la comprobación: 7 de septiembre de 2026. Alcance: primer recorrido
 recomendado en las secciones 37–38 del documento solicitado, conservado en
 [PLAN_CAD_PARAMETRICO_BLENDER_TABLET_REMOTE.md](../PLAN_CAD_PARAMETRICO_BLENDER_TABLET_REMOTE.md).

@@ -438,9 +438,8 @@ Referencia de organización: [lista de operaciones plegable de Onshape](https://
    sus aristas, a través de la pieza. El sólido y el resto de la escena conservan
    su sombreado opaco. Confirmar/cancelar retira el fantasma automáticamente.
 
-Con el motor **OpenCascade** (por defecto) los vaciados y uniones son booleanos
-exactos entre sólidos BREP; con **Malla de Blender**, diferencias Manifold sobre
-mallas cerradas (Blender 4.5 o posterior). Ver [Motor CAD](#motor-cad). Los vaciados
+Los vaciados y uniones usan **OpenCascade**, el único motor CAD, con booleanos
+exactos entre sólidos BREP. Ver [Motor CAD](#motor-cad). Los vaciados
 desde caras opuestas y sus simetrías usan el mismo cálculo y conservan las cotas.
 Cada cuerpo publica un único objeto. Sus extrusiones se unen al resultado anterior
 y los vaciados restan de ese resultado; **Nuevo cuerpo** inicia otra pieza independiente.
@@ -483,9 +482,9 @@ Es una operación más de la pila: se puede ocultar, borrar o editar su ancho y
 segmentos tocando su nodo. Las aristas se guardan por su geometría, no por índices
 de malla: si alargas una extrusión, sus aristas rectas conservan el redondeo. Si
 una arista desaparece del diseño, la pila lo indica con un error en vez de ignorarla.
-Con OpenCascade es un redondeo o chaflán BREP exacto (Ancho = radio o distancia;
-los segmentos solo afectan al motor de malla) y admite uniones entre piezas, como
-un tubo contra una brida. Con Malla de Blender es el bisel nativo sobre el sólido.
+Redondeo y Chaflán se calculan sobre el BREP exacto (Ancho = radio o distancia)
+y admiten uniones entre piezas, como un tubo contra una brida. El campo legado
+Segmentos se conserva para leer documentos anteriores; no altera el sólido exacto.
 
 En el boceto, arrastrar el **centro de un arco** permite que su radio y sus ángulos
 libres se adapten a los extremos unidos. Las cotas fijadas siguen vigentes: para
@@ -493,21 +492,27 @@ cambiar un radio acotado se edita su cota o se quita el candado.
 
 ## Motor CAD
 
-El add-on elige el motor en **Preferencias → Blender Tablet Remote → CAD → Motor CAD**:
+La migración ha terminado: **OpenCascade es obligatorio y es el único motor de
+sólidos CAD**. Los barridos sobre líneas y arcos tangentes son cilindros y toros
+reales; helicoidales, redondeos, chaflanes y carcasas se calculan como BREP.
 
-- **OpenCascade (experimental, por defecto)**: sólidos exactos. Los barridos sobre
-  líneas y arcos tangentes son cilindros y toros reales, el helicoidal sigue una
-  hélice exacta y los redondeos/chaflanes son BREP. Se instala una vez con
-  `bash blender-backend/tools/install_occt.sh` (unos 380 MB en
-  `~/.local/share/blender-tablet-remote/occt`); solo lo carga el proceso CAD auxiliar.
-  Si no está instalado, el add-on usa la malla de Blender y lo indica en Preferencias.
-- **Malla de Blender**: el motor original, sin dependencias. Se mantiene mientras
-  dura la migración.
+Instálalo una vez con `bash blender-backend/tools/install_occt.sh`. OCP queda en
+`~/.local/share/blender-tablet-remote/occt`; solo lo carga el proceso CAD auxiliar.
+La preferencia **Ruta de OpenCascade** permite indicar otra instalación privada.
+Ya no existe un selector de motor ni una variable de entorno para cambiarlo.
 
-La pila CAD muestra el motor activo («Motor · OpenCascade»). Ambos usan el mismo
-documento: cambiar de motor vuelve a evaluar la pieza sin tocar el `.blend`. La
-malla que se ve en CAD procede del teselado del sólido exacto: caras planas como un
-polígono y superficies curvas en triángulos con una flecha de 3e-4 de la pieza.
+Si OCP falta o no puede cargar, la tablet recibe un error claro que remite a
+`blender-backend/tools/install_occt.sh`. La operación no modifica el documento y
+no hay alternativa automática de malla.
+
+Se conservan los documentos e IDs existentes. La malla que muestra Blender es la
+teselación del sólido exacto: caras planas como polígonos y superficies curvas en
+triángulos. El prisma ligero que sigue al lápiz en Extruir/Vaciar permanece; el
+booleano definitivo se calcula con OpenCascade al asentar el gesto.
+
+Las nuevas herramientas implementan sus sólidos solo en `cad/occt.py` y las
+pruebas CAD se ejecutan únicamente con OpenCascade. La antigua regla 5 de dos
+kernels del documento de tareas ya no se aplica.
 
 ## Persistencia y límites
 
@@ -522,11 +527,10 @@ polígono y superficies curvas en triángulos con una flecha de 3e-4 de la pieza
 - Los contornos exteriores admiten huecos simples separados. Se rechazan cruces,
   tangencias entre contornos y huecos anidados. No se extraen regiones arbitrarias
   de una red de segmentos cruzados o ramificados.
-- El resultado es una malla. Círculos/arcos mantienen parámetros analíticos en el
-  documento y se segmentan al visualizar/evaluar. No es BREP ni exporta STEP.
-- El redondeo es de sketch entre líneas conectadas o en esquinas de rectángulos. No es fillet de aristas
-  del sólido. Vaciar quita un perfil por profundidad, a un lado del croquis o a los dos; no es una operación Shell
-  de espesor automático sobre caras arbitrarias.
+- El sólido se evalúa como BREP; Blender recibe una malla de visualización. No se
+  exporta STEP desde la tablet.
+- Hay redondeos del boceto y Redondear/Chaflán de aristas del sólido. Vaciar corta
+  perfiles; Carcasa abre caras planas seleccionadas y deja un grosor de pared.
 - **Nuevo plano y croquis** (icono de capas arriba, o los iconos de plano del rail)
   entra en modo plano, sin diálogo. El plano aparece en la vista como una lámina
   azul translúcida con sus ejes (X rojo, Y verde, normal azul) y se ajusta en vivo:
@@ -649,5 +653,5 @@ grosor rechazado. Guardar o perder la conexión descarta la preview.
 
 El cálculo utiliza [MakeThickSolidByJoin de OpenCascade](https://occt3d.com/dev/doc/refman/html/class_b_rep_offset_a_p_i___make_thick_solid.html),
 con comprobación adicional del espesor interior para detectar paredes colapsadas.
-Con **Malla de Blender** devuelve «Carcasa requiere el motor OpenCascade» sin
-modificar la pieza. Para crear otro boceto sobre el resultado se usa **Boceto en cara**.
+Si falta OCP se muestra la instrucción de instalación, sin modificar la pieza.
+Para crear otro boceto sobre el resultado se usa **Boceto en cara**.

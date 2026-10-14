@@ -26,7 +26,7 @@ DEFAULT_STREAM_PORT = 8766
 TOKEN_ENV_VAR = "BLENDER_REMOTE_TOKEN"
 
 import bpy  # noqa: E402
-from bpy.props import BoolProperty, EnumProperty, IntProperty, StringProperty  # noqa: E402
+from bpy.props import BoolProperty, IntProperty, StringProperty  # noqa: E402
 
 from . import bridge, log  # noqa: E402
 
@@ -117,15 +117,6 @@ class BTRPreferences(bpy.types.AddonPreferences):
         min=20,
         max=95,
     )
-    cad_kernel: EnumProperty(
-        name="Motor CAD",
-        description="Cálculo de los sólidos del workspace CAD",
-        items=(
-            ("OCCT", "OpenCascade (experimental)", "Sólidos exactos: redondeos, chaflanes y uniones fiables"),
-            ("NATIVE", "Malla de Blender", "Motor de mallas original, sin dependencias"),
-        ),
-        default="OCCT",
-    )
     occt_path: StringProperty(
         name="Ruta de OpenCascade",
         description="Directorio con el paquete OCP (cadquery-ocp-novtk) para el Python de Blender",
@@ -161,13 +152,12 @@ class BTRPreferences(bpy.types.AddonPreferences):
         from .cad.occt import DEFAULT_PATH
         box = layout.box()
         box.label(text="CAD", icon="MOD_SOLIDIFY")
-        box.prop(self, "cad_kernel")
+        box.label(text="OpenCascade (obligatorio)")
         sub = box.column()
-        sub.enabled = self.cad_kernel == "OCCT"
         sub.prop(self, "occt_path")
         path = self.occt_path or DEFAULT_PATH
-        if self.cad_kernel == "OCCT" and not os.path.isdir(os.path.join(path, "OCP")):
-            sub.label(text=f"No se encuentra OCP en {path}: se usa la malla de Blender", icon="ERROR")
+        if not os.path.isdir(os.path.join(path, "OCP")):
+            sub.label(text="Falta OCP: ejecuta tools/install_occt.sh", icon="ERROR")
 
 
 class BTR_OT_start(bpy.types.Operator):

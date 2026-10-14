@@ -10,9 +10,9 @@ import bpy
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0,str(Path(__file__).resolve().parent))
-from test_cad import CadTests, OWNER, KERNEL, volume
+from test_cad import CadTests, OWNER, volume
 from blender_tablet_remote.cad import document as model
-from blender_tablet_remote.cad.kernel import revolve
+from blender_tablet_remote.cad import occt
 from blender_tablet_remote.cad.runtime import runtime
 from blender_tablet_remote.commands import cad
 from blender_tablet_remote.errors import CommandError
@@ -31,19 +31,15 @@ class RevolveTests(CadTests):
             state=cad.revolve_create(dict(profile_id='profile_'+rectangle,**OWNER)); undo.assert_called_once()
         feature=model.find(runtime.doc(),'features',state['selection']['id'])
         self.assertEqual((feature['type'],feature['axis'],feature['angle']),('REVOLVE','Y',360.))
-        if KERNEL=='OCCT':   # exact cylinder; only the display tessellation deviates
-            self.assertAlmostEqual(volume(self.obj())/(math.pi*.02**2*.03),1,delta=1e-3)
-        else:
-            polygon=64*.5*math.sin(math.tau/64)/math.pi       # tessellated circle / true circle
-            self.assertAlmostEqual(volume(self.obj()),math.pi*.02**2*.03*polygon,places=9)
+        self.assertAlmostEqual(volume(self.obj())/(math.pi*.02**2*.03),1,delta=1e-3)
         sketch,source=model.profile(runtime.doc(),'profile_'+rectangle)
-        self.assertTrue(closed(revolve(sketch,source,'Y',360.)))
+        self.assertTrue(closed(occt.tessellate(occt.revolve(sketch,source,'Y',360.))))
 
     def test_partial_angle_has_caps_and_a_ring_beside_the_axis(self):
         rectangle=self.draw('RECTANGLE',(.01,0),(.02,.03))
         sketch,source=model.profile(runtime.doc(),'profile_'+rectangle)
         for angle in (90.,180.,360.):
-            mesh=revolve(sketch,source,'Y',angle)
+            mesh=occt.tessellate(occt.revolve(sketch,source,'Y',angle))
             self.assertTrue(closed(mesh),angle)
         state=cad.revolve_create(dict(profile_id='profile_'+rectangle,angle=180,**OWNER))
         ring=math.pi*(.02**2-.01**2)*.03*.5

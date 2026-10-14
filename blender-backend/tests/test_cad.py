@@ -16,14 +16,13 @@ import bmesh
 from mathutils import Vector
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from blender_tablet_remote.cad import document as model
-from blender_tablet_remote.cad.kernel import kernel
+from blender_tablet_remote.cad import occt
 from blender_tablet_remote.cad.runtime import runtime, FEATURE_KEY
 from blender_tablet_remote.commands import cad, mode, sessions
 from blender_tablet_remote.errors import CommandError
 
 OWNER = {'_client_id':'test'}
-# BTR_CAD_KERNEL=OCCT runs the same suite on the OpenCascade kernel.
-KERNEL = os.environ.get('BTR_CAD_KERNEL', 'NATIVE')
+occt.load()  # The CAD test suite requires the same OCP installation as the app.
 
 
 def volume(obj):
@@ -118,7 +117,7 @@ class CadTests(unittest.TestCase):
             sketch=dict(id='s',plane=plane,entities=[])
             e=dict(id='e',type='RECTANGLE',x=0,y=0,width=.08,height=.045)
             sketch['entities'].append(e)
-            vertices,faces=kernel.extrude(sketch,e,.02)
+            vertices,faces=occt.tessellate(occt.operand(sketch,e,dict(type='EXTRUDE',depth=.02)))
             mesh=bpy.data.meshes.new('test')
             mesh.from_pydata(vertices,[],faces)
             obj=bpy.data.objects.new('test',mesh)

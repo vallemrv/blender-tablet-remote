@@ -139,24 +139,31 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   y se dibuja en el rectángulo del vídeo en Android; no persiste píxeles como geometría.
 - La vista CAD aísla temporalmente sus resultados y restaura la visibilidad previa
   al salir. Los `.blend` y estados de undo conservan la visibilidad de la escena.
-- El kernel CAD está en migración a OpenCascade (`cad/occt.py`, preferencia «Motor CAD»,
-  por defecto OpenCascade). OCP vive en un directorio privado
-  (`~/.local/share/blender-tablet-remote/occt`, `tools/install_occt.sh`) que solo
-  carga el proceso que evalúa; sin él se usa el kernel de malla. OpenCascade construye
-  sólidos exactos (barrido por tramos extruidos/revolucionados, helicoidal con pipe
-  binormal, solevado reglado, redondeo/chaflán BREP) y publica el mismo contrato de
-  mallas en metros: caras planas sin huecos como un polígono, curvas en triángulos.
-  Los booleanos prueban primero una tolerancia difusa de 1e-5 de la pieza, porque el
-  documento trae ruido micrométrico; el exacto y otra mayor son reservas. Las caras
-  coplanares se unifican solo si el resultado sigue siendo válido; si la
-  limpieza invalida una unión válida, se conserva el BREP previo, también al extruir
-  perfiles individuales sobre planos de caras capturados.
-  Las aristas guardadas se emparejan por geometría (rectas sobre su recta infinita con solape).
-  El kernel de malla sigue igual con la preferencia «Malla de Blender», solo mientras
-  dura la migración; la suite CAD se ejecuta en ambos (`BTR_CAD_KERNEL=OCCT`).
-  El solver NumPy resuelve las restricciones anunciadas, hasta 300 parámetros.
-  No anuncia STEP ni el solver completo de FreeCAD. Carcasa requiere OpenCascade. La evaluación de
-  OCP/CadQuery, build123d y FreeCAD vive en `docs/cad-kernel-evaluation.md`.
+- La migración CAD ha terminado: OpenCascade (`cad/occt.py`) es el único motor
+  de sólidos y OCP es obligatorio. Vive en un directorio privado
+  (`~/.local/share/blender-tablet-remote/occt`, `tools/install_occt.sh`) y solo lo
+  carga el proceso evaluador. Si falta o no puede cargar, CAD devuelve
+  `cad_kernel_missing` con la instrucción de ejecutar ese instalador; nunca recurre
+  a malla. No hay selector «Motor CAD» ni variable de entorno para elegir motor.
+  Construye sólidos BREP exactos (barrido por tramos extruidos/revolucionados,
+  helicoidal con pipe binormal, solevado, redondeo/chaflán y carcasa) y publica mallas
+  en metros para visualización: caras planas sin huecos como polígonos, curvas en
+  triángulos. La malla evaluada nunca sustituye al documento como fuente.
+  Los booleanos prueban primero una tolerancia difusa de 1e-5 de la pieza, porque
+  los documentos traen ruido micrométrico; el exacto y otra mayor son reservas.
+  Las caras coplanares se unifican solo si el resultado sigue siendo válido; si
+  la limpieza invalida una unión válida se conserva el BREP previo. Las aristas
+  se emparejan por geometría (rectas sobre su recta infinita con solape).
+  `cad/evaluation.py` y las operaciones de sólido de malla están retirados.
+  `cad/kernel.py` conserva utilidades geométricas compartidas y `ExtrusionPreviewCache`,
+  el prisma ligero del lápiz; no evalúa la pila ni ofrece un motor alternativo.
+  `cad/jobs.py` despacha snapshots al evaluador OpenCascade o al solver NumPy.
+  Todas las pruebas CAD se ejecutan con OpenCascade, sin selector. Cada herramienta
+  nueva implementa su geometría de sólido únicamente en `cad/occt.py`; queda sin
+  efecto la regla 5 de dos kernels del encargo `tareas-codex-cad-impresion3d.md`.
+  El solver NumPy mantiene las restricciones anunciadas y hasta 300 parámetros.
+  No se anuncia STEP ni el solver completo de FreeCAD. La evaluación histórica de
+  alternativas está en `docs/cad-kernel-evaluation.md`.
 
 ## Sistema de trabajo
 
@@ -581,7 +588,7 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   «Perforar todo» (`THROUGH_ALL`, solo CUT) calcula en cada evaluación un prisma
   que abarca el cuerpo acumulado a ambos lados del croquis, con margen. Conserva
   la cota manual al volver a ONE/BOTH; no ofrece campo ni gesto de profundidad
-  mientras está activo. Funciona con ambos kernels, perfiles con huecos, simetrías
+  mientras está activo. Funciona con perfiles con huecos, simetrías
   y cambios del grosor anterior; su fantasma usa el mismo cuerpo y no anuncia tapa
   de fondo ni apoyo de plano. Una profundidad explícita vuelve a ONE.
   Vaciar consume su sólido
@@ -604,14 +611,13 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Redondeo/Chaflán (`FILLET`/`CHAMFER`) son nodos de la pila del cuerpo sin boceto
   (`sketch_id: null`): guardan `edges` como segmentos en metros de las aristas de
   diseño elegidas (nunca índices), `width` y `segments` (chaflán = 1). Se evalúan con
-  `bmesh.ops.bevel` sobre el sólido compacto tras disolver la teselación coplanar; una
-  arista coincide si está en la recta de un segmento guardado y lo solapa, así sobrevive
-  a cambios de longitud. Sin coincidencia → error explícito. Antes del bisel se sueldan
-  duplicados y los vértices intermedios de cada tramo recto se llevan a su extremo;
-  el bisel no usa clamp (en círculos teselados anula el ancho) y un resultado que se
-  cruza consigo mismo se rechaza pidiendo reducir el ancho. En modo Aristas la
-  selección del sólido se acumula; Redondear/Chaflán abren una sesión `cad.finish.*`
-  excluyente, con preview desde el baseline y un undo. No sirven de apoyo de bocetos.
+  el BREP de OpenCascade; una arista recta coincide si está sobre la recta de un
+  segmento guardado y lo solapa, así sobrevive a cambios de longitud. Las curvas
+  se emparejan sobre su geometría analítica. Sin coincidencia → error explícito.
+  En modo Aristas la selección del sólido se acumula; Redondear/Chaflán abren una
+  sesión `cad.finish.*` excluyente, con preview desde el baseline y un undo.
+  No sirven de apoyo de bocetos. `segments` se conserva en documentos existentes
+  por compatibilidad; la forma BREP y su teselación no dependen de ese campo.
 - Carcasa (`SHELL`) abre una o varias caras planas del mismo cuerpo desde la
   bandeja de Caras, sin acción duplicada en el rail. Guarda sus puntos interiores y
   normales en metros locales del documento, no índices. Grosor inicia en 2 mm;
@@ -621,7 +627,7 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   o una única cara paralela que contenga su proyección si cambió la altura. Una
   referencia ausente/ambigua falla; no se elige otra cara por índice o proximidad.
   Verifica también que el hueco interior respete el grosor: un BREP válido puede
-  ocultar el cruce de paredes. El kernel de malla rechaza con `cad_kernel_unsupported`.
+  ocultar el cruce de paredes. El cálculo siempre usa OpenCascade.
   La preview parte del baseline; error conserva controles y bloquea confirmación,
   cancelar/desconectar/guardar restaura, confirmar crea un undo. Carcasa no sirve
   como apoyo de plano; Boceto en cara captura la superficie resultante. Las caras

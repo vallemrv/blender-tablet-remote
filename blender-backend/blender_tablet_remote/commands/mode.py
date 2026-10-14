@@ -21,6 +21,9 @@ def _set_mode(target: str, owner=None) -> dict:
     from ..cad.runtime import runtime, FEATURE_KEY, BODY_KEY
     from .sessions import cancel_all, cancel_cad
     from .sculpt import cancel as cancel_sculpt
+    if target == "CAD":
+        from ..cad.occt import require_available
+        require_available()
     cancel_sculpt()
     cancel_cad()
     from ..materials.runtime import runtime as materials

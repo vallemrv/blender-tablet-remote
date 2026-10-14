@@ -8,9 +8,10 @@ import bpy
 import bmesh
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_cad import CadTests, OWNER, KERNEL, volume
+from test_cad import CadTests, OWNER, volume
 from blender_tablet_remote.cad import document as model
-from blender_tablet_remote.cad.kernel import sweep, sweep_path
+from blender_tablet_remote.cad.kernel import sweep_path
+from blender_tablet_remote.cad import occt
 from blender_tablet_remote.cad.runtime import runtime
 from blender_tablet_remote.commands import cad
 from blender_tablet_remote.errors import CommandError
@@ -44,7 +45,7 @@ class SweepKernelTests(unittest.TestCase):
         sketch, source = tube()
         path = sweep_path(elbow())
         self.assertAlmostEqual(path[0][0].z, 0, places=7)   # the chain is ordered end to end
-        data = sweep(sketch, source, path)
+        data = occt.tessellate(occt.sweep(sketch, source, elbow()))
         length = .04 + math.pi/2*.05
         expected = math.pi*(.022**2-.014**2)*length
         self.assertAlmostEqual(closed_volume(data)/expected, 1, delta=.01)
@@ -54,19 +55,19 @@ class SweepKernelTests(unittest.TestCase):
 
     def test_straight_path_matches_an_extrusion(self):
         sketch, source = tube(.02, None)
-        path = sweep_path(dict(id='p', plane='XZ', offset=0, entities=[dict(id='l', type='LINE', x=0, y=0, x2=0, y2=.03)]))
-        self.assertAlmostEqual(closed_volume(sweep(sketch, source, path)), math.pi*.01**2*.03, delta=1e-8)
+        path = dict(id='p', plane='XZ', offset=0, entities=[dict(id='l', type='LINE', x=0, y=0, x2=0, y2=.03)])
+        self.assertAlmostEqual(closed_volume(occt.tessellate(occt.sweep(sketch, source, path))), math.pi*.01**2*.03, delta=1e-8)
 
     def test_invalid_paths_and_profiles_are_rejected(self):
         sketch, source = tube()
         with self.assertRaises(CommandError):   # profile wider than the bend radius
-            sweep(sketch, source, sweep_path(elbow(.015)))
+            occt.sweep(sketch, source, elbow(.015))
         branched = elbow(); branched['entities'].append(dict(id='x', type='LINE', x=0, y=.02, x2=.03, y2=.02))
         with self.assertRaises(CommandError):
             sweep_path(branched)
         with self.assertRaises(CommandError):   # profile plane contains the start tangent
-            sweep(sketch, source, sweep_path(dict(id='p', plane='XY', offset=0,
-                  entities=[dict(id='l', type='LINE', x=0, y=0, x2=.03, y2=0)])))
+            occt.sweep(sketch, source, dict(id='p', plane='XY', offset=0,
+                  entities=[dict(id='l', type='LINE', x=0, y=0, x2=.03, y2=0)]))
 
 
 class SweepCommandTests(CadTests):
@@ -102,7 +103,6 @@ class SweepCommandTests(CadTests):
 
     def test_tube_meets_a_flange_in_one_circular_edge_that_takes_a_fillet(self):
         from blender_tablet_remote.commands.snap import _cad_mesh
-        from blender_tablet_remote.cad.kernel import finish_edges
         flange = self.draw('CIRCLE', (0, 0), (.04, 0))
         self.extrude(flange, .007)
         cad.sketch_create(dict(plane='XY', **OWNER))
@@ -121,25 +121,13 @@ class SweepCommandTests(CadTests):
         self.assertEqual(len(regions), 1)   # one design edge, not its tessellation
         edge = [[list(points[a]*scale), list(points[b]*scale)] for a, b in next(iter(regions.values()))]
         solid = runtime.doc()['features'][-1]['id']
-        if KERNEL == 'OCCT':
-            from blender_tablet_remote.cad import occt
-            occt.evaluator.evaluate(runtime.doc(), scale=1.)
-            shape = occt.evaluator._shapes[solid][1]
-            added = (occt._volume(occt.finish_edges(shape, [edge], .004, 4))-occt._volume(shape))/occt.MM**3
-            self.assertAlmostEqual(added/((1-math.pi/4)*.004**2*2*math.pi*.0233), 1, delta=.12)
-            with self.assertRaises(CommandError): occt.finish_edges(shape, [edge], .03, 4)
-            return
-        from blender_tablet_remote.cad.evaluation import evaluator
-        base = evaluator.evaluate(runtime.doc(), scale=1.)['solids'][solid][1]
-        def closed(data):
-            bm = bmesh.new(); vs = [bm.verts.new(v) for v in data[0]]
-            for f in data[1]: bm.faces.new([vs[i] for i in f])
-            try: return bm.calc_volume()
-            finally: bm.free()
-        added = closed(finish_edges(base, [edge], .004, 4))-closed(base)
-        # Concave R4 around a Ø44 tube: (1-π/4)·r²·2π·(22 mm + ~r/3), within tessellation error.
+        from blender_tablet_remote.cad import occt
+        occt.evaluator.evaluate(runtime.doc(), scale=1.)
+        shape = occt.evaluator._shapes[solid][1]
+        added = (occt._volume(occt.finish_edges(shape, [edge], .004, 4))-occt._volume(shape))/occt.MM**3
         self.assertAlmostEqual(added/((1-math.pi/4)*.004**2*2*math.pi*.0233), 1, delta=.12)
-        with self.assertRaises(CommandError): finish_edges(base,[edge],.03,4)
+        with self.assertRaises(CommandError): occt.finish_edges(shape, [edge], .03, 4)
+
 
 
 if __name__ == '__main__':

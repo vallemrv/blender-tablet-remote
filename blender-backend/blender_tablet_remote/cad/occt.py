@@ -1,4 +1,4 @@
-"""OpenCascade CAD kernel (experimental): exact BREP evaluation, mesh contract.
+"""Required OpenCascade CAD kernel: exact BREP evaluation, display mesh contract.
 
 The document stays the source. Each feature is built as an OCCT solid with exact
 planes, cylinders and tori; the host still receives compact meshes in metres, so
@@ -19,31 +19,53 @@ DEFAULT_PATH = os.path.join(os.path.expanduser('~'), '.local', 'share', 'blender
 MM = 1000.
 
 
-def choice():
-    """Engine chosen in the add-on preferences: ('OCCT', path) or ('NATIVE', path).
+INSTALL_HINT = 'Ejecuta blender-backend/tools/install_occt.sh y reinicia Blender.'
 
-    BTR_CAD_KERNEL overrides it (tests, diagnosis). OpenCascade falls back to the
-    mesh kernel only when its private directory is missing.
-    """
+
+def configured_path():
+    """Private OCP directory; the interactive host never imports OCP."""
     from .. import get_prefs
     prefs = get_prefs()
-    path = (getattr(prefs, 'occt_path', '') or DEFAULT_PATH) if prefs else DEFAULT_PATH
-    engine = os.environ.get('BTR_CAD_KERNEL') or (getattr(prefs, 'cad_kernel', 'OCCT') if prefs else 'NATIVE')
-    if engine == 'OCCT' and not os.path.isdir(os.path.join(path, 'OCP')):
-        engine = 'NATIVE'
-    return engine, path
+    return (getattr(prefs, 'occt_path', '') or DEFAULT_PATH) if prefs else DEFAULT_PATH
+
+
+def require_available(path=None):
+    path = path or configured_path()
+    if not os.path.isdir(os.path.join(path, 'OCP')):
+        raise CommandError('Falta OpenCascade (OCP), obligatorio para CAD. '+INSTALL_HINT, code='cad_kernel_missing')
+    return path
 
 
 def load(path=None):
-    """Import OCP from its private site directory; False when it is not installed."""
-    path = path or DEFAULT_PATH
-    if path and os.path.isdir(path) and path not in sys.path:
+    """Load the required BREP kernel in the evaluator process, without fallback."""
+    path = require_available(path)
+    if path not in sys.path:
         sys.path.append(path)
     try:
         import OCP.BRepAlgoAPI  # noqa: F401
-    except Exception:
-        return False
-    return True
+    except Exception as exc:
+        raise CommandError('No se puede cargar OpenCascade (OCP). '+INSTALL_HINT, code='cad_kernel_missing') from exc
+
+
+def geometry_key(doc, limit, scale):
+    """Unused sketches, names and revisions do not invalidate a displayed solid."""
+    features = []
+    sketches = {}
+    for node in model.history(doc):
+        if node['kind'] == 'FEATURE' and node['enabled']:
+            feature = dict(node)
+            feature.pop('name', None)
+            features.append(feature)
+            for key in ('profile_id', 'to_profile_id'):
+                if node.get(key):
+                    sketch, _ = model.profile(doc, node[key])
+                    sketches[sketch['id']] = dict(frame=model.frame(sketch), entities=sketch['entities'])
+            if node.get('path_sketch_id'):
+                path = model.find(doc, 'sketches', node['path_sketch_id'])
+                sketches[path['id']] = dict(frame=model.frame(path), entities=path['entities'])
+        if node['id'] == limit:
+            break
+    return model.dumps(dict(id=doc['id'], features=features, sketches=sketches, scale=scale))
 
 
 # ---------------------------------------------------------------- geometry
@@ -168,7 +190,7 @@ def _faces(sketch, source):
         if not roots:
             raise CommandError('El croquis no contiene regiones exteriores válidas', code='cad_profile_invalid')
         return [face for root in roots for face in _faces(sketch, root)]
-    region(sketch, source)   # same validation and messages as the mesh kernel
+    region(sketch, source)   # validate analytic sketch regions before building BREP
     outer = model.outline(source)
     holes = [e for e in closed if e['id'] != source['id'] and model.contains(outer, model.outline(e)[0])]
     return [_face(sketch, source, holes)]
@@ -488,8 +510,13 @@ def sweep(sketch, source, path_sketch):
         span = (a3-a1) % math.tau if ccw else (a1-a3) % math.tau
         normal = basis[3] if ccw else basis[3].Reversed()
         axis = gp_Ax1(_point(basis, cx, cy), normal)
-        parts.append(_compound([BRepPrimAPI_MakeRevol(f, axis, span).Shape() for f in section])
-                     if len(section) > 1 else BRepPrimAPI_MakeRevol(section[0], axis, span).Shape())
+        turned=[]
+        for face in section:
+            turn=BRepPrimAPI_MakeRevol(face,axis,span)
+            if not turn.IsDone():
+                raise CommandError('El perfil no cabe en el giro del recorrido',code='cad_profile_invalid')
+            turned.append(turn.Shape())
+        parts.append(_compound(turned) if len(turned)>1 else turned[0])
         trsf = gp_Trsf(); trsf.SetRotation(axis, span)
         section = [_transformed(f, trsf) for f in section]
     result = parts[0]
@@ -658,7 +685,7 @@ def _match(shape, design_edges):
 
     A stored segment belongs to an edge when both ends lie on its curve. Lines
     compare against the infinite line and only need to overlap, so a straight
-    edge survives a changed length, like the mesh kernel.
+    edge survives a changed length.
     """
     from OCP.BRepAdaptor import BRepAdaptor_Curve
     from OCP.GeomAbs import GeomAbs_CurveType

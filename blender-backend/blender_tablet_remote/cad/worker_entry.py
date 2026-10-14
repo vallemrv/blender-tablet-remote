@@ -16,7 +16,7 @@ spec = importlib.util.spec_from_file_location('_btr_cad_worker', package / '__in
 module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
-from _btr_cad_worker.cad.evaluation import calculate
+from _btr_cad_worker.cad.jobs import calculate
 from _btr_cad_worker.errors import CommandError
 
 directory, parent = sys.argv[sys.argv.index('--') + 1:]

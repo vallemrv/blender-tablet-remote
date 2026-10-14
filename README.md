@@ -4,7 +4,8 @@ Interfaz táctil Android para controlar Blender sin convertir la tablet en un
 escritorio remoto. Blender conserva el motor 3D; la app aporta vídeo, gestos y
 controles adaptados a dedo y stylus.
 
-Requiere Blender 4.5 o posterior; CAD utiliza su solver booleano nativo Manifold.
+Requiere Blender 4.5 o posterior y OpenCascade (OCP) para CAD. Instálalo con
+`bash blender-backend/tools/install_occt.sh`; no hay motor de malla alternativo.
 
 ## Documentación
 
@@ -32,8 +33,7 @@ El workspace CAD tiene raíles propios de geometría y restricciones: líneas,
 rectángulos/cuadrados, círculos, arcos y redondeo de sketch. Permite seleccionar y
 arrastrar puntos/aristas, restringirlos y extruir perfiles cerrados; el vaciado por
 profundidad usa incrementos con lápiz y transparencia automática. El documento,
-sus cotas y dependencias se guardan en el `.blend`. El kernel sigue siendo de malla
-nativa, con un solver acotado; Object y Edit conservan su flujo habitual.
+sus cotas y dependencias se guardan en el `.blend`. Los sólidos se evalúan con OpenCascade y las restricciones con un solver NumPy acotado; Object y Edit conservan su flujo habitual.
 
 Sculpt incorpora nueve pinceles nativos, suavizado e inversión, presión del lápiz
 para fuerza y radio, simetría X/Y/Z, máscaras, Dyntopo y niveles Multires.

@@ -9,8 +9,7 @@ import bpy
 import bmesh
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from blender_tablet_remote.cad.kernel import kernel, ExtrusionPreviewCache
-from blender_tablet_remote.cad import mirror
+from blender_tablet_remote.cad import occt, document as model
 from blender_tablet_remote.errors import CommandError
 
 
@@ -18,51 +17,51 @@ def solid(typ,params,*,origin=(0,0,0),normal=(0,0,1),x=(1,0,0),y=(0,1,0),depth=.
     entity=dict(id='profile',type=typ,**params)
     sketch=dict(id='sketch',plane='XY',plane_id='plane',
                 frame=dict(origin=origin,x=x,y=y,normal=normal),entities=[entity])
-    return ExtrusionPreviewCache().extrude(sketch,entity,depth,symmetric=symmetric)
+    if typ=='POLYGON':
+        points=params['points']
+        sketch['entities']=[dict(id=f'line{i}',type='LINE',x=a[0],y=a[1],x2=b[0],y2=b[1])
+                            for i,(a,b) in enumerate(zip(points,points[1:]+points[:1]))]
+        entity=model.closed_entities(sketch)[0]
+    return occt.operand(sketch,entity,dict(type='EXTRUDE',depth=depth,extent='BOTH' if symmetric else 'ONE'))
 
 
 def closed_volume(data):
-    bm=bmesh.new()
-    try:
-        vertices=[bm.verts.new(v) for v in data[0]]
-        for face in data[1]: bm.faces.new([vertices[i] for i in face])
-        bm.normal_update()
-        assert bm.faces and all(e.is_manifold for e in bm.edges)
-        return bm.calc_volume()
-    finally: bm.free()
+    occt._valid(data,'cad_cut_invalid')
+    return occt._volume(data)/occt.MM**3
 
 
 class OppositeCutTests(unittest.TestCase):
     def setUp(self):
+        occt.load()
         self.objects=set(bpy.data.objects.keys()); self.meshes=set(bpy.data.meshes.keys())
         # Two supports of different thickness, joined by a transverse cylinder.
         base=solid('RECTANGLE',dict(x=-.0775,y=.01,width=.07,height=.01),origin=(0,0,.012),depth=.05)
-        base=kernel.union(base,solid('RECTANGLE',dict(x=-.076952286,y=-.0185,width=.068904573,height=.0085),
+        base=occt._boolean('UNION',base,solid('RECTANGLE',dict(x=-.076952286,y=-.0185,width=.068904573,height=.0085),
                                      origin=(0,0,.012),depth=.05))
-        base=kernel.union(base,solid('CIRCLE',dict(x=-.0425,y=.062,diameter=.05),
+        base=occt._boolean('UNION',base,solid('CIRCLE',dict(x=-.0425,y=.062,diameter=.05),
                                      normal=(0,-1,0),y=(0,0,1),depth=.03,symmetric=True))
         for points in ([(-.0775,.012),(-.0775,.062),(-.0675,.062)],
                        [(-.0075,.012),(-.0175,.062),(-.0075,.062)]):
             if sum(a[0]*b[1]-b[0]*a[1] for a,b in zip(points,points[1:]+points[:1]))<0:
                 points=list(reversed(points))
-            base=kernel.cut(base,solid('POLYGON',dict(points=points),origin=(0,-.0185,0),
+            base=occt._boolean('CUT',base,solid('POLYGON',dict(points=points),origin=(0,-.0185,0),
                                        normal=(0,-1,0),y=(0,0,1),depth=-.05))
         self.cutter=solid('CIRCLE',dict(x=-.0425,y=.062,diameter=.035),origin=(0,-.03,0),
                           normal=(0,-1,0),y=(0,0,1),depth=-.01)
-        self.base=kernel.cut(base,self.cutter)
+        self.base=occt._boolean('CUT',base,self.cutter)
 
     def tearDown(self):
         self.assertEqual(set(bpy.data.objects.keys()),self.objects)
         self.assertEqual(set(bpy.data.meshes.keys()),self.meshes)
 
     def assert_removed_bore(self,cutter,radius,depth):
-        baseline=copy.deepcopy(self.base); operand=copy.deepcopy(cutter)
-        result=kernel.cut(self.base,cutter)
+        baseline=occt._volume(self.base); operand=occt._volume(cutter)
+        result=occt._boolean('CUT',self.base,cutter)
         removed=closed_volume(self.base)-closed_volume(result)
-        # Area of the 128-sided evaluated circle; depth is along its plane normal.
-        expected=64*radius**2*math.sin(math.tau/128)*depth
+        # Exact circular area; depth is along its plane normal.
+        expected=math.pi*radius**2*depth
         self.assertAlmostEqual(removed,expected,delta=expected*2e-5)
-        self.assertEqual(self.base,baseline); self.assertEqual(cutter,operand)
+        self.assertEqual(occt._volume(self.base),baseline); self.assertEqual(occt._volume(cutter),operand)
 
     def test_opposite_face_bore_removes_material_towards_negative_y(self):
         for depth in (.001,.01):
@@ -73,14 +72,14 @@ class OppositeCutTests(unittest.TestCase):
                 self.assert_removed_bore(cutter,.017,depth)
 
     def test_mirrored_bore_subtracts_only_the_opposite_operand(self):
-        self.assert_removed_bore(mirror.solid(self.cutter,dict(plane='XZ',offset=0.)),.0175,.01)
+        self.assert_removed_bore(occt._mirrored(self.cutter,dict(plane='XZ',offset=0.)),.0175,.01)
 
     def test_miss_and_empty_result_still_reject_without_scene_residue(self):
         outside=solid('RECTANGLE',dict(x=1.,y=1.,width=.1,height=.1),depth=.1)
         covering=solid('RECTANGLE',dict(x=-1.,y=-1.,width=2.,height=2.),origin=(0,0,-1),depth=2.)
         for cutter,code in ((outside,'cad_cut_miss'),(covering,'cad_cut_invalid')):
             with self.subTest(code=code), self.assertRaises(CommandError) as error:
-                kernel.cut(self.base,cutter)
+                occt._boolean('CUT',self.base,cutter)
             self.assertEqual(error.exception.code,code)
 
 

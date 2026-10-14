@@ -1,5 +1,10 @@
 # Evaluación CAD y fluidez
 
+> Nota de continuidad (15/10/2026): la migración terminó. OpenCascade es el único
+> motor CAD y OCP es obligatorio; el evaluador de malla y el selector de motor se
+> retiraron. Las comparaciones y mediciones siguientes documentan estados históricos.
+
+
 CAD muestra el sólido compacto y reserva la retícula de cuadriláteros para una
 copia editable. El documento paramétrico sigue siendo la fuente de verdad; no se
 ha incorporado un kernel BREP ni se ha reducido el muestreo de círculos o arcos.

@@ -1,9 +1,8 @@
-"""CadKernel V1: deterministic native mesh extrusion, no binary dependencies.
+"""Shared CAD geometry and lightweight pointer prisms, in metres.
 
-Constrained triangulation keeps holes; analytic sketch source remains exact while
-circles are tessellated only for evaluation/display. No BREP/STEP claim.
+OpenCascade is the only solid evaluator. The tessellation here only supplies
+interactive extrusion/cut previews while the exact worker result is pending.
 """
-from abc import ABC, abstractmethod
 from mathutils import Vector
 from mathutils.geometry import delaunay_2d_cdt
 from .document import outline, contains, closed_entities, frame
@@ -29,7 +28,7 @@ class ExtrusionPreviewCache:
             local = dict(sketch, plane='XY', offset=0)
             local.pop('plane_id', None)
             local.pop('support_id', None)
-            vertices, faces = kernel.extrude(local, source, 1.0)
+            vertices, faces = _preview_prism(local, source)
             cached = dict(signature=signature, solid=(vertices, faces))
             self.entries[key] = cached
         vertices, faces = cached['solid']
@@ -46,6 +45,70 @@ class ExtrusionPreviewCache:
             if depth < 0:
                 faces = [tuple(reversed(face)) for face in faces]
         return vertices, faces
+
+
+def _preview_prism(sketch, source, depth=1.0):
+    """Tessellated prism template for pointer feedback only, never solid evaluation."""
+    if source['type'] == 'SKETCH':
+        profiles = closed_entities(sketch)
+        outlines = [(item, outline(item)) for item in profiles]
+        roots = [item for item, ring in outlines if not any(
+            other['id'] != item['id'] and contains(other_ring, ring[0]) for other, other_ring in outlines)]
+        if not roots:
+            raise CommandError('El croquis no contiene regiones exteriores válidas', code='cad_profile_invalid')
+        vertices, faces = [], []
+        for item in roots:
+            region_vertices, region_faces = _preview_prism(sketch, item, depth)
+            offset = len(vertices)
+            vertices.extend(region_vertices)
+            faces.extend(tuple(i + offset for i in face) for face in region_faces)
+        return vertices, faces
+    rings = region(sketch, source)
+    if len(rings)==1:
+        ring=rings[0]; n=len(ring)
+        # Perimeter order directly defines the walls. Convex even profiles
+        # get quad caps without the arbitrary diagonals of a global CDT.
+        turns=[(b[0]-a[0])*(c[1]-b[1])-(b[1]-a[1])*(c[0]-b[0])
+               for a,b,c in zip(ring,ring[1:]+ring[:1],ring[2:]+ring[:2])]
+        if n%2==0 and all(t>=-1e-20 for t in turns):
+            vertices=[world(sketch,*p,z) for z in (0,depth) for p in ring]
+            caps=[tuple(range(n))] if n==4 else []
+            if n>4:
+                center=tuple(sum(p[i] for p in ring)/n for i in (0,1))
+                vertices.extend(world(sketch,*center,z) for z in (0,depth))
+                caps=[(2*n,i,(i+1)%n,(i+2)%n) for i in range(0,n,2)]
+            polygons=[]
+            for cap in caps:
+                polygons.append(tuple(reversed(cap)))
+                polygons.append(tuple(2*n+1 if i==2*n else i+n for i in cap))
+            polygons.extend((i,(i+1)%n,(i+1)%n+n,i+n) for i in range(n))
+            if depth<0: polygons=[tuple(reversed(f)) for f in polygons]
+            return vertices,polygons
+    points, edges = [], []
+    for ring in rings:
+        start = len(points)
+        points.extend(Vector(p) for p in ring)
+        edges.extend((start+i, start+(i+1)%len(ring)) for i in range(len(ring)))
+    # CDT may reorder vertices; use its returned coordinates for caps and use
+    # coordinate lookup for walls. No evaluated index is persisted as identity.
+    verts, _, faces, _, _, _ = delaunay_2d_cdt(points, edges, [], 0, 1e-9)
+    n = len(verts)
+    vertices = [world(sketch, p.x,p.y,z) for z in (0,depth) for p in verts]
+    polygons = []
+    for face in faces:
+        center = tuple(sum(verts[i][axis] for i in face)/len(face) for axis in (0,1))
+        if contains(rings[0],center) and not any(contains(r,center) for r in rings[1:]):
+            polygons.append(tuple(reversed(face)))
+            polygons.append(tuple(i+n for i in face))
+    for ring in rings:
+        ids = [min(range(n),key=lambda i:(verts[i]-Vector(p)).length_squared) for p in ring]
+        for a,b in zip(ids, ids[1:]+ids[:1]):
+            polygons.append((a,b,b+n,a+n))
+    if not polygons:
+        raise CommandError('El perfil no genera un sólido', code='cad_profile_invalid')
+    if depth < 0:
+        polygons = [tuple(reversed(f)) for f in polygons]
+    return vertices, polygons
 
 
 def _to_face(vertices, faces, project, normal, to_face):
@@ -155,324 +218,6 @@ def region(sketch, source):
     return rings
 
 
-class CadKernel(ABC):
-    @abstractmethod
-    def extrude(self, sketch, source, depth):
-        """Return vertices and polygon indices in metres."""
-
-
-    @abstractmethod
-    def cut(self, base, cutter):
-        """Subtract two evaluated meshes, returning a validated solid in metres."""
-
-
-class BlenderNativeKernel(CadKernel):
-    name = 'BLENDER_NATIVE_MESH'
-
-    def cut(self, base, cutter):
-        return cut_mesh(base, cutter)
-
-    def union(self, base, addition):
-        extent=max(max(v[axis] for v in base[0]+addition[0])-min(v[axis] for v in base[0]+addition[0]) for axis in range(3))
-        tolerance=max(extent*1e-7,1e-10)
-        if any(max(v[axis] for v in base[0]) < min(v[axis] for v in addition[0])-tolerance or
-               max(v[axis] for v in addition[0]) < min(v[axis] for v in base[0])-tolerance for axis in range(3)):
-            count=len(base[0])
-            return list(base[0])+list(addition[0]), list(base[1])+[tuple(i+count for i in face) for face in addition[1]]
-        return cut_mesh(base, addition, operation='UNION')
-
-    def extrude(self, sketch, source, depth):
-        if source['type'] == 'SKETCH':
-            profiles = closed_entities(sketch)
-            outlines = [(item, outline(item)) for item in profiles]
-            roots = [item for item, ring in outlines if not any(
-                other['id'] != item['id'] and contains(other_ring, ring[0]) for other, other_ring in outlines)]
-            if not roots:
-                raise CommandError('El croquis no contiene regiones exteriores válidas', code='cad_profile_invalid')
-            vertices, faces = [], []
-            for item in roots:
-                region_vertices, region_faces = self.extrude(sketch, item, depth)
-                offset = len(vertices)
-                vertices.extend(region_vertices)
-                faces.extend(tuple(i + offset for i in face) for face in region_faces)
-            return vertices, faces
-        rings = region(sketch, source)
-        if len(rings)==1:
-            ring=rings[0]; n=len(ring)
-            # Perimeter order directly defines the walls. Convex even profiles
-            # get quad caps without the arbitrary diagonals of a global CDT.
-            turns=[(b[0]-a[0])*(c[1]-b[1])-(b[1]-a[1])*(c[0]-b[0])
-                   for a,b,c in zip(ring,ring[1:]+ring[:1],ring[2:]+ring[:2])]
-            if n%2==0 and all(t>=-1e-20 for t in turns):
-                vertices=[world(sketch,*p,z) for z in (0,depth) for p in ring]
-                caps=[tuple(range(n))] if n==4 else []
-                if n>4:
-                    center=tuple(sum(p[i] for p in ring)/n for i in (0,1))
-                    vertices.extend(world(sketch,*center,z) for z in (0,depth))
-                    caps=[(2*n,i,(i+1)%n,(i+2)%n) for i in range(0,n,2)]
-                polygons=[]
-                for cap in caps:
-                    polygons.append(tuple(reversed(cap)))
-                    polygons.append(tuple(2*n+1 if i==2*n else i+n for i in cap))
-                polygons.extend((i,(i+1)%n,(i+1)%n+n,i+n) for i in range(n))
-                if depth<0: polygons=[tuple(reversed(f)) for f in polygons]
-                return vertices,polygons
-        points, edges = [], []
-        for ring in rings:
-            start = len(points)
-            points.extend(Vector(p) for p in ring)
-            edges.extend((start+i, start+(i+1)%len(ring)) for i in range(len(ring)))
-        # CDT may reorder vertices; use its returned coordinates for caps and use
-        # coordinate lookup for walls. No evaluated index is persisted as identity.
-        verts, _, faces, _, _, _ = delaunay_2d_cdt(points, edges, [], 0, 1e-9)
-        n = len(verts)
-        vertices = [world(sketch, p.x,p.y,z) for z in (0,depth) for p in verts]
-        polygons = []
-        for face in faces:
-            center = tuple(sum(verts[i][axis] for i in face)/len(face) for axis in (0,1))
-            if contains(rings[0],center) and not any(contains(r,center) for r in rings[1:]):
-                polygons.append(tuple(reversed(face)))
-                polygons.append(tuple(i+n for i in face))
-        for ring in rings:
-            ids = [min(range(n),key=lambda i:(verts[i]-Vector(p)).length_squared) for p in ring]
-            for a,b in zip(ids, ids[1:]+ids[:1]):
-                polygons.append((a,b,b+n,a+n))
-        if not polygons:
-            raise CommandError('El perfil no genera un sólido', code='cad_profile_invalid')
-        if depth < 0:
-            polygons = [tuple(reversed(f)) for f in polygons]
-        return vertices, polygons
-
-
-
-kernel = BlenderNativeKernel()
-
-
-def cut_mesh(base, cutter, *, operation='DIFFERENCE'):
-    """Native manifold boolean on closed CAD operands; no scene residue."""
-    import bpy
-    import bmesh
-    meshes, objects = [], []
-    try:
-        for label,(vertices,faces) in zip(('CAD target','CAD cutter'),(base,cutter)):
-            mesh=bpy.data.meshes.new(label); meshes.append(mesh)
-            mesh.from_pydata(vertices,[],faces); mesh.update()
-            obj=bpy.data.objects.new(label,mesh); objects.append(obj)
-            bpy.context.scene.collection.objects.link(obj)
-        modifier=objects[0].modifiers.new('CAD difference','BOOLEAN')
-        # CAD operands are closed solids. Manifold preserves that invariant when
-        # opposite cuts meet cap n-gons produced by previous unions/differences.
-        modifier.operation=operation; modifier.solver='MANIFOLD'; modifier.object=objects[1]
-        bpy.context.view_layer.update()
-        evaluated=objects[0].evaluated_get(bpy.context.evaluated_depsgraph_get())
-        mesh=evaluated.to_mesh()
-        try:
-            result=([tuple(v.co) for v in mesh.vertices],[tuple(f.vertices) for f in mesh.polygons])
-            bm=bmesh.new()
-            try:
-                bm.from_mesh(mesh)
-                result_volume = bm.calc_volume()
-                valid=bool(bm.faces) and all(e.is_manifold for e in bm.edges) and result_volume>1e-18
-            finally: bm.free()
-            if not valid:
-                raise CommandError('La operación produce un sólido vacío o geometría inválida',code='cad_cut_invalid' if operation=='DIFFERENCE' else 'cad_union_invalid')
-            def volume(data):
-                bm=bmesh.new()
-                try:
-                    vertices = [bm.verts.new(v) for v in data[0]]
-                    for face in data[1]: bm.faces.new([vertices[i] for i in face])
-                    bm.normal_update()
-                    return abs(bm.calc_volume())
-                finally:
-                    bm.free()
-            if operation=='DIFFERENCE':
-                base_volume=volume(base)
-                if base_volume-result_volume <= max(base_volume*1e-7,1e-18):
-                    raise CommandError('El perfil no quita material del sólido destino',code='cad_cut_miss')
-            return result
-        finally: evaluated.to_mesh_clear()
-    finally:
-        for obj in objects: bpy.data.objects.remove(obj,do_unlink=True)
-        for mesh in meshes:
-            if mesh.users==0: bpy.data.meshes.remove(mesh)
-
-
-def _self_intersects(bm, unchanged=frozenset()):
-    """New crossings, including changed faces against the untouched solid."""
-    from mathutils.bvhtree import BVHTree
-    bm.faces.ensure_lookup_table()
-    bm.faces.index_update()
-    tree = BVHTree.FromBMesh(bm, epsilon=0.)
-    for a, b in tree.overlap(tree):
-        if a < b and not (bm.faces[a] in unchanged and bm.faces[b] in unchanged) and not (set(bm.faces[a].verts) & set(bm.faces[b].verts)):
-            return True
-    return False
-
-
-def finish_edges(solid, edges, width, segments):
-    """Fillet (segments > 1) or chamfer (1) the design edges on a compact solid.
-
-    Each design edge is stored as its segments in metres, never mesh indices:
-    a solid edge on the line of one of them that overlaps it is bevelled, so a
-    straight edge survives a changed length (e.g. a deeper extrusion). A design
-    edge with nothing left (the design moved away) is an explicit error.
-    """
-    import bmesh
-    from mathutils.geometry import intersect_point_line
-    vertices, faces = solid
-    bounds=[(min(v[i] for v in vertices),max(v[i] for v in vertices)) for i in range(3)]
-    extent = max(high-low for low,high in bounds)
-    tolerance = extent*1e-6+1e-9
-    lines = [[(Vector(a), Vector(b)) for a, b in edge] for edge in edges]
-    # Spatial index of the stored segments: each mesh edge only tests its neighbours.
-    from mathutils.kdtree import KDTree
-    flat = [(k, a, b) for k, segments_of in enumerate(lines) for a, b in segments_of]
-    index = KDTree(len(flat))
-    for i, (_, a, b) in enumerate(flat): index.insert((a+b)*.5, i)
-    index.balance()
-    reach = max(((b-a).length*.5 for _, a, b in flat), default=0.)+tolerance
-    def owner(edge):
-        """Design edge whose stored segment line holds this mesh edge, or None."""
-        p, q = edge.verts[0].co, edge.verts[1].co
-        found = {i for point in (p, q, (p+q)*.5) for _, i, _ in index.find_range(point, reach+(q-p).length)}
-        for i in found:
-            k, a, b = flat[i]
-            (cp, tp), (cq, tq) = intersect_point_line(p, a, b), intersect_point_line(q, a, b)
-            overlap = min(max(tp, tq), 1.) - max(min(tp, tq), 0.)
-            if (cp-p).length <= tolerance and (cq-q).length <= tolerance and overlap > 1e-6: return k
-        return None
-    bm = bmesh.new()
-    try:
-        verts = [bm.verts.new(v) for v in vertices]
-        for face in faces: bm.faces.new([verts[i] for i in face])
-        bm.normal_update()
-        original_faces={f:frozenset(tuple(v.co) for v in f.verts) for f in bm.faces}
-        # Boolean seams leave duplicate vertices; coplanar tessellation is not a design edge.
-        vicinity={v for e in bm.edges if owner(e) is not None for v in e.verts}
-        bmesh.ops.remove_doubles(bm, verts=list(vicinity), dist=tolerance)
-        bmesh.ops.dissolve_limit(bm, angle_limit=1e-4, verts=[v for v in vicinity if v.is_valid],
-                                edges=[e for e in bm.edges if all(v in vicinity for v in e.verts)])
-        # A vertex in the middle of a straight run of a design edge (where another
-        # face was split) leaves slivers the bevel cannot offset: slide it to the
-        # nearer end of that run. Faces stay planar and the edge keeps its line.
-        pending = list({v for e in bm.edges if owner(e) is not None for v in e.verts})
-        while pending:
-            vert = pending.pop()
-            if not vert.is_valid: continue
-            run = [e for e in vert.link_edges if owner(e) is not None]
-            if len(run) != 2: continue
-            a, b = (e.other_vert(vert) for e in run)
-            # Straightness by distance to the chord a-b: tiny float32 pieces near
-            # a corner have meaningless directions but sit on the line.
-            foot, t = intersect_point_line(vert.co, a.co, b.co)
-            if not 0. < t < 1. or (foot-vert.co).length > tolerance*10: continue
-            target = a if (vert.co-a.co).length <= (vert.co-b.co).length else b
-            bmesh.ops.pointmerge(bm, verts=[vert, target], merge_co=target.co.copy())
-            pending.append(target)
-        chosen = set()
-        hit = set()
-        for e in bm.edges:
-            k = owner(e)
-            if k is not None: chosen.add(e); hit.add(k)
-        if len(hit) != len(lines):
-            raise CommandError('Una arista del redondeo ya no existe; edita o borra la operación', code='cad_reference_missing')
-        # No clamp: on a tessellated circle it shrinks the width to the ~1 mm chord
-        # length and the fillet vanishes. A width that does not fit is caught below.
-        bevel=bmesh.ops.bevel(bm, geom=list(chosen)+list({v for e in chosen for v in e.verts}), offset=width,
-                        offset_type='OFFSET', profile_type='SUPERELLIPSE', segments=segments,
-                        profile=.5, affect='EDGES', clamp_overlap=False, loop_slide=True)
-        bm.normal_update()
-        unchanged={f for f,coords in original_faces.items() if f.is_valid and
-                   frozenset(tuple(v.co) for v in f.verts)==coords}
-        # A concave fillet may add material, but cannot grow beyond the source
-        # solid's bounds. Oversized offsets can otherwise produce a closed flange
-        # wider than the original and escape the intersection test.
-        outside=any(v.co[i]<low-tolerance or v.co[i]>high+tolerance
-                    for v in bm.verts for i,(low,high) in enumerate(bounds))
-        if not bevel['faces'] or outside or not all(e.is_manifold for e in bm.edges) or bm.calc_volume() <= 1e-18 or _self_intersects(bm,unchanged):
-            raise CommandError('El redondeo no cabe en esas aristas; reduce el ancho', code='cad_finish_invalid')
-        bm.verts.index_update()
-        return [tuple(v.co) for v in bm.verts], [tuple(v.index for v in f.verts) for f in bm.faces]
-    finally:
-        bm.free()
-
-
-def _ring_parameters(ring):
-    lengths = [(Vector(b)-Vector(a)).length for a, b in zip(ring, ring[1:]+ring[:1])]
-    total = sum(lengths)
-    result, run = [], 0.
-    for length in lengths:
-        result.append(run/total); run += length
-    return result, lengths, total
-
-
-def _ring_at(ring, lengths, total, t):
-    target = (t % 1.)*total
-    for i, length in enumerate(lengths):
-        if target <= length or i == len(lengths)-1:
-            a, b = Vector(ring[i]), Vector(ring[(i+1) % len(ring)])
-            return a.lerp(b, min(1., target/length) if length > 0 else 0.)
-        target -= length
-
-
-def loft(sketch_a, source_a, sketch_b, source_b):
-    """Join two closed outer contours on different planes with ruled walls.
-
-    Each ring keeps its own corners: both are sampled at the union of their
-    normalized perimeter parameters. The start of the second ring is the vertex
-    that best matches the first one around their centroids (least twist).
-    """
-    from mathutils.geometry import tessellate_polygon
-    rings = []
-    for sketch, source in ((sketch_a, source_a), (sketch_b, source_b)):
-        if len(region(sketch, source)) != 1:
-            raise CommandError('El solevado une contornos exteriores sin huecos', code='cad_profile_invalid')
-        rings.append([Vector(world(sketch, *p)) for p in outline(source)])
-    a, b = rings
-    def newell(ring):
-        n = Vector((0., 0., 0.))
-        for p, q in zip(ring, ring[1:]+ring[:1]):
-            n += Vector((p.y*q.z-p.z*q.y, p.z*q.x-p.x*q.z, p.x*q.y-p.y*q.x))
-        return n
-    ca, cb = sum(a, Vector())/len(a), sum(b, Vector())/len(b)
-    axis = newell(a).normalized()
-    if abs((cb-ca).dot(axis)) < 1e-7 and abs((cb-ca).dot(newell(b).normalized())) < 1e-7:
-        raise CommandError('Los dos croquis están en el mismo plano; separa uno de ellos', code='cad_profile_invalid')
-    if newell(b).dot(newell(a)) < 0: b.reverse()
-    def local(ring, center):
-        return [(p-center)-axis*(p-center).dot(axis) for p in ring]
-    la, lb = local(a, ca), local(b, cb)
-    ta, lengths_a, total_a = _ring_parameters(a)
-    probes = [_ring_at(la, lengths_a, total_a, i/64) for i in range(64)]
-    tb0, lengths_b, total_b = _ring_parameters(b)
-    candidates = range(len(b)) if len(b) <= 512 else range(0, len(b), len(b)//512+1)
-    def cost(start):
-        return sum((_ring_at(lb, lengths_b, total_b, tb0[start]+i/64)-p).length_squared for i, p in enumerate(probes))
-    start = min(candidates, key=cost)
-    b = b[start:]+b[:start]
-    tb, lengths_b, total_b = _ring_parameters(b)
-    params = sorted(set(round(t, 12) for t in ta+tb))
-    ring_a = [_ring_at(a, lengths_a, total_a, t) for t in params]
-    ring_b = [_ring_at(b, lengths_b, total_b, t) for t in params]
-    n = len(params)
-    side = 1. if (cb-ca).dot(axis) > 0 else -1.
-    vertices = [tuple(p) for p in ring_a+ring_b]
-    faces = [(i, (i+1) % n, (i+1) % n+n, i+n) if side > 0 else (i+n, (i+1) % n+n, (i+1) % n, i) for i in range(n)]
-    for ring, offset, flip in ((ring_a, 0, True), (ring_b, n, False)):
-        for tri in tessellate_polygon([[p.copy() for p in ring]]):
-            tri = tuple(i+offset for i in tri)
-            # Orient every cap triangle along the loft axis before the global check.
-            p, q, r = (Vector(vertices[i]) for i in tri)
-            if ((q-p).cross(r-p).dot(axis)*side > 0) == flip: tri = tuple(reversed(tri))
-            faces.append(tri)
-    volume = sum(Vector(vertices[f[0]]).dot(Vector(vertices[f[i]]).cross(Vector(vertices[f[i+1]])))
-                 for f in faces for i in range(1, len(f)-1))
-    if abs(volume) < 1e-18:
-        raise CommandError('El solevado no encierra volumen', code='cad_profile_invalid')
-    if volume < 0: faces = [tuple(reversed(f)) for f in faces]
-    return vertices, faces
-
-
 def helix_axis(sketch, axis):
     """Axis point and direction in the sketch's local 2D frame: 'X', 'Y' or a line id."""
     if axis in ('X', 'Y', None):
@@ -483,127 +228,6 @@ def helix_axis(sketch, axis):
     dx, dy = line['x2']-line['x'], line['y2']-line['y']
     length = (dx*dx+dy*dy)**.5
     return (line['x'], line['y']), (dx/length, dy/length)
-
-
-def helix(sketch, source, axis, pitch, turns, hand='RIGHT'):
-    """Sweep a closed contour around an in-plane axis while it advances `pitch` per turn."""
-    import math
-    from mathutils.geometry import tessellate_polygon
-    if len(region(sketch, source)) != 1:
-        raise CommandError('El barrido helicoidal usa un contorno sin huecos', code='cad_profile_invalid')
-    ring = outline(source)
-    (ax, ay), (dx, dy) = helix_axis(sketch, axis)
-    heights = [(x-ax)*dx+(y-ay)*dy for x, y in ring]
-    radial = [-(x-ax)*dy+(y-ay)*dx for x, y in ring]   # signed distance to the axis
-    if min(radial) <= 1e-9 and max(radial) >= -1e-9:
-        raise CommandError('El perfil toca o cruza el eje; sepáralo del eje para barrerlo', code='cad_profile_invalid')
-    if pitch <= max(heights)-min(heights)+1e-9:
-        raise CommandError('El paso debe superar la altura del perfil a lo largo del eje, o las vueltas se solapan', code='cad_profile_invalid')
-    basis = frame(sketch)
-    o, fx, fy, fn = (Vector(basis[k]) for k in ('origin', 'x', 'y', 'normal'))
-    origin = o+fx*ax+fy*ay
-    d = (fx*dx+fy*dy).normalized()
-    side = 1. if radial[0] > 0 else -1.
-    u = (fx*-dy+fy*dx)*side                                  # from the axis toward the profile
-    turn = 1. if hand == 'RIGHT' else -1.
-    w = d.cross(u)*turn
-    steps = max(8, math.ceil(turns*48))
-    n = len(ring)
-    vertices = []
-    for k in range(steps+1):
-        theta = math.tau*turns*k/steps
-        c, s = math.cos(theta), math.sin(theta)
-        for h, r in zip(heights, radial):
-            vertices.append(tuple(origin+d*(h+pitch*turns*k/steps)+(u*c+w*s)*abs(r)))
-    # Moving direction along the sketch normal decides which side faces outward.
-    sigma = 1. if w.dot(fn) > 0 else -1.
-    faces = []
-    for k in range(steps):
-        a, b = k*n, (k+1)*n
-        for i in range(n):
-            quad = (a+i, a+(i+1) % n, b+(i+1) % n, b+i)
-            faces.append(quad if sigma > 0 else tuple(reversed(quad)))
-    for tri in tessellate_polygon([[Vector((x, y, 0.)) for x, y in ring]]):
-        (x0, y0), (x1, y1), (x2, y2) = (ring[i] for i in tri)
-        if (x1-x0)*(y2-y0)-(y1-y0)*(x2-x0) < 0: tri = tuple(reversed(tri))   # CCW about the sketch normal
-        faces.append(tuple(reversed(tri)) if sigma > 0 else tuple(tri))
-        end = tuple(i+steps*n for i in tri)
-        faces.append(end if sigma > 0 else tuple(reversed(end)))
-    volume = sum(Vector(vertices[f[0]]).dot(Vector(vertices[f[i]]).cross(Vector(vertices[f[i+1]])))
-                 for f in faces for i in range(1, len(f)-1))
-    if volume < 0: faces = [tuple(reversed(f)) for f in faces]
-    return vertices, faces
-
-
-def revolve(sketch, source, axis, angle):
-    """Revolve a closed contour `angle` degrees (≤ 360) around an in-plane axis.
-
-    Unlike the helix, the contour may rest on the axis (cones, domes): those points
-    are shared by every step so the solid stays closed. A full turn welds its last
-    step to the first and has no end caps.
-    """
-    import math
-    from mathutils.geometry import tessellate_polygon
-    if len(region(sketch, source)) != 1:
-        raise CommandError('La revolución usa un contorno sin huecos', code='cad_profile_invalid')
-    ring = outline(source)
-    (ax, ay), (dx, dy) = helix_axis(sketch, axis)
-    heights = [(x-ax)*dx+(y-ay)*dy for x, y in ring]
-    radial = [-(x-ax)*dy+(y-ay)*dx for x, y in ring]
-    span = max(max(heights)-min(heights), max(abs(r) for r in radial), 1e-12)
-    eps = span*1e-9
-    if min(radial) < -eps and max(radial) > eps:
-        raise CommandError('El perfil cruza el eje; déjalo a un lado del eje (puede apoyarse en él)', code='cad_profile_invalid')
-    if max(abs(r) for r in radial) <= eps:
-        raise CommandError('El perfil está sobre el eje y no encierra volumen', code='cad_profile_invalid')
-    full = angle >= 360-1e-9
-    basis = frame(sketch)
-    o, fx, fy, fn = (Vector(basis[k]) for k in ('origin', 'x', 'y', 'normal'))
-    origin = o+fx*ax+fy*ay
-    d = (fx*dx+fy*dy).normalized()
-    side = 1. if max(radial) > eps else -1.
-    u = (fx*-dy+fy*dx)*side
-    w = d.cross(u)
-    steps = max(4, math.ceil(angle/360*64))
-    rings = steps if full else steps+1
-    n = len(ring)
-    on_axis = [abs(r) <= eps for r in radial]
-    vertices, index = [], {}
-    for i in range(n):
-        if on_axis[i]:
-            index[(None, i)] = len(vertices); vertices.append(tuple(origin+d*heights[i]))
-    for k in range(rings):
-        theta = math.radians(angle)*k/steps
-        c, s = math.cos(theta), math.sin(theta)
-        for i in range(n):
-            if not on_axis[i]:
-                index[(k, i)] = len(vertices)
-                vertices.append(tuple(origin+d*heights[i]+(u*c+w*s)*abs(radial[i])))
-    def at(k, i):
-        return index[(None, i)] if on_axis[i] else index[(k % rings if full else k, i)]
-    faces = []
-    for k in range(steps):
-        for i in range(n):
-            j = (i+1) % n
-            loop = []
-            for v in (at(k, i), at(k, j), at(k+1, j), at(k+1, i)):
-                if v not in loop: loop.append(v)
-            if len(loop) >= 3: faces.append(tuple(loop))
-    caps = []
-    if not full:
-        for tri in tessellate_polygon([[Vector((x, y, 0.)) for x, y in ring]]):
-            caps.append(tuple(at(0, i) for i in tri))
-            caps.append(tuple(at(steps, i) for i in reversed(tri)))
-        # Side quads share one winding; a cap wound like its neighbouring side
-        # repeats a directed edge and must be flipped to close the surface.
-        directed = {(f[i], f[(i+1) % len(f)]) for f in faces for i in range(len(f))}
-        caps = [tuple(reversed(f)) if any((f[i], f[(i+1) % len(f)]) in directed for i in range(len(f))) else f
-                for f in caps]
-    faces += caps
-    volume = sum(Vector(vertices[f[0]]).dot(Vector(vertices[f[i]]).cross(Vector(vertices[f[i+1]])))
-                 for f in faces for i in range(1, len(f)-1))
-    if volume < 0: faces = [tuple(reversed(f)) for f in faces]
-    return vertices, faces
 
 
 def sweep_path(sketch):
@@ -682,65 +306,3 @@ def sweep_frames(sketch, sampled):
     for i in range(1, len(path)):
         matrices.append(directions[i-1].rotation_difference(directions[i]).to_matrix() @ matrices[-1])
     return path, tangents, directions, matrices, facing, corners
-
-
-def sweep(sketch, source, sampled):
-    """Move a closed contour (holes allowed) along a polyline path.
-
-    The profile keeps its pose relative to the path start: every section is the
-    start section turned by the parallel transport of the path tangent. Interior
-    vertices use the bisector plane, stretched across the bend, so walls keep
-    their thickness through each joint. Sections must keep advancing; a profile
-    larger than the curvature allows is rejected.
-    """
-    from mathutils.geometry import tessellate_polygon
-    rings2d = region(sketch, source)
-    def area(ring): return sum(a[0]*b[1]-b[0]*a[1] for a, b in zip(ring, ring[1:]+ring[:1]))
-    rings2d = [ring if (area(ring) > 0) == (k == 0) else list(reversed(ring)) for k, ring in enumerate(rings2d)]
-    profile = [Vector(world(sketch, x, y)) for ring in rings2d for x, y in ring]
-    path, tangents, directions, matrices, facing, corners = sweep_frames(sketch, sampled)
-    start = path[0]
-    sections = []
-    for i, point in enumerate(path):
-        matrix = matrices[i]
-        bend = None; stretch = 1.
-        if corners[i]:
-            before, after = tangents[i-1], tangents[i]
-            stretch = 1./max(before.dot(directions[i]), 1e-3)
-            bend = after-before
-            bend = bend.normalized() if bend.length > 1e-12 else None
-        section = []
-        for p in profile:
-            q = matrix @ (p-start)
-            if bend is not None: q += bend*(q.dot(bend)*(stretch-1.))
-            section.append(point+q)
-        sections.append(section)
-    for i, tangent in enumerate(tangents):
-        if any((b-a).dot(tangent) <= 0 for a, b in zip(sections[i], sections[i+1])):
-            raise CommandError('El perfil es demasiado grande para la curvatura del recorrido', code='cad_profile_invalid')
-    m = len(profile); sigma = 1. if facing > 0 else -1.
-    vertices = [tuple(p) for section in sections for p in section]
-    faces = []
-    offset = 0
-    for ring in rings2d:
-        n = len(ring)
-        for k in range(len(sections)-1):
-            a, b = k*m+offset, (k+1)*m+offset
-            for j in range(n):
-                quad = (a+j, a+(j+1) % n, b+(j+1) % n, b+j)
-                faces.append(quad if sigma > 0 else tuple(reversed(quad)))
-        offset += n
-    flat = [p for ring in rings2d for p in ring]
-    last = (len(sections)-1)*m
-    for tri in tessellate_polygon([[Vector((x, y, 0.)) for x, y in ring] for ring in rings2d]):
-        (x0, y0), (x1, y1), (x2, y2) = (flat[i] for i in tri)
-        if (x1-x0)*(y2-y0)-(y1-y0)*(x2-x0) < 0: tri = tuple(reversed(tri))
-        faces.append(tuple(reversed(tri)) if sigma > 0 else tuple(tri))
-        end = tuple(i+last for i in tri)
-        faces.append(end if sigma > 0 else tuple(reversed(end)))
-    volume = sum(Vector(vertices[f[0]]).dot(Vector(vertices[f[i]]).cross(Vector(vertices[f[i+1]])))
-                 for f in faces for i in range(1, len(f)-1))
-    if abs(volume) < 1e-18:
-        raise CommandError('El barrido no encierra volumen', code='cad_profile_invalid')
-    if volume < 0: faces = [tuple(reversed(f)) for f in faces]
-    return vertices, faces

@@ -1090,9 +1090,8 @@ def _shell_preview(session, feature):
 @command('cad.shell.begin')
 def shell_begin(payload):
     body,faces=_shell_faces()
-    from ..cad.occt import choice
-    if choice()[0]!='OCCT':
-        raise CommandError('Carcasa requiere el motor OpenCascade',code='cad_kernel_unsupported')
+    from ..cad.occt import require_available
+    require_available()
     from .units import current_scale
     preset=current_scale()
     initial=max(preset['snap_step']/1000,min(.002,preset['primitive_size']/5))

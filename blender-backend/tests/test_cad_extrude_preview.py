@@ -8,9 +8,10 @@ from unittest.mock import patch
 import bpy
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_cad import CadTests, OWNER, KERNEL, volume
+from test_cad import CadTests, OWNER, volume
 from blender_tablet_remote.cad import document as model
-from blender_tablet_remote.cad.kernel import kernel, ExtrusionPreviewCache
+from blender_tablet_remote.cad.kernel import ExtrusionPreviewCache
+from blender_tablet_remote.cad import kernel as preview_geometry, occt
 from blender_tablet_remote.cad.runtime import runtime
 from blender_tablet_remote.commands import cad
 
@@ -32,9 +33,7 @@ class ExtrudePreviewTests(CadTests):
         cad.sketch_create(dict(support_id=runtime.doc()['features'][-1]['id'], **OWNER))
         rim = self.draw('RECTANGLE', (.01, .01), (.07, .03))
         cad.extrude_begin(dict(profile_id='profile_'+rim, depth=.004, **OWNER))
-        from blender_tablet_remote.cad import kernel as kernel_module, occt
-        target, name = (occt, '_boolean') if KERNEL == 'OCCT' else (kernel_module, 'cut_mesh')
-        with patch.object(target, name, wraps=getattr(target, name)) as boolean:
+        with patch.object(occt, '_boolean', wraps=occt._boolean) as boolean:
             cad.extrude_update(dict(gesture_u=0, gesture_v=-.4, baseline_depth=.004, **OWNER))
             self.assertEqual(boolean.call_count, 0)
             self.assertTrue(any(o.get(PRISM_KEY) for o in bpy.data.objects))
@@ -72,27 +71,20 @@ class ExtrudePreviewTests(CadTests):
             self.draw('CIRCLE', (x, y), (x + .01, y))
         return outer
 
-    @unittest.skipIf(KERNEL == 'OCCT', 'reutiliza la teselación del motor de malla')
-    def test_four_holes_depth_changes_reuse_tessellation_and_confirm_one_solid(self):
+    def test_four_holes_depth_changes_keep_the_exact_solid_and_one_undo(self):
         outer = self.plate()
         bpy.context.scene.unit_settings.scale_length = .001
         before = model.dumps(runtime.doc())
-        with patch.object(kernel, 'extrude', wraps=kernel.extrude) as tessellate:
-            self.extrude(outer, .02, confirm=False)
-            self.assertEqual(tessellate.call_count, 1)
-            topology = (len(self.obj().data.vertices), len(self.obj().data.polygons))
-            for depth in (.04, .1, 1e-7, .035):
-                status = cad.extrude_update(dict(depth=depth, **OWNER))
-                self.assertTrue(status['session']['can_confirm'])
-                self.assertTrue(self.obj().visible_get())
-                self.assertEqual(topology, (len(self.obj().data.vertices), len(self.obj().data.polygons)))
-                area = .27 * .15 - 4 * .5 * 128 * .01**2 * math.sin(2 * math.pi / 128)
-                self.assertAlmostEqual(volume(self.obj()) * .001**3, area * depth, delta=area * depth * 1e-5)
-            self.assertEqual(model.dumps(runtime.doc()), before)
-            with patch('blender_tablet_remote.commands.cad.undo_push') as undo:
-                cad.confirm(OWNER)
-                undo.assert_called_once()
-            self.assertEqual(tessellate.call_count, 1)
+        self.extrude(outer, .02, confirm=False)
+        area = .27*.15-4*math.pi*.01**2
+        for depth in (.04, .1, .0001, .035):
+            state = cad.extrude_update(dict(depth=depth, **OWNER))
+            self.assertTrue(state['session']['can_confirm'])
+            self.assertTrue(self.obj().visible_get())
+            self.assertAlmostEqual(volume(self.obj())*.001**3, area*depth, delta=area*depth*1e-3)
+        self.assertEqual(model.dumps(runtime.doc()), before)
+        with patch('blender_tablet_remote.commands.cad.undo_push') as undo:
+            cad.confirm(OWNER); undo.assert_called_once()
         self.assertEqual(len(runtime.objects(runtime.doc())), 1)
         self.assertEqual(runtime.doc()['features'][0]['depth'], .035)
         self.assertIsNone(runtime.session)
@@ -115,10 +107,10 @@ class ExtrudePreviewTests(CadTests):
         sketch['plane_id'] = 'tilted-plane'
         sketch['frame'] = dict(origin=(.2, .3, .4), x=(0,1,0), y=(0,0,1), normal=(1,0,0))
         cache = ExtrusionPreviewCache()
-        with patch.object(kernel, 'extrude', wraps=kernel.extrude) as tessellate:
+        with patch.object(preview_geometry, '_preview_prism', wraps=preview_geometry._preview_prism) as tessellate:
             for depth in (.02, .04, -.03):
                 vertices, faces = cache.extrude(sketch, source, depth)
-                expected, expected_faces = kernel.extrude(sketch, source, depth)
+                expected, expected_faces = preview_geometry._preview_prism(sketch, source, depth)
                 self.assertEqual(faces, expected_faces)
                 for a,b in zip(vertices, expected):
                     for x,y in zip(a,b): self.assertAlmostEqual(x,y,places=7)
@@ -135,7 +127,7 @@ class ExtrudePreviewTests(CadTests):
             sketch.update(plane=plane, offset=.12)
             for depth in (.02, -.04):
                 vertices, faces = cache.extrude(sketch, source, depth)
-                expected, expected_faces = kernel.extrude(sketch, source, depth)
+                expected, expected_faces = preview_geometry._preview_prism(sketch, source, depth)
                 self.assertEqual(faces, expected_faces)
                 for a,b in zip(vertices, expected):
                     for x,y in zip(a,b): self.assertAlmostEqual(x,y,places=7)
