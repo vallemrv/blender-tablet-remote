@@ -389,6 +389,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             cadStroke = false
             if (cadGestureMode == "DEPTH") client.cadCommand("cad.extrude.update", mapOf("depth" to cadDepthStart))
             else if (cadGestureMode == "PLANE") client.cadCommand("cad.plane.update", mapOf("offset" to cadDepthStart, "shift" to cadShiftStart, "release" to true))
+            else if (cadGestureMode == "SHELL") client.cadCommand("cad.shell.update", mapOf("thickness" to cadDepthStart))
             else if (cadGestureMode == "FINISH") client.cadCommand("cad.finish.update", mapOf("width" to cadDepthStart))
             else if (cadGestureMode != "FACE") client.cadCommand("cad.session.cancel")
             cadGestureMode = null
@@ -418,6 +419,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     cadStroke = true; cadGestureMode = "PLANE"; cadDepthStart = cad.plane?.offset ?: 0.0
                     cadShiftStart = cad.plane?.shift ?: listOf(0.0, 0.0)
                     client.cadCommand("cad.plane.update", mapOf("grab_u" to u, "grab_v" to v))
+                    return
+                }
+                if (cad.sessionActive && cad.operation == "SHELL") {
+                    cadStroke = true; cadGestureMode = "SHELL"; cadDepthStart = cad.thickness
                     return
                 }
                 if (cad.sessionActive && cad.operation in listOf("FILLET", "CHAMFER")) {
@@ -454,6 +459,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     "DEPTH" -> client.cadCommand("cad.extrude.update", mapOf(
                         "gesture_u" to (u - cadPointerStartU), "gesture_v" to (v - cadPointerStartV),
                         "u" to u, "v" to v, "baseline_depth" to cadDepthStart))
+                    "SHELL" -> client.cadCommand("cad.shell.update", mapOf("gesture" to (cadPointerStartV - v), "baseline_thickness" to cadDepthStart))
                     "FINISH" -> client.cadCommand("cad.finish.update", mapOf("gesture" to (cadPointerStartV - v), "baseline_width" to cadDepthStart))
                     "PLANE" -> client.cadCommand("cad.plane.update", mapOf("gesture_u" to (u - cadPointerStartU),
                         "gesture_v" to (v - cadPointerStartV), "u" to u, "v" to v, "baseline_offset" to cadDepthStart))

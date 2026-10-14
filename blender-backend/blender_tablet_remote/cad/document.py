@@ -29,6 +29,17 @@ FINISHES = ('FILLET', 'CHAMFER')
 HANDS = ('RIGHT', 'LEFT')
 
 
+def validate_shell(feature):
+    faces = feature.get('faces')
+    if not isinstance(faces,list) or not faces or len(faces)>200:
+        raise BadPayload('Selecciona una o varias caras planas para abrir la carcasa')
+    feature['faces'] = [validate_face(face) for face in faces]
+    feature['thickness'] = number(feature.get('thickness'),positive=True)
+    if feature.setdefault('side','INSIDE') not in ('INSIDE','OUTSIDE'):
+        raise BadPayload('El grosor de la carcasa debe ir hacia dentro o hacia fuera')
+    return feature
+
+
 def validate_helix(feature):
     """Helical sweep: `pitch` metres per turn, `turns`, hand and an in-sketch axis."""
     feature['pitch'] = number(feature.get('pitch'), positive=True)
@@ -164,11 +175,11 @@ def loads(raw):
             unique(feature['id'])
             if not isinstance(feature.get('name'),str):
                 raise ValueError('invalid feature name')
-            if feature.get('type') in FINISHES:
+            if feature.get('type') in FINISHES + ('SHELL',):
                 find(doc,'bodies',feature['body_id'])
                 if not isinstance(feature.get('enabled'),bool) or feature.get('sketch_id') is not None:
                     raise ValueError('invalid feature')
-                validate_finish(feature)
+                (validate_shell if feature['type']=='SHELL' else validate_finish)(feature)
                 seen_features.add(feature['id'])
                 continue
             if feature.get('type') == 'LOFT':
@@ -440,7 +451,7 @@ def resolve_supports(doc):
     def supported(feature_id):
         f=find(doc,'features',feature_id)
         if f.get('mirror'): raise BadPayload('Usa Boceto en cara sobre el resultado de la simetría')
-        if f['type'] in FINISHES + ('LOFT','HELIX','REVOLVE','SWEEP'):
+        if f['type'] in FINISHES + ('SHELL','LOFT','HELIX','REVOLVE','SWEEP'):
             raise BadPayload('Un redondeo o solevado no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
         if f.get('extent') in ('TO_FACE','THROUGH_ALL'):
             raise BadPayload('Una operación hasta cara o pasante no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')

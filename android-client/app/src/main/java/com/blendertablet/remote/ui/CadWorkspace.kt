@@ -102,6 +102,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     // Dibujar muestra las mismas medidas en vivo que arrastrar; se editan al soltar.
     val drawPreview = cad.sessionActive && cad.operation in listOf("LINE", "RECTANGLE", "CIRCLE", "ARC")
     val livePreview = dragPreview || drawPreview
+    val shellPreview = cad.sessionActive && cad.operation == "SHELL"
     val finishPreview = cad.sessionActive && cad.operation in listOf("FILLET", "CHAMFER")
     // Colocar un plano: el rail elige la base y la bandeja sus medidas, con preview en la vista.
     val planePreview = cad.sessionActive && cad.operation == "PLANE"
@@ -327,7 +328,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                         CadNodeAction("Seleccionar") {
                                             vm.cadTool(null); command("cad.select", "kind" to "FEATURE", "id" to feature.id)
                                         },
-                                        if (!feature.isFinish) CadNodeAction("Editar ${cad.sketches.firstOrNull { it.id == feature.sketchId }?.name ?: "boceto fuente"}") { editSketch(feature.sketchId) } else null,
+                                        if (feature.sketchId.isNotEmpty()) CadNodeAction("Editar ${cad.sketches.firstOrNull { it.id == feature.sketchId }?.name ?: "boceto fuente"}") { editSketch(feature.sketchId) } else null,
                                         if (capabilities.featureMirror && feature.type in listOf("EXTRUDE", "CUT") && !feature.isMirror)
                                             CadNodeAction("Simetría de operación", feature.enabled && !dimmed) {
                                                 vm.cadTool(null); mirrorSource = feature; mirrorPlane = "XZ"
@@ -402,6 +403,13 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 drafts["depth"]?.let { command("cad.extrude.update", "depth" to it) }
                 if (cad.canConfirm) command("cad.session.confirm")
             }
+            shellPreview -> {
+                val thickness = drafts["thickness"]
+                if (thickness != null) {
+                    drafts.remove("thickness")
+                    command("cad.shell.update", "thickness" to thickness)
+                } else if (cad.canConfirm) command("cad.session.confirm")
+            }
             finishPreview -> {
                 val width = drafts["width"]
                 if (width != null) {
@@ -419,6 +427,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                     "plane" to mirrorPlane, "offset" to (drafts["mirror_offset"] ?: 0.0))
                 mirrorSource = null
             }
+            feature?.type == "SHELL" && drafts["thickness"] != null -> command("cad.feature.set", "feature_id" to feature.id, "thickness" to drafts["thickness"])
             feature?.isFinish == true && drafts["width"] != null -> command("cad.feature.set", "feature_id" to feature.id, "width" to drafts["width"])
             pendingDimension != null -> {
                 val type = pendingDimension!!
@@ -447,12 +456,13 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     }
     fun discardValues() {
         focusManager.clearFocus()
-        if (depthPreview || finishPreview || planePreview) command("cad.session.cancel")
+        if (depthPreview || finishPreview || shellPreview || planePreview) command("cad.session.cancel")
         if (cad.selectionKind == "CONSTRAINT") command("cad.select_all", "action" to "DESELECT")
         pendingDimension = null; editingConstraint = null; offsetSource = null; mirrorSource = null; resetInputs++
     }
     val canAccept = connected && validDrafts && when {
         depthPreview -> cad.canConfirm
+        shellPreview -> cad.canConfirm || drafts["thickness"] != null
         finishPreview -> cad.canConfirm || drafts["width"] != null
         planePreview -> true
         pendingDimension != null -> true
@@ -460,7 +470,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
         else -> drafts.isNotEmpty()
     }
     val parameterScroll = rememberScrollState()
-    val hasValues = depthPreview || finishPreview || planePreview || pendingDimension != null || editingConstraint != null || entity != null || feature != null || offsetPlane != null || offsetSource != null || mirrorSource != null
+    val hasValues = depthPreview || finishPreview || shellPreview || planePreview || pendingDimension != null || editingConstraint != null || entity != null || feature != null || offsetPlane != null || offsetSource != null || mirrorSource != null
     val arcSelectionHelp = entity?.let { selected ->
         val otherArcs = cadOtherSelectedArcs(cad, selected)
         if (otherArcs.isEmpty()) null else {
@@ -495,6 +505,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                     "Extrusión · Simetría crece a los dos lados del croquis · si no, desliza en el sentido del plano · suelta para asentar"
                 else "${cadLabel(cad.operation)} · desliza en el sentido del vaciado" +
                     " · una dirección o las dos · dos dedos navegan" + if (cad.transparent) " · transparencia automática" else ""
+                shellPreview -> "Carcasa · ${cad.faceCount} caras abiertas · arrastra o escribe el grosor · ✓ lo añade a la pila"
+                feature?.type == "SHELL" -> "Carcasa · ${feature.faceCount} caras abiertas · las paredes siguen al sólido anterior"
                 finishPreview -> "${cadLabel(cad.operation)} · desliza arriba/abajo o escribe el ancho · ✓ lo añade a la pila"
                 dragPreview -> "Medidas en vivo · suelta para fijar una medida con su candado"
                 drawPreview -> "Medidas en vivo · Incremento redondea al paso y los puntos existentes atraen · suelta para editar las medidas"
@@ -549,9 +561,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 key(editScope, resetInputs) {
                     Row(Modifier.weight(1f).horizontalScroll(parameterScroll), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (cad.surface.mode != "PROFILE" || !editing) {
-                            CadSurfaceControls(cad, unit, connected && !cad.sessionActive, vm)
+                            CadSurfaceControls(cad, capabilities, unit, connected && !cad.sessionActive, vm)
                         }
-                        if (capabilities.sketchEditing && (editing || depthPreview)) {
+                        if (capabilities.sketchEditing && (editing || depthPreview || shellPreview)) {
                             SnapControl(listOf(SnapType.NONE, SnapType.INCREMENT), if (cad.increment) SnapType.INCREMENT else SnapType.NONE,
                                 { command("cad.settings", "increment" to (it == SnapType.INCREMENT)) })
                         }
@@ -719,6 +731,15 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                 minimum = if (cad.operation == "EXTRUDE") -10000.0 else .0000001, enabled = connected, onNudge = ::preview,
                                 onDone = { drafts["depth"]?.let(::preview) }) { drafts["depth"] = it }
                             }
+                        } else if (shellPreview) {
+                            fun preview(value: Double) { drafts.remove("thickness"); command("cad.shell.update", "thickness" to value) }
+                            CadDimension("Grosor", cad.thickness, unit, cad.sessionId.orEmpty(), step = cad.step,
+                                minimum = .0000001, enabled = connected, onNudge = ::preview,
+                                onDone = { drafts["thickness"]?.let(::preview) }) { drafts["thickness"] = it }
+                            CadShellSideControl(cad.side, connected && validDrafts) { side ->
+                                drafts["thickness"]?.let(::preview)
+                                command("cad.shell.update", "side" to side)
+                            }
                         } else if (finishPreview) {
                             fun preview(value: Double) { drafts.remove("width"); command("cad.finish.update", "width" to value) }
                             CadDimension("Ancho", cad.width, unit, cad.sessionId.orEmpty(), step = cad.step,
@@ -740,6 +761,16 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                 command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled)
                             }
                             CadAction("DELETE", "Borrar simetría", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
+                        } else if (feature?.type == "SHELL") {
+                            CadDimension("Grosor", drafts["thickness"] ?: feature.thickness, unit, feature.id,
+                                step = cad.step, minimum = .0000001, enabled = connected, onDone = ::acceptValues) { drafts["thickness"] = it }
+                            CadShellSideControl(feature.side, connected && validDrafts) { side ->
+                                command("cad.feature.set", "feature_id" to feature.id, "side" to side,
+                                    "thickness" to (drafts["thickness"] ?: feature.thickness))
+                                drafts.remove("thickness")
+                            }
+                            CadAction("VISIBLE", if (feature.enabled) "Ocultar" else "Mostrar", selected = feature.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled) }
+                            CadAction("DELETE", "Borrar carcasa", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
                         } else if (feature?.isFinish == true) {
                             CadDimension("Ancho", drafts["width"] ?: feature.width, unit, feature.id,
                                 step = cad.step, minimum = .0000001, enabled = connected, onDone = ::acceptValues) { drafts["width"] = it }
@@ -813,10 +844,10 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 }
                 if (hasValues && !livePreview) {
                     Spacer(Modifier.width(10.dp))
-                    RoundAction(AppIcons.cad("CANCEL"), if (depthPreview || finishPreview || planePreview) "Descartar preview" else "Descartar medidas", Ink.Bad, ::discardValues)
+                    RoundAction(AppIcons.cad("CANCEL"), if (depthPreview || finishPreview || shellPreview || planePreview) "Descartar preview" else "Descartar medidas", Ink.Bad, ::discardValues)
                     Spacer(Modifier.width(4.dp))
                     RoundAction(AppIcons.cad("FINISH"), if (planePreview) (if (cad.plane?.planeId != null) "Aplicar posición del plano" else "Crear el plano y su croquis")
-                        else if (depthPreview || finishPreview) "Confirmar ${cadLabel(cad.operation)}" else "Aplicar medidas",
+                        else if (depthPreview || finishPreview || shellPreview) "Confirmar ${cadLabel(cad.operation)}" else "Aplicar medidas",
                         if (canAccept) Ink.Ok else Ink.Faint, { if (canAccept) acceptValues() })
                 }
             }
@@ -1060,7 +1091,7 @@ internal fun cadLabel(type: String) = when (type) {
     "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "SLOT" -> "Ranura"; "GEAR" -> "Engranaje"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "POINT" -> "Punto"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
     "TANGENT" -> "Tangente (línea y arco, o dos arcos/círculos)"; "EQUAL" -> "Igualdad (tamaño del primero; en arcos también el ángulo, salvo redondeos)"; "EQUAL_ANGLE" -> "Igualdad de ángulo"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "ANGLE" -> "Ángulo"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio (punto + arista, o 3 puntos; último = medio)"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
-    "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; "REVOLVE" -> "Revolución"; "SWEEP" -> "Barrido"; else -> type
+    "SHELL" -> "Carcasa"; "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; "REVOLVE" -> "Revolución"; "SWEEP" -> "Barrido"; else -> type
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1183,11 +1214,26 @@ internal fun cadPlaneAxes(base: String?): CadPlaneAxes = when (base) {
     else -> CadPlaneAxes(listOf("U", "V"), listOf("U", "V", "normal"), "hacia fuera de la cara", "hacia dentro")
 }
 
+internal fun cadShellEnabled(cad: CadState, capabilities: CadCapabilities): Boolean =
+    "SHELL" in capabilities.features && cad.activeSketchId == null && cad.surface.selection.isNotEmpty() &&
+        cad.surface.selection.all { it.kind == "FACE" && it.planar && it.featureId != null } &&
+        cad.surface.selection.map { it.objectName }.distinct().size == 1
+
 @Composable
-private fun CadSurfaceControls(cad: CadState, unit: LengthUnit, enabled: Boolean, vm: MainViewModel) {
+private fun CadShellSideControl(side: String, enabled: Boolean, select: (String) -> Unit) {
+    listOf("INSIDE" to "Hacia dentro", "OUTSIDE" to "Hacia fuera").forEach { (value, label) ->
+        PillButton(label, selected = side == value, enabled = enabled) { select(value) }
+    }
+}
+
+@Composable
+private fun CadSurfaceControls(cad: CadState, capabilities: CadCapabilities, unit: LengthUnit, enabled: Boolean, vm: MainViewModel) {
     val edges = cad.surface.selection.isNotEmpty() && cad.surface.selection.all { it.kind == "EDGE" }
     if (cad.surface.selection.isNotEmpty()) {
         PillButton("Limpiar", enabled = enabled) { vm.cadCommand("cad.surface.clear") }
+    }
+    if (cadShellEnabled(cad, capabilities)) {
+        CadAction("SHELL", "Carcasa", enabled = enabled) { vm.cadCommand("cad.shell.begin") }
     }
     if (cad.activeSketchId == null && edges) {
         // Varias aristas del sólido se redondean o achaflanan de una vez, como un paso de la pila.
@@ -1201,6 +1247,10 @@ private fun CadSurfaceControls(cad: CadState, unit: LengthUnit, enabled: Boolean
 
 internal fun cadSurfaceSummary(cad: CadState, unit: LengthUnit): String {
     val factor = lengthFactor(unit)
+    if (cad.surface.selection.size > 2 && cad.surface.selection.all { it.kind == "FACE" }) {
+        val total = cad.surface.measurements.filter { it.unit == "AREA" }.sumOf { it.value } * factor * factor
+        return "${cad.surface.selection.size} caras · Área total: ${formatToolDistance(total, detailDecimalPlaces(total, 3))} ${unit.short}²"
+    }
     if (cad.surface.selection.size > 2 && cad.surface.selection.all { it.kind == "EDGE" }) {
         val total = cad.surface.measurements.filter { it.unit == "LENGTH" }.sumOf { it.value } * factor
         return "${cad.surface.selection.size} aristas · Longitud total: ${formatToolDistance(total, detailDecimalPlaces(total, 3))} ${unit.short}"

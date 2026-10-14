@@ -45,6 +45,8 @@ class Evaluator:
             if feature['kind']!='FEATURE' or not mirror.active(doc,feature): continue
             identifier=feature['id']; body=feature['body_id']
             previous=tips.get(body)
+            if feature['type']=='SHELL':
+                raise CommandError('Carcasa requiere el motor OpenCascade',code='cad_kernel_unsupported')
             if feature['type'] in model.FINISHES:
                 if previous is None:
                     raise CommandError('El cuerpo no tiene un sólido que redondear',code='cad_dependency')

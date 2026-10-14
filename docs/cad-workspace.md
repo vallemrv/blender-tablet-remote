@@ -624,3 +624,30 @@ valores iniciales reales y conservación del tamaño al redondear un cuadrado.
 `test_cad_surface.py` verifica selección visible real, medición en metros, proyección,
 invalidez de referencias antiguas, vuelta a 3D sin tocar el PC y orden del árbol.
 La prueba GPU comprueba el resaltado completo y su exclusión de las capturas limpias.
+
+
+## Carcasa: abrir un sólido dejando paredes
+
+En CAD 3D, elige **Caras** y toca las caras planas de una misma pieza que quieras
+abrir. Puedes acumular varias; tocar una de nuevo la retira. Pulsa **Carcasa** en
+la bandeja inferior. Esta herramienta requiere el motor **OpenCascade**.
+
+**Grosor** empieza en 2 mm. Escríbelo (admite cuentas), usa −/+ con el paso CAD o
+arrastra sobre la vista. **Hacia dentro** mantiene las medidas exteriores;
+**Hacia fuera** conserva el hueco interior y añade pared por fuera. Dos dedos
+permiten navegar. ✓ confirma con un único undo; × cancela.
+
+La operación queda en la pila como **Carcasa** y allí puedes editar su grosor y
+lado, desactivarla o borrarla. Sigue los cambios del sólido anterior. Sus caras se
+reconocen por posición y orientación; una cara paralela inequívoca puede seguir un
+cambio de altura. Si una abertura desaparece o la correspondencia resulta ambigua,
+el cambio se rechaza en vez de abrir una cara distinta.
+
+Si el grosor no cabe, se conserva el campo y aparece el error: redúcelo para
+recuperar una preview válida. Confirmar nunca acepta el resultado anterior de un
+grosor rechazado. Guardar o perder la conexión descarta la preview.
+
+El cálculo utiliza [MakeThickSolidByJoin de OpenCascade](https://occt3d.com/dev/doc/refman/html/class_b_rep_offset_a_p_i___make_thick_solid.html),
+con comprobación adicional del espesor interior para detectar paredes colapsadas.
+Con **Malla de Blender** devuelve «Carcasa requiere el motor OpenCascade» sin
+modificar la pieza. Para crear otro boceto sobre el resultado se usa **Boceto en cara**.

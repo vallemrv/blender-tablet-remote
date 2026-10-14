@@ -7,8 +7,8 @@ internal data class CadQueuedMessage(val name: String, val payload: JSONObject)
 /** Serialize CAD computations; absolute pointer samples keep only the newest unsent candidate. */
 internal class CadDepthCommandQueue {
     companion object {
-        val CANDIDATES = setOf("cad.extrude.update", "cad.finish.update", "cad.drag.update", "cad.entity.update", "cad.polygon.update")
-        private val BEGINS = setOf("cad.extrude.begin", "cad.finish.begin", "cad.drag.begin", "cad.entity.begin", "cad.polygon.begin")
+        val CANDIDATES = setOf("cad.extrude.update", "cad.finish.update", "cad.shell.update", "cad.drag.update", "cad.entity.update", "cad.polygon.update")
+        private val BEGINS = setOf("cad.extrude.begin", "cad.finish.begin", "cad.shell.begin", "cad.drag.begin", "cad.entity.begin", "cad.polygon.begin")
         fun waitsForResponse(name: String?) = name?.startsWith("cad.") == true && name != "cad.state"
     }
     private val queue = java.util.ArrayDeque<CadQueuedMessage>()
@@ -18,7 +18,9 @@ internal class CadDepthCommandQueue {
     fun add(message: CadQueuedMessage) {
         val last = queue.peekLast()
         val settle = message.payload.optBoolean("settle")
-        if (!settle && message.name in CANDIDATES && last?.name == message.name && !last.payload.optBoolean("settle")) queue.removeLast()
+        // Shell thickness and side edits are independent: never drop one for the other.
+        val sameShellFields = message.name != "cad.shell.update" || last?.payload?.keys()?.asSequence()?.toSet() == message.payload.keys().asSequence().toSet()
+        if (!settle && sameShellFields && message.name in CANDIDATES && last?.name == message.name && !last.payload.optBoolean("settle")) queue.removeLast()
         queue.addLast(message)
     }
 

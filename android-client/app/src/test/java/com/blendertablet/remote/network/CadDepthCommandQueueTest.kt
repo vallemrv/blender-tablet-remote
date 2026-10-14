@@ -5,6 +5,31 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadDepthCommandQueueTest {
+    @Test fun shellCoalescesThicknessButKeepsSideEditsAndConfirmationInOrder() {
+        val queue = CadDepthCommandQueue()
+        fun thickness(value: Double) = CadQueuedMessage("cad.shell.update", JSONObject().put("thickness", value))
+        queue.add(CadQueuedMessage("cad.shell.begin", JSONObject())); queue.poll()
+        queue.add(thickness(.003)); queue.add(thickness(.004))
+        queue.add(CadQueuedMessage("cad.shell.update", JSONObject().put("side", "OUTSIDE")))
+        queue.add(thickness(.005)); queue.add(thickness(.006))
+        queue.add(CadQueuedMessage("cad.session.confirm", JSONObject()))
+        queue.acknowledge(true)
+        assertEquals(.004, queue.poll()!!.payload.getDouble("thickness"), 1e-12)
+        queue.acknowledge(true)
+        assertEquals("OUTSIDE", queue.poll()!!.payload.getString("side"))
+        queue.acknowledge(true)
+        assertEquals(.006, queue.poll()!!.payload.getDouble("thickness"), 1e-12)
+        queue.acknowledge(false)
+        assertNull(queue.poll())
+        queue.add(thickness(.004)); queue.poll()
+        queue.add(CadQueuedMessage("cad.shell.begin", JSONObject()))
+        queue.add(thickness(.002))
+        queue.acknowledge(false)
+        assertEquals("cad.shell.begin", queue.poll()!!.name)
+        queue.acknowledge(true)
+        assertEquals(.002, queue.poll()!!.payload.getDouble("thickness"), 1e-12)
+    }
+
     private fun message(name: String, depth: Double = .02) = CadQueuedMessage(name, JSONObject().put("depth", depth))
 
     @Test fun slowServerReceivesOnlyFirstAndLatestDepthBeforeConfirmation() {

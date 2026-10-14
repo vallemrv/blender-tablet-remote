@@ -99,7 +99,7 @@ def _new_sketch(doc,payload):
     if support_id:
         feature=model.find(doc,'features',support_id)
         if feature.get('mirror'): raise BadPayload('Usa Boceto en cara sobre el resultado de la simetría')
-        if feature['type'] in model.FINISHES + ('LOFT','HELIX','REVOLVE','SWEEP') or feature.get('extent')=='TO_FACE':
+        if feature['type'] in model.FINISHES + ('SHELL','LOFT','HELIX','REVOLVE','SWEEP') or feature.get('extent')=='TO_FACE':
             raise BadPayload('Esta operación no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
         source,_=model.profile(doc,feature['profile_id'])
         plane_local=source['plane']
@@ -1044,10 +1044,95 @@ def finish_update(payload):
     return runtime.status()
 
 
+def _shell_faces():
+    """Capture selected openings in document metres, independent of object placement."""
+    runtime.require_workspace()
+    if runtime.active_sketch_id: raise BadPayload('Finaliza el boceto antes de crear una carcasa')
+    runtime.surface.validate()
+    items=runtime.surface.items
+    if not items or any(i['kind']!='FACE' or not i['planar'] for i in items):
+        raise BadPayload('Selecciona una o varias caras planas para abrir la carcasa')
+    obj=bpy.data.objects.get(items[0]['object'])
+    if obj is None or not obj.get(BODY_KEY) or any(i['object']!=obj.name for i in items):
+        raise BadPayload('Las caras deben pertenecer a una misma pieza CAD')
+    _require_reachable(runtime.doc(),obj[FEATURE_KEY])
+    from mathutils import Vector
+    inverse=obj.matrix_world.inverted_safe()
+    to_normal=obj.matrix_world.to_3x3().transposed()
+    scale=bpy.context.scene.unit_settings.scale_length
+    faces=[]
+    for item in items:
+        center=Vector(item['center'])
+        # Area centroids can lie in a hole or outside a concave face. A triangle's
+        # interior is always on the selected face; choose the nearest to its centre.
+        if item.get('triangles'):
+            centers=[sum((Vector(p) for p in tri),Vector())/3 for tri in item['triangles']]
+            center=min(centers,key=lambda p:(p-center).length_squared)
+        faces.append(model.validate_face(dict(origin=list((inverse@center)*scale),
+                                             normal=list((to_normal@Vector(item['normal'])).normalized()))))
+    return obj[BODY_KEY],faces
+
+
+def _shell_preview(session, feature):
+    preview=copy.deepcopy(session['baseline'])
+    preview['features'].append(feature)
+    if session.get('at_bar'): model.insert_after(preview,feature,runtime.bar(preview))
+    session.update(preview=preview,feature=feature,thickness=feature['thickness'],side=feature['side'],candidate=None,error=None)
+    try:
+        yield from runtime.rebuild_steps(preview,limit=feature['id'] if session.get('at_bar') else None)
+    except CommandError as exc:
+        if exc.code not in ('cad_shell_invalid','cad_reference_missing'): raise
+        session['error']=exc.message
+    else:
+        session['candidate']=feature['id']
+
+
+@command('cad.shell.begin')
+def shell_begin(payload):
+    body,faces=_shell_faces()
+    from ..cad.occt import choice
+    if choice()[0]!='OCCT':
+        raise CommandError('Carcasa requiere el motor OpenCascade',code='cad_kernel_unsupported')
+    from .units import current_scale
+    preset=current_scale()
+    initial=max(preset['snap_step']/1000,min(.002,preset['primitive_size']/5))
+    doc=runtime.doc()
+    feature=model.validate_shell(dict(id=model.uid('feature'),type='SHELL',name='Carcasa '+str(len(doc['features'])+1),
+        order=model.next_order(doc),sketch_id=None,body_id=body,enabled=True,faces=faces,
+        thickness=payload.get('thickness',initial),side=payload.get('side','INSIDE')))
+    session=runtime.begin(payload,'SHELL')
+    session.update(feature_id=feature['id'],at_bar=bool(runtime.bar(doc)))
+    try:
+        yield from _shell_preview(session,feature)
+    except Exception:
+        runtime.cancel()
+        raise
+    runtime.surface.clear()
+    runtime.selection=dict(kind='FEATURE',id=feature['id'])
+    return runtime.status()
+
+
+@command('cad.shell.update')
+def shell_update(payload):
+    session=runtime.require(payload)
+    if session['operation']!='SHELL': raise CommandError('La sesión no es una carcasa',code='wrong_tool')
+    # Share the finish gesture's step and snap policy without changing its path.
+    values={k:v for k,v in payload.items() if k not in ('width','baseline_width')}
+    if 'thickness' in payload: values['width']=payload['thickness']
+    if 'baseline_thickness' in payload: values['baseline_width']=payload['baseline_thickness']
+    thickness=_finish_step(values,dict(width=session['thickness']))
+    side=payload.get('side',session['side'])
+    if thickness==session['thickness'] and side==session['side']: return runtime.status()
+    feature=model.validate_shell(dict(copy.deepcopy(session['feature']),thickness=thickness,side=side))
+    yield from _shell_preview(session,feature)
+    return runtime.status()
+
+
 @command('cad.session.confirm')
 def confirm(payload):
     session = runtime.require(payload)
     if not session['candidate']:
+        if session['operation']=='SHELL': return runtime.status()
         runtime.cancel()
         return runtime.status()
     doc = session['preview']
@@ -1099,6 +1184,10 @@ def feature_set(payload):
             if 'width' in payload: feature['width']=payload['width']
             if 'segments' in payload: feature['segments']=payload['segments']
             model.validate_finish(feature)
+        if feature['type']=='SHELL':
+            for key in ('thickness','side'):
+                if key in payload: feature[key]=payload[key]
+            model.validate_shell(feature)
         if feature['type']=='REVOLVE':
             if 'angle' in payload: feature['angle']=payload['angle']
             if 'axis' in payload: feature['axis']=_helix_axis(model.find(doc,'sketches',feature['sketch_id']),payload['axis'])

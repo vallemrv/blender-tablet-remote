@@ -5,6 +5,22 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadParserTest {
+    @Test fun shellCapabilityPreviewAndSavedParametersReachAndroid() {
+        val capabilities = CadParser.capabilities(JSONObject("""{"version":2,"length_unit":"METERS","features":["EXTRUDE","SHELL"]}"""))
+        assertTrue("SHELL" in capabilities.features)
+        val state = CadParser.state(JSONObject("""{"version":1,"workspace":true,
+            "session":{"active":true,"id":"shell","operation":"SHELL","thickness":0.003,"side":"OUTSIDE","face_count":2,"can_confirm":false},
+            "error":"La carcasa no cabe con ese grosor; redúcelo",
+            "document":{"features":[{"id":"shell","type":"SHELL","sketch_id":null,"thickness":0.003,"side":"OUTSIDE","faces":[{},{}]}]}}"""))
+        assertEquals(.003, state.thickness, 1e-12)
+        assertEquals("OUTSIDE", state.side); assertEquals(2, state.faceCount)
+        assertFalse(state.canConfirm); assertNotNull(state.error)
+        val feature = state.features.single()
+        assertEquals(.003, feature.thickness, 1e-12)
+        assertEquals("OUTSIDE", feature.side); assertEquals(2, feature.faceCount)
+        assertTrue(feature.sketchId.isEmpty())
+    }
+
     @Test fun throughAllIsPreservedInPreviewAndSavedCut() {
         val state = CadParser.state(JSONObject("""{"version":1,"workspace":true,
             "session":{"active":true,"id":"cut","operation":"CUT","extent":"THROUGH_ALL","depth":0.002,"can_confirm":true},

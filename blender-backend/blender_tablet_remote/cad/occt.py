@@ -577,6 +577,82 @@ def helix(sketch, source, axis, pitch, turns, hand='RIGHT'):
 
 # ------------------------------------------------------------ edge finishes
 
+def _shell_faces(shape, references):
+    """Match outward planar faces by an interior point and oriented normal."""
+    from OCP.BRepAdaptor import BRepAdaptor_Surface
+    from OCP.BRepClass import BRepClass_FaceClassifier
+    from OCP.GeomAbs import GeomAbs_Plane
+    from OCP.TopAbs import TopAbs_FACE, TopAbs_REVERSED, TopAbs_IN, TopAbs_ON
+    from OCP.TopExp import TopExp_Explorer
+    from OCP.TopoDS import TopoDS
+    from OCP.gp import gp_Pnt
+    tolerance=max(_extent(shape)*2e-6,1e-5)
+    candidates=[]
+    explorer=TopExp_Explorer(shape,TopAbs_FACE)
+    while explorer.More():
+        face=TopoDS.Face(explorer.Current()); surface=BRepAdaptor_Surface(face)
+        if surface.GetType()==GeomAbs_Plane:
+            plane=surface.Plane(); normal=plane.Axis().Direction()
+            sign=-1 if face.Orientation()==TopAbs_REVERSED else 1
+            candidates.append((face,plane.Location(),[sign*normal.X(),sign*normal.Y(),sign*normal.Z()]))
+        explorer.Next()
+    selected=[]
+    for ref in references:
+        point=[v*MM for v in ref['origin']]
+        matches=[]
+        for face,origin,normal in candidates:
+            if sum(a*b for a,b in zip(normal,ref['normal']))<=.9999: continue
+            distance=sum((p-o)*n for p,o,n in zip(point,(origin.X(),origin.Y(),origin.Z()),normal))
+            projected=gp_Pnt(*(p-distance*n for p,n in zip(point,normal)))
+            if BRepClass_FaceClassifier(face,projected,tolerance).State() in (TopAbs_IN,TopAbs_ON):
+                matches.append((abs(distance),face))
+        exact=[face for distance,face in matches if distance<=tolerance]
+        # A unique parallel face follows a changed extrusion height. Ambiguous
+        # or removed faces fail rather than opening an arbitrary replacement.
+        choices=exact if exact else [face for _,face in matches]
+        if len(choices)!=1:
+            raise CommandError('No se encuentra la cara de la carcasa; vuelve a seleccionarla',code='cad_reference_missing')
+        if not any(choices[0].IsSame(face) for face in selected): selected.append(choices[0])
+    return selected,tolerance
+
+
+def shell(shape, faces, thickness, side):
+    """Hollow the current exact solid, opening the captured planar faces."""
+    from OCP.BRepOffsetAPI import BRepOffsetAPI_MakeThickSolid
+    from OCP.collections import List_TopoDS_Shape as TopTools_ListOfShape
+    selected,tolerance=_shell_faces(shape,faces)
+    removed=TopTools_ListOfShape()
+    for face in selected: removed.Append(face)
+    try:
+        builder=BRepOffsetAPI_MakeThickSolid()
+        builder.MakeThickSolidByJoin(shape,removed,(-1 if side=='INSIDE' else 1)*thickness*MM,tolerance)
+        if not builder.IsDone(): raise ValueError('No thick solid')
+        result=_valid(_clean(builder.Shape()),'cad_shell_invalid')
+        if side=='INSIDE':
+            # OCCT can return a valid but inverted offset after opposite walls
+            # cross. Verify the actual cavity stays at least `thickness` away
+            # from every retained original face, not merely BREP validity.
+            from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut
+            from OCP.BRepExtrema import BRepExtrema_DistShapeShape
+            from OCP.TopExp import TopExp_Explorer
+            from OCP.TopAbs import TopAbs_FACE
+            cavity=_valid(BRepAlgoAPI_Cut(shape,result).Shape(),'cad_shell_invalid')
+            original_volume=_volume(shape)
+            if abs(_volume(result)+_volume(cavity)-original_volume)>max(original_volume*1e-6,1e-8):
+                raise ValueError('Inward shell extends beyond the body')
+            explorer=TopExp_Explorer(shape,TopAbs_FACE)
+            while explorer.More():
+                face=explorer.Current()
+                if not any(face.IsSame(opening) for opening in selected):
+                    distance=BRepExtrema_DistShapeShape(face,cavity)
+                    if not distance.IsDone() or distance.Value()<thickness*MM-tolerance*5:
+                        raise ValueError('Offset walls cross')
+                explorer.Next()
+        return result
+    except Exception as exc:
+        raise CommandError('La carcasa no cabe con ese grosor; redúcelo',code='cad_shell_invalid') from exc
+
+
 def _match(shape, design_edges):
     """BREP edges that carry each stored design edge (segments in metres).
 
@@ -769,7 +845,12 @@ class Evaluator:
             def joined(build, base=base):
                 return lambda: _boolean('UNION', base, build()) if base is not None else _valid(build(), 'cad_profile_invalid')
             kind = feature['type']
-            if kind in model.FINISHES:
+            if kind == 'SHELL':
+                if base is None:
+                    raise CommandError('El cuerpo no tiene un sólido para crear la carcasa',code='cad_dependency')
+                store(identifier,('OCCT',kind,model.dumps(feature['faces']),feature['thickness'],feature['side'],keys.get(previous)),
+                      lambda: shell(base,feature['faces'],feature['thickness'],feature['side']))
+            elif kind in model.FINISHES:
                 if previous is None:
                     raise CommandError('El cuerpo no tiene un sólido que redondear', code='cad_dependency')
                 store(identifier, ('OCCT', kind, feature['width'], feature.get('segments', 1),

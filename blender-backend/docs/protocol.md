@@ -1472,6 +1472,29 @@ activa al crear y no ser otra simetría. Su desactivación oculta ambos resultad
 La fuente con dependientes no se puede borrar. MIRROR tiene un tipo propio para
 que complementos antiguos lo rechacen en vez de evaluarlo como otra extrusión.
 
+Carcasa se anuncia como `SHELL` en `features.cad.features`. Su nodo guarda
+`{id,type:"SHELL",name,order,sketch_id:null,body_id,enabled,faces:[{origin,normal}],thickness,side}`.
+`faces` contiene entre 1 y 200 caras planas abiertas; sus puntos interiores y normales
+están en el espacio local del documento, en metros (inversa de `matrix_world` para
+puntos, transpuesta para normales, y `scale_length` para longitudes). No guarda
+índices. Si el centro de una cara cae en un hueco, se usa un punto interior de su
+triangulación. La referencia se empareja por normal exterior y contención del punto;
+si cambia la altura, admite una única cara paralela que contenga la proyección.
+Sin coincidencia o con ambigüedad devuelve `cad_reference_missing`.
+
+`thickness` es positivo en metros; `side` es `INSIDE` (por defecto) o `OUTSIDE`.
+OpenCascade usa MakeThickSolidByJoin y verifica cierre, volumen y el espesor real
+del hueco interior. NATIVE devuelve `cad_kernel_unsupported` sin cambiar el documento.
+La sesión publica `operation:SHELL`, `thickness`, `side`, `face_count`, `can_confirm`
+y `error`. Un grosor inviable deja `candidate:null`, conserva los campos, no crea
+undo y confirmar no cierra esa sesión inválida. Una actualización válida rehabilita
+la confirmación. Cancelar, guardar o desconectar restaura el baseline.
+Cada actualización reconstruye desde ese baseline; la barra de retroceso determina
+la inserción del nodo y confirmar avanza hasta él. No tiene croquis fuente ni sirve
+como apoyo de un plano; se usa Boceto en cara para la superficie resultante.
+Android serializa sus comandos y conserva cambios de lado entre muestras de grosor;
+solo coalesce actualizaciones de Carcasa con los mismos campos.
+
 Hasta cara (`extent:TO_FACE`) termina una Extrusión/Vaciado en el plano de una cara
 plana del sólido, sondeada una sola vez en el toque `u,v` mediante `commands/snap.py`.
 El nodo guarda `to_face:{origin,normal}` en metros (marco capturado, sin índices
@@ -1540,13 +1563,15 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.polygon.close` | `{}` | Cierra la cadena con el segmento final y confirma; con menos de tres vértices responde error y conserva la sesión |
 | `cad.entity.set` | `{entity_id,values:{width?,height?,diameter?,radius?,start?,sweep?,length?,flats?,angle?,sides?,module?,teeth?,pressure?,x?,y?,x2?,y2?},constrain?:bool}` | Edita dimensiones y reconstruye dependientes; `constrain:true` acota las medidas editadas que ofrecen candado |
 | `cad.entity.delete` | `{entity_id}` o `{}` | Borra una figura completa o la selección de puntos/aristas/figuras en un undo; protege perfiles usados |
+| `cad.shell.begin` | `{thickness?,side?:"INSIDE\|OUTSIDE"}` | Carcasa sobre las caras planas seleccionadas del mismo cuerpo, en CAD 3D. Grosor inicial 0,002 m, lado INSIDE; requiere OpenCascade |
+| `cad.shell.update` | `{thickness?,side?}` o `{gesture,baseline_thickness}` | Actualiza la preview desde el baseline; comparte el paso y snap de acabados. Confirma/cancela mediante `cad.session.*` |
 | `cad.extrude.begin` | `{profile_id?,sketch_id?,depth,operation:"EXTRUDE\\|CUT",target_id?,extent?}` | Un perfil o el croquis completo; contornos exteriores como volumen e interiores como huecos. CUT exige destino. `extent` es `ONE` (defecto), `BOTH` o `THROUGH_ALL` (solo CUT); en EXTRUDE, `BOTH` es simetría a los dos lados del croquis |
 | `cad.finish.begin` | `{operation:"FILLET\|CHAMFER",width?,segments?}` | Redondea/achaflana las aristas seleccionadas del sólido (`surface` en EDGE, un mismo cuerpo) como nuevo nodo de la pila; preview reversible |
 | `cad.finish.update` | `{width}` o `{gesture,baseline_width}` o `{segments}` | Ancho exacto o delta vertical (un paso por 4 % de altura); segmentos 1–16, chaflán siempre 1. Confirmar/cancelar con `cad.session.*`; el estado de sesión publica `width` y `segments` |
 | `cad.extrude.update` | `{depth}` o `{gesture,baseline_depth}` o `{gesture_u,gesture_v,u?,v?,baseline_depth}` o `{settle}` o `{extent}` o `{extent:"TO_FACE",u,v}` | Cota exacta, también negativa en EXTRUDE (sentido contrario a la normal del plano). El gesto de lápiz sigue esa normal en pantalla y no rehace el booleano; `settle` al soltar asienta el sólido. En CUT, `extent` cambia una o dos direcciones o `THROUGH_ALL` sin confirmar. `TO_FACE` con `u,v` sondea una vez la cara plana tocada (ver «Hasta cara») |
 | `cad.session.confirm` | `{}` | Confirma candidato estable, un undo |
 | `cad.session.cancel` | `{}` | Restaura documento y geometría originales |
-| `cad.feature.set` | `{feature_id,depth?,enabled?,extent?,u?,v?,width?,segments?}` | Edita o suprime feature. `extent` en EXTRUDE/CUT: `ONE`, `BOTH`, `TO_FACE` (con `u,v` de la cara) o `THROUGH_ALL` (solo CUT); una `depth` escrita sustituye el límite automático; `width`/`segments` solo en FILLET/CHAMFER |
+| `cad.feature.set` | `{feature_id,depth?,enabled?,extent?,u?,v?,width?,segments?,thickness?,side?}` | Edita o suprime feature. `extent` en EXTRUDE/CUT: `ONE`, `BOTH`, `TO_FACE` (con `u,v` de la cara) o `THROUGH_ALL` (solo CUT); una `depth` escrita sustituye el límite automático; `width`/`segments` solo en FILLET/CHAMFER; `thickness`/`side` solo en SHELL |
 | `cad.feature.delete` | `{feature_id}` | Borra feature y resultado |
 | `cad.convert` | `{body_id}` o `{feature_id}` | Copia el cuerpo completo como malla independiente con sus modificadores, sale a Object y conserva el documento; el original queda oculto fuera de CAD |
 | `cad.settings` | `{step?,increment?,construction?,show_scene?,section?}` | Paso métrico positivo y snap, sin undo ni cambio geométrico. `section` corta el vídeo por el plano del boceto abierto (ver «Vista en sección») |

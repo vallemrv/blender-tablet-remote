@@ -155,7 +155,7 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   El kernel de malla sigue igual con la preferencia «Malla de Blender», solo mientras
   dura la migración; la suite CAD se ejecuta en ambos (`BTR_CAD_KERNEL=OCCT`).
   El solver NumPy resuelve las restricciones anunciadas, hasta 300 parámetros.
-  No anuncia STEP, el solver completo de FreeCAD ni Shell. La evaluación de
+  No anuncia STEP ni el solver completo de FreeCAD. Carcasa requiere OpenCascade. La evaluación de
   OCP/CadQuery, build123d y FreeCAD vive en `docs/cad-kernel-evaluation.md`.
 
 ## Sistema de trabajo
@@ -612,6 +612,20 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   cruza consigo mismo se rechaza pidiendo reducir el ancho. En modo Aristas la
   selección del sólido se acumula; Redondear/Chaflán abren una sesión `cad.finish.*`
   excluyente, con preview desde el baseline y un undo. No sirven de apoyo de bocetos.
+- Carcasa (`SHELL`) abre una o varias caras planas del mismo cuerpo desde la
+  bandeja de Caras, sin acción duplicada en el rail. Guarda sus puntos interiores y
+  normales en metros locales del documento, no índices. Grosor inicia en 2 mm;
+  Hacia dentro conserva el exterior y Hacia fuera conserva el interior. El gesto,
+  paso y números comparten la política de acabados; el nodo se edita en la pila.
+  OpenCascade empareja caras orientadas por geometría: primero el punto en su plano,
+  o una única cara paralela que contenga su proyección si cambió la altura. Una
+  referencia ausente/ambigua falla; no se elige otra cara por índice o proximidad.
+  Verifica también que el hueco interior respete el grosor: un BREP válido puede
+  ocultar el cruce de paredes. El kernel de malla rechaza con `cad_kernel_unsupported`.
+  La preview parte del baseline; error conserva controles y bloquea confirmación,
+  cancelar/desconectar/guardar restaura, confirmar crea un undo. Carcasa no sirve
+  como apoyo de plano; Boceto en cara captura la superficie resultante. Las caras
+  del mismo cuerpo se acumulan para elegir varias aberturas.
 - Un boceto sobre la cara superior sigue el plano/altura de su operación soporte.
   Los soportes con dependientes no se borran; crear una copia de malla conserva sus referencias.
 - La iconografía se resuelve por intención desde `ui/Iconography.kt`; las pantallas no

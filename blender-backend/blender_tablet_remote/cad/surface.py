@@ -122,8 +122,11 @@ class SurfaceSelection:
         if old: self.items.remove(old); return
         # Sketch projection keeps every reference, including across objects/kinds.
         # Two references are enough for a 3D measurement; a third starts a fresh pair.
-        # Edges accumulate: Redondear/Chaflán act on every selected edge at once.
-        if not accumulate and len(self.items)>=2 and not (item['kind']=='EDGE' and all(i['kind']=='EDGE' and i['object']==item['object'] for i in self.items)):
+        # Edge finishes and shell openings act on multiple references of one body.
+        obj=bpy.data.objects.get(item['object'])
+        shell_faces=item['kind']=='FACE' and item['planar'] and obj is not None and obj.get('btr_cad_body_id') and all(i['planar'] for i in self.items)
+        same_body_group=(item['kind']=='EDGE' or shell_faces) and all(i['kind']==item['kind'] and i['object']==item['object'] for i in self.items)
+        if not accumulate and len(self.items)>=2 and not same_body_group:
             self.clear()
         self.items.append(item)
         self._stamps[item['object']]=stamp(bpy.data.objects[item['object']])

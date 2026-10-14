@@ -7,6 +7,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadFeedbackTest {
+    @Test fun shellNeedsPlanarFacesOfOneCadBodyAndAdvertisedCapability() {
+        val capabilities = CadCapabilities(features = listOf("SHELL"))
+        val faces = listOf(CadSurfaceItem("f1", "FACE", "Caja", "extrude", true), CadSurfaceItem("f2", "FACE", "Caja", "extrude", true))
+        val cad = CadState(surface = CadSurface(mode = "FACE", selection = faces))
+        assertTrue(cadShellEnabled(cad, capabilities))
+        assertFalse(cadShellEnabled(cad, CadCapabilities()))
+        assertFalse(cadShellEnabled(cad.copy(activeSketchId = "s"), capabilities))
+        for (invalid in listOf(faces[1].copy(planar = false), faces[1].copy(kind = "EDGE"),
+            faces[1].copy(objectName = "Otra caja"), faces[1].copy(featureId = null))) {
+            assertFalse(cadShellEnabled(cad.copy(surface = cad.surface.copy(selection = listOf(faces[0], invalid))), capabilities))
+        }
+        assertFalse(cadShellEnabled(CadState(), capabilities))
+    }
+
     @Test fun filletCornersSupportDimensionsSymmetryAndMidpoints() {
         val cad = CadParser.state(JSONObject("""{"version":1,"active_sketch_id":"s","document":{"sketches":[
             {"id":"s","entities":[{"id":"a","type":"ARC","is_fillet":true},

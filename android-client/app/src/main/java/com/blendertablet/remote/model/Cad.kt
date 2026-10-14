@@ -36,7 +36,8 @@ data class CadFeature(val id: String, val name: String, val sketchId: String,
     val pitch: Double = 0.0, val turns: Double = 0.0, val hand: String = "RIGHT", val axis: String = "Y",
     val mirrorSourceId: String? = null, val mirrorPlane: String = "XZ", val mirrorOffset: Double = 0.0,
     /** Revolución (`REVOLVE`): grados alrededor de su eje (X, Y o una línea del croquis). */
-    val angle: Double = 360.0) {
+    val angle: Double = 360.0,
+    val thickness: Double = .002, val side: String = "INSIDE", val faceCount: Int = 0) {
     val isFinish get() = type in listOf("FILLET", "CHAMFER")
     val isMirror get() = mirrorSourceId != null
 }
@@ -80,6 +81,9 @@ data class CadState(
     val negativeDirection: String = "",
     val extent: String = "ONE",
     val width: Double = 0.0,
+    val thickness: Double = .002,
+    val side: String = "INSIDE",
+    val faceCount: Int = 0,
     val segments: Int = 1,
     val overlay: List<CadOverlay> = emptyList(),
     val error: String? = null,

@@ -26,7 +26,7 @@ object CadParser {
         j.optString("length_unit") != "METERS") CadCapabilities() else CadCapabilities(2,
         strings(j.optJSONArray("planes")).filter { it in listOf("XY", "XZ", "YZ") },
         strings(j.optJSONArray("entities")).filter { it in listOf("POINT", "LINE", "RECTANGLE", "CIRCLE", "ARC", "NGON", "SLOT", "GEAR", "POLYGON") },
-        strings(j.optJSONArray("features")).filter { it in listOf("EXTRUDE", "CUT", "LOFT", "HELIX", "REVOLVE", "SWEEP", "MIRROR") },
+        strings(j.optJSONArray("features")).filter { it in listOf("EXTRUDE", "CUT", "LOFT", "HELIX", "REVOLVE", "SWEEP", "MIRROR", "SHELL") },
         strings(j.optJSONArray("constraints")).filter { it in listOf("COINCIDENT", "POINT_ON_LINE", "HORIZONTAL", "VERTICAL", "PARALLEL", "PERPENDICULAR", "TANGENT", "EQUAL", "DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "ANGLE", "FIX", "MIDPOINT", "SYMMETRIC", "SYMMETRIC_LINE") },
         j.optBoolean("sketch_editing"), strings(j.optJSONArray("offset_entities")), j.optBoolean("feature_mirror"),
         j.optBoolean("edge_plane"), j.optBoolean("plane_purge"), j.optBoolean("section_view"), j.optBoolean("midpoint_points"), j.optBoolean("reference_profile"))
@@ -66,7 +66,8 @@ object CadParser {
                 it.optJSONArray("edges")?.length() ?: 0, it.optDouble("pitch", 0.0), it.optDouble("turns", 0.0),
                 it.optString("hand", "RIGHT"), it.optString("axis", "Y"),
                 it.optJSONObject("mirror")?.id("source_id"), it.optJSONObject("mirror")?.optString("plane", "XZ") ?: "XZ",
-                it.optJSONObject("mirror")?.optDouble("offset", 0.0) ?: 0.0, it.optDouble("angle", 360.0)) },
+                it.optJSONObject("mirror")?.optDouble("offset", 0.0) ?: 0.0, it.optDouble("angle", 360.0),
+                it.optDouble("thickness", .002), it.optString("side", "INSIDE"), it.optJSONArray("faces")?.length() ?: 0) },
             activeSketchId = j.id("active_sketch_id"), selectionKind = selection?.id("kind"), selectionId = selection?.id("id"),
             sessionActive = session?.optBoolean("active") == true, sessionId = session?.id("id"), canConfirm = session?.optBoolean("can_confirm", true) == true,
             canClose = session?.optBoolean("can_close") == true, operation = session?.optString("operation").orEmpty(),
@@ -76,6 +77,9 @@ object CadParser {
             width = session?.optDouble("width", 0.0)?.takeIf { it.isFinite() } ?: 0.0,
             segments = session?.optInt("segments", 1) ?: 1,
             extent = cadExtent(session?.optString("extent")),
+            thickness = session?.optDouble("thickness", .002) ?: .002,
+            side = session?.optString("side", "INSIDE") ?: "INSIDE",
+            faceCount = session?.optInt("face_count", 0) ?: 0,
             overlay = objects(j.optJSONArray("overlay")).map { item ->
                 val points = item.optJSONArray("points")
                 CadOverlay(item.optString("id"), if (points == null) emptyList() else (0 until points.length()).mapNotNull { index ->
