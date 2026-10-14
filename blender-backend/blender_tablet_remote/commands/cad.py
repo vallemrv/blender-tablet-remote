@@ -701,10 +701,12 @@ def _depth_value(session, payload):
     return depth
 
 
-def _extent(value):
+def _extent(value, operation):
     value=str(value or 'ONE').upper()
-    if value not in ('ONE','BOTH','TO_FACE'):
-        raise BadPayload('La extensión debe ser una dirección, dos o hasta una cara')
+    if value not in ('ONE','BOTH','TO_FACE','THROUGH_ALL'):
+        raise BadPayload('La extensión debe ser una dirección, dos, hasta una cara o perforar todo')
+    if value=='THROUGH_ALL' and operation!='CUT':
+        raise BadPayload('Perforar todo solo está disponible en Vaciado')
     return value
 
 
@@ -738,7 +740,7 @@ def extrude_begin(payload):
     _require_reachable(doc,sketch['id'])
     operation=str(payload.get('operation','EXTRUDE')).upper()
     if operation not in ('EXTRUDE','CUT'): raise BadPayload('Operación CAD no compatible')
-    extent=_extent(payload.get('extent','ONE'))
+    extent=_extent(payload.get('extent','ONE'),operation)
     if extent=='TO_FACE': raise BadPayload('Empieza la extrusión y después toca la cara donde termina')
     target=None
     if operation=='CUT':
@@ -916,7 +918,9 @@ def extrude_update(payload):
         raise CommandError('La sesión no es una extrusión',code='wrong_tool')
     if 'extent' in payload and session['operation'] not in ('EXTRUDE','CUT'):
         raise BadPayload('Solo extruir o vaciar eligen una dirección o dos')
-    extent=_extent(payload['extent']) if 'extent' in payload else session.get('extent','ONE')
+    extent=_extent(payload['extent'],session['operation']) if 'extent' in payload else session.get('extent','ONE')
+    if extent=='THROUGH_ALL' and 'depth' in payload and 'extent' not in payload:
+        extent='ONE'
     if extent=='TO_FACE':
         # Only an explicit choice samples the tap; pen samples carry u/v too.
         if 'extent' in payload and 'u' in payload and 'v' in payload: face=_face_target(payload)
@@ -931,9 +935,9 @@ def extrude_update(payload):
                         extrusion_cache=session['extrusion_cache'])
         session.update(preview=preview,depth=feature['depth'],extent='TO_FACE',to_face=face)
         return runtime.status()
-    stylus = 'gesture_u' in payload or 'gesture_v' in payload
-    settle = bool(payload.get('settle'))
-    depth = _depth_value(session, payload)
+    stylus = extent!='THROUGH_ALL' and ('gesture_u' in payload or 'gesture_v' in payload)
+    settle = extent!='THROUGH_ALL' and bool(payload.get('settle'))
+    depth = session['depth'] if extent=='THROUGH_ALL' else _depth_value(session, payload)
     if not settle and depth == session['depth'] and extent == session.get('extent','ONE'):
         return runtime.status()
     preview = copy.deepcopy(session['preview'])
@@ -1107,13 +1111,13 @@ def feature_set(payload):
         if 'depth' in payload:
             if feature['type'] not in ('EXTRUDE','CUT'): raise BadPayload('Esta operación no tiene profundidad')
             feature['depth'] = _depth_value(dict(operation=feature['type'], depth=feature['depth'], preview=doc), dict(depth=payload['depth']))
-            if 'extent' not in payload and feature.get('extent')=='TO_FACE':
-                # A written depth replaces the face.
+            if 'extent' not in payload and feature.get('extent') in ('TO_FACE','THROUGH_ALL'):
+                # A written depth replaces the automatic limit.
                 feature['extent']='ONE'; feature.pop('to_face',None)
         if 'extent' in payload:
             if feature['type'] not in ('EXTRUDE','CUT'):
                 raise BadPayload('Solo extruir o vaciar eligen una dirección o dos')
-            extent=_extent(payload['extent'])
+            extent=_extent(payload['extent'],feature['type'])
             if extent=='TO_FACE': _reach_face(doc,feature,face)
             else: feature['extent']=extent; feature.pop('to_face',None)
         if 'enabled' in payload:
@@ -1799,7 +1803,7 @@ def _face_plane(doc, frame, source, offset=0.):
                translation=[0,0,offset],rotation=[0,0,0],face_frame=frame)
     feature=next((f for f in doc['features'] if f['id']==source['feature_id']),None)
     candidates=[node for node in reversed(model.history(doc)) if node['kind']=='FEATURE' and node['enabled'] and not node.get('mirror') and
-                node['type'] in ('EXTRUDE','CUT') and node.get('extent')!='TO_FACE' and
+                node['type'] in ('EXTRUDE','CUT') and node.get('extent') not in ('TO_FACE','THROUGH_ALL') and
                 feature and node['body_id']==feature['body_id'] and node['id'] in _reachable_ids(doc)]
     for support in candidates:
         source_sketch=model.find(doc,'sketches',support['sketch_id']); base=model.frame(source_sketch)

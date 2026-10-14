@@ -125,7 +125,7 @@ class Evaluator:
                        keys.get(previous),feature.get('mirror'))
             cached=self._solids.get(identifier)
             if cached is None or cached[0]!=model.dumps(signature):
-                operand=extrusion_operand(extrusion_cache,sketch,entity,feature)
+                operand=extrusion_operand(extrusion_cache,sketch,entity,feature,solids.get(previous))
                 if feature.get('mirror'): operand=mirror.solid(operand,feature['mirror'])
                 if previous:
                     operand=kernel.cut(solids[previous],operand) if cut else kernel.union(solids[previous],operand)

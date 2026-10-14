@@ -276,11 +276,25 @@ def _translated(shape, vector):
     return _transformed(shape, trsf)
 
 
-def operand(sketch, source, feature):
+def operand(sketch, source, feature, base=None):
     """Tool solid of an extrusion or cut before it joins or leaves its body."""
     faces = _faces(sketch, source)
     normal = model.frame(sketch)['normal']
     extent = feature.get('extent', 'ONE')
+    if extent == 'THROUGH_ALL':
+        from itertools import product
+        from OCP.Bnd import Bnd_Box
+        from OCP.BRepBndLib import BRepBndLib
+        from .kernel import through_depth
+        if base is None:
+            raise CommandError('No hay sólido para perforar', code='cad_dependency')
+        box = Bnd_Box()
+        BRepBndLib.Add_s(base, box)
+        low, high = box.CornerMin(), box.CornerMax()
+        corners = list(product((low.X()/MM, high.X()/MM), (low.Y()/MM, high.Y()/MM), (low.Z()/MM, high.Z()/MM)))
+        depth = through_depth(sketch, corners, feature.get('mirror'))*MM
+        moved = [_translated(f, [-c*depth for c in normal]) for f in faces]
+        return _prism(moved, [c*2*depth for c in normal])
     if extent == 'TO_FACE':
         return _to_face(sketch, source, faces, feature['to_face'])
     depth = feature['depth']*MM
@@ -792,7 +806,7 @@ class Evaluator:
                 if cut and base is None:
                     raise CommandError('El cuerpo no tiene un sólido para vaciar', code='cad_dependency')
                 def tool(sketch=sketch, entity=entity, feature=feature):
-                    shape = operand(sketch, entity, feature)
+                    shape = operand(sketch, entity, feature, base)
                     return _mirrored(shape, feature['mirror']) if feature.get('mirror') else shape
                 store(identifier, ('OCCT', feature['profile_id'], kind, depth, feature.get('extent', 'ONE'),
                                    feature.get('to_face'), sketch_key(sketch), keys.get(previous), feature.get('mirror')),

@@ -333,6 +333,19 @@ class CadRuntime:
                 bpy.data.meshes.remove(old)
         return obj
 
+    def _through_base(self, doc, feature):
+        """Evaluated body immediately before a through cut, including prior unions."""
+        if feature.get('extent') != 'THROUGH_ALL':
+            return None
+        from . import mirror
+        previous = None
+        for node in model.history(doc):
+            if node['id'] == feature['id']:
+                break
+            if node['kind']=='FEATURE' and mirror.active(doc,node) and node.get('body_id') == feature['body_id'] and node['id'] in self._solids:
+                previous = self._solids[node['id']]
+        return previous
+
     def fast_depth(self, session):
         """Move the prism with the stylus. The exact boolean waits until the pen lifts.
 
@@ -345,7 +358,8 @@ class CadRuntime:
         sketch, entity = model.profile(doc, feature['profile_id'])
         cut = feature['type'] == 'CUT'
         signed = -feature['depth'] if cut else feature['depth']
-        vertices, faces = extrusion_operand(session['extrusion_cache'], sketch, entity, feature)
+        base = self._through_base(doc, feature)
+        vertices, faces = extrusion_operand(session['extrusion_cache'], sketch, entity, feature, base[1] if base else None)
         scale = max(float(bpy.context.scene.unit_settings.scale_length), 1e-12)
         vertices = [tuple(c / scale for c in v) for v in vertices]
         previous = None
@@ -639,13 +653,15 @@ class CadRuntime:
         matrix=body.matrix_world.copy() if body is not None else None
         scale=max(float(bpy.context.scene.unit_settings.scale_length),1e-12)
         extent=feature.get('extent','ONE')
+        base=self._through_base(doc,feature)
         key=(model.dumps(sketch),feature['profile_id'],feature['depth'],extent,model.dumps(feature.get('to_face')),model.dumps(feature.get('mirror')),scale,
+             base[0] if base else None,
              tuple(tuple(row) for row in matrix) if matrix is not None else None)
         cached=session.get('ghost')
         if cached and cached['key']==key:
             return cached
         from mathutils.geometry import tessellate_polygon
-        vertices,faces=extrusion_operand(session['extrusion_cache'],sketch,entity,feature)
+        vertices,faces=extrusion_operand(session['extrusion_cache'],sketch,entity,feature,base[1] if base else None)
         if feature.get('mirror'):
             from . import mirror
             vertices,faces=mirror.solid((vertices,faces),feature['mirror'])

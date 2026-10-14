@@ -84,9 +84,27 @@ def face_travel(sketch, to_face):
     return (Vector(to_face['origin']) - Vector(basis['origin'])).dot(plane) / facing
 
 
-def operand(cache, sketch, source, feature):
+def through_depth(sketch, vertices, reflection=None):
+    """Half-length enclosing the current body along the sketch normal, in metres."""
+    if not vertices:
+        raise CommandError('No hay sólido para perforar', code='cad_dependency')
+    if reflection:
+        from . import mirror
+        vertices = [mirror.point(v, reflection) for v in vertices]
+    basis = frame(sketch)
+    origin, normal = Vector(basis['origin']), Vector(basis['normal'])
+    depth = max(abs((Vector(v)-origin).dot(normal)) for v in vertices)
+    span = max(max(v[i] for v in vertices)-min(v[i] for v in vertices) for i in range(3))
+    margin = max(max(depth,span)*1e-4, 1e-7)
+    return depth+margin
+
+
+def operand(cache, sketch, source, feature, base=None):
     """Tool solid of an extrusion or cut before it joins or leaves its body."""
     extent = feature.get('extent', 'ONE')
+    if extent == 'THROUGH_ALL':
+        depth = through_depth(sketch, base[0] if base else [], feature.get('mirror'))
+        return cache.extrude(sketch, source, depth, symmetric=True)
     if extent == 'TO_FACE':
         return cache.extrude(sketch, source, 0, to_face=feature['to_face'])
     depth = feature['depth']

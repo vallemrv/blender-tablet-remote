@@ -490,6 +490,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 state.cadFacePick != null -> "Hasta cara: toca la cara plana donde termina · su plano corta la extrusión, también inclinado · vuelve a pulsar para cancelar"
                 pendingDimension == "FILLET" -> "Redondeo: varias esquinas, el rectángulo entero o líneas unidas · un radio para todas · tras el primero, toca otra esquina"
                 drafts.isNotEmpty() && !depthPreview -> "Medidas pendientes · ✓ aplica los cambios · × descarta"
+                depthPreview && cad.extent == "THROUGH_ALL" -> "Perforar todo · atraviesa el cuerpo completo · se adapta si cambia el grosor · dos dedos navegan"
                 depthPreview -> if (cad.operation == "EXTRUDE")
                     "Extrusión · Simetría crece a los dos lados del croquis · si no, desliza en el sentido del plano · suelta para asentar"
                 else "${cadLabel(cad.operation)} · desliza en el sentido del vaciado" +
@@ -695,8 +696,14 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             PillButton("Hasta cara", selected = cad.extent == "TO_FACE" || state.cadFacePick == "SESSION", enabled = connected) {
                                 vm.cadPickEndFace(if (state.cadFacePick == "SESSION") null else "SESSION")
                             }
+                            if (cad.operation == "CUT") PillButton("Perforar todo", selected = cad.extent == "THROUGH_ALL" && state.cadFacePick == null, enabled = connected) {
+                                focusManager.clearFocus(); drafts.remove("depth")
+                                command("cad.extrude.update", "extent" to "THROUGH_ALL")
+                            }
                             if (cad.extent == "TO_FACE") {
                                 Text("Termina en la cara elegida", color = Ink.Muted, fontSize = 12.sp)
+                            } else if (cad.extent == "THROUGH_ALL") {
+                                Text("Todo el grosor", color = Ink.Muted, fontSize = 12.sp)
                             } else {
                             if (cad.operation == "EXTRUDE" && cad.extent != "BOTH" && cad.positiveDirection.isNotEmpty()) {
                                 val magnitude = kotlin.math.abs(cad.depth).coerceAtLeast(cad.step)
@@ -789,8 +796,13 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                 PillButton("Hasta cara", selected = selected.extent == "TO_FACE" || state.cadFacePick == selected.id, enabled = connected) {
                                     vm.cadPickEndFace(if (state.cadFacePick == selected.id) null else selected.id)
                                 }
+                                if (selected.type == "CUT") PillButton("Perforar todo", selected = selected.extent == "THROUGH_ALL" && state.cadFacePick == null, enabled = connected) {
+                                    focusManager.clearFocus(); drafts.remove("depth")
+                                    command("cad.feature.set", "feature_id" to selected.id, "extent" to "THROUGH_ALL")
+                                }
                             }
                             if (selected.extent == "TO_FACE") Text("Termina en la cara elegida", color = Ink.Muted, fontSize = 12.sp)
+                            else if (selected.extent == "THROUGH_ALL") Text("Todo el grosor", color = Ink.Muted, fontSize = 12.sp)
                             else CadDimension("Profundidad", drafts["depth"] ?: selected.depth, unit, selected.id,
                                 step = cad.step, minimum = if (selected.type == "EXTRUDE") -10000.0 else .0000001,
                                 enabled = connected, onDone = ::acceptValues) { drafts["depth"] = it }

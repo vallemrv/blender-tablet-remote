@@ -5,6 +5,15 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadParserTest {
+    @Test fun throughAllIsPreservedInPreviewAndSavedCut() {
+        val state = CadParser.state(JSONObject("""{"version":1,"workspace":true,
+            "session":{"active":true,"id":"cut","operation":"CUT","extent":"THROUGH_ALL","depth":0.002,"can_confirm":true},
+            "document":{"features":[{"id":"cut","type":"CUT","extent":"THROUGH_ALL","depth":0.002}]}}"""))
+        assertEquals("THROUGH_ALL", state.extent)
+        assertEquals("THROUGH_ALL", state.features.single().extent)
+        assertTrue(state.canConfirm)
+    }
+
     @Test fun planeSessionAndLineAngleOfferAreRead() {
         val state = CadParser.state(JSONObject("""{"version":1,"workspace":true,
             "session":{"active":true,"id":"p","operation":"PLANE","plane":{"base":"XZ","plane_id":null,"offset":0.02,

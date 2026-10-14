@@ -578,6 +578,12 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   avanza por pasos enteros durante el trazo y redondea ese asiento; las
   cotas escritas son exactas. Vaciar crece a un lado del
   croquis (`ONE`) o a los dos (`BOTH`); la profundidad es la de cada lado.
+  «Perforar todo» (`THROUGH_ALL`, solo CUT) calcula en cada evaluación un prisma
+  que abarca el cuerpo acumulado a ambos lados del croquis, con margen. Conserva
+  la cota manual al volver a ONE/BOTH; no ofrece campo ni gesto de profundidad
+  mientras está activo. Funciona con ambos kernels, perfiles con huecos, simetrías
+  y cambios del grosor anterior; su fantasma usa el mismo cuerpo y no anuncia tapa
+  de fondo ni apoyo de plano. Una profundidad explícita vuelve a ONE.
   Vaciar consume su sólido
   destino en el árbol y reconstruye desde los parámetros. Solo el volumen del
   vaciado activo es translúcido: un fantasma dibujado en GPUOffScreen, sin rayos X

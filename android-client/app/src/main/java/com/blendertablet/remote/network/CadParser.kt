@@ -124,4 +124,4 @@ object CadParser {
     }
 }
 
-private fun cadExtent(value: String?) = if (value == "BOTH" || value == "TO_FACE") value else "ONE"
+private fun cadExtent(value: String?) = if (value == "BOTH" || value == "TO_FACE" || value == "THROUGH_ALL") value else "ONE"

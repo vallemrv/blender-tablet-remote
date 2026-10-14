@@ -212,8 +212,10 @@ def loads(raw):
                 raise ValueError('invalid feature')
             feature['depth'] = depth
             feature.setdefault('extent', 'ONE')
-            if feature['extent'] not in ('ONE', 'BOTH', 'TO_FACE'):
+            if feature['extent'] not in ('ONE', 'BOTH', 'TO_FACE', 'THROUGH_ALL'):
                 raise ValueError('invalid feature extent')
+            if feature['extent'] == 'THROUGH_ALL' and feature.get('operation',feature['type']) != 'CUT':
+                raise ValueError('through all requires a cut')
             if feature['extent'] == 'TO_FACE':
                 feature['to_face'] = validate_face(feature.get('to_face'))
             else:
@@ -440,8 +442,8 @@ def resolve_supports(doc):
         if f.get('mirror'): raise BadPayload('Usa Boceto en cara sobre el resultado de la simetría')
         if f['type'] in FINISHES + ('LOFT','HELIX','REVOLVE','SWEEP'):
             raise BadPayload('Un redondeo o solevado no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
-        if f.get('extent')=='TO_FACE':
-            raise BadPayload('Una extrusión hasta cara no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
+        if f.get('extent') in ('TO_FACE','THROUGH_ALL'):
+            raise BadPayload('Una operación hasta cara o pasante no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
         source=find(doc,'sketches',f['sketch_id']); resolve(source)
         result=copy.deepcopy(frame(source))
         depth=f['depth'] if f['type']=='EXTRUDE' else 0

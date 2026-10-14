@@ -406,6 +406,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     return
                 }
                 if (cad.sessionActive && cad.operation in listOf("EXTRUDE", "CUT")) {
+                    if (cad.extent == "THROUGH_ALL") {
+                        cadStroke = false; cadGestureMode = null
+                        return
+                    }
                     cadStroke = true; cadGestureMode = "DEPTH"; cadDepthStart = cad.depth
                     return
                 }

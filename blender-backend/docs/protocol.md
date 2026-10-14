@@ -1482,6 +1482,16 @@ si no, se rechaza sin cambios. `depth` conserva el recorrido en el origen del cr
 (solo informativo). La simetría copia `to_face` y lo refleja con el operando. Una
 extrusión hasta cara no sirve de apoyo de bocetos; `ONE`/`BOTH` o una `depth`
 escrita retiran la cara.
+Perforar todo (`extent:THROUGH_ALL`, solo CUT) atraviesa el cuerpo acumulado
+a ambos lados del croquis siguiendo su normal. Cada evaluación calcula el alcance
+desde los límites del sólido anterior, con margen: no persiste una profundidad
+artificial ni depende del grosor inicial. Respeta perfiles completos, huecos y
+simetrías; no crea una tapa de fondo. `depth` conserva la última cota manual para
+volver a `ONE`/`BOTH`. Los gestos y `settle` no alteran un corte pasante; una
+`depth` explícita sin `extent` vuelve a `ONE`. El fantasma usa el mismo cuerpo
+anterior y el cambio se confirma/cancela con el ciclo de sesión habitual.
+Una operación pasante no sirve como apoyo de plano: se usa Boceto en cara.
+
 Las magnitudes y planos usan los metros/ejes del documento CAD; las matrices de
 colocación del objeto Blender siguen aplicándose al resultado completo.
 `mode.set {mode:CAD}` activa el espacio CAD (Blender permanece en Object).
@@ -1530,13 +1540,13 @@ es +Z para XY, −Y para XZ y +X para YZ.
 | `cad.polygon.close` | `{}` | Cierra la cadena con el segmento final y confirma; con menos de tres vértices responde error y conserva la sesión |
 | `cad.entity.set` | `{entity_id,values:{width?,height?,diameter?,radius?,start?,sweep?,length?,flats?,angle?,sides?,module?,teeth?,pressure?,x?,y?,x2?,y2?},constrain?:bool}` | Edita dimensiones y reconstruye dependientes; `constrain:true` acota las medidas editadas que ofrecen candado |
 | `cad.entity.delete` | `{entity_id}` o `{}` | Borra una figura completa o la selección de puntos/aristas/figuras en un undo; protege perfiles usados |
-| `cad.extrude.begin` | `{profile_id?,sketch_id?,depth,operation:"EXTRUDE\\|CUT",target_id?,extent?}` | Un perfil o el croquis completo; contornos exteriores como volumen e interiores como huecos. CUT exige destino. `extent` es `ONE` (defecto) o `BOTH`; en EXTRUDE, `BOTH` es simetría a los dos lados del croquis |
+| `cad.extrude.begin` | `{profile_id?,sketch_id?,depth,operation:"EXTRUDE\\|CUT",target_id?,extent?}` | Un perfil o el croquis completo; contornos exteriores como volumen e interiores como huecos. CUT exige destino. `extent` es `ONE` (defecto), `BOTH` o `THROUGH_ALL` (solo CUT); en EXTRUDE, `BOTH` es simetría a los dos lados del croquis |
 | `cad.finish.begin` | `{operation:"FILLET\|CHAMFER",width?,segments?}` | Redondea/achaflana las aristas seleccionadas del sólido (`surface` en EDGE, un mismo cuerpo) como nuevo nodo de la pila; preview reversible |
 | `cad.finish.update` | `{width}` o `{gesture,baseline_width}` o `{segments}` | Ancho exacto o delta vertical (un paso por 4 % de altura); segmentos 1–16, chaflán siempre 1. Confirmar/cancelar con `cad.session.*`; el estado de sesión publica `width` y `segments` |
-| `cad.extrude.update` | `{depth}` o `{gesture,baseline_depth}` o `{gesture_u,gesture_v,u?,v?,baseline_depth}` o `{settle}` o `{extent}` o `{extent:"TO_FACE",u,v}` | Cota exacta, también negativa en EXTRUDE (sentido contrario a la normal del plano). El gesto de lápiz sigue esa normal en pantalla y no rehace el booleano; `settle` al soltar asienta el sólido. En CUT, `extent` cambia una o dos direcciones sin confirmar. `TO_FACE` con `u,v` sondea una vez la cara plana tocada (ver «Hasta cara») |
+| `cad.extrude.update` | `{depth}` o `{gesture,baseline_depth}` o `{gesture_u,gesture_v,u?,v?,baseline_depth}` o `{settle}` o `{extent}` o `{extent:"TO_FACE",u,v}` | Cota exacta, también negativa en EXTRUDE (sentido contrario a la normal del plano). El gesto de lápiz sigue esa normal en pantalla y no rehace el booleano; `settle` al soltar asienta el sólido. En CUT, `extent` cambia una o dos direcciones o `THROUGH_ALL` sin confirmar. `TO_FACE` con `u,v` sondea una vez la cara plana tocada (ver «Hasta cara») |
 | `cad.session.confirm` | `{}` | Confirma candidato estable, un undo |
 | `cad.session.cancel` | `{}` | Restaura documento y geometría originales |
-| `cad.feature.set` | `{feature_id,depth?,enabled?,extent?,u?,v?,width?,segments?}` | Edita o suprime feature. `extent` en EXTRUDE/CUT: `ONE`, `BOTH` o `TO_FACE` (con `u,v` de la cara); una `depth` escrita sustituye la cara; `width`/`segments` solo en FILLET/CHAMFER |
+| `cad.feature.set` | `{feature_id,depth?,enabled?,extent?,u?,v?,width?,segments?}` | Edita o suprime feature. `extent` en EXTRUDE/CUT: `ONE`, `BOTH`, `TO_FACE` (con `u,v` de la cara) o `THROUGH_ALL` (solo CUT); una `depth` escrita sustituye el límite automático; `width`/`segments` solo en FILLET/CHAMFER |
 | `cad.feature.delete` | `{feature_id}` | Borra feature y resultado |
 | `cad.convert` | `{body_id}` o `{feature_id}` | Copia el cuerpo completo como malla independiente con sus modificadores, sale a Object y conserva el documento; el original queda oculto fuera de CAD |
 | `cad.settings` | `{step?,increment?,construction?,show_scene?,section?}` | Paso métrico positivo y snap, sin undo ni cambio geométrico. `section` corta el vídeo por el plano del boceto abierto (ver «Vista en sección») |
@@ -1766,7 +1776,7 @@ límite del proceso auxiliar devuelve `cad_worker_failed` y conserva el último 
 publicado. No cambia el formato del documento, las longitudes ni los IDs de selección.
 
 `document.revision` aumenta con cada transacción confirmada y vuelve al valor
-correspondiente al usar undo/redo. `session.depth` y `session.extent` (`ONE`, `BOTH` o `TO_FACE`) describen la preview de EXTRUDE/CUT y
+correspondiente al usar undo/redo. `session.depth` y `session.extent` (`ONE`, `BOTH`, `TO_FACE` o `THROUGH_ALL`) describen la preview de EXTRUDE/CUT y
 `session.can_confirm` exige un candidato no degenerado. Una cadena cerrada de
 líneas/arcos no ramificada forma un perfil; las redes cruzadas no se subdividen
 en regiones implícitas. Los vaciados sin intersección o que eliminan todo el

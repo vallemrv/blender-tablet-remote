@@ -94,7 +94,10 @@ def surfaces(doc, body_id, scale):
         f = model.frame(sketch)
         origin, fx, fy, fn = (Vector(f[k]) for k in ('origin', 'x', 'y', 'normal'))
         depth = feature['depth']
-        if feature.get('extent') == 'TO_FACE':
+        if feature.get('extent') == 'THROUGH_ALL':
+            # A through bore has side surfaces only, never a bottom cap.
+            levels = ()
+        elif feature.get('extent') == 'TO_FACE':
             # The far cap lies on the captured face plane, inclined or not.
             end = feature['to_face']; levels = (0.,)
             result.append(('PLANE', Vector(end['normal']), Vector(end['origin']).dot(Vector(end['normal']))/scale))

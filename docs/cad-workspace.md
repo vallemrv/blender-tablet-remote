@@ -429,7 +429,11 @@ Referencia de organización: [lista de operaciones plegable de Onshape](https://
    operación de soporte. Dibujar el hueco y finalizar el boceto.
 6. Seleccionar ese perfil, elegir el sólido **Destino** y pulsar **Vaciar**.
    La profundidad entra en dirección contraria a la normal del boceto. El lápiz,
-   paso y botones funcionan como en Extruir. Puede atravesar toda la pieza.
+   paso y botones funcionan como en Extruir. **Perforar todo** atraviesa el cuerpo
+   completo siguiendo la normal del boceto, a ambos lados, sin escribir una
+   profundidad. Se adapta al cambiar el grosor y también está disponible al editar
+   un vaciado ya creado. **Una dirección** o **Dos direcciones** recuperan la cota
+   manual anterior.
 7. Durante el vaciado solo el material retirado se ve translúcido, en rojo y con
    sus aristas, a través de la pieza. El sólido y el resto de la escena conservan
    su sombreado opaco. Confirmar/cancelar retira el fantasma automáticamente.
