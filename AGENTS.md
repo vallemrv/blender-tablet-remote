@@ -152,7 +152,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   Los booleanos prueban primero una tolerancia difusa de 1e-5 de la pieza, porque
   los documentos traen ruido micrométrico; el exacto y otra mayor son reservas.
   Las caras coplanares se unifican solo si el resultado sigue siendo válido; si
-  la limpieza invalida una unión válida se conserva el BREP previo. Las aristas
+  la limpieza invalida una unión o un redondeo/chaflán válido se conserva el BREP
+  previo. Los acabados nunca aceptan un resultado nativo inválido como reserva. Las aristas
   se emparejan por geometría (rectas sobre su recta infinita con solape).
   `cad/evaluation.py` y las operaciones de sólido de malla están retirados.
   `cad/kernel.py` conserva utilidades geométricas compartidas y `ExtrusionPreviewCache`,

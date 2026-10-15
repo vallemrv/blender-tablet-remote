@@ -119,6 +119,46 @@ class OcctKernelTests(unittest.TestCase):
         area = sum(e['width']*e['height'] for e in model.closed_entities(sketch))
         self.assertAlmostEqual(volume-before, area*height, delta=1e-10)
 
+    def test_connected_support_keeps_valid_r2_when_face_unification_fails(self):
+        # Captured planes carry float32 noise. Unifying the *other* faces after
+        # finishing these edges used to reject every hole and concave junction.
+        from OCP.BRepCheck import BRepCheck_Analyzer
+        doc=model.loads((Path(__file__).parent/'fixtures'/'cad_finish_connected_support.json').read_text())
+        def circle(center, axes):
+            points=[tuple(center[j]+.002*(math.cos(i*math.tau/64)*axes[0][j]+math.sin(i*math.tau/64)*axes[1][j])
+                          for j in range(3)) for i in range(64)]
+            return [[list(a),list(b)] for a,b in zip(points,points[1:]+points[:1])]
+        cases={
+            'base hole':circle((.0275,-.02,.006),((1,0,0),(0,1,0))),
+            'support hole':circle((-.0025,-.025,.009),((1,0,0),(0,0,1))),
+            'lower junction':[[[.0035,-.025,.006],[.0035,-.012,.006]]],
+            'step junction':[[[-.0225,-.025,.01],[-.0225,.025,.01]]],
+            'rear junction':[[[-.00841608,.012,.01],[-.00841608,.025,.01]]],
+        }
+        for label,edge in cases.items():
+            with self.subTest(edge=label):
+                evaluator,result=self.evaluate(doc)
+                shape=evaluator._shapes[result['tips']['body']][1]
+                finished=occt.finish_edges(shape,[edge],.002,4)
+                self.assertTrue(BRepCheck_Analyzer(finished).IsValid())
+                self.assertGreater(occt._volume(finished),0)
+                delta=occt._volume(finished)-occt._volume(shape)
+                self.assertLess(delta,0) if 'hole' in label else self.assertGreater(delta,0)
+                # Exercise the evaluator and display contract, not just MakeFillet.
+                feature=dict(id='r2',type='FILLET',name='R2',order=8,body_id='body',sketch_id=None,
+                             enabled=True,edges=[edge],width=.002,segments=4)
+                result=evaluator.evaluate(dict(doc,features=doc['features']+[feature]))
+                self.assertEqual(result['tips']['body'],'r2')
+                self.assertTrue(result['display']['body'][1][1])
+
+    def test_finish_still_rejects_an_invalid_native_result(self):
+        doc=model.loads((Path(__file__).parent/'fixtures'/'cad_finish_connected_support.json').read_text())
+        evaluator,result=self.evaluate(doc)
+        shape=evaluator._shapes[result['tips']['body']][1]
+        # An impossible radius cannot be made acceptable by retaining the raw BREP.
+        with self.assertRaises(CommandError):
+            occt.finish_edges(shape,[[[[.0035,-.025,.006],[.0035,-.012,.006]]]],.1,4)
+
     def test_lateral_junction_takes_an_exact_fillet(self):
         evaluator, result = self.evaluate(ELBOW)
         shape = evaluator._shapes[next(iter(result['tips'].values()))][1]

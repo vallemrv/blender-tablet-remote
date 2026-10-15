@@ -1,0 +1,424 @@
+{
+  "version": 1,
+  "id": "finish_regression",
+  "revision": 0,
+  "bodies": [
+    {
+      "id": "body",
+      "name": "Test support"
+    }
+  ],
+  "sketches": [
+    {
+      "id": "sketch1",
+      "name": "sketch1",
+      "plane": "XY",
+      "offset": 0,
+      "plane_id": "plane1",
+      "body_id": "body",
+      "order": 1,
+      "entities": [
+        {
+          "id": "e1_1",
+          "type": "LINE",
+          "construction": false,
+          "x": -0.02749999999416016,
+          "y": -0.024999999999999998,
+          "x2": 0.027500000002837997,
+          "y2": -0.024999999999999998
+        },
+        {
+          "id": "e1_2",
+          "type": "LINE",
+          "construction": false,
+          "x": 0.032499999999999994,
+          "y": -0.019999999998109554,
+          "x2": 0.032499999999999994,
+          "y2": 0.02000000000139244
+        },
+        {
+          "id": "e1_3",
+          "type": "LINE",
+          "construction": false,
+          "x": 0.02749999999713063,
+          "y": 0.024999999999999998,
+          "x2": -0.02750000000291637,
+          "y2": 0.024999999999999998
+        },
+        {
+          "id": "e1_4",
+          "type": "LINE",
+          "construction": false,
+          "x": -0.032499999999999994,
+          "y": 0.020000000000564934,
+          "x2": -0.032499999999999994,
+          "y2": -0.020000000004253966
+        },
+        {
+          "id": "e1_5",
+          "type": "ARC",
+          "construction": false,
+          "x": -0.027499999999999997,
+          "y": -0.020000000000000004,
+          "radius": 0.005,
+          "start": 180.00000004874676,
+          "sweep": 90.00000001817284
+        },
+        {
+          "id": "e1_6",
+          "type": "ARC",
+          "construction": false,
+          "x": 0.027499999999999993,
+          "y": -0.02,
+          "radius": 0.005,
+          "start": -89.99999996747887,
+          "sweep": 89.9999999891418
+        },
+        {
+          "id": "e1_7",
+          "type": "ARC",
+          "construction": false,
+          "x": 0.027499999999999993,
+          "y": 0.019999999999999997,
+          "radius": 0.005,
+          "start": 1.595620944146836e-08,
+          "sweep": 90.00000001692428
+        },
+        {
+          "id": "e1_8",
+          "type": "ARC",
+          "construction": false,
+          "x": -0.027499999999999993,
+          "y": 0.019999999999999997,
+          "radius": 0.005,
+          "start": 90.00000003341914,
+          "sweep": 89.99999996010712
+        },
+        {
+          "id": "e1_9",
+          "type": "CIRCLE",
+          "construction": false,
+          "x": -0.027499999999999997,
+          "y": -0.020000000000000004,
+          "diameter": 0.0039999999997502
+        },
+        {
+          "id": "e1_10",
+          "type": "CIRCLE",
+          "construction": false,
+          "x": 0.027499999999999993,
+          "y": 0.019999999999999997,
+          "diameter": 0.003999999999750199
+        },
+        {
+          "id": "e1_11",
+          "type": "CIRCLE",
+          "construction": false,
+          "x": 0.027499999999999993,
+          "y": -0.02,
+          "diameter": 0.0039999999997502
+        },
+        {
+          "id": "e1_12",
+          "type": "CIRCLE",
+          "construction": false,
+          "x": -0.027499999999999993,
+          "y": 0.019999999999999997,
+          "diameter": 0.003999999999766079
+        }
+      ],
+      "constraints": []
+    },
+    {
+      "id": "sketch2",
+      "name": "sketch2",
+      "plane": "XY",
+      "offset": 0,
+      "plane_id": "plane2",
+      "body_id": "body",
+      "order": 3,
+      "entities": [
+        {
+          "id": "e2_1",
+          "type": "CIRCLE",
+          "construction": false,
+          "x": -0.0023917455971241004,
+          "y": -7.873401046246201e-05,
+          "diameter": 0.02000000000000001
+        },
+        {
+          "id": "e2_2",
+          "type": "LINE",
+          "construction": true,
+          "x": 0.02760825678706169,
+          "y": 0.024921264499425888,
+          "x2": -0.027391742914915085,
+          "y2": 0.024921264499425888
+        },
+        {
+          "id": "e2_3",
+          "type": "CIRCLE",
+          "construction": false,
+          "x": -0.0023917455971241004,
+          "y": -7.873401046246157e-05,
+          "diameter": 0.026
+        },
+        {
+          "id": "e2_4",
+          "type": "LINE",
+          "construction": true,
+          "x": -0.0323917455971241,
+          "y": 0.01992126740515232,
+          "x2": -0.0323917455971241,
+          "y2": -0.020078735426068306
+        },
+        {
+          "id": "e2_5",
+          "type": "LINE",
+          "construction": true,
+          "x": -0.0323917455971241,
+          "y": -7.873401045799216e-05,
+          "x2": 0.027999999997778902,
+          "y2": -7.873401045799243e-05
+        }
+      ],
+      "constraints": []
+    },
+    {
+      "id": "sketch3",
+      "name": "sketch3",
+      "plane": "XY",
+      "offset": 0,
+      "plane_id": "plane3",
+      "body_id": "body",
+      "order": 6,
+      "entities": [
+        {
+          "id": "e3_1",
+          "type": "LINE",
+          "construction": true,
+          "x": 0.027499999850988388,
+          "y": 0.0029999997932463884,
+          "x2": -0.0325000025331974,
+          "y2": 0.0029999997932463884
+        },
+        {
+          "id": "e3_2",
+          "type": "CIRCLE",
+          "construction": true,
+          "x": -0.002500002533197405,
+          "y": 0.005999999793322163,
+          "diameter": 0.012
+        },
+        {
+          "id": "e3_3",
+          "type": "LINE",
+          "construction": false,
+          "x": -0.0325000025331974,
+          "y": 0.0029999997932463884,
+          "x2": 0.0034999974668025965,
+          "y2": 0.0029999997932463884
+        },
+        {
+          "id": "e3_4",
+          "type": "LINE",
+          "construction": false,
+          "x": 0.0034999974668025965,
+          "y": 0.0029999997932463884,
+          "x2": 0.0034999974668025965,
+          "y2": 0.006000002478349563
+        },
+        {
+          "id": "e3_5",
+          "type": "LINE",
+          "construction": false,
+          "x": -0.0225000025331974,
+          "y": 0.011999999793322164,
+          "x2": -0.032500002533197396,
+          "y2": 0.011999999793322164
+        },
+        {
+          "id": "e3_6",
+          "type": "LINE",
+          "construction": false,
+          "x": -0.0325000025331974,
+          "y": 0.011999999793322162,
+          "x2": -0.0325000025331974,
+          "y2": 0.0029999997932463884
+        },
+        {
+          "id": "e3_7",
+          "type": "LINE",
+          "construction": false,
+          "x": -0.022500002533197408,
+          "y": 0.00699999999631214,
+          "x2": -0.008416082281985449,
+          "y2": 0.00699999999631214
+        },
+        {
+          "id": "e3_8",
+          "type": "LINE",
+          "construction": false,
+          "x": -0.0225000025331974,
+          "y": 0.011999999793322164,
+          "x2": -0.022500002533197408,
+          "y2": 0.00699999999631214
+        },
+        {
+          "id": "e3_9",
+          "type": "ARC",
+          "construction": false,
+          "x": -0.002500002533197405,
+          "y": 0.005999999793322163,
+          "radius": 0.006,
+          "start": 2.564012298523936e-05,
+          "sweep": 170.4059041671085
+        },
+        {
+          "id": "e3_10",
+          "type": "CIRCLE",
+          "construction": false,
+          "x": -0.002500002533197405,
+          "y": 0.005999999793322163,
+          "diameter": 0.004
+        }
+      ],
+      "constraints": []
+    }
+  ],
+  "planes": [
+    {
+      "id": "plane1",
+      "name": "plane1",
+      "base": "XY",
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "id": "plane2",
+      "name": "plane2",
+      "base": "XY",
+      "implicit": true,
+      "translation": [
+        -0.00010825663775904104,
+        7.873358117649332e-05,
+        0.0
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "support_id": "feature1"
+    },
+    {
+      "id": "plane3",
+      "name": "plane3",
+      "base": "XY",
+      "implicit": true,
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0
+      ],
+      "face_frame": {
+        "origin": [
+          0.0,
+          -0.02500000037252903,
+          0.0029999997932463884
+        ],
+        "x": [
+          1.0,
+          0.0,
+          -0.0
+        ],
+        "y": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "normal": [
+          0.0,
+          -1.0,
+          0.0
+        ]
+      }
+    }
+  ],
+  "features": [
+    {
+      "id": "feature1",
+      "name": "feature1",
+      "type": "EXTRUDE",
+      "order": 2,
+      "sketch_id": "sketch1",
+      "profile_id": "profile_sketch1",
+      "depth": 0.006,
+      "enabled": true,
+      "body_id": "body",
+      "extent": "ONE"
+    },
+    {
+      "id": "feature2",
+      "name": "feature2",
+      "type": "EXTRUDE",
+      "order": 4,
+      "sketch_id": "sketch2",
+      "profile_id": "profile_sketch2",
+      "depth": 0.034,
+      "enabled": true,
+      "body_id": "body",
+      "extent": "ONE"
+    },
+    {
+      "id": "feature3",
+      "name": "feature3",
+      "type": "CUT",
+      "order": 5,
+      "sketch_id": "sketch2",
+      "profile_id": "profile_e2_1",
+      "depth": 0.016,
+      "enabled": true,
+      "body_id": "body",
+      "extent": "ONE",
+      "target_id": "feature2"
+    },
+    {
+      "id": "feature4",
+      "name": "feature4",
+      "type": "EXTRUDE",
+      "order": 7,
+      "sketch_id": "sketch3",
+      "profile_id": "profile_sketch3",
+      "depth": -0.05000000074505806,
+      "enabled": true,
+      "body_id": "body",
+      "extent": "TO_FACE",
+      "to_face": {
+        "origin": [
+          0.0,
+          0.02500000037252903,
+          0.0029999997932463884
+        ],
+        "normal": [
+          0.0,
+          1.0,
+          0.0
+        ]
+      }
+    }
+  ]
+}

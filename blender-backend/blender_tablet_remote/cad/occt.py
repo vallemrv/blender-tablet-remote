@@ -867,7 +867,13 @@ def finish_edges(shape, edges, width, segments):
         ok, result = False, None
     if not ok:
         raise CommandError('El redondeo no cabe en esas aristas; reduce el ancho', code='cad_finish_invalid')
-    return _valid(_clean(result), 'cad_finish_invalid')
+    try:
+        return _valid(_clean(result), 'cad_finish_invalid')
+    except (CommandError, RuntimeError):
+        # Unifying nearly coincident faces can invalidate a perfectly valid
+        # fillet, just as it can invalidate a boolean. Retain the exact BREP
+        # produced by the finish; never accept an invalid result from either.
+        return _valid(result, 'cad_finish_invalid')
 
 
 # ------------------------------------------------------------- tessellation
