@@ -750,12 +750,17 @@ def extrude_begin(payload):
     if operation=='CUT':
         target=model.find(doc,'features',payload.get('target_id'))
         if not target['enabled']: raise BadPayload('El sólido destino está desactivado')
+        target_body=payload.get('target_body_id') or target['body_id']
+        if target_body!=target['body_id']:
+            derived=model.find(doc,'bodies',target_body)
+            if derived.get('source',{}).get('feature_id')!=target['id']:
+                raise BadPayload('El sólido destino no pertenece a ese cuerpo')
     bar = runtime.bar(doc)
     session = runtime.begin(payload,operation)
     from ..cad.kernel import ExtrusionPreviewCache
     session['extrusion_cache'] = ExtrusionPreviewCache()
     feature = dict(id=model.uid('feature'),name=('Vaciado ' if operation=='CUT' else 'Extrusión ')+str(len(doc['features'])+1),
-                   type=operation,order=model.next_order(doc),sketch_id=sketch['id'],profile_id='profile_'+e['id'],depth=depth,enabled=True,body_id=target['body_id'] if target else sketch['body_id'])
+                   type=operation,order=model.next_order(doc),sketch_id=sketch['id'],profile_id='profile_'+e['id'],depth=depth,enabled=True,body_id=target_body if target else sketch['body_id'])
     feature['extent']=extent
     if target: feature['target_id']=target['id']
     preview = copy.deepcopy(session['baseline'])
@@ -1259,6 +1264,7 @@ def feature_delete(payload):
         _require_reachable(doc,feature['id'])
         _require_no_dependents(doc,feature['id'])
         doc['features'].remove(feature)
+        doc['bodies']=[b for b in doc['bodies'] if b.get('source',{}).get('feature_id')!=feature['id']]
     yield from runtime.transaction_steps(payload,change,'CAD eliminar extrusión')
     runtime.selection = None
     return runtime.status()
@@ -1298,6 +1304,9 @@ def convert(payload):
 
 
 def _require_no_dependents(doc, identifier):
+    from ..cad.split import require_empty
+    for body in doc['bodies']:
+        if body.get('source',{}).get('feature_id')==identifier: require_empty(doc,body)
     if any(f.get('tool_body_id')==identifier for f in doc['features']):
         raise CommandError('El cuerpo se usa como herramienta de una combinación',code='cad_dependency')
     if any(identifier in f.get('source_ids',[]) or f.get('mirror',{}).get('source_id')==identifier for f in doc['features']):
@@ -1860,7 +1869,7 @@ def plane_set(payload):
 def plane_purge(payload):
     """Remove every plane no sketch uses, in one undo."""
     def change(doc):
-        used={s.get('plane_id') for s in doc['sketches']}
+        used={s.get('plane_id') for s in doc['sketches']} | {f['plane'] for f in doc['features'] if f['type']=='SPLIT' and isinstance(f['plane'],str)}
         unused=[p for p in doc['planes'] if p['id'] not in used]
         if not unused: raise CommandError('No hay planos sin usar',code='nothing_to_purge')
         doc['planes']=[p for p in doc['planes'] if p['id'] in used]
@@ -1886,7 +1895,8 @@ def surface_select(payload):
     last=runtime.surface.items[-1] if runtime.surface.items else None
     runtime.selection=dict(kind='SURFACE',id=last['id'],feature_id=last['feature_id']) if last else None
     if last and last['feature_id'] and not runtime.active_sketch_id:
-        runtime.active_body_id=model.find(runtime.doc(),'features',last['feature_id']).get('body_id')
+        obj=bpy.data.objects.get(last['object'])
+        runtime.active_body_id=obj.get(BODY_KEY) if obj else model.find(runtime.doc(),'features',last['feature_id']).get('body_id')
     return runtime.status()
 
 
@@ -1902,9 +1912,11 @@ def _face_plane(doc, frame, source, offset=0.):
     plane=dict(id=model.uid('plane'),name='Cara de '+source['object'],base='XY',implicit=True,
                translation=[0,0,offset],rotation=[0,0,0],face_frame=frame)
     feature=next((f for f in doc['features'] if f['id']==source['feature_id']),None)
+    source_obj=bpy.data.objects.get(source['object'])
+    body=source_obj.get(BODY_KEY) if source_obj else (feature.get('body_id') if feature else None)
     candidates=[node for node in reversed(model.history(doc)) if node['kind']=='FEATURE' and node['enabled'] and not node.get('mirror') and
                 node['type'] in ('EXTRUDE','CUT') and node.get('extent') not in ('TO_FACE','THROUGH_ALL') and
-                feature and node['body_id']==feature['body_id'] and node['id'] in _reachable_ids(doc)]
+                feature and node['body_id']==body and node['id'] in _reachable_ids(doc)]
     for support in candidates:
         source_sketch=model.find(doc,'sketches',support['sketch_id']); base=model.frame(source_sketch)
         normal=Vector(base['normal'])
@@ -1915,7 +1927,7 @@ def _face_plane(doc, frame, source, offset=0.):
             plane['translation']=[delta.dot(Vector(base['x'])),delta.dot(Vector(base['y'])),offset]
             plane['rotation']=[0.,0.,math.degrees(math.atan2(Vector(frame['x']).dot(Vector(base['y'])),Vector(frame['x']).dot(Vector(base['x']))))]
             break
-    return plane,(feature.get('body_id') if feature else None)
+    return plane,body
 
 
 @command('cad.sketch.on_face')
@@ -1983,6 +1995,25 @@ def _plane_preview(session):
     plane,body=_session_plane(doc,session)
     model.validate_plane(plane)
     p=session['plane']
+    if session['operation']=='SPLIT':
+        from ..cad import split
+        # Resolve a saved datum without editing it, or capture the placed plane.
+        if p.get('plane_id'):
+            doc['planes']=[plane if q['id']==plane['id'] else q for q in doc['planes']]
+        else: doc['planes'].append(plane)
+        model.resolve_supports(doc)
+        frame=plane['frame']
+        feature=copy.deepcopy(session['feature'])
+        feature['plane']=model.validate_face(frame)
+        feature['offset']=0.
+        # Preserve association with a saved plane; session offset is relative to its original pose.
+        if p.get('plane_id') and p['tilt']==session['initial_plane']['tilt'] and p['shift']==session['initial_plane']['shift']:
+            feature['plane']=p['plane_id']; feature['offset']=p['offset']-session['initial_plane']['offset']
+        doc=copy.deepcopy(session['baseline']);doc['features'].append(feature)
+        if session.get('bar'):model.insert_after(doc,feature,session['bar'])
+        split.validate(doc,feature);split.sync_body(doc,feature)
+        session.update(preview=doc,feature=feature,candidate=None,plane_frame=frame,shift_axes=_shift_axes(session,frame),error=None)
+        return
     if p.get('plane_id'):
         doc['planes']=[plane if q['id']==plane['id'] else q for q in doc['planes']]
         model.resolve_supports(doc)
@@ -2069,16 +2100,36 @@ def plane_begin(payload):
     runtime.surface.validate()
     if base=='EDGE' or (not plane_id and runtime.surface.straight_edge() is not None):
         edge=(runtime.surface.edge_frame(),copy.deepcopy(runtime.surface.items[0]))
-    session=runtime.begin(payload,'PLANE')
+    splitting=payload.get('split_body_id')
+    if splitting:
+        model.find(runtime.doc(),'bodies',splitting)
+        if face is None and runtime.surface.status()['can_sketch']:
+            face=(runtime.surface.face_frame(),copy.deepcopy(runtime.surface.items[0]))
+        if not plane_id and base in model.PLANES:
+            from mathutils import Vector
+            obj=next((o for o in runtime.objects(runtime.doc()) if o.get(BODY_KEY)==splitting),None)
+            if obj is not None:
+                center=sum((Vector(p) for p in obj.bound_box),Vector())/8
+                params['offset']=center.dot(Vector(model.base_frame(base)['normal']))*bpy.context.scene.unit_settings.scale_length
+    session=runtime.begin(payload,'SPLIT' if splitting else 'PLANE')
     session.update(plane=params,face=face,edge=edge)
+    if splitting:
+        doc=session['baseline'];identifier=model.uid('feature');bar=runtime.bar(doc)
+        session.update(initial_plane=copy.deepcopy(params),feature_id=identifier,bar=bar,at_bar=bool(bar),
+                       feature=dict(id=identifier,type='SPLIT',name='Partir cuerpo '+str(len(doc['features'])+1),
+                                    sketch_id=None,body_id=splitting,enabled=True,order=model.next_order(doc),
+                                    keep=payload.get('keep','BOTH'),derived_body_id=model.uid('body')))
+        if runtime.active_sketch_id:runtime.solid_view()
+        runtime.active_body_id=splitting
     _plane_preview(session)
+    if splitting:yield from _split_rebuild(session)
     return runtime.status()
 
 
 @command('cad.plane.update')
 def plane_update(payload):
     session=runtime.require(payload)
-    if session['operation']!='PLANE': raise CommandError('La sesión no coloca un plano',code='wrong_tool')
+    if session['operation'] not in ('PLANE','SPLIT'): raise CommandError('La sesión no coloca un plano',code='wrong_tool')
     p=dict(session['plane'],tilt=list(session['plane']['tilt']),shift=list(session['plane']['shift']))
     if 'base' in payload:
         base=str(payload['base']).upper()
@@ -2122,11 +2173,23 @@ def plane_update(payload):
         if runtime.increment: value=round(value/runtime.step)*runtime.step
         if index is None: p['offset']=value
         else: p['shift'][index]=value
+    if session['operation']=='SPLIT' and 'keep' in payload:session['feature']['keep']=payload['keep']
     previous=session['plane']; session['plane']=p
     try: _plane_preview(session)
     except (BadPayload,CommandError):
         session['plane']=previous; _plane_preview(session); raise
+    if session['operation']=='SPLIT':yield from _split_rebuild(session)
     return runtime.status()
+
+
+def _split_rebuild(session):
+    try:
+        yield from runtime.rebuild_steps(session['preview'],limit=session['feature_id'] if session.get('bar') else None)
+    except CommandError as exc:
+        if exc.code in ('cad_cancelled','cad_kernel_missing'):raise
+        session.update(error=exc.message,candidate=None)
+    else:
+        session.update(candidate=session['feature_id'],error=None)
 
 
 @command('cad.reference.project')

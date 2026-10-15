@@ -1070,3 +1070,11 @@ no quedan archivos o referencias temporales.
   El evaluador usa el estado de la herramienta en ese punto del historial y rechaza
   ciclos incluso indirectos. keep_tool:false oculta la herramienta consumida, sin
   borrarla; los cuerpos usados quedan protegidos frente a borrado.
+
+- Partir (`SPLIT`) reutiliza la sesión de colocación de planos, con `split_body_id`.
+  Conserva BELOW en el original y, con BOTH, crea un cuerpo `source:{feature_id,
+  side:ABOVE}` que sigue al original y admite su propia pila. El corte no se
+  aproxima: OpenCascade intersecta semiespacios planos exactos. El sólido inicial
+  derivado se cachea por ID de cuerpo; su tip público es el SPLIT. Desactivar o
+  retroceder antes del corte retira sus derivados; no se elimina una mitad con
+  operaciones. Los planos guardados invalidan la caché por su marco resuelto.

@@ -243,6 +243,8 @@ def loads(raw):
             seen_features.add(feature['id'])
         for index,node in enumerate(history(doc),1):
             find(doc,'sketches' if node['kind']=='SKETCH' else 'features',node['id']).setdefault('order',index)
+        from .split import validate_sources
+        validate_sources(doc)
         resolve_supports(doc)
         return doc
     except (ValueError, TypeError, KeyError, CommandError) as exc:
@@ -498,6 +500,8 @@ def resolve_supports(doc):
         finish(sketch)
     for plane in doc.get('planes',[]): resolve_plane(plane)
     for sketch in doc['sketches']: resolve(sketch)
+    from .split import validate_sources
+    validate_sources(doc)
 
 
 def sketch_visible(doc, sketch):

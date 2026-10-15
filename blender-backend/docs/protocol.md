@@ -2212,3 +2212,26 @@ traslación en metros que captura la colocación relativa. `cad.operation.update
 Se evalúan ambos cuerpos en el punto de la pila, no con su resultado futuro.
 keep_tool:false oculta su objeto sin eliminar el documento. Ciclos entre cuerpos
 y borrado de una herramienta usada responden cad_dependency.
+
+### CAD SPLIT
+
+Capacidad `cad.features: SPLIT`. `cad.plane.begin` acepta `split_body_id` y
+`keep: BOTH|ABOVE|BELOW` (BOTH inicial); `base` y `plane_id` son los del colocador.
+`cad.plane.update` conserva offset/tilt/shift/gestos y admite `keep`.
+La sesión es `SPLIT`, publica `session.plane` y `operation_controls`; el plano
+se dibuja en GPUOffScreen. Confirmar/cancelar usan `cad.session.*`.
+
+Nodo: `{id,type:SPLIT,name,order,body_id,sketch_id:null,enabled,plane,offset,keep}`.
+`plane` es un ID de plano guardado o `{origin,normal}` en metros; `offset` sigue
+su normal. BOTH añade `derived_body_id` y un cuerpo con
+`source:{feature_id,side:ABOVE}`. El cuerpo inicial conserva BELOW; el derivado
+arranca desde ABOVE y admite su propia pila. El evaluador publica su tip inicial
+como el SPLIT fuente, y conserva internamente su sólido inicial por ID de cuerpo.
+La caché incluye el marco resuelto. La barra anterior al corte oculta al derivado.
+`cad.feature.set` edita `offset`, `keep` y `enabled`; eliminar dependencias o
+retirar una mitad con operaciones falla con `cad_dependency`.
+
+Vaciar una mitad derivada sin operaciones propias usa `cad.extrude.begin` con
+`target_id` del SPLIT fuente y `target_body_id` de esa mitad. El backend comprueba
+su asociación y conserva el target_id real como dependencia; no persiste IDs de
+operaciones ficticias. Sin target_body_id se mantiene el destino habitual.

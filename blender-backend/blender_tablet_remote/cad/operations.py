@@ -1,15 +1,16 @@
 """Parameters and tray descriptors for new CAD features, independent of Compose."""
-from . import document as model, holes, pattern, combine
+from . import document as model, holes, pattern, combine, split
 from ..errors import BadPayload
 
-TYPES=('HOLE','PATTERN','COMBINE')
-LABELS={'HOLE':'Taladro','PATTERN':'Patrón','COMBINE':'Combinar cuerpos'}
+TYPES=('HOLE','PATTERN','COMBINE','SPLIT')
+LABELS={'HOLE':'Taladro','PATTERN':'Patrón','COMBINE':'Combinar cuerpos','SPLIT':'Partir cuerpo'}
 
 
 def validate(doc, feature):
     if feature['type']=='HOLE': return holes.validate(doc,feature)
     if feature['type']=='PATTERN': return pattern.validate(doc,feature)
     if feature['type']=='COMBINE': return combine.validate(doc,feature)
+    if feature['type']=='SPLIT': return split.validate(doc,feature)
     raise ValueError('Unsupported feature')
 
 
@@ -17,7 +18,7 @@ def update(doc, feature, payload):
     if 'enabled' in payload:
         if not isinstance(payload['enabled'],bool): raise BadPayload('enabled debe ser booleano')
         feature['enabled']=payload['enabled']
-    fields={'HOLE':holes.FIELDS,'PATTERN':pattern.FIELDS,'COMBINE':combine.FIELDS}.get(feature['type'],())
+    fields={'HOLE':holes.FIELDS,'PATTERN':pattern.FIELDS,'COMBINE':combine.FIELDS,'SPLIT':split.FIELDS}.get(feature['type'],())
     for key in fields:
         if key in payload: feature[key]=payload[key]
     if feature['type']=='PATTERN' and any('axis_'+k in payload for k in ('x','y','z')):
@@ -25,7 +26,9 @@ def update(doc, feature, payload):
         for i,k in enumerate(('x','y','z')):
             if 'axis_'+k in payload:origin[i]=model.number(payload['axis_'+k])
         feature['axis_origin']=origin
-    return validate(doc,feature)
+    result=validate(doc,feature)
+    if feature['type']=='SPLIT': split.sync_body(doc,feature)
+    return result
 
 
 def number(feature, key, label, step, minimum=1e-7, unit='LENGTH', maximum=10000):
@@ -38,6 +41,9 @@ def select(feature, key, label, options):
 
 def controls(doc, feature, step):
     fields=[]; typ=feature['type']
+    if typ=='SPLIT':
+        fields=[select(feature,'keep','Conservar',{'BOTH':'Ambas mitades','ABOVE':'Encima','BELOW':'Debajo'}),
+                number(feature,'offset','Separación del corte',step,-10000)]
     if typ=='HOLE':
         fields=[select(feature,'size','Métrica',{s:s.replace('.',',') for s in holes.TABLE}),select(feature,'kind','Tipo',holes.KINDS)]
         if feature['kind']!='INSERT':

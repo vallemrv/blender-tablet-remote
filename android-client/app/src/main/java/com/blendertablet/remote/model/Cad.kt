@@ -47,7 +47,7 @@ data class CadOverlay(val id: String, val points: List<Pair<Float, Float>>, val 
     val label: String? = null, val labelPoint: Pair<Float, Float>? = null, val labelOffset: Float = 14f,
     val kind: String = "ENTITY", val labelBox: List<Float> = emptyList(),
     val dimensionLines: List<List<Pair<Float, Float>>> = emptyList(), val arrows: List<List<Pair<Float, Float>>> = emptyList())
-data class CadBody(val id: String, val name: String)
+data class CadBody(val id: String, val name: String, val sourceFeatureId: String? = null)
 /** Interactive plane: base XY/XZ/YZ/FACE, separation along its normal (m), tilt (°) and in-plane shift (m). */
 data class CadPlaneSession(val base: String, val planeId: String?, val offset: Double, val tilt: List<Double>,
     val shift: List<Double>, val positiveLabel: String, val negativeLabel: String)

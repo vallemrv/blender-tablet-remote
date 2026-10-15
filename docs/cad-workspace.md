@@ -686,3 +686,18 @@ la pieza usada; desactivarlo la oculta sin borrarla. ✓ confirma, × restaura.
 Los cambios paramétricos de la herramienta actualizan el resultado. Su colocación
 relativa se captura al elegirla; **Tocar pieza herramienta** permite capturar de
 nuevo su colocación tras moverla en Object. No se permiten ciclos entre cuerpos.
+
+### Partir cuerpo
+
+El menú del cuerpo ofrece **Partir por plano**. Usa las flechas, Separación y las
+inclinaciones de la colocación de planos para situar el corte; también admite un
+plano guardado. Conservar elige ambas mitades, encima o debajo. La preview se
+recalcula en OpenCascade y ✓ guarda un solo undo. Un corte sin volumen muestra
+el error y permite corregir la posición; cancelar restaura el cuerpo.
+
+`SPLIT` conserva la mitad inferior en el cuerpo original y crea, con Ambas, otro
+cuerpo cuya fuente es la mitad superior de esa operación. Sigue los cambios del
+original y admite bocetos y operaciones propios. No se puede borrar el corte ni
+retirar esa mitad mientras tenga dependientes. El plano guardado conserva su
+asociación si solo se cambia la separación; cambiar su inclinación captura un
+marco independiente. El nodo permite editar separación y mitades conservadas.

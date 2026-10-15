@@ -80,11 +80,17 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     val barPos = cad.rollbackId?.let { id -> cad.history.indexOfFirst { it.id == id } }?.takeIf { it >= 0 }
     fun behindBar(nodeId: String) = barPos != null && cad.history.indexOfFirst { it.id == nodeId } > barPos
     var cutTarget by remember(cad.documentId) { mutableStateOf<String?>(null) }
-    val targets = cad.features.filter { it.enabled && !behindBar(it.id) }.groupBy { it.bodyId }.values.map { body ->
+    val operatedTargets = cad.features.filter { it.enabled && !behindBar(it.id) }.groupBy { it.bodyId }.values.map { body ->
         body.maxBy { feature -> cad.history.indexOfFirst { it.id == feature.id } }
     }
-    LaunchedEffect(cad.selectedFeature?.id) { cad.selectedFeature?.let { cutTarget = it.id } }
-    val target = targets.firstOrNull { it.id == cutTarget } ?: targets.singleOrNull()
+    val targets = operatedTargets + cad.bodies.filter { body -> operatedTargets.none { it.bodyId == body.id } }.mapNotNull { body ->
+        cad.features.firstOrNull { it.id == body.sourceFeatureId && it.enabled && !behindBar(it.id) }?.copy(bodyId = body.id, name = body.name)
+    }
+    LaunchedEffect(cad.selectedFeature?.id) { cad.selectedFeature?.let { cutTarget = it.bodyId } }
+    LaunchedEffect(cad.selectedSketch?.bodyId) {
+        cad.bodies.firstOrNull { it.id == cad.selectedSketch?.bodyId && it.sourceFeatureId != null }?.let { cutTarget = it.id }
+    }
+    val target = targets.firstOrNull { it.bodyId == cutTarget } ?: targets.singleOrNull()
     val editing = cad.activeSketchId != null
     val selectedSketch = cad.selectedSketch
     val bodyHistory = cad.history.filter { cad.activeBodyId == null || it.bodyId == cad.activeBodyId }
@@ -106,7 +112,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     val shellPreview = cad.sessionActive && cad.operation == "SHELL"
     val finishPreview = cad.sessionActive && cad.operation in listOf("FILLET", "CHAMFER")
     // Colocar un plano: el rail elige la base y la bandeja sus medidas, con preview en la vista.
-    val planePreview = cad.sessionActive && cad.operation == "PLANE"
+    val planePreview = cad.sessionActive && cad.operation in listOf("PLANE", "SPLIT")
     val availableHeight = (LocalConfiguration.current.screenHeightDp - 320).coerceAtLeast(100).dp
     fun command(name: String, vararg values: Pair<String, Any?>) { if (connected) vm.cadCommand(name, mapOf(*values)) }
     fun editSketch(sketchId: String) {
@@ -118,7 +124,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
         vm.cadTool(null)
         command("cad.extrude.begin", "profile_id" to cad.selectionId.takeIf { cad.selectionKind == "PROFILE" },
             "sketch_id" to cad.selectionId.takeIf { cad.selectionKind == "SKETCH" }, "depth" to cad.step * 10,
-            "operation" to operation, "target_id" to target?.id)
+            "operation" to operation, "target_id" to target?.id, "target_body_id" to target?.bodyId)
     }
     if (planePreview) ToolRail(Modifier.align(Alignment.CenterStart).padding(start = Metrics.EdgeMargin, top = 120.dp, bottom = 160.dp).heightIn(max = availableHeight)) {
         val plane = cad.plane
@@ -282,6 +288,10 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             DropdownMenuItem(text = { Text("Copia editable · Edición / Escultura") },
                                 enabled = connected && !cad.sessionActive && targets.any { it.bodyId == cad.activeBodyId },
                                 onClick = { bodiesOpen = false; command("cad.convert", "body_id" to cad.activeBodyId) })
+                            if ("SPLIT" in capabilities.features) DropdownMenuItem(text = { Text("Partir por plano") },
+                                leadingIcon = { Icon(AppIcons.cad("SPLIT"), null) },
+                                enabled = connected && !cad.sessionActive,
+                                onClick = { bodiesOpen = false; command("cad.plane.begin", "split_body_id" to cad.activeBodyId) })
                             if ("COMBINE" in capabilities.features) DropdownMenuItem(text = { Text("Combinar con otro cuerpo") },
                                 enabled = connected && !cad.sessionActive && cad.bodies.size > 1,
                                 onClick = { bodiesOpen = false; vm.cadPickParameter("pick_tool_body", "COMBINE:" + cad.activeBodyId) })
@@ -406,6 +416,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
         focusManager.clearFocus()
         when {
             dynamicPreview -> {
+                if (planePreview) pushPlane()
                 if (drafts.isNotEmpty()) command("cad.operation.update", *drafts.map { it.key to it.value }.toTypedArray())
                 drafts.clear()
                 command("cad.session.confirm")
@@ -685,7 +696,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             Box {
                                 PillButton("Destino: ${cad.bodies.firstOrNull { it.id == target?.bodyId }?.name ?: "elegir cuerpo"}", enabled = connected && targets.isNotEmpty()) { expanded = true }
                                 DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
-                                    targets.forEach { item -> DropdownMenuItem(text = { Text(cad.bodies.firstOrNull { it.id == item.bodyId }?.name ?: item.name) }, onClick = { cutTarget = item.id; expanded = false }) }
+                                    targets.forEach { item -> DropdownMenuItem(text = { Text(cad.bodies.firstOrNull { it.id == item.bodyId }?.name ?: item.name) }, onClick = { cutTarget = item.bodyId; expanded = false }) }
                                 }
                             }
                         }
@@ -709,11 +720,13 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                         cad.planes.forEach { saved ->
                                             // Qué bocetos usa cada plano: el nombre solo dice de dónde salió.
                                             val users = cad.sketches.filter { it.planeId == saved.id }.joinToString(", ") { it.name }
-                                            DropdownMenuItem(text = { Text("${saved.name} (${users.ifEmpty { "sin usar" }}) · nuevo croquis") }, onClick = {
-                                                savedOpen = false; command("cad.session.cancel"); command("cad.sketch.create", "plane_id" to saved.id)
+                                            DropdownMenuItem(text = { Text("${saved.name} (${users.ifEmpty { "sin usar" }}) · ${if (cad.operation == "SPLIT") "plano de corte" else "nuevo croquis"}") }, onClick = {
+                                                savedOpen = false; command("cad.session.cancel");
+                                                if (cad.operation == "SPLIT") command("cad.plane.begin", "plane_id" to saved.id, "split_body_id" to cad.activeBodyId)
+                                                else command("cad.sketch.create", "plane_id" to saved.id)
                                             })
-                                            DropdownMenuItem(text = { Text("${saved.name} (${users.ifEmpty { "sin usar" }}) · recolocar") }, onClick = {
-                                                savedOpen = false; command("cad.plane.begin", "plane_id" to saved.id)
+                                            if (cad.operation != "SPLIT") DropdownMenuItem(text = { Text("${saved.name} (${users.ifEmpty { "sin usar" }}) · recolocar") }, onClick = {
+                                                savedOpen = false; command("cad.plane.begin", "plane_id" to saved.id, "split_body_id" to cad.activeBodyId.takeIf { cad.operation == "SPLIT" })
                                             })
                                         }
                                     }
@@ -882,7 +895,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                     Spacer(Modifier.width(10.dp))
                     RoundAction(AppIcons.cad("CANCEL"), if (depthPreview || finishPreview || shellPreview || dynamicPreview || planePreview) "Descartar preview" else "Descartar medidas", Ink.Bad, ::discardValues)
                     Spacer(Modifier.width(4.dp))
-                    RoundAction(AppIcons.cad("FINISH"), if (planePreview) (if (cad.plane?.planeId != null) "Aplicar posición del plano" else "Crear el plano y su croquis")
+                    RoundAction(AppIcons.cad("FINISH"), if (planePreview) (if (cad.operation == "SPLIT") "Partir cuerpo" else if (cad.plane?.planeId != null) "Aplicar posición del plano" else "Crear el plano y su croquis")
                         else if (depthPreview || finishPreview || shellPreview || dynamicPreview) "Confirmar ${cadLabel(cad.operation)}" else "Aplicar medidas",
                         if (canAccept) Ink.Ok else Ink.Faint, { if (canAccept) acceptValues() })
                 }
@@ -1127,7 +1140,7 @@ internal fun cadLabel(type: String) = when (type) {
     "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "SLOT" -> "Ranura"; "GEAR" -> "Engranaje"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "POINT" -> "Punto"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
     "TANGENT" -> "Tangente (línea y arco, o dos arcos/círculos)"; "EQUAL" -> "Igualdad (tamaño del primero; en arcos también el ángulo, salvo redondeos)"; "EQUAL_ANGLE" -> "Igualdad de ángulo"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "ANGLE" -> "Ángulo"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio (punto + arista, o 3 puntos; último = medio)"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
-    "COMBINE" -> "Combinar"; "PATTERN" -> "Patrón"; "HOLE" -> "Taladro"; "SHELL" -> "Carcasa"; "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; "REVOLVE" -> "Revolución"; "SWEEP" -> "Barrido"; else -> type
+    "SPLIT" -> "Partir cuerpo"; "COMBINE" -> "Combinar"; "PATTERN" -> "Patrón"; "HOLE" -> "Taladro"; "SHELL" -> "Carcasa"; "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; "REVOLVE" -> "Revolución"; "SWEEP" -> "Barrido"; else -> type
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

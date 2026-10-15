@@ -55,6 +55,9 @@ def geometry_key(doc, limit, scale):
         if node['kind'] == 'FEATURE' and node['enabled']:
             feature = dict(model.find(doc,'features',node['id']))
             feature.pop('name', None)
+            if feature['type']=='SPLIT':
+                from . import split
+                feature['resolved_plane']=split.frame(doc,feature)
             if feature.get('sketch_id'):
                 source=model.find(doc,'sketches',feature['sketch_id'])
                 sketches[source['id']]=dict(frame=model.frame(source),entities=source['entities'])
@@ -372,6 +375,21 @@ def hole_operand(sketch, feature, base):
             if head is not None:tool=_boolean('UNION',tool,head)
         result.append(tool)
     return result[0] if len(result)==1 else _compound(result)
+
+
+def split_solid(base, frame, side):
+    """Intersect with an exact half-space; the plane has no arbitrary box size."""
+    from OCP.gp import gp_Pln, gp_Pnt, gp_Dir
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
+    from OCP.BRepPrimAPI import BRepPrimAPI_MakeHalfSpace
+    origin=[v*MM for v in frame['origin']]; normal=frame['normal']
+    face=BRepBuilderAPI_MakeFace(gp_Pln(gp_Pnt(*origin),gp_Dir(*normal))).Face()
+    sign=1 if side=='ABOVE' else -1
+    point=gp_Pnt(*(p+sign*n*max(_extent(base),1.) for p,n in zip(origin,normal)))
+    half=BRepPrimAPI_MakeHalfSpace(face,point).Solid()
+    try: return _boolean('INTERSECT',base,half)
+    except CommandError as exc:
+        raise CommandError('El plano debe atravesar el cuerpo y dejar volumen en la mitad elegida',code='cad_split_invalid') from exc
 
 
 def combined(base, tool, feature):
@@ -960,12 +978,24 @@ class Evaluator:
                 continue
             feature=model.find(doc,'features',feature['id'])
             identifier = feature['id']; body = feature['body_id']
+            if model.find(doc,'bodies',body).get('source') and body not in tips:
+                continue
             previous = tips.get(body)
             base = shapes.get(previous)
             def joined(build, base=base):
                 return lambda: _boolean('UNION', base, build()) if base is not None else _valid(build(), 'cad_profile_invalid')
             kind = feature['type']
-            if kind == 'COMBINE':
+            if kind == 'SPLIT':
+                from . import split
+                if base is None:raise CommandError('No hay sólido anterior para partir',code='cad_dependency')
+                frame=split.frame(doc,feature)
+                side='ABOVE' if feature['keep']=='ABOVE' else 'BELOW'
+                store(identifier,('SPLIT',frame,side,keys.get(previous)),lambda:split_solid(base,frame,side))
+                if feature['keep']=='BOTH':
+                    child=model.find(doc,'bodies',feature['derived_body_id'])
+                    store(child['id'],('SPLIT',frame,'ABOVE',keys.get(previous)),lambda:split_solid(base,frame,'ABOVE'))
+                    tips[child['id']]=child['id']
+            elif kind == 'COMBINE':
                 tool_tip=tips.get(feature['tool_body_id']);tool=shapes.get(tool_tip)
                 if base is None or tool is None:raise CommandError('La combinación necesita ambos cuerpos antes de este paso',code='cad_dependency')
                 store(identifier,('COMBINE',model.dumps(feature),keys.get(previous),keys.get(tool_tip)),lambda:combined(base,tool,feature))
@@ -1044,10 +1074,12 @@ class Evaluator:
                 cached = (signature, ([tuple(c/scale for c in v) for v in vertices], faces))
                 self._body_meshes[body] = cached
             display[body] = cached
-        feature_ids = {f['id'] for f in doc['features']}
+        feature_ids = {f['id'] for f in doc['features']} | {b['id'] for b in doc['bodies'] if b.get('source')}
         self._shapes = {k: v for k, v in self._shapes.items() if k in feature_ids}
         self._meshes = {k: v for k, v in self._meshes.items() if k in feature_ids}
         self._body_meshes = {k: v for k, v in self._body_meshes.items() if k in tips}
+        sources={b['id']:b['source']['feature_id'] for b in doc['bodies'] if b.get('source')}
+        tips={b:sources.get(t,t) for b,t in tips.items()}
         return dict(display=display, tips=tips, solids=solids, profiles={})
 
 

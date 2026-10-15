@@ -282,7 +282,12 @@ class CadRuntime:
             signature,(vertices,faces)=display[identifier]
             record=(obj.as_pointer(),obj.data.as_pointer(),signature,stamp(obj)) if obj else None
             if record is None or self._materialized.get(identifier)!=record:
+                fresh=obj is None
                 obj = self._paint(obj, vertices, faces)
+                if fresh and body.get('source'):
+                    parent=model.find(doc,'features',body['source']['feature_id'])['body_id']
+                    source=next((o for o in existing if o.get(BODY_KEY)==parent),None)
+                    if source is not None:obj.matrix_world=source.matrix_world.copy()
                 self._materialized[identifier]=(obj.as_pointer(),obj.data.as_pointer(),signature,stamp(obj))
             obj.name=body['name']
             obj[FEATURE_KEY]=tips[identifier];obj[DOC_KEY]=doc['id'];obj[BODY_KEY]=identifier
@@ -335,7 +340,7 @@ class CadRuntime:
         if feature.get('extent') != 'THROUGH_ALL':
             return None
         from . import mirror
-        previous = None
+        previous = self._solids.get(feature['body_id'])
         for node in model.history(doc):
             if node['id'] == feature['id']:
                 break
@@ -359,7 +364,7 @@ class CadRuntime:
         vertices, faces = extrusion_operand(session['extrusion_cache'], sketch, entity, feature, base[1] if base else None)
         scale = max(float(bpy.context.scene.unit_settings.scale_length), 1e-12)
         vertices = [tuple(c / scale for c in v) for v in vertices]
-        previous = None
+        previous = feature['body_id'] if feature['body_id'] in self._solids else None
         for node in model.history(doc):
             if node['id'] == feature['id']:
                 break
@@ -713,6 +718,8 @@ class CadRuntime:
             if session: feature=session.get('feature') if session.get('operation') in operations.TYPES else None
             if feature and feature['type'] in operations.TYPES:
                 operation_controls=operations.controls(doc,feature,self.step)
+                if session and session['operation']=='SPLIT':
+                    operation_controls['fields']=[f for f in operation_controls['fields'] if f['key']!='offset']
             return dict(version=1,workspace=self.workspace,isolated=bool(self.workspace and not self.show_scene),document=self.public_document(doc),
                         dimension_options=numeric,surface=self.surface.status(),operation_controls=operation_controls,
                         rollback_id=self.bar(doc),
@@ -729,7 +736,7 @@ class CadRuntime:
                                       positive_label=labels[0] if labels else None,
                                       negative_label=labels[1] if labels else None,
                                       transparent=bool(session and session['operation']=='CUT'),
-                                      plane=_plane_public(session) if session and session['operation']=='PLANE' else None,
+                                      plane=_plane_public(session) if session and session['operation'] in ('PLANE','SPLIT') else None,
                                      can_confirm=bool(session and session.get('candidate')),
                                      can_close=bool(session and session.get('can_close'))),
                         overlay=self.overlay(doc),error=session.get('error') if session else None,

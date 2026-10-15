@@ -125,7 +125,7 @@ def draw_cad_plane(rv3d, width, height):
     """
     from ..cad.runtime import runtime
     session=runtime.session
-    if not (runtime.workspace and session and session['operation']=='PLANE' and session.get('plane_frame')):
+    if not (runtime.workspace and session and session['operation'] in ('PLANE','SPLIT') and session.get('plane_frame')):
         return
     gizmo=plane_gizmo(session); quad=gizmo['quad']
     fill=gpu.shader.from_builtin('UNIFORM_COLOR'); line=gpu.shader.from_builtin('POLYLINE_UNIFORM_COLOR')

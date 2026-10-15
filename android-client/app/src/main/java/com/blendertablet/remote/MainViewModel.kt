@@ -418,7 +418,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     cadStroke = true; cadGestureMode = "DEPTH"; cadDepthStart = cad.depth
                     return
                 }
-                if (cad.sessionActive && cad.operation == "PLANE") {
+                if (cad.sessionActive && cad.operation in listOf("PLANE", "SPLIT")) {
                     // El lápiz agarra la flecha que toca (o la normal) y la sigue 1:1 bajo la punta.
                     cadStroke = true; cadGestureMode = "PLANE"; cadDepthStart = cad.plane?.offset ?: 0.0
                     cadShiftStart = cad.plane?.shift ?: listOf(0.0, 0.0)

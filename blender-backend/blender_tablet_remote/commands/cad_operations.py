@@ -50,6 +50,8 @@ def hole_begin(payload):
 def operation_update(payload):
     session=runtime.require(payload)
     if session['operation'] not in operations.TYPES: raise BadPayload('La sesión no admite estos parámetros')
+    if session['operation']=='SPLIT':
+        return (yield from cad.plane_update.__wrapped__(payload))
     feature=copy.deepcopy(session['feature'])
     try:operations.update(session['baseline'],feature,capture_parameters(session['baseline'],feature,payload))
     except CommandError as exc:
