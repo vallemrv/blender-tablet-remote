@@ -156,6 +156,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             }
             if (capabilities.sketchEditing) CadAction("FILLET", "Redondear esquinas seleccionadas", selected = pendingDimension == "FILLET",
                 enabled = !cad.sessionActive && cad.selection.any { it.id != "ORIGIN" }) { pendingDimension = "FILLET" }
+            if (capabilities.entityTrim) CadAction("TRIM", "Recortar tramo entre intersecciones", selected = state.cadTool == "TRIM",
+                enabled = connected && (!cad.sessionActive || cad.operation == "TRIM")) { vm.cadTool(if (state.cadTool == "TRIM") null else "TRIM") }
             if (capabilities.offsetEntities.isNotEmpty()) {
                 val source = cadOffsetSource(cad, capabilities.offsetEntities)
                 CadAction("OFFSET", if (source != null) "Desfase por grosor: contorno concéntrico vinculado"
@@ -1140,7 +1142,7 @@ internal fun cadLabel(type: String) = when (type) {
     "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "SLOT" -> "Ranura"; "GEAR" -> "Engranaje"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "POINT" -> "Punto"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
     "TANGENT" -> "Tangente (línea y arco, o dos arcos/círculos)"; "EQUAL" -> "Igualdad (tamaño del primero; en arcos también el ángulo, salvo redondeos)"; "EQUAL_ANGLE" -> "Igualdad de ángulo"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "ANGLE" -> "Ángulo"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio (punto + arista, o 3 puntos; último = medio)"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
-    "SPLIT" -> "Partir cuerpo"; "COMBINE" -> "Combinar"; "PATTERN" -> "Patrón"; "HOLE" -> "Taladro"; "SHELL" -> "Carcasa"; "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; "REVOLVE" -> "Revolución"; "SWEEP" -> "Barrido"; else -> type
+    "TRIM" -> "Recortar"; "SPLIT" -> "Partir cuerpo"; "COMBINE" -> "Combinar"; "PATTERN" -> "Patrón"; "HOLE" -> "Taladro"; "SHELL" -> "Carcasa"; "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; "REVOLVE" -> "Revolución"; "SWEEP" -> "Barrido"; else -> type
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

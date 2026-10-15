@@ -1078,3 +1078,12 @@ no quedan archivos o referencias temporales.
   derivado se cachea por ID de cuerpo; su tip público es el SPLIT. Desactivar o
   retroceder antes del corte retira sus derivados; no se elimina una mitad con
   operaciones. Los planos guardados invalidan la caché por su marco resuelto.
+
+- Recortar bocetos (`cad.entity.trim`) tiene sesión TRIM: BEGIN/UPDATE solo
+  resaltan el tramo entre intersecciones analíticas; END confirma el último
+  candidato sin otro sondeo. Cada gesto crea un undo; miss/cancelar no cambian nada.
+  LINE/ARC se fragmentan, CIRCLE pasa a ARC y RECTANGLE a líneas. Construcción no
+  corta; NGON/SLOT/GEAR no se recortan. Conserva cotas/fijaciones de extremos vivos,
+  descarta las que perdieron sentido y añade POINT_ON_LINE contra rectas; contra
+  curvas los extremos quedan libres. Protege perfiles usados, ejes, centros de
+  Taladro y Desfase. El overlay candidato no participa en su propio picking.

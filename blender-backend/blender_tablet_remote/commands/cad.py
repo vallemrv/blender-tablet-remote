@@ -581,6 +581,60 @@ def entity_delete(payload):
     return runtime.status()
 
 
+@command('cad.entity.trim')
+def entity_trim(payload):
+    """BEGIN/UPDATE highlight only; END consumes the last stable candidate."""
+    phase=str(payload.get('phase','TAP')).upper()
+    if phase not in ('BEGIN','UPDATE','END','CANCEL','TAP'):raise BadPayload('Fase de recorte inválida')
+    runtime.require_workspace()
+    if phase=='CANCEL':
+        runtime.require(payload);runtime.cancel();return runtime.status()
+    if phase in ('BEGIN','TAP'):
+        sketch=model.find(runtime.doc(),'sketches',runtime.active_sketch_id)
+        session=runtime.begin(payload,'TRIM');session['sketch_id']=sketch['id']
+    else:
+        session=runtime.require(payload)
+        if session['operation']!='TRIM':raise BadPayload('No hay un recorte activo')
+        sketch=model.find(session['baseline'],'sketches',session['sketch_id'])
+    if phase in ('BEGIN','UPDATE','TAP'):
+        session.update(candidate=None,error=None)
+        try:
+            hit=_pick(payload)
+            if hit and hit.get('kind')=='ENTITY' and hit['id']!='ORIGIN':
+                # Handles and annotations do not acquire a remote arc circumference.
+                point=runtime.point(payload,sketch)
+                v=model.number(payload.get('v'))
+                near=runtime.point(dict(payload,v=v+.024 if v<.976 else v-.024),sketch)
+                session['candidate']=geometry.trim_candidate(sketch,point,entity_id=hit['id'],max_distance=math.dist(point,near))
+        except CommandError as exc:
+            session['error']=exc.message
+    if phase in ('BEGIN','UPDATE'):return runtime.status()
+    candidate=session.get('candidate');sketch_id=session['sketch_id'];runtime.session=None
+    if session.get('error'):raise BadPayload(session['error'])
+    if candidate is None:return runtime.status()
+    def change(doc):
+        sketch=model.find(doc,'sketches',sketch_id);identifier=candidate['id']
+        from ..cad import holes
+        for feature in doc['features']:
+            if feature.get('sketch_id')!=sketch_id:continue
+            if feature['type'] in ('HELIX','REVOLVE') and feature['axis']==identifier:
+                raise CommandError('La línea es un eje utilizado; cambia antes el eje de la operación',code='cad_dependency')
+            if feature['type']=='HOLE' and any(e['id']==identifier for e in holes.points(sketch,feature)):
+                raise CommandError('El centro se usa en Taladro; elimina antes su operación',code='cad_dependency')
+        if any(c['type']=='OFFSET' and any(r['id']==identifier for r in c['refs']) for c in sketch['constraints']):
+            raise CommandError('Quita la relación Desfase antes de recortar ese contorno',code='cad_dependency')
+        geometry.trim(sketch,candidate=candidate)
+        for feature in doc['features']:
+            for skey,pkey in (('sketch_id','profile_id'),('to_sketch_id','to_profile_id')):
+                if feature.get(skey)!=sketch_id or not feature.get(pkey):continue
+                try:model.profile(doc,feature[pkey])
+                except CommandError as exc:
+                    raise CommandError('El recorte abriría un perfil utilizado; elimina primero su operación CAD',code='cad_dependency') from exc
+    yield from runtime.transaction_steps(payload,change,'CAD recortar tramo')
+    runtime.selection=None
+    return runtime.status()
+
+
 def direction_labels(normal):
     """World names for positive and negative depth along the sketch normal."""
     axis = max(range(3), key=lambda i: abs(normal[i]))
@@ -1139,6 +1193,7 @@ def shell_update(payload):
 @command('cad.session.confirm')
 def confirm(payload):
     session = runtime.require(payload)
+    if session['operation']=='TRIM':return (yield from entity_trim.__wrapped__(dict(payload,phase='END')))
     if not session['candidate']:
         from ..cad import operations
         if session['operation']=='SHELL' or session['operation'] in operations.TYPES: return runtime.status()
@@ -1331,7 +1386,7 @@ def _pick(payload):
     if runtime.active_sketch_id and annotation: return annotation
     candidates=[]
     for item in overlay:
-        if item.get('kind') in ('DIMENSION','CONSTRAINT'): continue
+        if item.get('kind') in ('DIMENSION','CONSTRAINT','TRIM'): continue
         ring=item['points']
         if runtime.active_sketch_id:
             for handle in item.get('handles',[]):

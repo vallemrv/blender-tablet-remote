@@ -630,6 +630,10 @@ class CadRuntime:
                 result.append(dict(id=e['id'],points=points,closed=e['type'] not in ('LINE','ARC','POINT'),
                                    selected=selected,handles=handle_points,selected_parts=selected_parts,construction=e.get('construction',False)))
             if sketch['id']==self.active_sketch_id:
+                if self.session and self.session['operation']=='TRIM' and self.session.get('candidate'):
+                    points=[project(p) for p in self.session['candidate']['points']]
+                    if all(p is not None for p in points):
+                        result.append(dict(id='TRIM_CANDIDATE',points=points,closed=False,selected=True,handles=[],kind='TRIM'))
                 from . import annotations
                 result.extend(annotations.overlay(sketch,project,self.selection,
                     bpy.context.scene.unit_settings.length_unit,found[2].width/max(found[2].height,1)))

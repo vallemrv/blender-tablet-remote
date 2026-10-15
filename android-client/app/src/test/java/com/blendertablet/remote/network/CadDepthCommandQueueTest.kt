@@ -143,4 +143,20 @@ class CadDepthCommandQueueTest {
         queue.acknowledge(true)
         assertEquals("cad.session.cancel", queue.poll()!!.name)
     }
+
+    @org.junit.Test fun trimKeepsGestureBoundariesAndLatestCandidate() {
+        val queue = CadDepthCommandQueue()
+        fun message(phase: String, u: Double = 0.0) = CadQueuedMessage("cad.entity.trim", org.json.JSONObject().put("phase", phase).put("u", u))
+        queue.add(message("BEGIN"))
+        queue.add(message("UPDATE", .2))
+        queue.add(message("UPDATE", .4))
+        queue.add(message("END"))
+        org.junit.Assert.assertEquals("BEGIN", queue.poll()!!.payload.getString("phase"))
+        queue.acknowledge(true)
+        org.junit.Assert.assertEquals(.4, queue.poll()!!.payload.getDouble("u"), 0.0)
+        queue.acknowledge(true)
+        org.junit.Assert.assertEquals("END", queue.poll()!!.payload.getString("phase"))
+        queue.acknowledge(true)
+        org.junit.Assert.assertNull(queue.poll())
+    }
 }

@@ -20,6 +20,9 @@ internal class CadDepthCommandQueue {
         val settle = message.payload.optBoolean("settle")
         // Shell thickness and side edits are independent: never drop one for the other.
         val sameShellFields = message.name !in setOf("cad.shell.update", "cad.operation.update", "cad.plane.update") || last?.payload?.keys()?.asSequence()?.toSet() == message.payload.keys().asSequence().toSet()
+        val trimUpdate = message.name == "cad.entity.trim" && message.payload.optString("phase") == "UPDATE" &&
+            last?.name == message.name && last.payload.optString("phase") == "UPDATE"
+        if (trimUpdate) queue.removeLast()
         if (!settle && sameShellFields && message.name in CANDIDATES && last?.name == message.name && !last.payload.optBoolean("settle")) queue.removeLast()
         queue.addLast(message)
     }
@@ -35,9 +38,11 @@ internal class CadDepthCommandQueue {
         if (!ok) {
             val pending = queue.iterator()
             while (pending.hasNext()) {
-                val name = pending.next().name
+                val message = pending.next()
+                val name = message.name
+                if (name == "cad.entity.trim" && message.payload.optString("phase") == "BEGIN") break
                 if (name in BEGINS) break
-                if (name in CANDIDATES || name == "cad.session.confirm") pending.remove()
+                if (name in CANDIDATES || name == "cad.session.confirm" || name == "cad.entity.trim") pending.remove()
             }
         }
     }

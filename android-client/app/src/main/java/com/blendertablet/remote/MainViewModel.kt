@@ -376,7 +376,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         cancelCadStroke()
         local.update { it.copy(cadFacePick = null, cadParameterPick = null, cadParameterFeature = null) }
         if (client.state.value.cad.surface.mode != "PROFILE") client.cadCommand("cad.surface.mode", mapOf("mode" to "PROFILE"))
-        local.update { it.copy(cadTool = type?.takeIf { candidate -> candidate in client.state.value.features.cad.entities }) }
+        local.update { it.copy(cadTool = type?.takeIf { candidate -> candidate in client.state.value.features.cad.entities || (candidate == "TRIM" && client.state.value.features.cad.entityTrim) }) }
     }
     fun cadSurfaceMode(mode: String) {
         cancelCadStroke()
@@ -444,14 +444,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 cadGestureMode = when {
                     type == null || angleHandle -> "DRAG"
+                    type == "TRIM" -> "TRIM"
                     type == "POLYGON" -> "POLY"
                     else -> "DRAW"
                 }
                 client.cadCommand(when (cadGestureMode) {
+                    "TRIM" -> "cad.entity.trim"
                     "DRAG" -> "cad.drag.begin"
                     "POLY" -> "cad.polygon.begin"
                     else -> "cad.entity.begin"
-                }, if (cadGestureMode == "DRAG") mapOf("u" to u, "v" to v) else when (type) {
+                }, if (cadGestureMode == "TRIM") mapOf("phase" to "BEGIN", "u" to u, "v" to v) else if (cadGestureMode == "DRAG") mapOf("u" to u, "v" to v) else when (type) {
                     null -> mapOf("u" to u, "v" to v)
                     "NGON" -> mapOf("type" to type, "sides" to local.value.cadNgonSides, "u" to u, "v" to v)
                     "GEAR" -> mapOf("type" to type, "teeth" to local.value.cadGearTeeth, "u" to u, "v" to v)
@@ -467,6 +469,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     "FINISH" -> client.cadCommand("cad.finish.update", mapOf("gesture" to (cadPointerStartV - v), "baseline_width" to cadDepthStart))
                     "PLANE" -> client.cadCommand("cad.plane.update", mapOf("gesture_u" to (u - cadPointerStartU),
                         "gesture_v" to (v - cadPointerStartV), "u" to u, "v" to v, "baseline_offset" to cadDepthStart))
+                    "TRIM" -> client.cadCommand("cad.entity.trim", mapOf("phase" to "UPDATE", "u" to u, "v" to v))
                     "DRAG" -> client.cadCommand("cad.drag.update", mapOf("u" to u, "v" to v))
                     "POLY" -> client.cadCommand("cad.polygon.update", mapOf("u" to u, "v" to v))
                     "DRAW" -> client.cadCommand("cad.entity.update", mapOf("u" to u, "v" to v))
@@ -483,6 +486,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         client.cadCommand("cad.extrude.update", mapOf("extent" to "TO_FACE",
                             "u" to cadPointerStartU, "v" to cadPointerStartV))
                     }
+                    "TRIM" -> client.cadCommand("cad.entity.trim", mapOf("phase" to "END"))
                     "DRAG" -> client.cadCommand("cad.drag.end")
                     "POLY" -> client.cadCommand("cad.polygon.segment", mapOf("u" to u, "v" to v))
                     "DRAW" -> client.cadCommand("cad.session.confirm")

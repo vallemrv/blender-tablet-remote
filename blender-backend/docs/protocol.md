@@ -2235,3 +2235,21 @@ Vaciar una mitad derivada sin operaciones propias usa `cad.extrude.begin` con
 `target_id` del SPLIT fuente y `target_body_id` de esa mitad. El backend comprueba
 su asociación y conserva el target_id real como dependencia; no persiste IDs de
 operaciones ficticias. Sin target_body_id se mantiene el destino habitual.
+### CAD sketch trim
+
+Flag `cad.entity_trim: true`. `cad.entity.trim` admite `phase: BEGIN|UPDATE|END|CANCEL`
+y `u,v` normalizados en BEGIN/UPDATE. Sin phase equivale a `TAP` (acción completa).
+La sesión `TRIM` posee owner/ID, conserva el documento baseline y publica el tramo
+candidato en `overlay` (`kind:TRIM`, puntos proyectados, selected:true).
+BEGIN/UPDATE no mutan el documento; END consume el último candidato y crea un
+undo. CANCEL, desconexión y guardar descartan el candidato; un miss no crea undo.
+`cad.session.confirm/cancel` también cierran la sesión. END no vuelve a sondear.
+Las coordenadas del overlay nunca se persisten como geometría.
+
+`LINE/ARC` producen hasta dos fragmentos; `CIRCLE` se convierte en `ARC` y
+`RECTANGLE` en líneas. NGON/SLOT/GEAR dan un error explícito. Los cutters son las
+figuras no constructivas LINE/ARC/CIRCLE/RECTANGLE. Las reglas de extremos
+supervivientes se remapean; los nuevos extremos contra rectas reciben
+POINT_ON_LINE. Contra curvas quedan libres. Perfiles usados, ejes y centros de
+Taladro quedan protegidos con `cad_dependency`; no se borra una operación como
+consecuencia de recortar su boceto.

@@ -842,3 +842,164 @@ def fit_polyline(points, closed, tol):
         a,b=path[i],path[j]
         result.append(dict(type='LINE',x=a[0],y=a[1],x2=b[0],y2=b[1])); i=j
     return result
+
+
+# ---- Trim analytic sketch segments ------------------------------------------------
+
+def _trim_curves(sketch):
+    curves=[]
+    for e in sketch['entities']:
+        if e.get('construction') or e['type']=='POINT':continue
+        if e['type']=='RECTANGLE':
+            ring=model.outline(e)
+            curves.extend(dict(e,type='LINE',x=a[0],y=a[1],x2=b[0],y2=b[1],part='EDGE'+str(i))
+                          for i,(a,b) in enumerate(zip(ring,ring[1:]+ring[:1])))
+        else:curves.append(dict(e,part='BODY'))
+    return curves
+
+
+def _trim_at(e, t):
+    if e['type']=='LINE':return (e['x']+(e['x2']-e['x'])*t,e['y']+(e['y2']-e['y'])*t)
+    start,sweep=(0.,360.) if e['type']=='CIRCLE' else (e['start'],e['sweep'])
+    radius=e['diameter']/2 if e['type']=='CIRCLE' else e['radius']
+    angle=math.radians(start+sweep*t)
+    return (e['x']+radius*math.cos(angle),e['y']+radius*math.sin(angle))
+
+
+def _trim_parameter(e, p, *, nearest=False):
+    if e['type']=='LINE':
+        dx,dy=e['x2']-e['x'],e['y2']-e['y']
+        t=((p[0]-e['x'])*dx+(p[1]-e['y'])*dy)/max(dx*dx+dy*dy,1e-30)
+    else:
+        angle=math.degrees(math.atan2(p[1]-e['y'],p[0]-e['x']))
+        start,sweep=(0.,360.) if e['type']=='CIRCLE' else (e['start'],e['sweep'])
+        distance=((angle-start) if sweep>0 else (start-angle))%360
+        if distance>360-1e-7:distance=0.
+        t=distance/abs(sweep)
+        if nearest and t>1:
+            return min((0.,1.),key=lambda v:math.dist(p,_trim_at(e,v)))
+    return max(0.,min(1.,t)) if nearest else t
+
+
+def _trim_intersections(a, b):
+    """Analytic intersections, including signed arcs; no tessellation for cuts."""
+    if a['type'] not in ('LINE','ARC','CIRCLE') or b['type'] not in ('LINE','ARC','CIRCLE'):return []
+    if a['type']!='LINE' and b['type']=='LINE':return _trim_intersections(b,a)
+    cross=lambda u,v:u[0]*v[1]-u[1]*v[0]
+    if a['type']=='LINE':
+        p=np.array([a['x'],a['y']]);d=np.array([a['x2'],a['y2']])-p
+        if b['type']=='LINE':
+            q=np.array([b['x'],b['y']]);v=np.array([b['x2'],b['y2']])-q;den=cross(d,v)
+            if abs(den)<math.sqrt(float(d@d)*float(v@v))*1e-10:return []
+            t=cross(q-p,v)/den;u=cross(q-p,d)/den
+            return [tuple(p+t*d)] if -1e-8<=t<=1+1e-8 and -1e-8<=u<=1+1e-8 else []
+        center=np.array([b['x'],b['y']]);r=b['diameter']/2 if b['type']=='CIRCLE' else b['radius']
+        v=p-center;aa=float(d@d);bb=2*float(v@d);cc=float(v@v)-r*r
+        disc=bb*bb-4*aa*cc
+        if aa<1e-30 or disc<-max(bb*bb,abs(4*aa*cc),1e-30)*1e-10:return []
+        points=[tuple(p+t*d) for t in ((-bb-math.sqrt(max(0.,disc)))/(2*aa),(-bb+math.sqrt(max(0.,disc)))/(2*aa)) if -1e-8<=t<=1+1e-8]
+    else:
+        p=np.array([a['x'],a['y']]);q=np.array([b['x'],b['y']]);d=float(np.linalg.norm(q-p))
+        ra=a['diameter']/2 if a['type']=='CIRCLE' else a['radius'];rb=b['diameter']/2 if b['type']=='CIRCLE' else b['radius']
+        tol=max(ra,rb)*1e-9
+        if d<tol or d>ra+rb+tol or d<abs(ra-rb)-tol:return []
+        x=(ra*ra-rb*rb+d*d)/(2*d);h=math.sqrt(max(0.,ra*ra-x*x));v=(q-p)/d;n=np.array([-v[1],v[0]])
+        points=[tuple(p+v*x+n*h),tuple(p+v*x-n*h)]
+    return [p for p in points if all(e['type']=='CIRCLE' or -1e-8<=_trim_parameter(e,p)<=1+1e-8 for e in (a,b))]
+
+
+def trim_candidate(sketch, point, *, entity_id=None, max_distance=float('inf')):
+    curves=_trim_curves(sketch);ranked=[]
+    for e in curves:
+        if entity_id is not None and e['id']!=entity_id:continue
+        if entity_id is not None and e['type'] not in ('LINE','ARC','CIRCLE'):
+            raise BadPayload('Recortar no admite polígonos regulares, ranuras ni engranajes')
+        if e['type'] in ('LINE','ARC','CIRCLE'):
+            t=_trim_parameter(e,point,nearest=True);distance=math.dist(point,_trim_at(e,t))
+        else:
+            ring=model.outline(e)
+            distance=min(math.dist(point,p) for p in ring);t=0.
+        ranked.append((distance,e,t))
+    if not ranked:return None
+    distance,e,t=min(ranked,key=lambda v:v[0])
+    if distance>max_distance:return None
+    if e['type'] not in ('LINE','ARC','CIRCLE'):
+        raise BadPayload('Recortar admite líneas, arcos, círculos y rectángulos; no polígonos regulares, ranuras ni engranajes')
+    hits=[]
+    for cutter in curves:
+        if cutter['id']==e['id']:continue
+        for p in _trim_intersections(e,cutter):
+            value=_trim_parameter(e,p)
+            if -1e-8<=value<=1+1e-8 and not any(abs(value-h[0])<1e-8 for h in hits):
+                hits.append((max(0.,min(1.,value)),dict(id=cutter['id'],part=cutter['part']) if cutter['type']=='LINE' else None))
+    hits.sort(key=lambda h:h[0])
+    if e['type']=='CIRCLE':
+        if len(hits)<2:lo,hi=0.,1.;left=right=None
+        else:
+            extended=[(v-1,r) for v,r in hits]+hits+[(v+1,r) for v,r in hits]
+            lo,left=max((h for h in extended if h[0]<=t+1e-10),key=lambda h:h[0])
+            hi,right=min((h for h in extended if h[0]>t+1e-10),key=lambda h:h[0])
+    else:
+        interior=[h for h in hits if 1e-8<h[0]<1-1e-8]
+        lo,left=max([(0.,None)]+[h for h in interior if h[0]<=t+1e-10],key=lambda h:h[0])
+        hi,right=min([(1.,None)]+[h for h in interior if h[0]>t+1e-10],key=lambda h:h[0])
+    steps=1 if e['type']=='LINE' else max(2,int((hi-lo)*96))
+    return dict(id=e['id'],part=e['part'],lo=lo,hi=hi,left=left,right=right,
+                points=[_trim_at(e,lo+(hi-lo)*i/steps) for i in range(steps+1)])
+
+
+def trim(sketch, point=None, *, candidate=None):
+    """Remove the touched interval, preserving surviving endpoint constraints."""
+    chosen=candidate or trim_candidate(sketch,point)
+    if chosen is None:return None
+    e=model.find(sketch,'entities',chosen['id'])
+    original=e['id']
+    if e['type']=='RECTANGLE':
+        e=_rectangle_lines(sketch,e)[int(chosen['part'][4:])]
+    identifier=e['id'];lo,hi=chosen['lo'],chosen['hi'];closed=e['type']=='CIRCLE'
+    intervals=([(hi,lo+1)] if hi-lo<1-1e-8 else []) if closed else ([(0.,lo)] if lo>1e-8 else [])+([(hi,1.)] if hi<1-1e-8 else [])
+    fragments=[];mapping={};new_ends=[]
+    for a,b in intervals:
+        clone=dict(e,id=identifier if not fragments else model.uid('entity'))
+        if e['type']=='LINE':
+            p,q=_trim_at(e,a),_trim_at(e,b);clone.update(x=p[0],y=p[1],x2=q[0],y2=q[1])
+        else:
+            start,sweep=(0.,360.) if closed else (e['start'],e['sweep'])
+            clone.update(type='ARC',radius=e['diameter']/2 if closed else e['radius'],start=(start+sweep*a)%360,sweep=sweep*(b-a))
+            clone.pop('diameter',None)
+        model.validate_entity(clone)
+        fragments.append(clone)
+        if not closed and abs(a)<1e-8:mapping['START']=dict(id=clone['id'],part='START')
+        else:new_ends.append((dict(id=clone['id'],part='START'),chosen['right']))
+        if not closed and abs(b-1)<1e-8:mapping['END']=dict(id=clone['id'],part='END')
+        else:new_ends.append((dict(id=clone['id'],part='END'),chosen['left']))
+    if fragments and e['type'] in ('ARC','CIRCLE'):mapping['CENTER']=dict(id=fragments[0]['id'],part='CENTER')
+    constraints=[]
+    safe_body=('HORIZONTAL','VERTICAL','PARALLEL','PERPENDICULAR','COLLINEAR','POINT_ON_LINE','RADIUS')
+    for c in sketch.get('constraints',[]):
+        if not any(r['id']==identifier for r in c['refs']):constraints.append(c);continue
+        if c['type']=='FIX':
+            fixed=c.get('points') or handles(e)
+            for role,value in fixed.items():
+                if role in mapping:
+                    ref=mapping[role];constraints.append(dict(id=model.uid('constraint'),type='FIX',refs=[ref],points={ref['part']:list(value)}))
+            if 'values' in c and fragments and e['type'] in ('ARC','CIRCLE'):
+                constraints.extend(dict(id=model.uid('constraint'),type='RADIUS',refs=[dict(id=f['id'],part='BODY')],value=f['radius']) for f in fragments)
+            continue
+        mapped=[]
+        for ref in c['refs']:
+            if ref['id']!=identifier:mapped.append(copy.deepcopy(ref));continue
+            part=ref.get('part','BODY')
+            if part=='BODY' and c['type'] in safe_body and fragments:mapped.append(dict(id=fragments[0]['id'],part='BODY'))
+            else:mapped.append(mapping.get(part))
+        if all(r is not None for r in mapped):
+            clone=copy.deepcopy(c);clone['refs']=mapped;constraints.append(clone)
+            # Direction and radius constraints apply to both fragments independently.
+            if len(fragments)==2 and len(c['refs'])==1 and c['refs'][0].get('part','BODY')=='BODY':
+                clone=copy.deepcopy(clone);clone['id']=model.uid('constraint');clone['refs'][0]['id']=fragments[1]['id'];constraints.append(clone)
+    sketch['entities']=[f for old in sketch['entities'] for f in (fragments if old['id']==identifier else [old])]
+    for ref,cutter in new_ends:
+        if cutter:constraints.append(dict(id=model.uid('constraint'),type='POINT_ON_LINE',refs=[ref,cutter]))
+    sketch['constraints']=constraints
+    solve(sketch)
+    return original

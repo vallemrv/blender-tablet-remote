@@ -701,3 +701,22 @@ original y admite bocetos y operaciones propios. No se puede borrar el corte ni
 retirar esa mitad mientras tenga dependientes. El plano guardado conserva su
 asociación si solo se cambia la separación; cambiar su inclinación captura un
 marco independiente. El nodo permite editar separación y mitades conservadas.
+
+### Recortar bocetos
+
+**Recortar** está en el rail del boceto, junto a Redondear. Toca el tramo que sobra:
+se elimina entre las intersecciones más cercanas, o hasta el extremo libre. Al
+arrastrar se resalta en naranja el candidato; soltar confirma lo resaltado sin
+repetir el sondeo. Cada gesto crea un undo; un miss o cancelar no cambia el boceto.
+
+Las líneas y arcos se dividen en hasta dos fragmentos; un círculo pasa a arco y
+un rectángulo a líneas. Las intersecciones son analíticas entre líneas, lados de
+rectángulos, círculos y arcos. Construcción no corta; NGON, SLOT y GEAR no se
+recortan en esta versión. Sin intersecciones se elimina la figura o el lado.
+
+Las cotas y fijaciones de extremos supervivientes conservan sus referencias;
+se retiran las reglas de longitudes, ángulos o extremos que dejan de existir.
+Los nuevos extremos sobre líneas reciben Punto sobre recta. Contra curvas quedan
+libres: no se añade una restricción inexistente de punto sobre círculo. Recortar
+rechaza abrir perfiles usados, cambiar ejes de Revolución/Helicoidal, centros de
+Taladro o contornos vinculados por Desfase hasta retirar esas dependencias.

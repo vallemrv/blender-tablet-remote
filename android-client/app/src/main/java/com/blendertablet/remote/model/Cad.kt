@@ -15,6 +15,7 @@ data class CadCapabilities(
     val sectionView: Boolean = false,
     val midpointPoints: Boolean = false,
     val referenceProfile: Boolean = false,
+    val entityTrim: Boolean = false,
 ) { val available get() = version == 2 && planes.isNotEmpty() }
 data class CadEntity(val id: String, val type: String, val values: Map<String, Double>, val construction: Boolean = false,
     val dimensions: List<CadMeasure> = emptyList(), val isFillet: Boolean = false, val isSquare: Boolean = false, val reference: Boolean = false)
