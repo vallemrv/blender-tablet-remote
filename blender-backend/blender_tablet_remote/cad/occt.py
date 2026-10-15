@@ -246,14 +246,14 @@ def _boolean(kind, base, tool):
     contact off by 1 µm leaves sliver faces inside an exact boolean. A small
     fuzzy value (1e-5 of the part) merges them; exact and coarser values are
     fallbacks when it fails."""
-    from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse, BRepAlgoAPI_Cut
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse, BRepAlgoAPI_Cut, BRepAlgoAPI_Common
     from OCP.BRepCheck import BRepCheck_Analyzer
     from OCP.collections import List_TopoDS_Shape
-    code = 'cad_union_invalid' if kind == 'UNION' else 'cad_cut_invalid'
+    code = {'UNION':'cad_union_invalid','CUT':'cad_cut_invalid','INTERSECT':'cad_intersection_invalid'}[kind]
     extent = _extent(base)
     result = None
     for fuzzy in (max(1e-4, extent*1e-5), 0., max(1e-3, extent*1e-4)):
-        op = (BRepAlgoAPI_Fuse if kind == 'UNION' else BRepAlgoAPI_Cut)()
+        op = {'UNION':BRepAlgoAPI_Fuse,'CUT':BRepAlgoAPI_Cut,'INTERSECT':BRepAlgoAPI_Common}[kind]()
         arguments, tools = List_TopoDS_Shape(), List_TopoDS_Shape()
         arguments.Append(base); tools.Append(tool)
         op.SetArguments(arguments); op.SetTools(tools)
@@ -372,6 +372,26 @@ def hole_operand(sketch, feature, base):
             if head is not None:tool=_boolean('UNION',tool,head)
         result.append(tool)
     return result[0] if len(result)==1 else _compound(result)
+
+
+def combined(base, tool, feature):
+    from OCP.gp import gp_GTrsf,gp_Mat,gp_XYZ
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_GTransform, BRepBuilderAPI_Copy
+    matrix=feature.get('tool_transform')
+    if matrix:
+        trsf=gp_GTrsf(gp_Mat(*(matrix[i][j] for i in range(3) for j in range(3))),gp_XYZ(*(matrix[i][3]*MM for i in range(3))))
+        # GTransform must not retain tessellation attached to the cached BREP.
+        detached=BRepBuilderAPI_Copy(tool,True,False).Shape()
+        tool=_valid(BRepBuilderAPI_GTransform(detached,trsf,True).Shape(),'cad_combine_invalid')
+    if feature['operation']=='CUT' and feature['clearance']>0:
+        from OCP.BRepOffsetAPI import BRepOffsetAPI_MakeOffsetShape
+        try:
+            offset=BRepOffsetAPI_MakeOffsetShape()
+            offset.PerformByJoin(tool,feature['clearance']*MM,max(_extent(tool)*2e-6,1e-5))
+            if not offset.IsDone():raise ValueError('Offset failed')
+            tool=_valid(_clean(offset.Shape()),'cad_combine_invalid')
+        except Exception as exc:raise CommandError('No cabe esa holgura en la herramienta; redúcela',code='cad_combine_invalid') from exc
+    return _boolean(feature['operation'],base,tool)
 
 
 def feature_operand(doc, feature, base):
@@ -924,6 +944,7 @@ class Evaluator:
             if end is not None:
                 sequence = sequence[:end+1]
         tips, shapes, keys = {}, {}, {}
+        consumed=set()
         def store(identifier, signature, build):
             text = model.dumps(signature)
             cached = self._shapes.get(identifier)
@@ -944,7 +965,12 @@ class Evaluator:
             def joined(build, base=base):
                 return lambda: _boolean('UNION', base, build()) if base is not None else _valid(build(), 'cad_profile_invalid')
             kind = feature['type']
-            if kind == 'PATTERN':
+            if kind == 'COMBINE':
+                tool_tip=tips.get(feature['tool_body_id']);tool=shapes.get(tool_tip)
+                if base is None or tool is None:raise CommandError('La combinación necesita ambos cuerpos antes de este paso',code='cad_dependency')
+                store(identifier,('COMBINE',model.dumps(feature),keys.get(previous),keys.get(tool_tip)),lambda:combined(base,tool,feature))
+                if not feature['keep_tool']:consumed.add(feature['tool_body_id'])
+            elif kind == 'PATTERN':
                 if base is None:raise CommandError('El patrón necesita un cuerpo anterior',code='cad_dependency')
                 store(identifier,('PATTERN',model.dumps(feature),keys.get(previous),[keys.get(i) for i in feature['source_ids']]),
                       lambda: patterned(doc,feature,base))
@@ -1010,6 +1036,7 @@ class Evaluator:
             solids[identifier] = (self._shapes[identifier][0], cached[1])
         display = {}
         for body, identifier in tips.items():
+            if body in consumed:continue
             signature = model.dumps((keys[identifier], scale))
             cached = self._body_meshes.get(body)
             if cached is None or cached[0] != signature:

@@ -26,7 +26,7 @@ object CadParser {
         j.optString("length_unit") != "METERS") CadCapabilities() else CadCapabilities(2,
         strings(j.optJSONArray("planes")).filter { it in listOf("XY", "XZ", "YZ") },
         strings(j.optJSONArray("entities")).filter { it in listOf("POINT", "LINE", "RECTANGLE", "CIRCLE", "ARC", "NGON", "SLOT", "GEAR", "POLYGON") },
-        strings(j.optJSONArray("features")).filter { it in listOf("EXTRUDE", "CUT", "LOFT", "HELIX", "REVOLVE", "SWEEP", "MIRROR", "SHELL", "HOLE", "PATTERN") },
+        strings(j.optJSONArray("features")).filter { it in listOf("EXTRUDE", "CUT", "LOFT", "HELIX", "REVOLVE", "SWEEP", "MIRROR", "SHELL", "HOLE", "PATTERN", "COMBINE") },
         strings(j.optJSONArray("constraints")).filter { it in listOf("COINCIDENT", "POINT_ON_LINE", "HORIZONTAL", "VERTICAL", "PARALLEL", "PERPENDICULAR", "TANGENT", "EQUAL", "DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "ANGLE", "FIX", "MIDPOINT", "SYMMETRIC", "SYMMETRIC_LINE") },
         j.optBoolean("sketch_editing"), strings(j.optJSONArray("offset_entities")), j.optBoolean("feature_mirror"),
         j.optBoolean("edge_plane"), j.optBoolean("plane_purge"), j.optBoolean("section_view"), j.optBoolean("midpoint_points"), j.optBoolean("reference_profile"))

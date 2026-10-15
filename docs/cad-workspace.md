@@ -675,3 +675,14 @@ para rejillas, además de reparto a ambos lados. El circular ofrece eje, centro 
 una dirección/eje y **Tocar cara cilíndrica** usa su eje. Operaciones permite repetir
 varias fuentes anteriores del mismo cuerpo. Editar la fuente actualiza sus copias.
 ✓ confirma y × cancela; el patrón se puede editar y desactivar desde la pila.
+
+## Combinar cuerpos con holgura
+
+Activa el cuerpo destino, abre su menú y elige **Combinar con otro cuerpo**. Toca
+la pieza herramienta. La bandeja ofrece Restar, Unir e Intersecar. Restar añade
+**Holgura**, inicialmente 0,2 mm por lado y editable por pasos de 0,05 mm: un
+alojamiento queda 0,4 mm más ancho por eje. Mantener herramienta conserva visible
+la pieza usada; desactivarlo la oculta sin borrarla. ✓ confirma, × restaura.
+Los cambios paramétricos de la herramienta actualizan el resultado. Su colocación
+relativa se captura al elegirla; **Tocar pieza herramienta** permite capturar de
+nuevo su colocación tras moverla en Object. No se permiten ciclos entre cuerpos.

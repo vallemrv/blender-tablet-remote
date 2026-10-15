@@ -1298,6 +1298,8 @@ def convert(payload):
 
 
 def _require_no_dependents(doc, identifier):
+    if any(f.get('tool_body_id')==identifier for f in doc['features']):
+        raise CommandError('El cuerpo se usa como herramienta de una combinación',code='cad_dependency')
     if any(identifier in f.get('source_ids',[]) or f.get('mirror',{}).get('source_id')==identifier for f in doc['features']):
         raise CommandError('La operación tiene una simetría o patrón dependiente',code='cad_dependency')
     if any(f.get('target_id')==identifier for f in doc['features']) or any(s.get('support_id')==identifier for s in doc['sketches']) or any(p.get('support_id')==identifier for p in doc.get('planes',[])):

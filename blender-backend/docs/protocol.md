@@ -2201,3 +2201,14 @@ visible en metros locales. `source_ids` admite EXTRUDE/CUT/HOLE anteriores y del
 mismo cuerpo; ninguna fuente puede ser patrón o simetría. MULTI con all_null:false
 envía todos los IDs explícitos al elegir Todos. Desactivar una fuente suprime el
 patrón; borrarla con dependientes responde cad_dependency.
+
+### Combinar cuerpos
+
+`cad.combine.begin {body_id,tool_body_id? | u,v,operation?,clearance?,keep_tool?}`
+inicia COMBINE. `operation`: CUT/UNION/INTERSECT; clearance≥0 en metros, solo CUT;
+keep_tool es booleano. El nodo guarda además tool_transform, una matriz afín con
+traslación en metros que captura la colocación relativa. `cad.operation.update` y
+`cad.feature.set` editan los campos; `pick_tool_body:true,u,v` cambia la herramienta.
+Se evalúan ambos cuerpos en el punto de la pila, no con su resultado futuro.
+keep_tool:false oculta su objeto sin eliminar el documento. Ciclos entre cuerpos
+y borrado de una herramienta usada responden cad_dependency.

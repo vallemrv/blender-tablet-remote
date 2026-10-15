@@ -1063,3 +1063,10 @@ no quedan archivos o referencias temporales.
   número par, una copia extra al lado negativo). Direcciones/ejes se capturan por
   segmentos o por eje cilíndrico, en metros locales; no persisten índices.
   Las fuentes desactivadas suprimen el patrón y no se borran mientras se utilicen.
+
+- Combinar (`COMBINE`) opera entre dos cuerpos CAD: CUT/UNION/INTERSECT. CUT
+  admite holgura por desfase BREP (paso 0,05 mm). La colocación relativa se captura
+  en una matriz con traslación métrica; la geometría fuente sigue siendo paramétrica.
+  El evaluador usa el estado de la herramienta en ese punto del historial y rechaza
+  ciclos incluso indirectos. keep_tool:false oculta la herramienta consumida, sin
+  borrarla; los cuerpos usados quedan protegidos frente a borrado.

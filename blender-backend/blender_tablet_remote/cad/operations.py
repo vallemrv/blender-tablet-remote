@@ -1,14 +1,15 @@
 """Parameters and tray descriptors for new CAD features, independent of Compose."""
-from . import document as model, holes, pattern
+from . import document as model, holes, pattern, combine
 from ..errors import BadPayload
 
-TYPES=('HOLE','PATTERN')
-LABELS={'HOLE':'Taladro','PATTERN':'Patrón'}
+TYPES=('HOLE','PATTERN','COMBINE')
+LABELS={'HOLE':'Taladro','PATTERN':'Patrón','COMBINE':'Combinar cuerpos'}
 
 
 def validate(doc, feature):
     if feature['type']=='HOLE': return holes.validate(doc,feature)
     if feature['type']=='PATTERN': return pattern.validate(doc,feature)
+    if feature['type']=='COMBINE': return combine.validate(doc,feature)
     raise ValueError('Unsupported feature')
 
 
@@ -16,7 +17,7 @@ def update(doc, feature, payload):
     if 'enabled' in payload:
         if not isinstance(payload['enabled'],bool): raise BadPayload('enabled debe ser booleano')
         feature['enabled']=payload['enabled']
-    fields={'HOLE':holes.FIELDS,'PATTERN':pattern.FIELDS}.get(feature['type'],())
+    fields={'HOLE':holes.FIELDS,'PATTERN':pattern.FIELDS,'COMBINE':combine.FIELDS}.get(feature['type'],())
     for key in fields:
         if key in payload: feature[key]=payload[key]
     if feature['type']=='PATTERN' and any('axis_'+k in payload for k in ('x','y','z')):
@@ -74,4 +75,9 @@ def controls(doc, feature, step):
                 fields.extend(number(values,'axis_'+k,'Centro '+k.upper(),step,-10000) for k in ('x','y','z'))
         allowed=[f for f in doc['features'] if f['body_id']==feature['body_id'] and f['type'] in ('EXTRUDE','CUT','HOLE') and f.get('order',0)<feature['order']]
         fields.append(dict(key='source_ids',label='Operaciones',type='MULTI',all_null=False,value=feature['source_ids'],options=[dict(id=f['id'],label=f['name']) for f in allowed]))
+    if typ=='COMBINE':
+        fields=[select(feature,'operation','Operación',{'CUT':'Restar','UNION':'Unir','INTERSECT':'Intersecar'}),
+                dict(key='pick_tool_body',label='Tocar pieza herramienta',type='ACTION')]
+        if feature['operation']=='CUT':fields.append(number(feature,'clearance','Holgura',.00005,0))
+        fields.append(dict(key='keep_tool',label='Mantener herramienta',type='BOOL',value=feature['keep_tool']))
     return dict(id=feature['id'],type=typ,label=LABELS[typ],fields=fields)

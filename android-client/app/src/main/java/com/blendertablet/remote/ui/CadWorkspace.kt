@@ -282,6 +282,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             DropdownMenuItem(text = { Text("Copia editable · Edición / Escultura") },
                                 enabled = connected && !cad.sessionActive && targets.any { it.bodyId == cad.activeBodyId },
                                 onClick = { bodiesOpen = false; command("cad.convert", "body_id" to cad.activeBodyId) })
+                            if ("COMBINE" in capabilities.features) DropdownMenuItem(text = { Text("Combinar con otro cuerpo") },
+                                enabled = connected && !cad.sessionActive && cad.bodies.size > 1,
+                                onClick = { bodiesOpen = false; vm.cadPickParameter("pick_tool_body", "COMBINE:" + cad.activeBodyId) })
                             DropdownMenuItem(text = { Text("Nuevo cuerpo") }, onClick = { bodiesOpen = false; command("cad.body.create") })
                         }
                     }
@@ -499,7 +502,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             val help = cad.error ?: when {
                 !connected -> "Reconectando · recuperando el documento de Blender"
-                state.cadParameterPick != null -> "Toca la referencia en la pieza para fijar la dirección o el eje"
+                state.cadParameterPick != null -> if (state.cadParameterPick == "pick_tool_body") "Toca la pieza que se usará como herramienta" else "Toca la referencia en la pieza para fijar la dirección o el eje"
                 cad.operationControls != null -> cad.operationControls.label + " · ajusta los parámetros · ✓ confirma · × cancela"
                 planePreview -> cad.plane?.let { plane ->
                     (if (plane.planeId != null) "Colocar plano guardado" else "Plano ${if (plane.base == "FACE") "en la cara" else cadPlaneLabel(plane.base)}") +
@@ -1124,7 +1127,7 @@ internal fun cadLabel(type: String) = when (type) {
     "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "SLOT" -> "Ranura"; "GEAR" -> "Engranaje"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "POINT" -> "Punto"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
     "TANGENT" -> "Tangente (línea y arco, o dos arcos/círculos)"; "EQUAL" -> "Igualdad (tamaño del primero; en arcos también el ángulo, salvo redondeos)"; "EQUAL_ANGLE" -> "Igualdad de ángulo"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "ANGLE" -> "Ángulo"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio (punto + arista, o 3 puntos; último = medio)"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
-    "PATTERN" -> "Patrón"; "HOLE" -> "Taladro"; "SHELL" -> "Carcasa"; "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; "REVOLVE" -> "Revolución"; "SWEEP" -> "Barrido"; else -> type
+    "COMBINE" -> "Combinar"; "PATTERN" -> "Patrón"; "HOLE" -> "Taladro"; "SHELL" -> "Carcasa"; "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; "REVOLVE" -> "Revolución"; "SWEEP" -> "Barrido"; else -> type
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

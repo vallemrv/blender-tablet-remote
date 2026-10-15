@@ -98,6 +98,10 @@ def delete(payload: dict) -> dict:
     from .sessions import cancel_all
     cancel_all(restore=True)
     objs = resolve_objects(payload)
+    from ..cad.runtime import runtime, BODY_KEY
+    from .cad import _require_no_dependents
+    for obj in objs:
+        if obj.get(BODY_KEY):_require_no_dependents(runtime.doc(),obj[BODY_KEY])
     removed = [o.name for o in objs]
     for obj in objs:
         bpy.data.objects.remove(obj, do_unlink=True)

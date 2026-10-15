@@ -30,7 +30,7 @@ def begin(payload, feature):
     try: yield from preview(session,feature)
     except Exception:
         runtime.cancel();raise
-    runtime.surface.clear();runtime.selection=dict(kind='FEATURE',id=feature['id'])
+    runtime.surface.clear();runtime.selection=dict(kind='FEATURE',id=feature['id']);runtime.active_body_id=feature['body_id']
     runtime.solid_view()
     return runtime.status()
 
@@ -79,6 +79,9 @@ def capture_parameters(doc, feature, payload):
     from ..cad.runtime import BODY_KEY
     from mathutils import Vector
     import bpy
+    if feature['type']=='COMBINE' and (payload.get('pick_tool_body') or 'tool_body_id' in payload):
+        tool=payload.get('tool_body_id') or picked_body(doc,payload)
+        return dict(payload,tool_body_id=tool,tool_transform=tool_placement(doc,feature['body_id'],tool))
     keys=[k for k in ('pick_direction','pick_direction2','pick_axis','pick_cylinder') if payload.get(k)]
     if not keys:return payload
     if feature['type']!='PATTERN':raise BadPayload('La operación no usa un eje de patrón')
@@ -118,3 +121,37 @@ def capture_parameters(doc, feature, payload):
     if key in ('pick_axis','pick_cylinder'):values['axis']=model.validate_face(dict(origin=list(start),normal=list((end-start).normalized())))
     else:values[key.removeprefix('pick_')]=[list(start),list(end)]
     return values
+
+
+def picked_body(doc, payload):
+    from .snap import query_cad_surface
+    from ..cad.runtime import BODY_KEY,FEATURE_KEY
+    import bpy
+    item=query_cad_surface(payload,'FACE')
+    obj=bpy.data.objects.get(item['object']) if item else None
+    if obj is None or not obj.get(BODY_KEY):raise BadPayload('Toca una pieza CAD como herramienta')
+    cad._require_reachable(doc,obj[FEATURE_KEY])
+    return obj[BODY_KEY]
+
+
+def tool_placement(doc, body, tool):
+    from ..cad.runtime import BODY_KEY
+    import bpy
+    objects={o[BODY_KEY]:o for o in runtime.objects(doc) if o.get(BODY_KEY)}
+    if body not in objects or tool not in objects:raise BadPayload('Los dos cuerpos deben tener un sólido visible')
+    relative=objects[body].matrix_world.inverted_safe()@objects[tool].matrix_world
+    result=[list(row) for row in relative]
+    for i in range(3):result[i][3]*=bpy.context.scene.unit_settings.scale_length
+    return result
+
+
+@command('cad.combine.begin')
+def combine_begin(payload):
+    runtime.require_workspace();doc=runtime.doc()
+    body=payload.get('body_id') or runtime.active_body_id
+    model.find(doc,'bodies',body)
+    tool=payload.get('tool_body_id') or picked_body(doc,payload)
+    feature=dict(type='COMBINE',sketch_id=None,body_id=body,tool_body_id=tool,operation='CUT',clearance=.0002,keep_tool=True,
+                 tool_transform=tool_placement(doc,body,tool))
+    operations.update(doc,feature,payload)
+    return (yield from begin(payload,feature))

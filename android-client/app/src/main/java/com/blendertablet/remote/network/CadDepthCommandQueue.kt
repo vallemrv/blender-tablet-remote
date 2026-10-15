@@ -8,7 +8,7 @@ internal data class CadQueuedMessage(val name: String, val payload: JSONObject)
 internal class CadDepthCommandQueue {
     companion object {
         val CANDIDATES = setOf("cad.extrude.update", "cad.finish.update", "cad.shell.update", "cad.operation.update", "cad.drag.update", "cad.entity.update", "cad.polygon.update")
-        private val BEGINS = setOf("cad.extrude.begin", "cad.finish.begin", "cad.shell.begin", "cad.hole.begin", "cad.pattern.begin", "cad.drag.begin", "cad.entity.begin", "cad.polygon.begin")
+        private val BEGINS = setOf("cad.extrude.begin", "cad.finish.begin", "cad.shell.begin", "cad.hole.begin", "cad.pattern.begin", "cad.combine.begin", "cad.drag.begin", "cad.entity.begin", "cad.polygon.begin")
         fun waitsForResponse(name: String?) = name?.startsWith("cad.") == true && name != "cad.state"
     }
     private val queue = java.util.ArrayDeque<CadQueuedMessage>()

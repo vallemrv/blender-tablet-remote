@@ -668,6 +668,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (parameter != null) {
                 val feature = local.value.cadParameterFeature
                 local.update { it.copy(cadParameterPick = null, cadParameterFeature = null) }
+                if (feature?.startsWith("COMBINE:") == true) {
+                    client.cadCommand("cad.combine.begin", mapOf("body_id" to feature.removePrefix("COMBINE:"), "u" to u, "v" to v))
+                    return
+                }
                 client.cadCommand(if (feature == "SESSION") "cad.operation.update" else "cad.feature.set",
                     mapOf(parameter to true, "feature_id" to feature, "u" to u, "v" to v))
                 return
