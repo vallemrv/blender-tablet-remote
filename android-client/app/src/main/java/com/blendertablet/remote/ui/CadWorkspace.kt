@@ -333,6 +333,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                             vm.cadTool(null); command("cad.select", "kind" to "FEATURE", "id" to feature.id)
                                         },
                                         if (feature.sketchId.isNotEmpty()) CadNodeAction("Editar ${cad.sketches.firstOrNull { it.id == feature.sketchId }?.name ?: "boceto fuente"}") { editSketch(feature.sketchId) } else null,
+                                        if ("PATTERN" in capabilities.features && feature.type in listOf("EXTRUDE", "CUT", "HOLE")) CadNodeAction("Patrón", feature.enabled && !dimmed) {
+                                            vm.cadTool(null); command("cad.pattern.begin", "source_ids" to listOf(feature.id))
+                                        } else null,
                                         if (capabilities.featureMirror && feature.type in listOf("EXTRUDE", "CUT") && !feature.isMirror)
                                             CadNodeAction("Simetría de operación", feature.enabled && !dimmed) {
                                                 vm.cadTool(null); mirrorSource = feature; mirrorPlane = "XZ"
@@ -496,6 +499,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             val help = cad.error ?: when {
                 !connected -> "Reconectando · recuperando el documento de Blender"
+                state.cadParameterPick != null -> "Toca la referencia en la pieza para fijar la dirección o el eje"
                 cad.operationControls != null -> cad.operationControls.label + " · ajusta los parámetros · ✓ confirma · × cancela"
                 planePreview -> cad.plane?.let { plane ->
                     (if (plane.planeId != null) "Colocar plano guardado" else "Plano ${if (plane.base == "FACE") "en la cara" else cadPlaneLabel(plane.base)}") +
@@ -716,6 +720,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                         if (cad.operationControls != null) {
                             val controls = cad.operationControls
                             fun change(values: Map<String, Any?>) {
+                                val pick = values.keys.firstOrNull { it.startsWith("pick_") }
+                                if (pick != null) { vm.cadPickParameter(pick, if (dynamicPreview) "SESSION" else controls.id); return }
                                 values.keys.forEach { drafts.remove(it) }
                                 if (dynamicPreview) command("cad.operation.update", *values.entries.map { it.key to it.value }.toTypedArray())
                                 else command("cad.feature.set", "feature_id" to controls.id, *values.entries.map { it.key to it.value }.toTypedArray())
@@ -1118,7 +1124,7 @@ internal fun cadLabel(type: String) = when (type) {
     "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "SLOT" -> "Ranura"; "GEAR" -> "Engranaje"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "POINT" -> "Punto"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
     "TANGENT" -> "Tangente (línea y arco, o dos arcos/círculos)"; "EQUAL" -> "Igualdad (tamaño del primero; en arcos también el ángulo, salvo redondeos)"; "EQUAL_ANGLE" -> "Igualdad de ángulo"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "ANGLE" -> "Ángulo"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio (punto + arista, o 3 puntos; último = medio)"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
-    "HOLE" -> "Taladro"; "SHELL" -> "Carcasa"; "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; "REVOLVE" -> "Revolución"; "SWEEP" -> "Barrido"; else -> type
+    "PATTERN" -> "Patrón"; "HOLE" -> "Taladro"; "SHELL" -> "Carcasa"; "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; "REVOLVE" -> "Revolución"; "SWEEP" -> "Barrido"; else -> type
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1332,7 +1338,7 @@ private fun CadOperationFields(controls: CadOperationControls, unit: LengthUnit,
                 Box {
                     PillButton("${field.label}: $current", enabled = enabled) { open = true }
                     DropdownMenu(open, onDismissRequest = { open = false }) {
-                        if (field.type == "MULTI") DropdownMenuItem(text = { Text("Todos") }, onClick = { change(mapOf(field.key to null)); open = false })
+                        if (field.type == "MULTI") DropdownMenuItem(text = { Text("Todos") }, onClick = { change(mapOf(field.key to if (field.allNull) null else field.options.map { it.first })); open = false })
                         field.options.forEach { (id, label) ->
                             val selected = if (field.type == "MULTI") field.ids == null || id in field.ids else id == field.value
                             DropdownMenuItem(text = { Text((if (selected) "✓ " else "") + label) }, onClick = {
@@ -1340,7 +1346,7 @@ private fun CadOperationFields(controls: CadOperationControls, unit: LengthUnit,
                                     val ids = field.ids ?: field.options.map { it.first }
                                     val next = if (id in ids) ids - id else ids + id
                                     if (next.isNotEmpty()) change(mapOf(field.key to next))
-                                } else { change(mapOf(field.key to id)); open = false }
+                                } else { if (id != field.value) change(mapOf(field.key to id)); open = false }
                             })
                         }
                     }

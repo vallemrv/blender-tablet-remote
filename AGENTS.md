@@ -1055,3 +1055,11 @@ no quedan archivos o referencias temporales.
   no se borran. Su preview y controles se describen en `cad/operations.py`;
   Android consume ese esquema con los campos numéricos comunes. `kind` persistido
   describe la variante; el `kind` de la vista de historial solo clasifica nodos.
+
+- Patrón (`PATTERN`) repite operandos EXTRUDE/CUT/HOLE anteriores del mismo cuerpo;
+  nunca el sólido acumulado. Lineal admite dos direcciones y rejilla; circular usa
+  360° sin duplicar el inicio o un ángulo parcial incluyendo extremos. Número incluye
+  el original. Ambos lados reparte índices enteros alrededor del original (con un
+  número par, una copia extra al lado negativo). Direcciones/ejes se capturan por
+  segmentos o por eje cilíndrico, en metros locales; no persisten índices.
+  Las fuentes desactivadas suprimen el patrón y no se borran mientras se utilicen.

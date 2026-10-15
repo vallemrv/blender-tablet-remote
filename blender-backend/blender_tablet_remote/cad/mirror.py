@@ -30,6 +30,9 @@ def resolve(doc):
 
 
 def active(doc, feature):
+    if feature['type']=='PATTERN':
+        from . import pattern
+        return pattern.active(doc,feature)
     return feature['enabled'] and (not feature.get('mirror') or
             model.find(doc,'features',feature['mirror']['source_id'])['enabled'])
 

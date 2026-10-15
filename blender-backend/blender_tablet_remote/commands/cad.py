@@ -99,7 +99,7 @@ def _new_sketch(doc,payload):
     if support_id:
         feature=model.find(doc,'features',support_id)
         if feature.get('mirror'): raise BadPayload('Usa Boceto en cara sobre el resultado de la simetría')
-        if feature['type'] in model.FINISHES + ('SHELL','HOLE','LOFT','HELIX','REVOLVE','SWEEP') or feature.get('extent')=='TO_FACE':
+        if not feature.get('profile_id') or feature['type'] in model.FINISHES + ('SHELL','HOLE','LOFT','HELIX','REVOLVE','SWEEP') or feature.get('extent')=='TO_FACE':
             raise BadPayload('Esta operación no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
         source,_=model.profile(doc,feature['profile_id'])
         plane_local=source['plane']
@@ -1190,7 +1190,8 @@ def feature_set(payload):
             model.validate_finish(feature)
         from ..cad import operations
         if feature['type'] in operations.TYPES:
-            operations.update(doc,feature,payload)
+            from .cad_operations import capture_parameters
+            operations.update(doc,feature,capture_parameters(doc,feature,payload))
             return
         if feature['type']=='SHELL':
             for key in ('thickness','side'):
@@ -1297,8 +1298,8 @@ def convert(payload):
 
 
 def _require_no_dependents(doc, identifier):
-    if any(f.get('mirror',{}).get('source_id')==identifier for f in doc['features']):
-        raise CommandError('La operación tiene una simetría dependiente',code='cad_dependency')
+    if any(identifier in f.get('source_ids',[]) or f.get('mirror',{}).get('source_id')==identifier for f in doc['features']):
+        raise CommandError('La operación tiene una simetría o patrón dependiente',code='cad_dependency')
     if any(f.get('target_id')==identifier for f in doc['features']) or any(s.get('support_id')==identifier for s in doc['sketches']) or any(p.get('support_id')==identifier for p in doc.get('planes',[])):
         raise CommandError('El sólido tiene bocetos o vaciados dependientes',code='cad_dependency')
 

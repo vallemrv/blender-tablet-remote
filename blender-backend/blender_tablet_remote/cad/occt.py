@@ -374,6 +374,31 @@ def hole_operand(sketch, feature, base):
     return result[0] if len(result)==1 else _compound(result)
 
 
+def feature_operand(doc, feature, base):
+    if feature['type']=='HOLE':
+        return hole_operand(model.find(doc,'sketches',feature['sketch_id']),feature,base)
+    sketch,source=model.profile(doc,feature['profile_id'])
+    return operand(sketch,source,feature,base)
+
+
+def patterned(doc, feature, base):
+    from . import pattern
+    from OCP.gp import gp_Trsf,gp_Vec,gp_Ax1,gp_Pnt,gp_Dir
+    transforms=[]
+    for spec in pattern.copies(feature):
+        trsf=gp_Trsf()
+        if 'translation' in spec: trsf.SetTranslation(gp_Vec(*(v*MM for v in spec['translation'])))
+        else:
+            a=spec['axis'];trsf.SetRotation(gp_Ax1(gp_Pnt(*(v*MM for v in a['origin'])),gp_Dir(*a['normal'])),math.radians(spec['angle']))
+        transforms.append(trsf)
+    result=base
+    for identifier in feature['source_ids']:
+        source=model.find(doc,'features',identifier);tool=feature_operand(doc,source,base)
+        copies=[_transformed(tool,trsf) for trsf in transforms]
+        result=_boolean('CUT' if source['type'] in ('CUT','HOLE') else 'UNION',result,_compound(copies))
+    return result
+
+
 def _to_face(sketch, source, faces, to_face):
     """Walls run along the sketch normal and end on the (possibly inclined) face plane."""
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
@@ -919,7 +944,11 @@ class Evaluator:
             def joined(build, base=base):
                 return lambda: _boolean('UNION', base, build()) if base is not None else _valid(build(), 'cad_profile_invalid')
             kind = feature['type']
-            if kind == 'HOLE':
+            if kind == 'PATTERN':
+                if base is None:raise CommandError('El patrón necesita un cuerpo anterior',code='cad_dependency')
+                store(identifier,('PATTERN',model.dumps(feature),keys.get(previous),[keys.get(i) for i in feature['source_ids']]),
+                      lambda: patterned(doc,feature,base))
+            elif kind == 'HOLE':
                 sketch=model.find(doc,'sketches',feature['sketch_id'])
                 if base is None: raise CommandError('El cuerpo no tiene sólido para taladrar',code='cad_dependency')
                 store(identifier,('HOLE',model.dumps(feature),sketch_key(sketch),keys.get(previous)),

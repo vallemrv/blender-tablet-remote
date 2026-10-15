@@ -2188,3 +2188,16 @@ profundidad propia. `cad.operation.update` modifica los mismos campos de la sesi
 El estado publica `operation_controls:{id,type,label,fields}`; cada campo describe
 key/label/type/value y, según tipo, options/step/min/max/unit. Tipos: NUMBER, ENUM,
 MULTI, BOOL, ACTION. Una preview inválida conserva los controles y no confirma.
+
+### Patrón de operaciones
+
+`cad.pattern.begin {source_ids,kind?,count?,spacing?,direction?,direction2?,count2?,spacing2?,symmetric?,axis?,axis_origin?,angle?}`
+inicia PATTERN. LINEAR admite ejes X/Y/Z o segmentos capturados; CIRCULAR admite
+eje X/Y/Z por axis_origin o marco {origin,normal}. Número es 2–100 e incluye la
+fuente; el ángulo parcial incluye extremos y 360° excluye la copia coincidente.
+`cad.operation.update` / `cad.feature.set` aceptan esos campos y `pick_direction`,
+`pick_direction2`, `pick_axis` o `pick_cylinder` con u/v para capturar la referencia
+visible en metros locales. `source_ids` admite EXTRUDE/CUT/HOLE anteriores y del
+mismo cuerpo; ninguna fuente puede ser patrón o simetría. MULTI con all_null:false
+envía todos los IDs explícitos al elegir Todos. Desactivar una fuente suprime el
+patrón; borrarla con dependientes responde cad_dependency.

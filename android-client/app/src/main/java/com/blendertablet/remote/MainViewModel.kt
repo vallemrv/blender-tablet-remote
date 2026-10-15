@@ -352,8 +352,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun cadCommand(name: String, payload: Map<String, Any?> = emptyMap()) {
         if (!client.state.value.cad.workspace) return
         cancelCadStroke()
-        local.update { it.copy(cadFacePick = null) }
+        local.update { it.copy(cadFacePick = null, cadParameterPick = null, cadParameterFeature = null) }
         client.cadCommand(name, payload)
+    }
+    fun cadPickParameter(key: String, feature: String) {
+        cancelCadStroke()
+        local.update { it.copy(cadFacePick = null, cadParameterPick = key, cadParameterFeature = feature) }
     }
     /** Hasta cara: el siguiente toque elige la cara plana donde termina la extrusión. */
     fun cadPickEndFace(target: String?) {
@@ -370,7 +374,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun cadTool(type: String?) {
         cancelCadStroke()
-        local.update { it.copy(cadFacePick = null) }
+        local.update { it.copy(cadFacePick = null, cadParameterPick = null, cadParameterFeature = null) }
         if (client.state.value.cad.surface.mode != "PROFILE") client.cadCommand("cad.surface.mode", mapOf("mode" to "PROFILE"))
         local.update { it.copy(cadTool = type?.takeIf { candidate -> candidate in client.state.value.features.cad.entities }) }
     }
@@ -475,7 +479,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     "PLANE" -> client.cadCommand("cad.plane.update", mapOf("release" to true))
                     "FACE" -> {
                         // La cara se sondea donde bajó el dedo, no donde se levantó.
-                        local.update { it.copy(cadFacePick = null) }
+                        local.update { it.copy(cadFacePick = null, cadParameterPick = null, cadParameterFeature = null) }
                         client.cadCommand("cad.extrude.update", mapOf("extent" to "TO_FACE",
                             "u" to cadPointerStartU, "v" to cadPointerStartV))
                     }
@@ -660,9 +664,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         if (client.state.value.cad.workspace) {
+            val parameter = local.value.cadParameterPick
+            if (parameter != null) {
+                val feature = local.value.cadParameterFeature
+                local.update { it.copy(cadParameterPick = null, cadParameterFeature = null) }
+                client.cadCommand(if (feature == "SESSION") "cad.operation.update" else "cad.feature.set",
+                    mapOf(parameter to true, "feature_id" to feature, "u" to u, "v" to v))
+                return
+            }
             val endFace = local.value.cadFacePick
             if (endFace != null && endFace != "SESSION") {
-                local.update { it.copy(cadFacePick = null) }
+                local.update { it.copy(cadFacePick = null, cadParameterPick = null, cadParameterFeature = null) }
                 client.cadCommand("cad.feature.set", mapOf("feature_id" to endFace, "extent" to "TO_FACE", "u" to u, "v" to v)); return
             }
             if (client.state.value.cad.surface.mode != "PROFILE") {

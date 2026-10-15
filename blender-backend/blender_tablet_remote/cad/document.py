@@ -458,7 +458,7 @@ def resolve_supports(doc):
     def supported(feature_id):
         f=find(doc,'features',feature_id)
         if f.get('mirror'): raise BadPayload('Usa Boceto en cara sobre el resultado de la simetría')
-        if f['type'] in FINISHES + ('SHELL','HOLE','LOFT','HELIX','REVOLVE','SWEEP'):
+        if not f.get('profile_id') or f['type'] in FINISHES + ('SHELL','HOLE','LOFT','HELIX','REVOLVE','SWEEP'):
             raise BadPayload('Un redondeo o solevado no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
         if f.get('extent') in ('TO_FACE','THROUGH_ALL'):
             raise BadPayload('Una operación hasta cara o pasante no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')

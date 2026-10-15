@@ -665,3 +665,13 @@ Avellanado, Tuerca hexagonal o Inserto. **Puntos** permite usar todos o una sele
 diametral inicial es 0,2 mm. Los insertos son orientativos y dependen del fabricante:
 puedes ajustar su diámetro y profundidad. ✓ confirma y × cancela; la operación
 se edita desde la pila. Mover un punto del croquis actualiza su taladro.
+
+## Patrón lineal y circular
+
+En el menú de una Extrusión, Vaciado o Taladro de la pila elige **Patrón**. Número
+incluye el original. El lineal ofrece separación, dirección y una segunda dirección
+para rejillas, además de reparto a ambos lados. El circular ofrece eje, centro y
+ángulo; 360° distribuye las copias sin repetir el inicio. **Tocar arista** captura
+una dirección/eje y **Tocar cara cilíndrica** usa su eje. Operaciones permite repetir
+varias fuentes anteriores del mismo cuerpo. Editar la fuente actualiza sus copias.
+✓ confirma y × cancela; el patrón se puede editar y desactivar desde la pila.

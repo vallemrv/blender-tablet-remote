@@ -532,6 +532,8 @@ data class AppUiState(
     val cadGearTeeth: Int = 20,
     /** Hasta cara armado: `SESSION` para la preview de extrusión o el ID de la operación a editar. */
     val cadFacePick: String? = null,
+    val cadParameterPick: String? = null,
+    val cadParameterFeature: String? = null,
     val sculptSmooth: Boolean = false,
     val sculptInvert: Boolean = false,
     val sculptStylusOnly: Boolean = true,
