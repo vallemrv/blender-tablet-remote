@@ -655,3 +655,13 @@ El cálculo utiliza [MakeThickSolidByJoin de OpenCascade](https://occt3d.com/dev
 con comprobación adicional del espesor interior para detectar paredes colapsadas.
 Si falta OCP se muestra la instrucción de instalación, sin modificar la pieza.
 Para crear otro boceto sobre el resultado se usa **Boceto en cara**.
+
+## Taladro métrico
+
+Crea un boceto en la cara, coloca y acota puntos, y finalízalo. En el menú del
+croquis elige **Taladro métrico**. Selecciona Métrica y Tipo: Pasante, Cajeado,
+Avellanado, Tuerca hexagonal o Inserto. **Puntos** permite usar todos o una selección.
+**Perforar todo** atraviesa la pieza; Profundidad crea un agujero ciego. La Holgura
+diametral inicial es 0,2 mm. Los insertos son orientativos y dependen del fabricante:
+puedes ajustar su diámetro y profundidad. ✓ confirma y × cancela; la operación
+se edita desde la pila. Mover un punto del croquis actualiza su taladro.

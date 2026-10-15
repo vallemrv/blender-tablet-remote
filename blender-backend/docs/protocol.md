@@ -2176,3 +2176,15 @@ En Materiales/Texturas, `view.shading {mode:WIREFRAME|TOGGLE}` se normaliza a
 preexistente o activado desde el PC antes de tomar el estado que restaurará.
 El resultado conserva Solid, evitando el ciclo Wireframe/Material entre frames.
 Fuera de Materiales, `view.shading` conserva su comportamiento habitual.
+
+### Taladro y bandeja por esquema
+
+`cad.hole.begin {sketch_id,size?,kind?,point_ids?,depth?,extent?,tolerance?,insert_diameter?,insert_depth?}`
+crea preview `HOLE`. `kind`: THROUGH/COUNTERBORE/COUNTERSINK/NUT/INSERT; métricas
+M2/M2.5/M3/M4/M5/M6. `point_ids:null` usa todos los POINT y centros de CIRCLE.
+`extent`: ONE/THROUGH_ALL; longitudes en metros, holgura diametral. INSERT usa su
+profundidad propia. `cad.operation.update` modifica los mismos campos de la sesión;
+`cad.session.confirm/cancel` la cierra y `cad.feature.set` edita el nodo confirmado.
+El estado publica `operation_controls:{id,type,label,fields}`; cada campo describe
+key/label/type/value y, según tipo, options/step/min/max/unit. Tipos: NUMBER, ENUM,
+MULTI, BOOL, ACTION. Una preview inválida conserva los controles y no confirma.

@@ -53,8 +53,11 @@ def geometry_key(doc, limit, scale):
     sketches = {}
     for node in model.history(doc):
         if node['kind'] == 'FEATURE' and node['enabled']:
-            feature = dict(node)
+            feature = dict(model.find(doc,'features',node['id']))
             feature.pop('name', None)
+            if feature.get('sketch_id'):
+                source=model.find(doc,'sketches',feature['sketch_id'])
+                sketches[source['id']]=dict(frame=model.frame(source),entities=source['entities'])
             features.append(feature)
             for key in ('profile_id', 'to_profile_id'):
                 if node.get(key):
@@ -326,6 +329,49 @@ def operand(sketch, source, feature, base=None):
     cut = feature.get('operation', feature['type']) == 'CUT'
     signed = -depth if cut else depth
     return _prism(faces, [c*signed for c in normal])
+
+
+def hole_operand(sketch, feature, base):
+    """All screw seats in one cutting compound, located by sketch point IDs."""
+    from . import holes
+    from .kernel import through_depth, world
+    from OCP.BRepPrimAPI import BRepPrimAPI_MakeCylinder, BRepPrimAPI_MakeCone
+    from OCP.gp import gp_Pnt, gp_Dir, gp_Ax2
+    from OCP.Bnd import Bnd_Box
+    from OCP.BRepBndLib import BRepBndLib
+    from itertools import product
+    values=holes.measures(feature); basis=model.frame(sketch)
+    normal=basis['normal']; direction=gp_Dir(*[-v for v in normal])
+    long=feature.get('depth') or .01
+    if feature['extent']=='THROUGH_ALL':
+        box=Bnd_Box();BRepBndLib.Add_s(base,box);a,b=box.CornerMin(),box.CornerMax()
+        long=through_depth(sketch,list(product((a.X()/MM,b.X()/MM),(a.Y()/MM,b.Y()/MM),(a.Z()/MM,b.Z()/MM))))
+    result=[];seen=set()
+    for point in holes.points(sketch,feature):
+        key=(round(point['x'],10),round(point['y'],10))
+        if key in seen:continue
+        seen.add(key)
+        origin=world(sketch,point['x'],point['y'])
+        def axis(offset=0):return gp_Ax2(gp_Pnt(*[(origin[i]+normal[i]*offset)*MM for i in range(3)]),direction,gp_Dir(*basis['x']))
+        kind=feature['kind'];epsilon=1e-7
+        if kind=='INSERT':
+            tool=BRepPrimAPI_MakeCylinder(axis(epsilon),values['insert_diameter']*MM/2,(values['insert_depth']+epsilon)*MM).Shape()
+        else:
+            start=long if feature['extent']=='THROUGH_ALL' else epsilon
+            tool=BRepPrimAPI_MakeCylinder(axis(start),values['diameter']*MM/2,(long+start)*MM).Shape()
+            head=None
+            if kind=='COUNTERBORE':
+                head=BRepPrimAPI_MakeCylinder(axis(epsilon),values['head_diameter']*MM/2,(values['head_depth']+epsilon)*MM).Shape()
+            elif kind=='COUNTERSINK':
+                big,small=values['sink_diameter']/2,values['diameter']/2
+                head=BRepPrimAPI_MakeCone(axis(epsilon),(big+epsilon)*MM,small*MM,(big-small+epsilon)*MM).Shape()
+            elif kind=='NUT':
+                hexagon=dict(id='nut',type='NGON',x=point['x'],y=point['y'],flats=values['nut_flats'],sides=6,angle=0.)
+                face=_face(dict(sketch,entities=[hexagon]),hexagon,[])
+                head=_prism([_translated(face,[v*epsilon*MM for v in normal])],[-v*(values['nut_depth']+epsilon)*MM for v in normal])
+            if head is not None:tool=_boolean('UNION',tool,head)
+        result.append(tool)
+    return result[0] if len(result)==1 else _compound(result)
 
 
 def _to_face(sketch, source, faces, to_face):
@@ -866,13 +912,19 @@ class Evaluator:
         for feature in sequence:
             if feature['kind'] != 'FEATURE' or not mirror.active(doc, feature):
                 continue
+            feature=model.find(doc,'features',feature['id'])
             identifier = feature['id']; body = feature['body_id']
             previous = tips.get(body)
             base = shapes.get(previous)
             def joined(build, base=base):
                 return lambda: _boolean('UNION', base, build()) if base is not None else _valid(build(), 'cad_profile_invalid')
             kind = feature['type']
-            if kind == 'SHELL':
+            if kind == 'HOLE':
+                sketch=model.find(doc,'sketches',feature['sketch_id'])
+                if base is None: raise CommandError('El cuerpo no tiene sólido para taladrar',code='cad_dependency')
+                store(identifier,('HOLE',model.dumps(feature),sketch_key(sketch),keys.get(previous)),
+                      lambda: _boolean('CUT',base,hole_operand(sketch,feature,base)))
+            elif kind == 'SHELL':
                 if base is None:
                     raise CommandError('El cuerpo no tiene un sólido para crear la carcasa',code='cad_dependency')
                 store(identifier,('OCCT',kind,model.dumps(feature['faces']),feature['thickness'],feature['side'],keys.get(previous)),

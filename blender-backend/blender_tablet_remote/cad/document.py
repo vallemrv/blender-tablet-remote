@@ -175,6 +175,13 @@ def loads(raw):
             unique(feature['id'])
             if not isinstance(feature.get('name'),str):
                 raise ValueError('invalid feature name')
+            from . import operations
+            if feature.get('type') in operations.TYPES:
+                find(doc,'bodies',feature['body_id'])
+                if not isinstance(feature.get('enabled'),bool): raise ValueError('invalid feature')
+                operations.validate(doc,feature)
+                seen_features.add(feature['id'])
+                continue
             if feature.get('type') in FINISHES + ('SHELL',):
                 find(doc,'bodies',feature['body_id'])
                 if not isinstance(feature.get('enabled'),bool) or feature.get('sketch_id') is not None:
@@ -451,7 +458,7 @@ def resolve_supports(doc):
     def supported(feature_id):
         f=find(doc,'features',feature_id)
         if f.get('mirror'): raise BadPayload('Usa Boceto en cara sobre el resultado de la simetría')
-        if f['type'] in FINISHES + ('SHELL','LOFT','HELIX','REVOLVE','SWEEP'):
+        if f['type'] in FINISHES + ('SHELL','HOLE','LOFT','HELIX','REVOLVE','SWEEP'):
             raise BadPayload('Un redondeo o solevado no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
         if f.get('extent') in ('TO_FACE','THROUGH_ALL'):
             raise BadPayload('Una operación hasta cara o pasante no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')

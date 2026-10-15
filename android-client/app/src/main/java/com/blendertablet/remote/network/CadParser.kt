@@ -26,7 +26,7 @@ object CadParser {
         j.optString("length_unit") != "METERS") CadCapabilities() else CadCapabilities(2,
         strings(j.optJSONArray("planes")).filter { it in listOf("XY", "XZ", "YZ") },
         strings(j.optJSONArray("entities")).filter { it in listOf("POINT", "LINE", "RECTANGLE", "CIRCLE", "ARC", "NGON", "SLOT", "GEAR", "POLYGON") },
-        strings(j.optJSONArray("features")).filter { it in listOf("EXTRUDE", "CUT", "LOFT", "HELIX", "REVOLVE", "SWEEP", "MIRROR", "SHELL") },
+        strings(j.optJSONArray("features")).filter { it in listOf("EXTRUDE", "CUT", "LOFT", "HELIX", "REVOLVE", "SWEEP", "MIRROR", "SHELL", "HOLE") },
         strings(j.optJSONArray("constraints")).filter { it in listOf("COINCIDENT", "POINT_ON_LINE", "HORIZONTAL", "VERTICAL", "PARALLEL", "PERPENDICULAR", "TANGENT", "EQUAL", "DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "ANGLE", "FIX", "MIDPOINT", "SYMMETRIC", "SYMMETRIC_LINE") },
         j.optBoolean("sketch_editing"), strings(j.optJSONArray("offset_entities")), j.optBoolean("feature_mirror"),
         j.optBoolean("edge_plane"), j.optBoolean("plane_purge"), j.optBoolean("section_view"), j.optBoolean("midpoint_points"), j.optBoolean("reference_profile"))
@@ -71,6 +71,13 @@ object CadParser {
             activeSketchId = j.id("active_sketch_id"), selectionKind = selection?.id("kind"), selectionId = selection?.id("id"),
             sessionActive = session?.optBoolean("active") == true, sessionId = session?.id("id"), canConfirm = session?.optBoolean("can_confirm", true) == true,
             canClose = session?.optBoolean("can_close") == true, operation = session?.optString("operation").orEmpty(),
+            operationControls = j.optJSONObject("operation_controls")?.let { controls ->
+                CadOperationControls(controls.optString("id"), controls.optString("type"), controls.optString("label"),
+                    objects(controls.optJSONArray("fields")).map { f -> CadOperationField(f.optString("key"), f.optString("label"), f.optString("type"),
+                        f.optDouble("value", 0.0), f.optString("value", ""), f.optBoolean("value"),
+                        f.optJSONArray("value")?.let { strings(it) }, objects(f.optJSONArray("options")).map { it.optString("id") to it.optString("label") },
+                        f.optDouble("step", .001), f.optDouble("min", 0.0), f.optDouble("max", 10000.0), f.optString("unit", "LENGTH")) })
+            },
             depth = session?.optDouble("depth", 0.02) ?: 0.02,
             positiveDirection = session?.optString("positive_label").orEmpty(),
             negativeDirection = session?.optString("negative_label").orEmpty(),

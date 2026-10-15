@@ -5,6 +5,21 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CadParserTest {
+    @Test fun holeTrayReadsBackendFieldsWithoutAnotherNumericImplementation() {
+        val caps = CadParser.capabilities(JSONObject("""{"version":2,"length_unit":"METERS","features":["HOLE"]}"""))
+        assertTrue("HOLE" in caps.features)
+        val state = CadParser.state(JSONObject("""{"version":1,"operation_controls":{"id":"h","type":"HOLE","label":"Taladro","fields":[
+            {"key":"size","label":"Métrica","type":"ENUM","value":"M3","options":[{"id":"M3","label":"M3"}]},
+            {"key":"tolerance","label":"Holgura","type":"NUMBER","value":0.0002,"step":0.00005,"min":0,"unit":"LENGTH"},
+            {"key":"point_ids","label":"Puntos","type":"MULTI","value":["p"],"options":[{"id":"p","label":"Punto 1"}]}]}}"""))
+        val controls = state.operationControls!!
+        assertEquals("HOLE", controls.type)
+        assertEquals("M3", controls.fields[0].value)
+        assertEquals(.0002, controls.fields[1].number, 1e-12)
+        assertEquals(.00005, controls.fields[1].step, 1e-12)
+        assertEquals(listOf("p"), controls.fields[2].ids)
+    }
+
     @Test fun shellCapabilityPreviewAndSavedParametersReachAndroid() {
         val capabilities = CadParser.capabilities(JSONObject("""{"version":2,"length_unit":"METERS","features":["EXTRUDE","SHELL"]}"""))
         assertTrue("SHELL" in capabilities.features)

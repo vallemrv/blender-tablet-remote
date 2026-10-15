@@ -706,8 +706,15 @@ class CadRuntime:
                     labels = direction_labels(model.frame(sketch)['normal'])
                 except CommandError:
                     labels = None
+            from . import operations
+            operation_controls=None
+            chosen=(self.selection or {}).get('id')
+            feature=next((f for f in doc['features'] if f['id']==chosen),None)
+            if session: feature=session.get('feature') if session.get('operation') in operations.TYPES else None
+            if feature and feature['type'] in operations.TYPES:
+                operation_controls=operations.controls(doc,feature,self.step)
             return dict(version=1,workspace=self.workspace,isolated=bool(self.workspace and not self.show_scene),document=self.public_document(doc),
-                        dimension_options=numeric,surface=self.surface.status(),
+                        dimension_options=numeric,surface=self.surface.status(),operation_controls=operation_controls,
                         rollback_id=self.bar(doc),
                         active_sketch_id=self.active_sketch_id,selection=self.selection,step=self.step,increment=self.increment,construction=self.construction,active_body_id=self.active_body_id or doc['bodies'][0]['id'],show_scene=self.show_scene,section=self.section,
                         session=dict(active=bool(session),id=session['id'] if session else None,

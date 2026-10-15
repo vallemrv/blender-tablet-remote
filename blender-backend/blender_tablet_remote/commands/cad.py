@@ -99,7 +99,7 @@ def _new_sketch(doc,payload):
     if support_id:
         feature=model.find(doc,'features',support_id)
         if feature.get('mirror'): raise BadPayload('Usa Boceto en cara sobre el resultado de la simetría')
-        if feature['type'] in model.FINISHES + ('SHELL','LOFT','HELIX','REVOLVE','SWEEP') or feature.get('extent')=='TO_FACE':
+        if feature['type'] in model.FINISHES + ('SHELL','HOLE','LOFT','HELIX','REVOLVE','SWEEP') or feature.get('extent')=='TO_FACE':
             raise BadPayload('Esta operación no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
         source,_=model.profile(doc,feature['profile_id'])
         plane_local=source['plane']
@@ -562,10 +562,14 @@ def entity_delete(payload):
         if any(c['type']=='OFFSET' and c['refs'][0]['id'] in removed and c['refs'][1]['id'] not in removed
                for c in sketch.get('constraints',[])):
             raise CommandError('El contorno tiene un desfase dependiente; elimina primero su desfase',code='cad_dependency')
+        from ..cad import holes
+        for feature in doc['features']:
+            if feature['type']=='HOLE' and feature['sketch_id']==sketch['id'] and removed.intersection(e['id'] for e in holes.points(sketch,feature)):
+                raise CommandError('El punto está utilizado por Taladro; elimina antes su operación',code='cad_dependency')
         geometry.delete_selected(sketch,refs)
         for feature in doc['features']:
             for sketch_key,profile_key in (('sketch_id','profile_id'),('to_sketch_id','to_profile_id')):
-                if feature.get(sketch_key)!=sketch['id']: continue
+                if feature.get(sketch_key)!=sketch['id'] or not feature.get(profile_key): continue
                 try: model.profile(doc,feature[profile_key])
                 except CommandError as exc:
                     raise CommandError('El borrado abriría un perfil utilizado; elimina primero su operación CAD',code='cad_dependency') from exc
@@ -1131,7 +1135,8 @@ def shell_update(payload):
 def confirm(payload):
     session = runtime.require(payload)
     if not session['candidate']:
-        if session['operation']=='SHELL': return runtime.status()
+        from ..cad import operations
+        if session['operation']=='SHELL' or session['operation'] in operations.TYPES: return runtime.status()
         runtime.cancel()
         return runtime.status()
     doc = session['preview']
@@ -1183,6 +1188,10 @@ def feature_set(payload):
             if 'width' in payload: feature['width']=payload['width']
             if 'segments' in payload: feature['segments']=payload['segments']
             model.validate_finish(feature)
+        from ..cad import operations
+        if feature['type'] in operations.TYPES:
+            operations.update(doc,feature,payload)
+            return
         if feature['type']=='SHELL':
             for key in ('thickness','side'):
                 if key in payload: feature[key]=payload[key]

@@ -102,6 +102,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     // Dibujar muestra las mismas medidas en vivo que arrastrar; se editan al soltar.
     val drawPreview = cad.sessionActive && cad.operation in listOf("LINE", "RECTANGLE", "CIRCLE", "ARC")
     val livePreview = dragPreview || drawPreview
+    val dynamicPreview = cad.sessionActive && cad.operationControls != null
     val shellPreview = cad.sessionActive && cad.operation == "SHELL"
     val finishPreview = cad.sessionActive && cad.operation in listOf("FILLET", "CHAMFER")
     // Colocar un plano: el rail elige la base y la bandeja sus medidas, con preview en la vista.
@@ -301,7 +302,10 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                                 "path_sketch_id" to sketch.id)
                                         } else command("cad.history.rollback", "node_id" to node.id)
                                     },
-                                    actions = listOf(
+                                    actions = listOfNotNull(
+                                        if ("HOLE" in capabilities.features && sketch.entities.any { it.type in listOf("POINT", "CIRCLE") }) CadNodeAction("Taladro métrico") {
+                                            vm.cadTool(null); command("cad.hole.begin", "sketch_id" to sketch.id)
+                                        } else null,
                                         CadNodeAction("Renombrar croquis") { renamingSketch = sketch },
                                         CadNodeAction("Editar boceto") { editSketch(sketch.id) },
                                         CadNodeAction("Seleccionar croquis completo", sketch.profiles.isNotEmpty()) {
@@ -395,6 +399,15 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
         if (!connected || !validDrafts || livePreview) return
         focusManager.clearFocus()
         when {
+            dynamicPreview -> {
+                if (drafts.isNotEmpty()) command("cad.operation.update", *drafts.map { it.key to it.value }.toTypedArray())
+                drafts.clear()
+                command("cad.session.confirm")
+            }
+            cad.operationControls != null && feature != null -> {
+                command("cad.feature.set", "feature_id" to feature.id, *drafts.map { it.key to it.value }.toTypedArray())
+                drafts.clear()
+            }
             planePreview -> {
                 if (drafts.keys.any { it.startsWith("plane_") }) pushPlane()
                 command("cad.session.confirm")
@@ -456,11 +469,12 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     }
     fun discardValues() {
         focusManager.clearFocus()
-        if (depthPreview || finishPreview || shellPreview || planePreview) command("cad.session.cancel")
+        if (depthPreview || finishPreview || shellPreview || dynamicPreview || planePreview) command("cad.session.cancel")
         if (cad.selectionKind == "CONSTRAINT") command("cad.select_all", "action" to "DESELECT")
         pendingDimension = null; editingConstraint = null; offsetSource = null; mirrorSource = null; resetInputs++
     }
     val canAccept = connected && validDrafts && when {
+        dynamicPreview -> cad.canConfirm || drafts.isNotEmpty()
         depthPreview -> cad.canConfirm
         shellPreview -> cad.canConfirm || drafts["thickness"] != null
         finishPreview -> cad.canConfirm || drafts["width"] != null
@@ -470,7 +484,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
         else -> drafts.isNotEmpty()
     }
     val parameterScroll = rememberScrollState()
-    val hasValues = depthPreview || finishPreview || shellPreview || planePreview || pendingDimension != null || editingConstraint != null || entity != null || feature != null || offsetPlane != null || offsetSource != null || mirrorSource != null
+    val hasValues = depthPreview || finishPreview || shellPreview || dynamicPreview || planePreview || pendingDimension != null || editingConstraint != null || entity != null || feature != null || offsetPlane != null || offsetSource != null || mirrorSource != null
     val arcSelectionHelp = entity?.let { selected ->
         val otherArcs = cadOtherSelectedArcs(cad, selected)
         if (otherArcs.isEmpty()) null else {
@@ -482,6 +496,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             val help = cad.error ?: when {
                 !connected -> "Reconectando · recuperando el documento de Blender"
+                cad.operationControls != null -> cad.operationControls.label + " · ajusta los parámetros · ✓ confirma · × cancela"
                 planePreview -> cad.plane?.let { plane ->
                     (if (plane.planeId != null) "Colocar plano guardado" else "Plano ${if (plane.base == "FACE") "en la cara" else cadPlaneLabel(plane.base)}") +
                         " · arrastra las flechas: roja/verde lo deslizan, azul (o fuera de ellas) lo separa · positivo: ${plane.positiveLabel.lowercase()} · ✓ " +
@@ -698,7 +713,19 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                 }
                             }
                         }
-                        if (depthPreview) {
+                        if (cad.operationControls != null) {
+                            val controls = cad.operationControls
+                            fun change(values: Map<String, Any?>) {
+                                values.keys.forEach { drafts.remove(it) }
+                                if (dynamicPreview) command("cad.operation.update", *values.entries.map { it.key to it.value }.toTypedArray())
+                                else command("cad.feature.set", "feature_id" to controls.id, *values.entries.map { it.key to it.value }.toTypedArray())
+                            }
+                            CadOperationFields(controls, unit, connected, drafts, ::acceptValues, ::change)
+                            if (!dynamicPreview && feature != null) {
+                                CadAction("VISIBLE", "Activar/desactivar operación", selected = feature.enabled, enabled = connected) { change(mapOf("enabled" to !feature.enabled)) }
+                                CadAction("DELETE", "Borrar operación", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
+                            }
+                        } else if (depthPreview) {
                             PillButton("Una dirección", selected = cad.extent == "ONE" && state.cadFacePick == null, enabled = connected) {
                                 command("cad.extrude.update", "extent" to "ONE")
                             }
@@ -844,10 +871,10 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 }
                 if (hasValues && !livePreview) {
                     Spacer(Modifier.width(10.dp))
-                    RoundAction(AppIcons.cad("CANCEL"), if (depthPreview || finishPreview || shellPreview || planePreview) "Descartar preview" else "Descartar medidas", Ink.Bad, ::discardValues)
+                    RoundAction(AppIcons.cad("CANCEL"), if (depthPreview || finishPreview || shellPreview || dynamicPreview || planePreview) "Descartar preview" else "Descartar medidas", Ink.Bad, ::discardValues)
                     Spacer(Modifier.width(4.dp))
                     RoundAction(AppIcons.cad("FINISH"), if (planePreview) (if (cad.plane?.planeId != null) "Aplicar posición del plano" else "Crear el plano y su croquis")
-                        else if (depthPreview || finishPreview || shellPreview) "Confirmar ${cadLabel(cad.operation)}" else "Aplicar medidas",
+                        else if (depthPreview || finishPreview || shellPreview || dynamicPreview) "Confirmar ${cadLabel(cad.operation)}" else "Aplicar medidas",
                         if (canAccept) Ink.Ok else Ink.Faint, { if (canAccept) acceptValues() })
                 }
             }
@@ -1091,7 +1118,7 @@ internal fun cadLabel(type: String) = when (type) {
     "RECTANGLE" -> "Rectángulo"; "NGON" -> "Polígono regular"; "SLOT" -> "Ranura"; "GEAR" -> "Engranaje"; "CIRCLE" -> "Círculo"; "LINE" -> "Línea"; "POINT" -> "Punto"; "ARC" -> "Arco"; "POLYGON" -> "Polígono"; "FILLET" -> "Redondeo"; "CHAMFER" -> "Chaflán"; "PROJECT" -> "Proyectar"
     "COINCIDENT" -> "Coincidente"; "HORIZONTAL" -> "Horizontal"; "VERTICAL" -> "Vertical"; "PARALLEL" -> "Paralela"; "PERPENDICULAR" -> "Perpendicular"
     "TANGENT" -> "Tangente (línea y arco, o dos arcos/círculos)"; "EQUAL" -> "Igualdad (tamaño del primero; en arcos también el ángulo, salvo redondeos)"; "EQUAL_ANGLE" -> "Igualdad de ángulo"; "DISTANCE" -> "Distancia diagonal / longitud"; "DISTANCE_X" -> "Distancia horizontal"; "DISTANCE_Y" -> "Distancia vertical"; "RADIUS" -> "Radio"; "ANGLE" -> "Ángulo"; "FIX" -> "Fijar selección"; "MIDPOINT" -> "Punto medio (punto + arista, o 3 puntos; último = medio)"; "SYMMETRIC" -> "Simetría (3 puntos; último = centro)"; "SYMMETRIC_LINE" -> "Simetría respecto a línea (2 puntos + eje)"
-    "SHELL" -> "Carcasa"; "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; "REVOLVE" -> "Revolución"; "SWEEP" -> "Barrido"; else -> type
+    "HOLE" -> "Taladro"; "SHELL" -> "Carcasa"; "EXTRUDE" -> "Extruir"; "CUT" -> "Vaciar"; "LOFT" -> "Solevado"; "HELIX" -> "Barrido helicoidal"; "REVOLVE" -> "Revolución"; "SWEEP" -> "Barrido"; else -> type
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1140,13 +1167,13 @@ private fun CadRollbackBar() {
 @Composable
 private fun CadDimension(
     label: String, meters: Double, unit: LengthUnit, identity: String,
-    step: Double, enabled: Boolean, degrees: Boolean = false, readOnly: Boolean = false,
+    step: Double, enabled: Boolean, degrees: Boolean = false, readOnly: Boolean = false, scalar: Boolean = false,
     minimum: Double = -10000.0, maximum: Double = 10000.0,
     onNudge: ((Double) -> Unit)? = null,
     onDone: () -> Unit,
     onDraft: (Double?) -> Unit,
 ) {
-    val factor = if (degrees) 1.0 else when (unit) { LengthUnit.MILLIMETERS -> 1000.0; LengthUnit.CENTIMETERS -> 100.0; LengthUnit.METERS -> 1.0 }
+    val factor = if (degrees || scalar) 1.0 else when (unit) { LengthUnit.MILLIMETERS -> 1000.0; LengthUnit.CENTIMETERS -> 100.0; LengthUnit.METERS -> 1.0 }
     val input = remember(identity, factor) { CadNumberDraft() }
     SideEffect { input.acknowledge(meters) }
     val value = input.read(meters, factor, minimum, maximum)
@@ -1164,10 +1191,10 @@ private fun CadDimension(
                 color = Ink.OnPanel, fontSize = 13.sp, maxLines = 1)
         } else CompactNumericField(value = input.text ?: formatToolDistance(displayed, detailDecimalPlaces(displayed, if (degrees || unit == LengthUnit.MILLIMETERS) 2 else 4)),
             onValueChange = { if (enabled) { input.text = it; onDraft(input.read(meters, factor, minimum, maximum)) } },
-            modifier = Modifier.width(84.dp), textAlign = TextAlign.End, placeholder = if (degrees) "°" else unit.short,
+            modifier = Modifier.width(84.dp), textAlign = TextAlign.End, placeholder = if (scalar) "" else if (degrees) "°" else unit.short,
             textColor = if (value == null) Ink.Bad else if (enabled) Ink.OnPanel else Ink.Faint, selectAllOnFocus = true,
             onDone = { if (enabled && value != null) { input.pending = value; input.text = null; onDone() } })
-        Text(if (degrees) "°" else unit.short, color = Ink.Muted, fontSize = 12.sp)
+        Text(if (scalar) "" else if (degrees) "°" else unit.short, color = Ink.Muted, fontSize = 12.sp)
         StepperButton("+", enabled && !readOnly && value != null && value < maximum) { nudge(1) }
     }
 }
@@ -1284,3 +1311,41 @@ private fun CadCountControl(label: String, value: Int, range: IntRange, enabled:
 internal fun cadOffsetSource(cad: CadState, types: Collection<String>): CadEntity? =
     cad.selection.map { it.id }.distinct().singleOrNull()
         ?.let { id -> cad.activeSketch?.entities?.firstOrNull { it.id == id && it.type in types } }
+
+
+/** A single parameter tray consumes the feature schema published by Blender. */
+@Composable
+private fun CadOperationFields(controls: CadOperationControls, unit: LengthUnit, enabled: Boolean,
+    drafts: MutableMap<String, Double?>, done: () -> Unit, change: (Map<String, Any?>) -> Unit) {
+    controls.fields.forEach { field -> key(controls.id, field.key) {
+        when (field.type) {
+            "NUMBER" -> CadDimension(field.label, field.number, unit, controls.id + field.key, step = field.step,
+                enabled = enabled, degrees = field.unit == "ANGLE", scalar = field.unit == "SCALAR",
+                minimum = field.minimum, maximum = field.maximum, onNudge = { change(mapOf(field.key to it)) },
+                onDone = { drafts[field.key]?.let { change(mapOf(field.key to it)) } }) { drafts[field.key] = it }
+            "BOOL" -> PillButton(field.label, selected = field.boolean, enabled = enabled) { change(mapOf(field.key to !field.boolean)) }
+            "ACTION" -> PillButton(field.label, enabled = enabled) { change(mapOf(field.key to true)) }
+            "ENUM", "MULTI" -> {
+                var open by remember { mutableStateOf(false) }
+                val current = if (field.type == "MULTI") field.ids?.size?.toString() ?: "Todos"
+                    else field.options.firstOrNull { it.first == field.value }?.second ?: field.value
+                Box {
+                    PillButton("${field.label}: $current", enabled = enabled) { open = true }
+                    DropdownMenu(open, onDismissRequest = { open = false }) {
+                        if (field.type == "MULTI") DropdownMenuItem(text = { Text("Todos") }, onClick = { change(mapOf(field.key to null)); open = false })
+                        field.options.forEach { (id, label) ->
+                            val selected = if (field.type == "MULTI") field.ids == null || id in field.ids else id == field.value
+                            DropdownMenuItem(text = { Text((if (selected) "✓ " else "") + label) }, onClick = {
+                                if (field.type == "MULTI") {
+                                    val ids = field.ids ?: field.options.map { it.first }
+                                    val next = if (id in ids) ids - id else ids + id
+                                    if (next.isNotEmpty()) change(mapOf(field.key to next))
+                                } else { change(mapOf(field.key to id)); open = false }
+                            })
+                        }
+                    }
+                }
+            }
+        }
+    } }
+}

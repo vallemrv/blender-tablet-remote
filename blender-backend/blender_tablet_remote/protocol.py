@@ -403,7 +403,7 @@ FEATURES = {
     "scene_capture": {"version": 1, "mime": "image/png", "camera": "TABLET", "overlays": False},
     "cad": {"version": 2, "planes": ["XY", "XZ", "YZ"],
             "offset_entities": ["SLOT", "CIRCLE", "RECTANGLE"], "feature_mirror": True, "reference_profile": True,
-            "entities": ["POINT", "LINE", "RECTANGLE", "CIRCLE", "ARC", "NGON", "SLOT", "GEAR", "POLYGON"], "midpoint_points": True, "features": ["EXTRUDE", "CUT", "LOFT", "HELIX", "REVOLVE", "SWEEP", "MIRROR", "SHELL"],
+            "entities": ["POINT", "LINE", "RECTANGLE", "CIRCLE", "ARC", "NGON", "SLOT", "GEAR", "POLYGON"], "midpoint_points": True, "features": ["EXTRUDE", "CUT", "LOFT", "HELIX", "REVOLVE", "SWEEP", "MIRROR", "SHELL", "HOLE"],
             "constraints": ["COINCIDENT", "POINT_ON_LINE", "HORIZONTAL", "VERTICAL", "PARALLEL", "COLLINEAR", "PERPENDICULAR",
                             "TANGENT", "EQUAL", "DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "ANGLE", "FIX", "MIDPOINT",
                             "SYMMETRIC", "SYMMETRIC_LINE"],

@@ -1047,3 +1047,11 @@ no quedan archivos o referencias temporales.
   propietario/ID y baseline; END conserva la última muestra estable y cancelar,
   navegar, guardar o desconectar restaura el inicio. Reconectar conserva el giro
   confirmado. Solo modifica GPUOffScreen; no crea undo ni toca luces de escena o `rv3d`.
+
+- Taladro métrico (`HOLE`) usa POINT y centros de CIRCLE de un croquis, por ID.
+  M2–M6 ofrecen pasante, cajeado, avellanado a 90°, tuerca hexagonal e inserto.
+  La holgura es diametral (0,2 mm inicial) y los insertos permiten Ø/profundidad
+  propios. Un único compuesto se resta al cuerpo; los puntos y el croquis usados
+  no se borran. Su preview y controles se describen en `cad/operations.py`;
+  Android consume ese esquema con los campos numéricos comunes. `kind` persistido
+  describe la variante; el `kind` de la vista de historial solo clasifica nodos.

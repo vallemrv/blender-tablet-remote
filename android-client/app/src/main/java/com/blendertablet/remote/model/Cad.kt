@@ -61,6 +61,11 @@ data class CadSurface(val mode: String = "PROFILE", val selection: List<CadSurfa
     /** A single straight solid edge is selected: a plane can be hinged on it. */
     val canEdgePlane: Boolean = false)
 data class CadHistoryNode(val id: String, val kind: String, val name: String, val bodyId: String, val sketchId: String?)
+data class CadOperationField(val key: String, val label: String, val type: String,
+    val number: Double = 0.0, val value: String = "", val boolean: Boolean = false,
+    val ids: List<String>? = null, val options: List<Pair<String,String>> = emptyList(),
+    val step: Double = .001, val minimum: Double = 0.0, val maximum: Double = 10000.0, val unit: String = "LENGTH")
+data class CadOperationControls(val id: String, val type: String, val label: String, val fields: List<CadOperationField>)
 data class CadState(
     val workspace: Boolean = false,
     val isolated: Boolean = false,
@@ -76,6 +81,7 @@ data class CadState(
     val canConfirm: Boolean = false,
     val canClose: Boolean = false,
     val operation: String = "",
+    val operationControls: CadOperationControls? = null,
     val depth: Double = 0.02,
     val positiveDirection: String = "",
     val negativeDirection: String = "",
