@@ -217,7 +217,10 @@ def loads(raw):
                 (validate_helix if feature['type'] == 'HELIX' else validate_revolve)(feature)
                 seen_features.add(feature['id'])
                 continue
-            sketch, _ = profile(doc, feature['profile_id'])
+            if 'entity_ids' in feature and (not isinstance(feature['entity_ids'], list) or
+                    feature.get('operation', feature['type']) != 'CUT'):
+                raise ValueError('invalid selected-cut profile')
+            sketch, _ = profile(doc, feature['profile_id'], feature.get('entity_ids'))
             feature.setdefault('body_id',sketch['body_id'])
             find(doc,'bodies',feature['body_id'])
             if feature['type'] not in ('EXTRUDE', 'CUT', 'MIRROR') or sketch['id'] != feature['sketch_id'] or not isinstance(feature['enabled'], bool):
@@ -316,15 +319,30 @@ def closed_entities(sketch):
     return result
 
 
-def profile(doc, identifier):
+def profile(doc, identifier, entity_ids=None):
     for sketch in doc['sketches']:
         if identifier == 'profile_' + sketch['id']:
+            if entity_ids is not None:
+                if (not isinstance(entity_ids, list) or not entity_ids or
+                        any(not isinstance(i, str) for i in entity_ids) or len(set(entity_ids)) != len(entity_ids)):
+                    raise BadPayload('Selecciona uno o varios elementos distintos del mismo boceto')
+                chosen = [find(sketch, 'entities', i) for i in entity_ids]
+                if any(e.get('construction') or e['type'] == 'POINT' for e in chosen):
+                    raise BadPayload('El vaciado necesita contornos, sin puntos ni elementos de construcción')
+                # A transient view of the source sketch, never a copy persisted in
+                # the document. Unselected loops cannot become holes or cutters.
+                selected = set(entity_ids)
+                sketch = dict(sketch, entities=[e for e in sketch['entities'] if e['id'] in selected])
             closed = closed_entities(sketch)
             covered = {member for item in closed for member in item.get('members', [item['id']])}
             if not closed or any(e['id'] not in covered for e in sketch['entities']
                                  if e['type'] != 'POINT' and not e.get('construction', False)):
-                raise CommandError('El croquis contiene geometría abierta: ciérrala o márcala como construcción antes de extruirlo completo', code='cad_profile_invalid')
+                message = ('La selección contiene contornos abiertos: selecciona todos sus tramos para vaciar' if entity_ids is not None else
+                           'El croquis contiene geometría abierta: ciérrala o márcala como construcción antes de extruirlo completo')
+                raise CommandError(message, code='cad_profile_invalid')
             return sketch, dict(id=sketch['id'], type='SKETCH')
+        if entity_ids is not None:
+            continue
         for item in closed_entities(sketch):
             if 'profile_' + item['id'] == identifier:
                 return sketch, item

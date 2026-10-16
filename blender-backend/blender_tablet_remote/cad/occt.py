@@ -64,7 +64,11 @@ def geometry_key(doc, limit, scale):
             features.append(feature)
             for key in ('profile_id', 'to_profile_id'):
                 if node.get(key):
-                    sketch, _ = model.profile(doc, node[key])
+                    sketch, _ = model.profile(doc, node[key], feature.get('entity_ids') if key=='profile_id' else None)
+                    # Other features may use the rest of this same sketch. A
+                    # subset must not overwrite their complete cache dependency.
+                    if feature.get('entity_ids') is not None and key == 'profile_id':
+                        sketch = model.find(doc, 'sketches', sketch['id'])
                     sketches[sketch['id']] = dict(frame=model.frame(sketch), entities=sketch['entities'])
             if node.get('path_sketch_id'):
                 path = model.find(doc, 'sketches', node['path_sketch_id'])
@@ -415,7 +419,7 @@ def combined(base, tool, feature):
 def feature_operand(doc, feature, base):
     if feature['type']=='HOLE':
         return hole_operand(model.find(doc,'sketches',feature['sketch_id']),feature,base)
-    sketch,source=model.profile(doc,feature['profile_id'])
+    sketch,source=model.profile(doc,feature['profile_id'],feature.get('entity_ids'))
     return operand(sketch,source,feature,base)
 
 
@@ -1092,7 +1096,7 @@ class Evaluator:
                                    sketch_key(first, second), keys.get(previous)),
                       joined(lambda: loft(first, source, second, target)))
             else:
-                sketch, entity = model.profile(doc, feature['profile_id'])
+                sketch, entity = model.profile(doc, feature['profile_id'], feature.get('entity_ids'))
                 cut = feature.get('operation', kind) == 'CUT'
                 depth = model.number(feature['depth'], positive=cut)
                 if cut and feature.get('target_id') not in shapes:

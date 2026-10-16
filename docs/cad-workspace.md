@@ -720,3 +720,18 @@ Los nuevos extremos sobre líneas reciben Punto sobre recta. Contra curvas queda
 libres: no se añade una restricción inexistente de punto sobre círculo. Recortar
 rechaza abrir perfiles usados, cambiar ejes de Revolución/Helicoidal, centros de
 Taladro o contornos vinculados por Desfase hasta retirar esas dependencias.
+
+### Vaciar una selección del boceto
+
+Dentro del boceto, usa el cursor para seleccionar uno o varios contornos y pulsa
+**Vaciar selección** en el rail. Por ejemplo, selecciona solo los cuatro círculos
+de tornillería para perforarlos juntos sin tocar los círculos centrales. La ayuda
+indica cuántos elementos se han seleccionado. El cuerpo del boceto es el destino
+preferido; requiere que ese cuerpo ya tenga un sólido.
+
+Se abre la preview 3D habitual: profundidad, dos direcciones, Hasta cara y
+Perforar todo. ✓ crea una sola operación y un único undo. Los círculos, rectángulos
+y demás figuras cerradas funcionan individualmente; para contornos hechos de
+líneas/arcos selecciona todos sus tramos. Puntos, construcción y contornos abiertos
+no generan vaciado. La operación conserva los IDs elegidos y sigue sus cotas al
+editar el boceto; no incorpora automáticamente figuras añadidas después.

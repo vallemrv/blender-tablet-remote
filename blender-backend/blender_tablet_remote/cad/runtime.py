@@ -357,7 +357,7 @@ class CadRuntime:
         """
         doc = session['preview']
         feature = model.find(doc, 'features', session['feature_id'])
-        sketch, entity = model.profile(doc, feature['profile_id'])
+        sketch, entity = model.profile(doc, feature['profile_id'], feature.get('entity_ids'))
         cut = feature['type'] == 'CUT'
         signed = -feature['depth'] if cut else feature['depth']
         base = self._through_base(doc, feature)
@@ -652,7 +652,7 @@ class CadRuntime:
         doc=session['preview']
         try:
             feature=model.find(doc,'features',session['feature_id'])
-            sketch,entity=model.profile(doc,feature['profile_id'])
+            sketch,entity=model.profile(doc,feature['profile_id'],feature.get('entity_ids'))
         except CommandError:
             return None
         body=next((o for o in self.objects(doc) if o.get(BODY_KEY)==feature['body_id']),None)

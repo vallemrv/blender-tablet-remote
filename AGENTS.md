@@ -1092,3 +1092,12 @@ no quedan archivos o referencias temporales.
   descarta las que perdieron sentido y añade POINT_ON_LINE contra rectas; contra
   curvas los extremos quedan libres. Protege perfiles usados, ejes, centros de
   Taladro y Desfase. El overlay candidato no participa en su propio picking.
+
+- Vaciar selección se ofrece dentro del boceto: `cad.selected_cut` habilita CUT con
+  `sketch_id` y `entity_ids` explícitos. Crea un único nodo y undo con los controles
+  habituales de Vaciar. La lista persiste IDs del original, sin copiar figuras;
+  filtra tanto OpenCascade como el prisma/fantasma y las referencias analíticas.
+  Los círculos no elegidos no se convierten en cortes ni huecos del operando.
+  Selecciones vacías/abiertas, puntos y construcción se rechazan; los elementos
+  usados quedan protegidos. Simetría/Patrón heredan ese mismo operando. La caché
+  conserva también las dependencias completas de otras operaciones del boceto.

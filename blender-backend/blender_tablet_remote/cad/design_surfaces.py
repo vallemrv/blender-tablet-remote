@@ -88,7 +88,7 @@ def surfaces(doc, body_id, scale):
             continue
         first_surface=len(result)
         try:
-            sketch, _ = model.profile(doc, feature['profile_id'])
+            sketch, _ = model.profile(doc, feature['profile_id'], feature.get('entity_ids'))
         except Exception:
             continue
         f = model.frame(sketch)

@@ -93,6 +93,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     val target = targets.firstOrNull { it.bodyId == cutTarget } ?: targets.singleOrNull()
     val editing = cad.activeSketchId != null
     val selectedSketch = cad.selectedSketch
+    val cutSelection = cadCutSelection(cad)
+    val selectionTarget = targets.firstOrNull { it.bodyId == cad.activeSketch?.bodyId }
     val bodyHistory = cad.history.filter { cad.activeBodyId == null || it.bodyId == cad.activeBodyId }
     val lastNode = bodyHistory.lastOrNull()
     val viewIndex = if (barPos == null) bodyHistory.size
@@ -171,6 +173,16 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 selected = cad.surface.mode != "PROFILE", enabled = !cad.sessionActive) {
                 if (cad.surface.mode != "PROFILE" && cad.surface.selection.isNotEmpty()) command("cad.reference.project")
                 else vm.cadSurfaceMode(if (cad.surface.mode != "PROFILE") "PROFILE" else "EDGE")
+            }
+            if (capabilities.selectedCut && "CUT" in capabilities.features) {
+                RailDivider()
+                CadAction("CUT", "Vaciar selección (${cutSelection.size})",
+                    enabled = connected && !cad.sessionActive && cutSelection.isNotEmpty() && selectionTarget != null) {
+                    vm.cadTool(null)
+                    command("cad.extrude.begin", "operation" to "CUT", "sketch_id" to cad.activeSketchId,
+                        "entity_ids" to cutSelection, "depth" to cad.step * 10,
+                        "target_id" to selectionTarget?.id, "target_body_id" to selectionTarget?.bodyId)
+                }
             }
         } else {
             RailDivider()
@@ -522,6 +534,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                         " · arrastra las flechas: roja/verde lo deslizan, azul (o fuera de ellas) lo separa · positivo: ${plane.positiveLabel.lowercase()} · ✓ " +
                         (if (plane.planeId != null) "aplica la posición" else "crea el croquis")
                 } ?: "Colocando plano"
+                editing && !cad.sessionActive && capabilities.selectedCut && cutSelection.isNotEmpty() -> "${cutSelection.size} elementos seleccionados · Vaciar utiliza solo estos contornos"
                 offsetSource != null -> "Desfase vinculado: elige dentro o fuera y escribe el grosor · ✓ crea el contorno"
                 mirrorSource != null -> "Simetría de ${mirrorSource!!.name}: elige el plano y su posición · ✓ crea la operación vinculada"
                 feature?.isMirror == true -> "${feature.name} · perfil y profundidad siguen a la operación fuente"

@@ -101,7 +101,7 @@ def _new_sketch(doc,payload):
         if feature.get('mirror'): raise BadPayload('Usa Boceto en cara sobre el resultado de la simetría')
         if not feature.get('profile_id') or feature['type'] in model.FINISHES + ('SHELL','HOLE','LOFT','HELIX','REVOLVE','SWEEP') or feature.get('extent')=='TO_FACE':
             raise BadPayload('Esta operación no sirve de apoyo; usa Boceto en cara sobre la cara que quieras')
-        source,_=model.profile(doc,feature['profile_id'])
+        source,_=model.profile(doc,feature['profile_id'],feature.get('entity_ids'))
         plane_local=source['plane']
         offset=source.get('offset',0)+(feature['depth'] if feature['type']=='EXTRUDE' else 0)
     else: plane_local=str(payload.get('plane','XY')).upper()
@@ -570,7 +570,7 @@ def entity_delete(payload):
         for feature in doc['features']:
             for sketch_key,profile_key in (('sketch_id','profile_id'),('to_sketch_id','to_profile_id')):
                 if feature.get(sketch_key)!=sketch['id'] or not feature.get(profile_key): continue
-                try: model.profile(doc,feature[profile_key])
+                try: model.profile(doc,feature[profile_key],feature.get('entity_ids') if profile_key=='profile_id' else None)
                 except CommandError as exc:
                     raise CommandError('El borrado abriría un perfil utilizado; elimina primero su operación CAD',code='cad_dependency') from exc
             if feature.get('type') in ('HELIX','REVOLVE') and feature['sketch_id']==sketch['id'] and feature['axis'] not in ('X','Y') and \
@@ -627,7 +627,7 @@ def entity_trim(payload):
         for feature in doc['features']:
             for skey,pkey in (('sketch_id','profile_id'),('to_sketch_id','to_profile_id')):
                 if feature.get(skey)!=sketch_id or not feature.get(pkey):continue
-                try:model.profile(doc,feature[pkey])
+                try:model.profile(doc,feature[pkey],feature.get('entity_ids') if pkey=='profile_id' else None)
                 except CommandError as exc:
                     raise CommandError('El recorte abriría un perfil utilizado; elimina primero su operación CAD',code='cad_dependency') from exc
     yield from runtime.transaction_steps(payload,change,'CAD recortar tramo')
@@ -727,7 +727,8 @@ def _depth_value(session, payload):
         return depth
     if 'gesture_u' in payload or 'gesture_v' in payload or 'gesture' in payload:
         if 'gesture_u' in payload or 'gesture_v' in payload:
-            sketch, source = model.profile(session['preview'], model.find(session['preview'], 'features', session['feature_id'])['profile_id'])
+            feature = model.find(session['preview'], 'features', session['feature_id'])
+            sketch, source = model.profile(session['preview'], feature['profile_id'], feature.get('entity_ids'))
             gu, gv = model.number(payload.get('gesture_u', 0)), model.number(payload.get('gesture_v', 0))
             along = None
             if 'u' in payload and 'v' in payload:
@@ -782,7 +783,7 @@ def _face_target(payload):
 def _reach_face(doc, feature, face):
     """TO_FACE keeps depth as the travel at the sketch origin, for display only."""
     from ..cad.kernel import face_travel
-    sketch,_=model.profile(doc,feature['profile_id'])
+    sketch,_=model.profile(doc,feature['profile_id'],feature.get('entity_ids'))
     travel=face_travel(sketch,face)
     feature.update(extent='TO_FACE',to_face=face)
     if feature['type']=='CUT': feature['depth']=max(abs(travel),1e-7)
@@ -794,9 +795,13 @@ def extrude_begin(payload):
     depth = model.number(payload.get('depth',.02),positive=True)
     doc = runtime.doc()
     profile_id = 'profile_' + str(payload['sketch_id']) if payload.get('sketch_id') else payload.get('profile_id')
-    sketch,e = model.profile(doc,profile_id)
-    _require_reachable(doc,sketch['id'])
     operation=str(payload.get('operation','EXTRUDE')).upper()
+    entity_ids=payload.get('entity_ids')
+    if 'entity_ids' in payload:
+        if operation!='CUT' or not payload.get('sketch_id') or entity_ids is None:
+            raise BadPayload('Vaciar selección requiere un boceto y sus elementos seleccionados')
+    sketch,e = model.profile(doc,profile_id,entity_ids)
+    _require_reachable(doc,sketch['id'])
     if operation not in ('EXTRUDE','CUT'): raise BadPayload('Operación CAD no compatible')
     extent=_extent(payload.get('extent','ONE'),operation)
     if extent=='TO_FACE': raise BadPayload('Empieza la extrusión y después toca la cara donde termina')
@@ -816,6 +821,7 @@ def extrude_begin(payload):
     feature = dict(id=model.uid('feature'),name=('Vaciado ' if operation=='CUT' else 'Extrusión ')+str(len(doc['features'])+1),
                    type=operation,order=model.next_order(doc),sketch_id=sketch['id'],profile_id='profile_'+e['id'],depth=depth,enabled=True,body_id=target_body if target else sketch['body_id'])
     feature['extent']=extent
+    if entity_ids is not None: feature['entity_ids']=[e['id'] for e in sketch['entities']]
     if target: feature['target_id']=target['id']
     preview = copy.deepcopy(session['baseline'])
     preview['features'].append(feature)

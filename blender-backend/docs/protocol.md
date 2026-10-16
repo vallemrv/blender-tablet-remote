@@ -2253,3 +2253,24 @@ supervivientes se remapean; los nuevos extremos contra rectas reciben
 POINT_ON_LINE. Contra curvas quedan libres. Perfiles usados, ejes y centros de
 Taladro quedan protegidos con `cad_dependency`; no se borra una operación como
 consecuencia de recortar su boceto.
+
+### Vaciar elementos seleccionados de un boceto
+
+`cad.selected_cut: true` anuncia el vaciado de una selección del croquis.
+`cad.extrude.begin` acepta `operation:CUT`, `sketch_id` y `entity_ids:[id,…]`,
+además de destino/profundidad/extensión habituales. La lista debe ser explícita,
+no vacía, sin duplicados y pertenecer a ese boceto. No admite puntos ni
+construcción; líneas/arcos deben formar contornos cerrados completos.
+La selección puede iniciarse mientras se edita el boceto y abre la misma preview
+3D de Vaciar. Confirmar/cancelar conservan el ciclo de `cad.session.*`.
+
+El nodo CUT persiste `profile_id:profile_<sketch_id>` junto a `entity_ids`. Su
+geometría se resuelve desde esos IDs, sin copiar entidades al documento ni incluir
+los contornos no seleccionados. Un círculo elegido aisladamente produce un disco,
+aunque haya otros círculos dentro sin seleccionar; seleccionar ambos contornos
+conserva la semántica de región con hueco. La lista también limita el prisma del
+lápiz, el fantasma, Hasta cara, Perforar todo y los operandos de Simetría/Patrón.
+Las cotas originales siguen gobernando el resultado. Borrar/abrir elementos usados
+se rechaza atómicamente; los elementos no usados no se protegen por este vaciado.
+Sin `entity_ids`, los perfiles individuales y el boceto completo conservan su
+comportamiento anterior. Una lista vacía nunca equivale al boceto completo.
