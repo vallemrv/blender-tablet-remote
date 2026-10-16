@@ -58,6 +58,7 @@ class DeferredSketchTests(CadTests):
         cad.entity_set(dict(entity_id=e,values={'width':.001},**OWNER))
         self.assertAlmostEqual(volume(self.obj()),baseline)
         with self.assertRaises(CommandError):cad.sketch_finish(OWNER)
+        cad.sketch_activate(dict(sketch_id=sketch,**OWNER))
         cad.entity_set(dict(entity_id=e,values={'width':.09},**OWNER));cad.sketch_finish(OWNER)
         self.assertGreater(volume(self.obj()),baseline)
     def test_sketch_fillet_remapping_is_deferred_too(self):

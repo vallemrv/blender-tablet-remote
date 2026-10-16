@@ -743,8 +743,16 @@ solo el croquis. El sólido conserva la última evaluación válida; las operaci
 posteriores no bloquean un paso intermedio de edición. La bandeja indica
 «Pieza pendiente de actualizar» cuando ese croquis alimenta operaciones.
 
-**Finalizar boceto** valida y evalúa la pila una vez. Si falla, conserva los cambios
-y mantiene el boceto abierto para corregirlos. Abrir otro boceto, volver a Vista
+**Finalizar boceto** valida y evalúa solo hasta el puntero de la pila. Los pasos
+que quedan debajo esperan a que avances: salir del croquis no vuelve al final.
+Si al avanzar una operación falla, el puntero se detiene en ella, conserva los
+cambios y la muestra seleccionada en la pila.
+Su menú **⋮ → Borrar** permite quitarla; también se puede editar o desactivar.
+Se muestra la última pieza válida hasta resolver el fallo. Puedes retroceder;
+al borrar el paso señalado, el puntero vuelve al anterior sin calcular lo que
+queda debajo. Después avanzas de nuevo, paso a paso. Editar o borrar tiene undo.
+Un error del propio croquis mantiene su edición para corregirlo.
+Abrir otro boceto, volver a Vista
 3D/Object o iniciar una operación de sólido también cierra la edición pendiente.
 Cada acción de croquis conserva su undo; publicar la pieza al finalizar añade el
 paso de actualización del sólido. Una salida sin cambios no añade undo.

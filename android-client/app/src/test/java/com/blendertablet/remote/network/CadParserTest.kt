@@ -362,4 +362,15 @@ class CadParserTest {
         assertEquals("OpenCascade", CadParser.state(JSONObject("""{"version":1,"kernel":{"id":"OCCT","label":"OpenCascade"}}""")).kernel)
         assertNull(CadParser.state(JSONObject("""{"version":1}""")).kernel)
     }
+    @Test fun sketchFailureIdentifiesTheOperationToReviewInTheStack() {
+        val state = CadParser.state(JSONObject("""{"version":1,"sketch_pending":true,"sketch_review":true,
+            "error":"Redondeo 14: falta una arista",
+            "sketch_failure":{"feature_id":"r14","name":"Redondeo 14"}}"""))
+        assertEquals("r14", state.sketchFailure?.featureId)
+        assertEquals("Redondeo 14", state.sketchFailure?.name)
+        assertTrue(state.sketchReview)
+        assertTrue(state.sketchPending)
+        assertNull(CadParser.state(JSONObject("""{"version":1}""")).sketchFailure)
+        assertNull(CadParser.state(JSONObject("""{"version":1,"sketch_failure":{"name":"Operación"}}""")).sketchFailure)
+    }
 }

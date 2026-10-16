@@ -98,6 +98,8 @@ class CadRuntime:
         self._epoch = 0
         self._materialized = {}
         self.sketch_error = None
+        self.sketch_failure = None
+        self.sketch_review = False
         from .surface import SurfaceSelection
         self.surface = SurfaceSelection()
 
@@ -136,7 +138,7 @@ class CadRuntime:
             self._doc_raw, self._doc_value = raw, value
         doc = copy.deepcopy(self._doc_value)
         deferred = doc.get(model.DEFERRED_SKETCH)
-        if self.workspace and deferred and self.active_sketch_id is None and self.session is None:
+        if self.workspace and deferred and not self.sketch_review and self.active_sketch_id is None and self.session is None:
             self.active_sketch_id = deferred
             self.focus(model.find(doc, 'sketches', deferred))
         return doc
@@ -183,7 +185,6 @@ class CadRuntime:
         self.workspace = False
         self.workspace_owner = None
         self._save_suspended = False
-        self.rollback_id = None
         self.sync_section(None)
 
     def sync_section(self, sketch):
@@ -277,22 +278,40 @@ class CadRuntime:
         if used and sketch != previous:
             doc[model.DEFERRED_SKETCH] = identifier
         self.sketch_error = None
+        self.sketch_failure = None
         return True
 
-    def finish_sketch_steps(self):
-        """Publish the deferred solid once; an invalid stack leaves editing open."""
+    def sketch_failure_info(self, doc):
+        details = self.sketch_failure or {}
+        feature = next((f for f in doc['features'] if f['id'] == details.get('feature_id') and f['enabled']), None)
+        if not feature:return None
+        return dict(feature_id=feature['id'], name=feature['name'], type=feature['type'])
+
+    def review_sketch_failure(self, exc):
+        self.sketch_error = 'No se pudo actualizar la pieza: '+exc.message
+        self.sketch_failure = copy.deepcopy(exc.details)
         doc = self.doc()
-        if not doc.get(model.DEFERRED_SKETCH):
-            return
+        failure = self.sketch_failure_info(doc)
+        if failure:
+            # Leave the sketch without changing the draft or the last valid solid.
+            # The ordinary stack controls own every subsequent edit/deletion.
+            self.sketch_review = True
+            self.rollback_id = failure['feature_id']
+            self.active_body_id = model.find(doc, 'features', failure['feature_id'])['body_id']
+            self.solid_view()
+            self.selection = dict(kind='FEATURE', id=failure['feature_id'])
+
+    def finish_sketch_steps(self):
+        """Publish the draft, or open the stack at the failing operation."""
+        doc = self.doc()
+        if not doc.get(model.DEFERRED_SKETCH):return
         try:
             yield from self.rebuild_steps(doc, limit=self.bar(doc), force=True)
         except CommandError as exc:
-            self.sketch_error = 'No se pudo actualizar la pieza: '+exc.message
+            self.review_sketch_failure(exc)
             raise
         self.persist(doc)
-        self.sketch_error = None
-        with self.saving():
-            undo_push('CAD finalizar edición de boceto')
+        with self.saving():undo_push('CAD finalizar edición de boceto')
 
     def rebuild_steps(self, doc, *, limit=None, extrusion_cache=None, force=False):
         """Evaluate snapshots off-process; publish compact geometry on the pump."""
@@ -336,6 +355,8 @@ class CadRuntime:
         if pending:
             doc.clear()
             doc.update(candidate)
+        self.sketch_error = self.sketch_failure = None
+        self.sketch_review = False
 
     def _publish(self, doc, evaluated):
         from .surface import stamp
@@ -558,7 +579,11 @@ class CadRuntime:
             raise CommandError('Confirma o cancela la preview primero', code='session_active')
         doc = self.doc()
         change(doc)
-        yield from self.commit_steps(doc,label,geometry=geometry)
+        try:
+            yield from self.commit_steps(doc,label,geometry=geometry)
+        except CommandError as exc:
+            if self.sketch_review:self.review_sketch_failure(exc)
+            raise
         return self.status()
 
     def point(self, payload, plane, offset=None):
@@ -590,6 +615,7 @@ class CadRuntime:
         pending = self.doc().get(model.DEFERRED_SKETCH)
         if pending and pending != sketch['id']:
             raise CommandError('Finaliza el boceto actual antes de abrir otro', code='cad_sketch_pending')
+        self.sketch_review = False
         found=find_view3d()
         if found: camera.sync_from_region(found[3])
         if self.active_sketch_id is None: self._solid_view=camera.as_dict()
@@ -824,6 +850,8 @@ class CadRuntime:
                                      can_close=bool(session and session.get('can_close'))),
                         overlay=self.overlay(doc),error=session.get('error') if session else self.sketch_error,
                         sketch_pending=bool(doc.get(model.DEFERRED_SKETCH)),
+                        sketch_failure=self.sketch_failure_info(doc),
+                        sketch_review=self.sketch_review,
                         kernel=_kernel_public())
         except CommandError as exc:
             return dict(version=1,workspace=self.workspace,isolated=bool(self.workspace),document=None,active_sketch_id=None,

@@ -1,5 +1,7 @@
 package com.blendertablet.remote.ui
 
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -54,6 +56,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     var mirrorSource by remember(cad.documentId, cad.activeSketchId) { mutableStateOf<CadFeature?>(null) }
     var mirrorPlane by remember { mutableStateOf("XZ") }
     var renamingSketch by remember(cad.documentId) { mutableStateOf<CadSketch?>(null) }
+    LaunchedEffect(cad.sketchReview, cad.sketchFailure?.featureId) {
+        if (cad.sketchReview) onStackOpen(true)
+    }
     val historyScroll = rememberScrollState()
     var unit by remember(state.blender.sceneScale.lengthUnit) { mutableStateOf(state.blender.sceneScale.lengthUnit) }
     var pendingDimension by remember(cad.activeSketchId, cad.selection) { mutableStateOf<String?>(null) }
@@ -100,7 +105,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     val viewIndex = if (barPos == null) bodyHistory.size
         else bodyHistory.count { node -> !behindBar(node.id) }
     LaunchedEffect(lastNode?.id, cad.activeSketch?.entities?.lastOrNull()?.id, editing, constraintsVisible) {
-        if (!editing || !constraintsVisible) {
+        if (!cad.sketchReview && (!editing || !constraintsVisible)) {
             withFrameNanos { }; withFrameNanos { }
             historyScroll.scrollTo(historyScroll.maxValue)
         }
@@ -354,6 +359,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             if (feature != null) {
                                 CadStackNodeRow(feature.type, feature.name + if (!feature.enabled) " · desactivada" else "",
                                     cad.selectedFeature?.id == feature.id, dimmed, nodeEnabled,
+                                    reveal = cad.sketchReview && cad.sketchFailure?.featureId == feature.id,
                                     tap = { command("cad.history.rollback", "node_id" to node.id) },
                                     actions = listOfNotNull(
                                         CadNodeAction("Seleccionar") {
@@ -393,7 +399,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                     PillButton("Final", enabled = connected && !cad.sessionActive && barPos != null) {
                         command("cad.history.rollback")
                     }
-                    Text(if (barPos == null) "Modelo completo" else "Hasta ${bodyHistory.getOrNull(viewIndex - 1)?.name.orEmpty()}",
+                    Text(if (cad.sketchReview) "Fallo en este paso" else if (barPos == null) "Modelo completo" else "Hasta ${bodyHistory.getOrNull(viewIndex - 1)?.name.orEmpty()}",
                         color = Ink.Faint, fontSize = 11.sp, maxLines = 1, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
                 }
             }
@@ -581,7 +587,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 selectedSketch != null -> "${selectedSketch.name} · perfil seleccionado · Seleccionar todo elige el croquis completo para extruir"
                 else -> "Abre la pila (derecha) para editar un boceto · o crea uno en Planos, arriba, y selecciona un perfil para extruir"
             }
-            Text(if (cad.error != null) help else listOfNotNull(help, arcSelectionHelp).joinToString(" · "),
+            Text(if (cad.sketchReview) "$help · Edita o borra este paso, o retrocede en la pila. Se muestra la última pieza válida."
+                else if (cad.error != null) help else listOfNotNull(help, arcSelectionHelp).joinToString(" · "),
                 color = Ink.Muted, fontSize = 12.sp)
             if (cad.surface.selection.isNotEmpty() && (cad.surface.mode != "PROFILE" || !editing)) {
                 Text(cadSurfaceSummary(cad, unit), color = Ink.Muted, fontSize = 12.sp)
@@ -1174,9 +1181,16 @@ private class CadNodeAction(val label: String, val enabled: Boolean = true, val 
 /** One node of the operation stack: tap shows the model as of that node; ⋮ opens its actions. */
 @Composable
 private fun CadStackNodeRow(icon: String, label: String, selected: Boolean, dimmed: Boolean, enabled: Boolean,
-                            tap: () -> Unit, actions: List<CadNodeAction>) {
+                            tap: () -> Unit, actions: List<CadNodeAction>, reveal: Boolean = false) {
     var menuOpen by remember { mutableStateOf(false) }
-    Box {
+    val bringIntoView = remember { BringIntoViewRequester() }
+    LaunchedEffect(reveal) {
+        if (reveal) {
+            withFrameNanos { }; withFrameNanos { }
+            bringIntoView.bringIntoView()
+        }
+    }
+    Box(Modifier.bringIntoViewRequester(bringIntoView)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Icon(AppIcons.cad(icon), null, tint = if (dimmed) Ink.Faint else Ink.Muted, modifier = Modifier.size(20.dp))
             PillButton(label, modifier = Modifier.weight(1f), selected = selected, enabled = enabled && !dimmed, onClick = tap)

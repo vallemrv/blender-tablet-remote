@@ -47,7 +47,7 @@ def _set_mode(target: str, owner=None) -> dict:
                 bpy.ops.object.mode_set(mode="OBJECT")
         runtime.workspace = True
         runtime.workspace_owner = owner
-        if doc.get("deferred_sketch_id"):runtime.active_sketch_id=doc["deferred_sketch_id"]
+        if doc.get("deferred_sketch_id") and not runtime.sketch_review:runtime.active_sketch_id=doc["deferred_sketch_id"]
         objects=runtime.objects(doc)
         if doc['features'] and (not objects or any(not obj.get(BODY_KEY) for obj in objects)):
             runtime.rebuild(doc,limit=runtime.bar(doc))

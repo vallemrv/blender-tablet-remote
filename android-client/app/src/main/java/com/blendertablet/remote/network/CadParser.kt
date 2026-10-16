@@ -107,7 +107,10 @@ object CadParser {
                         (0 until box.length()).map { box.optDouble(it).toFloat() }
                             .takeIf { it.size == 4 && it.all(Float::isFinite) && it[2] > it[0] && it[3] > it[1] }
                     }.orEmpty(), annotationSegments(item.optJSONArray("dimension_lines")), annotationSegments(item.optJSONArray("arrows")))
-            }, error = j.id("error"), sketchPending = j.optBoolean("sketch_pending"),
+            }, error = j.id("error"), sketchPending = j.optBoolean("sketch_pending"), sketchReview = j.optBoolean("sketch_review"),
+            sketchFailure = j.optJSONObject("sketch_failure")?.let { failure ->
+                failure.id("feature_id")?.let { id -> CadSketchFailure(id, failure.optString("name", "Operación")) }
+            },
             selection = objects(selection?.optJSONArray("items")).map { CadSelection(it.optString("id"), it.optString("part", "BODY")) },
             step = j.optDouble("step", .001).takeIf { it.isFinite() && it > 0 } ?: .001,
             increment = j.optBoolean("increment", true), transparent = session?.optBoolean("transparent") == true,

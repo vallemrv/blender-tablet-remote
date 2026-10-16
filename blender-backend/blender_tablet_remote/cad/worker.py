@@ -76,7 +76,7 @@ class Worker:
             if result['id'] != identifier:
                 raise CommandError('Resultado CAD fuera de sesión', code='cad_cancelled')
             if 'error' in result:
-                raise CommandError(result['error'], code=result['code'])
+                raise CommandError(result['error'], code=result['code'], details=result.get('details'))
             return True, result['result']
         if self.process.poll() is not None or time.monotonic() - self.pending[1] > 120:
             self.stop()

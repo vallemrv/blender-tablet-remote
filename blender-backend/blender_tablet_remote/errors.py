@@ -6,10 +6,11 @@ from __future__ import annotations
 class CommandError(Exception):
     """Error controlado de un comando: se traduce en {"ok": false, "error": ...}."""
 
-    def __init__(self, message: str, code: str = "command_failed"):
+    def __init__(self, message: str, code: str = "command_failed", details: dict | None = None):
         super().__init__(message)
         self.message = message
         self.code = code
+        self.details = details
 
 
 class AuthError(CommandError):

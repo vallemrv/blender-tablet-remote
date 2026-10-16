@@ -50,28 +50,30 @@ def history_rollback(payload):
     if runtime.session:
         runtime.require(payload)
         runtime.cancel()
-    if runtime.doc().get(model.DEFERRED_SKETCH):
-        yield from runtime.finish_sketch_steps()
-        runtime.solid_view()
-    identifier = payload.get('node_id')
-    if identifier is not None:
-        if identifier not in _sequence(runtime.doc()):
-            raise CommandError('El nodo ya no existe en el documento', code='cad_reference_missing')
-        runtime.rollback_id = identifier
-    else:
-        runtime.rollback_id = None
     doc = runtime.doc()
-    bar = runtime.bar(doc)
+    identifier = payload.get('node_id')
     sequence = _sequence(doc)
-    if bar and runtime.active_sketch_id in sequence and sequence.index(runtime.active_sketch_id) > sequence.index(bar):
-        # Editing a node that is now future history: leave the sketch view.
-        runtime.active_sketch_id = None
-        runtime.selection = None
-        runtime.surface.mode = 'PROFILE'
-        runtime.surface.clear()
+    if identifier is not None and identifier not in sequence:
+        raise CommandError('El nodo ya no existe en el documento', code='cad_reference_missing')
+    old_bar = runtime.rollback_id
+    runtime.rollback_id = identifier
+    pending = bool(doc.get(model.DEFERRED_SKETCH))
+    try:
+        # The requested pointer is the evaluation boundary, including when
+        # closing a changed sketch. Future operations are never evaluated here.
+        if pending:
+            yield from runtime.finish_sketch_steps()
+            runtime.solid_view()
+            doc = runtime.doc()
+        else:
+            yield from runtime.rebuild_steps(doc, limit=identifier, force=True)
+    except CommandError as exc:
+        if not pending:runtime.review_sketch_failure(exc)
+        if not runtime.sketch_failure_info(doc):runtime.rollback_id = old_bar
+        raise
+    if identifier and runtime.active_sketch_id in sequence and sequence.index(runtime.active_sketch_id) > sequence.index(identifier):
         runtime.solid_view()
-    else:
-        yield from runtime.rebuild_steps(doc, limit=bar)
+        runtime.selection = None
     if not runtime.active_sketch_id and identifier:
         node=next(node for node in model.history(doc) if node['id']==identifier)
         runtime.active_body_id=node['body_id']
@@ -1330,11 +1332,20 @@ def feature_mirror(payload):
 def feature_delete(payload):
     def change(doc):
         feature=model.find(doc,'features',payload.get('feature_id'))
-        _require_reachable(doc,feature['id'])
         _require_no_dependents(doc,feature['id'])
         doc['features'].remove(feature)
         doc['bodies']=[b for b in doc['bodies'] if b.get('source',{}).get('feature_id')!=feature['id']]
-    yield from runtime.transaction_steps(payload,change,'CAD eliminar extrusión')
+    _require_reachable(runtime.doc(),payload.get('feature_id'))
+    old_bar = runtime.rollback_id
+    if payload.get('feature_id') == old_bar:
+        sequence = _sequence(runtime.doc())
+        index = sequence.index(old_bar)
+        runtime.rollback_id = sequence[index-1] if index else None
+    try:
+        yield from runtime.transaction_steps(payload,change,'CAD eliminar extrusión')
+    except BaseException:
+        runtime.rollback_id = old_bar
+        raise
     runtime.selection = None
     return runtime.status()
 

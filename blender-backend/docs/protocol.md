@@ -2285,9 +2285,22 @@ pospone hasta cerrar la edición; un contorno puede estar abierto temporalmente.
 ni añade una segunda fuente de geometría.
 
 `cad.sketch.finish` ahora puede suspenderse durante la evaluación del worker.
-Retira el marcador solo tras evaluar/publicar correctamente y registra la
-actualización del sólido en undo. Un error conserva el documento pendiente y el
-boceto activo. Abrir otro boceto, Vista 3D, operaciones de sólido y salir de CAD
+Evalúa solo hasta `rollback_id`, nunca las operaciones posteriores al puntero.
+Retira el marcador tras evaluar/publicar correctamente y registra la actualización
+del sólido en undo. Un error conserva el documento pendiente. Si
+procede de una operación, `sketch_failure:{feature_id,name,type}` la identifica y
+`sketch_review:true` sale a la pila con esa operación seleccionada; la tablet abre
+la pila y muestra la última pieza válida. La barra se detiene en el nodo que falla,
+también al avanzar después de cerrar el croquis. `cad.history.rollback` fija el
+límite solicitado antes de finalizar un croquis pendiente y evalúa ese prefijo;
+retroceder permite recuperar una vista válida. Los comandos habituales
+`cad.feature.set/delete` corrigen hasta la barra: borrar el nodo de la barra la
+sitúa en su predecesor y no evalúa pasos futuros. Las correcciones tienen undo;
+solo un avance explícito alcanza las operaciones posteriores. La posición de la
+barra se conserva al desconectar/reentrar en CAD. No se borra ni desactiva nada
+automáticamente. Un error del propio croquis mantiene su edición.
+La capacidad `cad.sketch_failure_recovery` anuncia este comportamiento.
+Abrir otro boceto, Vista 3D, operaciones de sólido y salir de CAD
 resuelven también la edición pendiente. Guardar conserva el marcador y el sólido
 congelado; al cargar y entrar en CAD se reabre el croquis pendiente. Los handlers
 de guardado/carga no ejecutan OpenCascade.

@@ -1106,8 +1106,17 @@ no quedan archivos o referencias temporales.
   cotas y arrastres actualizan solo el boceto y conservan el último sólido válido.
   `deferred_sketch_id` persiste el trabajo pendiente; la validación de los perfiles
   usados se completa al salir, sin relajar entidades, restricciones ni dependencias
-  de borrado. Finalizar evalúa en el worker; fallo conserva croquis/cambios y éxito
-  publica la pieza con undo. Cambiar de boceto, Vista 3D/Object o una operación de
+  de borrado. Finalizar evalúa en el worker; éxito publica la pieza con undo.
+  Fallar en una operación conserva el borrador y abre la pila con ese nodo
+  seleccionado/visible (`sketch_failure`, `sketch_review`), sin borrar ni desactivar
+  automáticamente. Finalizar y navegar calculan solo hasta el puntero; navegar
+  fija el destino antes de cerrar un croquis pendiente. Un fallo detiene la barra
+  en ese nodo, también al avanzar sin croquis abierto. Retroceder vuelve a evaluar
+  ese prefijo. Editar calcula hasta la barra; borrar su nodo retrocede al anterior
+  sin alcanzar pasos futuros. Las correcciones conservan undo y el sólido visible
+  ante un fallo sigue siendo el último válido. La desconexión conserva el puntero.
+  Los errores del propio croquis mantienen su edición.
+  Cambiar de boceto, Vista 3D/Object o una operación de
   sólido resuelve antes el pendiente. Guardar conserva croquis y sólido congelado;
   volver a CAD recupera la edición, sin kernel dentro de los handlers.
 

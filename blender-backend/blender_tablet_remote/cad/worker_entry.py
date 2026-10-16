@@ -44,7 +44,7 @@ while directory.exists() and time.monotonic() - last_request < 300:
     try:
         result = dict(id=message['id'], result=calculate(message['request']))
     except CommandError as exc:
-        result = dict(id=message['id'], error=exc.message, code=exc.code)
+        result = dict(id=message['id'], error=exc.message, code=exc.code, details=exc.details)
     except Exception as exc:
         result = dict(id=message['id'], error=f'Error de cálculo CAD: {exc}', code='cad_worker_failed')
     temporary = directory / 'result.tmp'

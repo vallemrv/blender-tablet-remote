@@ -68,6 +68,8 @@ data class CadOperationField(val key: String, val label: String, val type: Strin
     val ids: List<String>? = null, val options: List<Pair<String,String>> = emptyList(),
     val step: Double = .001, val minimum: Double = 0.0, val maximum: Double = 10000.0, val unit: String = "LENGTH", val allNull: Boolean = true)
 data class CadOperationControls(val id: String, val type: String, val label: String, val fields: List<CadOperationField>)
+data class CadSketchFailure(val featureId: String, val name: String)
+
 data class CadState(
     val workspace: Boolean = false,
     val isolated: Boolean = false,
@@ -96,6 +98,8 @@ data class CadState(
     val overlay: List<CadOverlay> = emptyList(),
     val error: String? = null,
     val sketchPending: Boolean = false,
+    val sketchReview: Boolean = false,
+    val sketchFailure: CadSketchFailure? = null,
     val selection: List<CadSelection> = emptyList(),
     val step: Double = .001,
     val increment: Boolean = true,

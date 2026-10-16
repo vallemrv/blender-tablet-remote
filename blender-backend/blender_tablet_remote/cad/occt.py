@@ -1020,7 +1020,12 @@ class Evaluator:
             text = model.dumps(signature)
             cached = self._shapes.get(identifier)
             if cached is None or cached[0] != text:
-                cached = (text, build())
+                try:
+                    built = build()
+                except CommandError as exc:
+                    raise CommandError(feature['name']+': '+exc.message, code=exc.code,
+                                       details=dict(feature_id=feature['id'], name=feature['name'], type=feature['type'])) from exc
+                cached = (text, built)
                 self._shapes[identifier] = cached
             shapes[identifier] = cached[1]
             keys[identifier] = hashlib.blake2b(text.encode(), digest_size=16).hexdigest()
