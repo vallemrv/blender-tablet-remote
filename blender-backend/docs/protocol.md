@@ -2291,3 +2291,18 @@ boceto activo. Abrir otro boceto, Vista 3D, operaciones de sólido y salir de CA
 resuelven también la edición pendiente. Guardar conserva el marcador y el sólido
 congelado; al cargar y entrar en CAD se reabre el croquis pendiente. Los handlers
 de guardado/carga no ejecutan OpenCascade.
+
+### Redondeo arco–línea
+
+`cad.fillet_arc_line:true` amplía `cad.fillet {radius}` a selecciones LINE+ARC
+con extremo compartido, además de los casos LINE+LINE/RECTANGLE existentes.
+Los extremos explícitos identifican la unión; seleccionar las dos figuras completas
+procesa sus uniones comunes. El radio sigue en metros.
+
+El arco nuevo guarda `fillet_kind:ARC_LINE` para distinguirlo del original.
+Sus fuentes se reconocen por las coincidencias y tangencias por ID/START/END
+existentes (LINE en START, ARC en END), con modo INTERNAL/EXTERNAL
+para la tangencia entre los arcos. No guarda puntos de malla ni píxeles. Sus
+propiedades usan `is_fillet`, Radio y `cad.fillet.remove` existentes; `CORNER` es
+la intersección virtual de la recta y el círculo originales. La inferencia de
+redondeos LINE+LINE de archivos antiguos permanece intacta.

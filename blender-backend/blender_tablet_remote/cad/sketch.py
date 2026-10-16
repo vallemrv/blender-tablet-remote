@@ -264,6 +264,10 @@ def line_angle(sketch, refs):
 
 
 def validate_constraints(sketch, constraints=None):
+    for entity in sketch['entities']:
+        kind=entity.get('fillet_kind')
+        if kind is not None and (entity['type']!='ARC' or kind!='ARC_LINE'):
+            raise BadPayload('Tipo de redondeo del boceto inválido')
     ids = set()
     for c in sketch.get('constraints',[]) if constraints is None else constraints:
         if c.get('type') not in CONSTRAINTS or not isinstance(c.get('id'),str) or c['id'] in ids:
@@ -610,22 +614,27 @@ def _corner_pairs(sketch, refs):
         lines=_rectangle_lines(sketch,rectangle)
         pairs.extend((dict(id=lines[(c-1)%4]['id'],part='BODY'),dict(id=lines[c]['id'],part='BODY')) for c in sorted(set(corners)))
     others=[r for r in refs if r['id']!='ORIGIN' and r['id'] not in rectangles]
-    lines=[get_entity(sketch,r) for r in others if r.get('part','BODY')=='BODY' and get_entity(sketch,r)['type']=='LINE']
-    for i,a in enumerate(lines):
-        for b in lines[i+1:]:
-            if any(math.dist(p,q)<1e-7 for p in handles(a).values() for q in handles(b).values()):
-                pairs.append((dict(id=a['id'],part='BODY'),dict(id=b['id'],part='BODY')))
+    edges=[get_entity(sketch,r) for r in others if r.get('part','BODY')=='BODY' and get_entity(sketch,r)['type'] in ('LINE','ARC')]
+    def shared(a,b):
+        return [(ra,rb) for ra,pa in handles(a).items() for rb,pb in handles(b).items()
+                if ra in ('START','END') and rb in ('START','END') and math.dist(pa,pb)<1e-7]
+    def add(a,b,ra,rb):
+        mixed=a['type']!=b['type']
+        pairs.append((dict(id=a['id'],part=ra if mixed else 'BODY'),dict(id=b['id'],part=rb if mixed else 'BODY')))
+    for i,a in enumerate(edges):
+        for b in edges[i+1:]:
+            if a['id']==b['id'] or (a['type']=='ARC' and b['type']=='ARC'):continue
+            for ra,rb in shared(a,b):add(a,b,ra,rb)
     for ref in others:
         e=get_entity(sketch,ref); role=ref.get('part','BODY')
-        if e['type']!='LINE' or role not in ('START','END'): continue
-        p=handles(e)[role]
-        partner=next((o for o in sketch['entities'] if o['type']=='LINE' and o['id']!=e['id']
-                      and any(math.dist(p,q)<1e-7 for q in handles(o).values())),None)
-        if partner is None: raise BadPayload('Ese extremo no forma esquina con otra línea')
-        pairs.append((dict(id=e['id'],part='BODY'),dict(id=partner['id'],part='BODY')))
+        if e['type'] not in ('LINE','ARC') or role not in ('START','END'): continue
+        partners=[(o,rb) for o in sketch['entities'] if o['id']!=e['id'] and o['type'] in ('LINE','ARC')
+                  and not(e['type']=='ARC' and o['type']=='ARC') for ra,rb in shared(e,o) if ra==role]
+        if len(partners)!=1:raise BadPayload('Ese extremo debe formar una única esquina entre líneas o entre línea y arco')
+        partner,other_role=partners[0];add(e,partner,role,other_role)
     unique=[]; seen=set()
     for a,b in pairs:
-        key=frozenset((a['id'],b['id']))
+        key=frozenset((r['id'],r.get('part','BODY')) for r in (a,b))
         if key not in seen: seen.add(key); unique.append((a,b))
     return unique
 
@@ -655,7 +664,7 @@ def fillet(sketch, refs, r):
     """
     pairs=_corner_pairs(sketch,refs)
     if not pairs:
-        raise BadPayload('Redondeo: toca una esquina, un rectángulo entero o dos líneas conectadas')
+        raise BadPayload('Redondeo: selecciona una esquina, dos líneas o una línea y un arco conectados')
     arcs=[]
     for a,b in pairs:
         arc=_fillet_pair(sketch,a,b,r)
@@ -670,6 +679,8 @@ def fillet(sketch, refs, r):
 def _fillet_pair(sketch, ref_a, ref_b, r):
     """Trim two connected straight edges and insert their tangent circular arc."""
     es=[get_entity(sketch,ref) for ref in (ref_a,ref_b)]
+    if {e['type'] for e in es}=={'LINE','ARC'}:
+        return _fillet_arc_line(sketch,ref_a,ref_b,r)
     if es[0]['id']==es[1]['id'] or any(e['type']!='LINE' for e in es):
         raise BadPayload('Redondeo: selecciona dos líneas distintas')
     pairs=[(ra,rb) for ra,pa in handles(es[0]).items() for rb,pb in handles(es[1]).items() if math.dist(pa,pb)<1e-7]
@@ -695,6 +706,85 @@ def _fillet_pair(sketch, ref_a, ref_b, r):
     return arc
 
 
+def _curve_endpoint(entity, role, value):
+    if entity['type']=='LINE':
+        x,y=('x','y') if role=='START' else ('x2','y2')
+        entity[x],entity[y]=map(float,value)
+        return
+    angle=math.degrees(math.atan2(value[1]-entity['y'],value[0]-entity['x']))
+    sign=1 if entity['sweep']>0 else -1
+    if role=='START':
+        end=entity['start']+entity['sweep']
+        entity['sweep']=sign*((end-angle)*sign%360)
+        entity['start']=end-entity['sweep']
+    else:entity['sweep']=sign*((angle-entity['start'])*sign%360)
+    model.validate_entity(entity)
+
+
+def _round_arc_line(line_entity, arc_entity, line_role, arc_role, radius, old_start=None):
+    """Exact tangent circles: offset line ∩ concentric circles, trimmed to both edges."""
+    radius=model.number(radius,positive=True)
+    corner=np.array(handles(line_entity)[line_role]);far=np.array(handles(line_entity)['END' if line_role=='START' else 'START'])
+    direction=far-corner;length=float(np.linalg.norm(direction))
+    if length<1e-7:raise BadPayload('La línea no tiene longitud para el redondeo')
+    direction/=length;normal=np.array([-direction[1],direction[0]])
+    center=np.array([arc_entity['x'],arc_entity['y']]);R=arc_entity['radius'];candidates=[]
+    arc_sign=1 if arc_entity['sweep']>0 else -1
+    for side in (-1,1):
+        origin=corner+normal*side*radius
+        projection=origin+direction*np.dot(center-origin,direction)
+        separation=float(np.linalg.norm(projection-center))
+        for mode,distance in (('EXTERNAL',R+radius),('INTERNAL',abs(R-radius))):
+            if distance<1e-10 or separation>distance+1e-10:continue
+            offset=math.sqrt(max(0.,distance*distance-separation*separation))
+            for root in (-1,1):
+                c=projection+direction*root*offset
+                a=c-normal*side*radius
+                travel=float(np.dot(a-corner,direction))
+                if not 1e-7<travel<length-1e-7:continue
+                toward=(c-center)/distance
+                b=center+toward*R*(1 if mode=='EXTERNAL' or R>radius else -1)
+                t=_trim_parameter(arc_entity,b)
+                if not 1e-7<t<1-1e-7:continue
+                angles=[math.degrees(math.atan2(p[1]-c[1],p[0]-c[0])) for p in (a,b)]
+                sweep=(angles[1]-angles[0]+180)%360-180
+                if not .01<=abs(sweep)<179.999:continue
+                turn=1 if sweep>0 else -1
+                tangent=lambda p:turn*np.array([-(p-c)[1],(p-c)[0]])/radius
+                into_arc=arc_sign*(1 if arc_role=='START' else -1)*np.array([-(b-center)[1],(b-center)[0]])/R
+                if np.dot(tangent(a),-direction)<1-1e-6 or np.dot(tangent(b),into_arc)<1-1e-6:continue
+                start=angles[0] if old_start is None else angles[0]+360*round((old_start-angles[0])/360)
+                removed=t if arc_role=='START' else 1-t
+                score=travel+removed*math.radians(abs(arc_entity['sweep']))*R
+                candidates.append((score,[a,b],dict(x=float(c[0]),y=float(c[1]),radius=radius,start=start,sweep=sweep),mode))
+    if not candidates:raise BadPayload('El radio no cabe entre esa línea y ese arco, o ya son tangentes')
+    _,touches,parameters,mode=min(candidates,key=lambda item:item[0])
+    return touches,parameters,mode
+
+
+def _fillet_arc_line(sketch, first, second, radius):
+    refs=sorted((first,second),key=lambda r:get_entity(sketch,r)['type']!='LINE')
+    line_entity,arc_entity=[get_entity(sketch,r) for r in refs]
+    joined=[(ra,rb) for ra,pa in handles(line_entity).items() for rb,pb in handles(arc_entity).items()
+            if ra in ('START','END') and rb in ('START','END') and math.dist(pa,pb)<1e-7
+            and (refs[0].get('part','BODY') in ('BODY',ra)) and (refs[1].get('part','BODY') in ('BODY',rb))]
+    if len(joined)!=1:raise BadPayload('Selecciona la unión entre la línea y el arco')
+    ra,rb=joined[0];sources=[dict(id=e['id'],part=role) for e,role in zip((line_entity,arc_entity),(ra,rb))]
+    touches,parameters,mode=_round_arc_line(line_entity,arc_entity,ra,rb,radius)
+    for e,role,p in zip((line_entity,arc_entity),(ra,rb),touches):_curve_endpoint(e,role,p)
+    arc=dict(id=model.uid('entity'),type='ARC',**parameters,fillet_kind='ARC_LINE',
+             construction=all(e.get('construction',False) for e in (line_entity,arc_entity)))
+    sketch['entities'].append(arc)
+    keys={(r['id'],r['part']) for r in sources}
+    sketch['constraints']=[c for c in sketch.get('constraints',[]) if not(c['type']=='COINCIDENT' and {(r['id'],r.get('part')) for r in c['refs']}==keys)]
+    _remap_corner_refs(sketch,{key:dict(id=arc['id'],part='CORNER') for key in keys})
+    for ref,role in zip(sources,('START','END')):
+        sketch['constraints'].append(dict(id=model.uid('constraint'),type='COINCIDENT',refs=[dict(ref),dict(id=arc['id'],part=role)]))
+        sketch['constraints'].append(dict(id=model.uid('constraint'),type='TANGENT',mode=mode if ref['id']==arc_entity['id'] else 'EXTERNAL',
+                                         refs=[dict(id=ref['id'],part='BODY'),dict(id=arc['id'],part='BODY')]))
+    return arc
+
+
 def _remap_corner_refs(sketch, mapping):
     """Keep point dimensions/fixes attached to the sharp corner when trimming it."""
     result=[]
@@ -711,6 +801,7 @@ def _remap_corner_refs(sketch, mapping):
 def fillet_sides(sketch, arc):
     """Recognize existing roundings by their joins/tangencies, including saved files."""
     if arc['type']!='ARC' or abs(arc['sweep'])>=179.999: return None
+    declared=arc.get('fillet_kind')=='ARC_LINE'
     result=[]
     for role in ('START','END'):
         candidates=[]
@@ -721,15 +812,28 @@ def fillet_sides(sketch, arc):
             other=next((r for r in c['refs'] if r is not own),None)
             if other is None: continue
             e=get_entity(sketch,other)
-            if e['type']!='LINE' or other.get('part') not in ('START','END'): continue
+            if e['type'] not in (('LINE','ARC') if declared else ('LINE',)) or other.get('part') not in ('START','END'): continue
             if any(t['type']=='TANGENT' and {r['id'] for r in t['refs']}=={arc['id'],e['id']} for t in sketch.get('constraints',[])):
                 candidates.append(dict(id=e['id'],part=other['part']))
         if len(candidates)!=1: return None
         result.append(candidates[0])
+    if declared and [get_entity(sketch,r)['type'] for r in result]!=['LINE','ARC']:return None
     return result if result[0]['id']!=result[1]['id'] else None
 
 
 def _fillet_corner(sketch, sides):
+    es=[get_entity(sketch,r) for r in sides]
+    if {e['type'] for e in es}=={'LINE','ARC'}:
+        straight=next(r for r,e in zip(sides,es) if e['type']=='LINE')
+        curved=next(r for r,e in zip(sides,es) if e['type']=='ARC')
+        a,b=line(sketch,straight);e=get_entity(sketch,curved);center=np.array([e['x'],e['y']])
+        direction=b-a;direction/=max(float(np.linalg.norm(direction)),1e-12)
+        foot=a+direction*np.dot(center-a,direction);h2=e['radius']**2-float(np.dot(foot-center,foot-center))
+        if h2<-1e-14:raise BadPayload('La línea y el arco del redondeo ya no forman una esquina')
+        roots=[foot+sign*direction*math.sqrt(max(0.,h2)) for sign in (-1,1)]
+        touch=np.array(handles(e)[curved['part']])
+        contact=point(sketch,straight) if straight.get('part') in ('START','END') else min((a,b),key=lambda p:np.linalg.norm(p-touch))
+        return min(roots,key=lambda p:np.linalg.norm(p-touch)+np.linalg.norm(p-contact))
     a,b=line(sketch,sides[0]); c,d=line(sketch,sides[1])
     matrix=np.column_stack((b-a,c-d))
     if abs(np.linalg.det(matrix))<1e-10*np.linalg.norm(b-a)*np.linalg.norm(d-c):
@@ -743,6 +847,15 @@ def resize_fillet(sketch, arc, radius):
     if sides is None: return []
     corner=_fillet_corner(sketch,sides)
     es=[get_entity(sketch,r) for r in sides]
+    if arc.get('fillet_kind')=='ARC_LINE':
+        originals=copy.deepcopy(es)
+        for e,ref in zip(originals,sides):_curve_endpoint(e,ref['part'],corner)
+        touches,parameters,mode=_round_arc_line(*originals,sides[0]['part'],sides[1]['part'],radius,arc['start'])
+        arc.update(parameters)
+        for e,ref,p in zip(es,sides,touches):_curve_endpoint(e,ref['part'],p)
+        for c in sketch['constraints']:
+            if c['type']=='TANGENT' and {r['id'] for r in c['refs']}=={arc['id'],es[1]['id']}:c['mode']=mode
+        return [dict(id=arc['id'],field='radius',value=radius)]
     ends=[np.array(handles(e)['END' if ref['part']=='START' else 'START']) for e,ref in zip(es,sides)]
     touches,parameters=_round_corner(corner,ends,radius,arc['start'])
     arc.update(parameters)
@@ -754,12 +867,11 @@ def resize_fillet(sketch, arc, radius):
 
 def remove_fillet(sketch, arc):
     sides=fillet_sides(sketch,arc)
-    if sides is None: raise BadPayload('Selecciona un redondeo unido a dos líneas tangentes')
+    if sides is None: raise BadPayload('Selecciona un redondeo unido a sus dos elementos tangentes')
     corner=_fillet_corner(sketch,sides)
     es=[get_entity(sketch,r) for r in sides]
     for e,ref in zip(es,sides):
-        kx,ky=('x','y') if ref['part']=='START' else ('x2','y2')
-        e[kx],e[ky]=map(float,corner)
+        _curve_endpoint(e,ref['part'],corner)
     _remap_corner_refs(sketch,{(arc['id'],'CORNER'):sides[0]})
     sketch['entities'].remove(arc)
     sketch['constraints']=[c for c in sketch.get('constraints',[]) if not any(r['id']==arc['id'] for r in c['refs'])]

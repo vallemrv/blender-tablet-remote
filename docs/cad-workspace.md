@@ -753,3 +753,17 @@ Guardar durante la edición conserva el croquis pendiente y el último sólido
 válido, sin ejecutar el kernel en el handler de guardado. Al volver a CAD tras
 cargar el archivo se recupera ese boceto. Borrar referencias utilizadas continúa
 protegido; esta edición diferida no elimina operaciones dependientes.
+
+### Redondear una unión entre arco y línea
+
+Selecciona la línea y el arco que comparten un extremo, o toca ese extremo, y usa
+**Redondear**. El radio crea un arco tangente a ambos y recorta los dos elementos;
+si seleccionas una línea y un semicírculo unidos por ambos extremos se redondean
+las dos uniones con un radio compartido.
+
+El nuevo arco ofrece Radio y Quitar redondeo, como los redondeos entre líneas.
+Quitar restituye la esquina original. Conserva las restricciones compatibles y
+las referencias a la esquina; un radio que no cabe o unas cotas incompatibles
+rechazan el cambio completo. La unión debe existir: no prolonga elementos
+separados ni añade redondeos entre dos arcos. El cambio del sólido usado por el
+croquis se publica al finalizar su edición.

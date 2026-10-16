@@ -1110,3 +1110,13 @@ no quedan archivos o referencias temporales.
   publica la pieza con undo. Cambiar de boceto, Vista 3D/Object o una operación de
   sólido resuelve antes el pendiente. Guardar conserva croquis y sólido congelado;
   volver a CAD recupera la edición, sin kernel dentro de los handlers.
+
+- Redondear bocetos admite LINE+ARC unidos por un extremo (o ambos): calcula
+  tangencias exactas mediante rectas desplazadas y círculos concéntricos, recorta
+  los elementos y conserva sus IDs. El nuevo ARC guarda `fillet_kind:ARC_LINE`
+  para distinguirlo del arco original; sus fuentes siguen las coincidencias y
+  tangencias por ID existentes. Radio y Quitar redondeo usan
+  el mismo flujo; CORNER conserva la esquina virtual recta–círculo y sus cotas.
+  Valida continuidad, radio disponible y restricciones antes de persistir; no
+  prolonga elementos separados ni ofrece redondeo ARC+ARC. LINE+LINE conserva
+  su reconocimiento por coincidencias/tangencias sin migrar documentos antiguos.
