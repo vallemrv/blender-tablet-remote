@@ -151,6 +151,58 @@ class OcctKernelTests(unittest.TestCase):
                 self.assertEqual(result['tips']['body'],'r2')
                 self.assertTrue(result['display']['body'][1][1])
 
+    def test_exact_r5_meets_base_round_and_preserves_later_finishes(self):
+        from OCP.BRepCheck import BRepCheck_Analyzer
+        from OCP.BRepAdaptor import BRepAdaptor_Surface
+        from OCP.TopExp import TopExp_Explorer
+        from OCP.TopAbs import TopAbs_FACE
+        from OCP.TopoDS import TopoDS
+        from OCP.GeomAbs import GeomAbs_Cylinder
+        from OCP.BRepTools import BRepTools
+        import tempfile
+        doc=model.loads((Path(__file__).parent/'fixtures'/'cad_finish_connected_support.json').read_text())
+        doc['sketches'].append(dict(id='web',name='Web',plane='XZ',offset=0,body_id='body',order=8,constraints=[],
+            entities=[dict(id='web_profile',type='RECTANGLE',x=-.0325000025331974,y=0.,width=.020000000002063846,height=.03,construction=False)]))
+        doc['features'].append(dict(id='web_solid',name='Web',type='EXTRUDE',body_id='body',sketch_id='web',
+            profile_id='profile_web_profile',depth=.0075,extent='BOTH',enabled=True,order=9))
+        corner_edges=[[[[-.0325000025331974,y,.006],[-.0325000025331974,y,.015]]] for y in (-.02500000037252903,.02500000037252903)]
+        evaluator,result=self.evaluate(doc);base=evaluator._shapes['web_solid'][1]
+        with tempfile.TemporaryDirectory() as directory:
+            first,last=Path(directory)/'before.brep',Path(directory)/'after.brep'
+            BRepTools.Write_s(base,str(first))
+            finished=occt.finish_edges(base,corner_edges,.005,4)
+            BRepTools.Write_s(base,str(last))
+            self.assertEqual(first.read_bytes(),last.read_bytes(), 'Repair mutated the cached predecessor')
+        self.assertTrue(BRepCheck_Analyzer(finished).IsValid())
+        radii=[];explorer=TopExp_Explorer(finished,TopAbs_FACE)
+        while explorer.More():
+            surface=BRepAdaptor_Surface(TopoDS.Face(explorer.Current()))
+            if surface.GetType()==GeomAbs_Cylinder:
+                cylinder=surface.Cylinder();origin=cylinder.Location()
+                if origin.X()<-26 and origin.Z()>6:
+                    radii.append(cylinder.Radius())
+            explorer.Next()
+        self.assertEqual(len(radii),2)
+        for radius in radii:self.assertAlmostEqual(radius,5.,places=10)
+        doc['features'].append(dict(id='r5',type='FILLET',name='R5',body_id='body',sketch_id=None,order=10,
+                                    enabled=True,width=.005,segments=4,edges=corner_edges))
+        subsequent=[
+            [[[-.02250000275671482,-.0075,.01],[-.02250000275671482,-.025,.01]]],
+            [[[-.00841608177870512,-.025,.01],[-.00841608177870512,-.011575836688280106,.01]]],
+            [[[.0034999975468963385,-.025,.006],[.0034999975468963385,-.011532562784850597,.006]]],
+        ]
+        for i,edge in enumerate(subsequent):
+            doc['features'].append(dict(id=f'r2_{i}',type='FILLET',name='R2',body_id='body',sketch_id=None,order=11+i,
+                                        enabled=True,width=.002,segments=4,edges=[edge]))
+        result=evaluator.evaluate(copy.deepcopy(doc))
+        self.assertEqual(result['tips']['body'],'r2_2')
+        self.assertTrue(BRepCheck_Analyzer(evaluator._shapes['r2_2'][1]).IsValid())
+        # Editing back to R4 and then to exact R5 must rebuild the same valid tip.
+        for radius in (.004,.005):
+            doc['features'][5]['width']=radius
+            result=evaluator.evaluate(copy.deepcopy(doc))
+            self.assertTrue(BRepCheck_Analyzer(evaluator._shapes[result['tips']['body']][1]).IsValid())
+
     def test_finish_still_rejects_an_invalid_native_result(self):
         doc=model.loads((Path(__file__).parent/'fixtures'/'cad_finish_connected_support.json').read_text())
         evaluator,result=self.evaluate(doc)

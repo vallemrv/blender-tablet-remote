@@ -155,6 +155,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   la limpieza invalida una unión o un redondeo/chaflán válido se conserva el BREP
   previo. Los acabados nunca aceptan un resultado nativo inválido como reserva. Las aristas
   se emparejan por geometría (rectas sobre su recta infinita con solape).
+  Si un redondeo falla al encontrarse con otro radio, admite un único reintento
+  sobre una copia BREP con caras unificadas y topología reparada dentro de la
+  tolerancia geométrica. Valida el sólido y limita el cambio de volumen; nunca
+  reduce el radio solicitado ni modifica el predecesor guardado en caché.
   `cad/evaluation.py` y las operaciones de sólido de malla están retirados.
   `cad/kernel.py` conserva utilidades geométricas compartidas y `ExtrusionPreviewCache`,
   el prisma ligero del lápiz; no evalúa la pila ni ofrece un motor alternativo.

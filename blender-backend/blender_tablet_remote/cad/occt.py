@@ -853,7 +853,35 @@ def _match(shape, design_edges):
     return chosen
 
 
-def finish_edges(shape, edges, width, segments):
+def _finish_base(shape):
+    """Repair captured-plane noise for a limiting fillet, on a detached BREP.
+
+    A radius can meet an existing round exactly. Nanometre offsets then leave
+    redundant faces which the fillet builder cannot terminate on. Unify and
+    repair their topology within the same tolerance used to match design edges;
+    the requested radius and the source document remain exact and unchanged.
+    """
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_Copy
+    from OCP.ShapeUpgrade import ShapeUpgrade_UnifySameDomain
+    from OCP.ShapeFix import ShapeFix_Shape
+    tolerance = max(_extent(shape)*2e-6, 1e-5)
+    detached = BRepBuilderAPI_Copy(shape, True, False).Shape()
+    unify = ShapeUpgrade_UnifySameDomain(detached, True, True, True)
+    unify.SetLinearTolerance(tolerance)
+    unify.SetAngularTolerance(1e-5)
+    unify.Build()
+    repair = ShapeFix_Shape(unify.Shape())
+    repair.SetPrecision(tolerance)
+    repair.SetMaxTolerance(tolerance*2)
+    repair.Perform()
+    result = _valid(repair.Shape(), 'cad_finish_invalid')
+    volume = _volume(shape)
+    if abs(_volume(result)-volume) > max(volume*1e-6, 1e-9):
+        raise CommandError('La reparación del redondeo alteraría el sólido', code='cad_finish_invalid')
+    return result
+
+
+def _finish_edges(shape, edges, width, segments):
     from OCP.BRepFilletAPI import BRepFilletAPI_MakeFillet, BRepFilletAPI_MakeChamfer
     chosen = _match(shape, edges)
     maker = BRepFilletAPI_MakeFillet(shape) if segments > 1 else BRepFilletAPI_MakeChamfer(shape)
@@ -874,6 +902,21 @@ def finish_edges(shape, edges, width, segments):
         # fillet, just as it can invalidate a boolean. Retain the exact BREP
         # produced by the finish; never accept an invalid result from either.
         return _valid(result, 'cad_finish_invalid')
+
+
+def finish_edges(shape, edges, width, segments):
+    try:
+        return _finish_edges(shape, edges, width, segments)
+    except CommandError as exc:
+        if segments <= 1 or exc.code != 'cad_finish_invalid':
+            raise
+        original = exc
+    # One bounded retry at the exact requested radius. ShapeFix must never
+    # mutate the cached predecessor or make an invalid finish acceptable.
+    try:
+        return _finish_edges(_finish_base(shape), edges, width, segments)
+    except (CommandError, RuntimeError):
+        raise original
 
 
 # ------------------------------------------------------------- tessellation
