@@ -799,6 +799,27 @@ def _reach_face(doc, feature, face):
     else: feature['depth']=travel if abs(travel)>=1e-7 else 1e-7
 
 
+def _extrude_preview(session, preview):
+    """An empty initial cut stays adjustable until its depth reaches material."""
+    feature = model.find(preview, 'features', session['feature_id'])
+    try:
+        yield from runtime.rebuild_steps(preview, limit=feature['id'] if session.get('at_bar') else None,
+                                        extrusion_cache=session['extrusion_cache'])
+    except CommandError as exc:
+        if (session['operation'] != 'CUT' or exc.code != 'cad_cut_miss'
+                or (exc.details or {}).get('feature_id') != feature['id']):
+            raise
+        # A previous successful preview must not remain visible/confirmable.
+        yield from runtime.rebuild_steps(session['baseline'], limit=runtime.bar(session['baseline']), force=True)
+        session['candidate'] = None
+        session['error'] = 'El vaciado todavía no alcanza material: aumenta la profundidad o elige Perforar todo'
+    else:
+        session['candidate'] = feature['id']
+        session['error'] = None
+    session.update(preview=preview, depth=feature['depth'], extent=feature.get('extent', 'ONE'),
+                   to_face=feature.get('to_face'), fast=False)
+
+
 @command('cad.extrude.begin')
 def extrude_begin(payload):
     yield from runtime.finish_sketch_steps()
@@ -807,6 +828,22 @@ def extrude_begin(payload):
     profile_id = 'profile_' + str(payload['sketch_id']) if payload.get('sketch_id') else payload.get('profile_id')
     operation=str(payload.get('operation','EXTRUDE')).upper()
     entity_ids=payload.get('entity_ids')
+    if 'profile_ids' in payload:
+        identifiers = payload['profile_ids']
+        if (operation != 'CUT' or not isinstance(identifiers,list) or not identifiers
+                or any(not isinstance(i,str) for i in identifiers) or len(set(identifiers)) != len(identifiers)
+                or any(payload.get(key) is not None for key in ('entity_ids','sketch_id','profile_id'))):
+            raise BadPayload('Selecciona perfiles distintos de un mismo boceto para vaciar')
+        source = None
+        entity_ids = []
+        for identifier in identifiers:
+            selected, contour = model.profile(doc,identifier)
+            if contour['type']=='SKETCH' or (source is not None and selected['id']!=source):
+                raise BadPayload('Los perfiles seleccionados deben pertenecer al mismo boceto')
+            source = selected['id']
+            entity_ids.extend(contour.get('members',[contour['id']]))
+        entity_ids = list(dict.fromkeys(entity_ids))
+        profile_id = 'profile_'+source
     if 'entity_ids' in payload:
         if operation!='CUT' or not payload.get('sketch_id') or entity_ids is None:
             raise BadPayload('Vaciar selección requiere un boceto y sus elementos seleccionados')
@@ -836,12 +873,12 @@ def extrude_begin(payload):
     preview = copy.deepcopy(session['baseline'])
     preview['features'].append(feature)
     if bar: model.insert_after(preview,feature,bar)
+    session.update(feature_id=feature['id'], at_bar=bool(bar))
     try:
-        yield from runtime.rebuild_steps(preview,limit=feature['id'] if bar else None,extrusion_cache=session['extrusion_cache'])
+        yield from _extrude_preview(session, preview)
     except Exception:
         runtime.session = None
         raise
-    session.update(feature_id=feature['id'],preview=preview,candidate=feature['id'],depth=depth,extent=extent,at_bar=bool(bar))
     runtime.selection = dict(kind='FEATURE',id=feature['id'])
     runtime.solid_view()
     return runtime.status()
@@ -1010,9 +1047,7 @@ def extrude_update(payload):
         preview=copy.deepcopy(session['preview'])
         feature=model.find(preview,'features',session['feature_id'])
         _reach_face(preview,feature,face)
-        yield from runtime.rebuild_steps(preview,limit=session['feature_id'] if session.get('at_bar') else None,
-                        extrusion_cache=session['extrusion_cache'])
-        session.update(preview=preview,depth=feature['depth'],extent='TO_FACE',to_face=face)
+        yield from _extrude_preview(session, preview)
         return runtime.status()
     stylus = extent!='THROUGH_ALL' and ('gesture_u' in payload or 'gesture_v' in payload)
     settle = extent!='THROUGH_ALL' and bool(payload.get('settle'))
@@ -1035,9 +1070,7 @@ def extrude_update(payload):
         except CommandError:
             session.update(previous)
             runtime.drop_prisms()
-    yield from runtime.rebuild_steps(preview,limit=session['feature_id'] if session.get('at_bar') else None,
-                    extrusion_cache=session['extrusion_cache'])
-    session.update(preview=preview,depth=depth,extent=extent,to_face=None)
+    yield from _extrude_preview(session, preview)
     return runtime.status()
 
 
@@ -1212,7 +1245,7 @@ def confirm(payload):
     if session['operation']=='TRIM':return (yield from entity_trim.__wrapped__(dict(payload,phase='END')))
     if not session['candidate']:
         from ..cad import operations
-        if session['operation']=='SHELL' or session['operation'] in operations.TYPES: return runtime.status()
+        if session['operation'] in ('SHELL','CUT') or session['operation'] in operations.TYPES: return runtime.status()
         runtime.cancel()
         return runtime.status()
     doc = session['preview']
@@ -1442,7 +1475,10 @@ def _pick(payload):
                 _,e=model.entity(runtime.doc(),item['id'])
                 part='EDGE'+str(index) if e['type'] in ('RECTANGLE','NGON') else 'BODY'
                 candidates.append((1,distance,dict(kind='ENTITY',id=item['id'],part=part)))
-    return min(candidates,key=lambda c:c[:2])[2] if candidates else (
+    # Coincident projected references must not hide a drawn circle's center.
+    # Distance still wins; construction is only a tie-break at the same point.
+    construction = {item['id']: bool(item.get('construction')) for item in overlay}
+    return min(candidates,key=lambda c:(*c[:2],construction.get(c[2]['id'],False)))[2] if candidates else (
         query_sketch_annotation(overlay,u,v,aspect,labels_only=False) if runtime.active_sketch_id else None)
 
 
@@ -1468,6 +1504,11 @@ def _toggle_refs(refs, hit):
     # A finished polygon keeps its profile selected for extrusion. Picking a
     # sketch side enters element selection; the profile is not another element.
     if hit.get('kind')=='ENTITY': refs=[r for r in refs if r.get('kind')=='ENTITY']
+    elif hit.get('kind')=='PROFILE':
+        sketch,_ = model.profile(runtime.doc(),hit['id'])
+        profiles = {p['id'] for p in model.profiles(sketch)}
+        refs = [r for r in refs if r.get('kind')=='PROFILE' and r['id'] in profiles]
+    else: return [hit]
     if any(_covers(r,hit) for r in refs):
         return [r for r in refs if not _covers(r,hit)]
     return [r for r in refs if not _covers(hit,r)]+[hit]

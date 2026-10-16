@@ -775,3 +775,20 @@ las referencias a la esquina; un radio que no cabe o unas cotas incompatibles
 rechazan el cambio completo. La unión debe existir: no prolonga elementos
 separados ni añade redondeos entre dos arcos. El cambio del sólido usado por el
 croquis se publica al finalizar su edición.
+
+### Elegir varios taladros y alcanzar el fondo de una boca
+
+Con **Mostrar boceto**, toca las formas directamente en la vista 3D: cada toque
+añade un contorno del mismo boceto; repetirlo lo quita. **Vaciar selección (4)**
+vacía juntos los cuatro seleccionados y excluye los círculos centrales no marcados.
+Tocar otro boceto inicia una selección nueva; tocar fuera limpia la selección.
+El grupo también admite contornos cerrados de líneas/arcos. Las herramientas de
+un único perfil se deshabilitan cuando hay varios, sin usar solo el último.
+Dentro de **Editar boceto**, se conserva la selección de entidades desde **Figuras**;
+esta alternativa evita confundir un centro con una cota superpuesta.
+
+Si empiezas un vaciado desde una boca ya hueca, la profundidad inicial puede
+recorrer solamente aire. La herramienta permanece abierta con Confirmar desactivado:
+aumenta **Profundidad**, elige **Hasta cara** o **Perforar todo** para alcanzar el
+material. Al obtener un corte válido se habilita Confirmar. Cancelar conserva la
+pieza original.

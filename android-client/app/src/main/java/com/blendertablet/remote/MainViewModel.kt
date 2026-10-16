@@ -688,7 +688,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (client.state.value.cad.surface.mode != "PROFILE") {
                 client.cadCommand("cad.surface.select", mapOf("u" to u, "v" to v)); return
             }
-            client.cadCommand("cad.select", mapOf("u" to u, "v" to v, "additive" to (client.state.value.cad.activeSketchId != null))); return
+            client.cadCommand("cad.select", mapOf("u" to u, "v" to v, "additive" to (client.state.value.cad.activeSketchId != null || client.state.value.features.cad.profileMultiselect))); return
         }
         val surfaceTool = client.toolSession.value
         if (surfaceTool.armed && surfaceTool.input == "REPEAT_TAP") {

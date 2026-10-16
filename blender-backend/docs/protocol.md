@@ -2319,3 +2319,30 @@ para la tangencia entre los arcos. No guarda puntos de malla ni píxeles. Sus
 propiedades usan `is_fillet`, Radio y `cad.fillet.remove` existentes; `CORNER` es
 la intersección virtual de la recta y el círculo originales. La inferencia de
 redondeos LINE+LINE de archivos antiguos permanece intacta.
+
+### Vaciado que todavía no alcanza material
+
+`cad.extrude.begin/update` con CUT conserva la sesión si OpenCascade devuelve
+`cad_cut_miss` para el nodo nuevo. El estado contiene `session.active:true`,
+`can_confirm:false`, la profundidad solicitada y una explicación en `error`.
+No persiste una operación vacía ni altera el sólido previo; se pueden ajustar
+profundidad, `TO_FACE` o `THROUGH_ALL`. Una preview que sí corta habilita Confirmar
+y limpia el error. Retroceder a una profundidad vacía restaura el sólido inicial
+y deshabilita Confirmar; confirmar ese estado no cancela ni crea undo. Los errores
+de otras operaciones y los sólidos inválidos siguen propagándose.
+
+### Selección de varios perfiles mostrados
+
+`cad.profile_multiselect:true` habilita toques aditivos de perfiles en la vista 3D.
+`cad.select {u,v,additive:true}` acumula/alterna perfiles del mismo boceto; otro
+boceto reemplaza el grupo, un miss lo limpia y seleccionar SKETCH/FEATURE lo
+sustituye. `selection.items` contiene todos los PROFILE elegidos; el overlay los
+resalta juntos. La selección no abre el editor ni cambia el documento.
+
+`cad.extrude.begin {operation:"CUT",profile_ids:[...],target_id,depth}` resuelve
+los perfiles a entidades originales, incluidos los miembros de cadenas cerradas.
+Persiste el mismo `entity_ids` de Vaciar selección, sin copiar el croquis. Rechaza
+listas vacías, duplicados, perfiles de distintos bocetos y mezclar `profile_ids`
+con `sketch_id`, `profile_id` o `entity_ids`. Un único perfil y el boceto completo
+mantienen sus entradas existentes. Android anuncia el recuento y no permite
+aplicar herramientas de perfil único al último elemento de un grupo.

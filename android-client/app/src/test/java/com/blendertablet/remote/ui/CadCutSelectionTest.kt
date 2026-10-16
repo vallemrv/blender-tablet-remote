@@ -28,10 +28,25 @@ class CadCutSelectionTest {
         assertTrue(cadCutSelection(state(CadSelection("hole1")).copy(activeSketchId = null)).isEmpty())
         assertTrue(cadCutSelection(state(CadSelection("hole1")).copy(surface = CadSurface(mode = "EDGE"))).isEmpty())
     }
+    @Test fun shownProfilesStayOutsideSketchEditingAndExcludeUnselectedCircles() {
+        val shown = sketch.copy(profiles = (1..4).map { CadProfile("profile_hole$it", "hole$it", "Círculo") } +
+            listOf(CadProfile("profile_center", "center", "Círculo"), CadProfile("profile_inner", "inner", "Círculo")))
+        val ids = (1..4).map { "profile_hole$it" }
+        val state = CadState(sketches = listOf(shown), selectionKind = "PROFILE", selectionId = ids.last(),
+            selection = ids.map { CadSelection(it) })
+        assertNull(state.activeSketchId)
+        assertEquals(ids, cadShownProfiles(state))
+        assertTrue(cadShownProfiles(state.copy(activeSketchId = "s")).isEmpty())
+        assertTrue(cadShownProfiles(state.copy(selection = state.selection + CadSelection("profile_other"))).isEmpty())
+        assertTrue(cadShownProfiles(state.copy(selectionKind = "SKETCH")).isEmpty())
+    }
     @Test fun olderServersDoNotOfferSubsetCuts() {
         val flags = JSONObject().put("version", 2).put("length_unit", "METERS").put("planes", org.json.JSONArray(listOf("XY")))
         assertFalse(CadParser.capabilities(flags).selectedCut)
+        assertFalse(CadParser.capabilities(flags).profileMultiselect)
         flags.put("selected_cut", true)
         assertTrue(CadParser.capabilities(flags).selectedCut)
+        flags.put("profile_multiselect", true)
+        assertTrue(CadParser.capabilities(flags).profileMultiselect)
     }
 }

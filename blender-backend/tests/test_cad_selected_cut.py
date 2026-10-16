@@ -35,6 +35,72 @@ class SelectedCutTests(CadTests):
         feature=runtime.doc()['features'][-1]
         self.assertEqual(feature['entity_ids'],holes);self.assertEqual(feature['profile_id'],'profile_'+sketch)
         model.loads(model.dumps(runtime.doc()))
+    def test_coincident_reference_centers_do_not_hide_drawn_holes(self):
+        _,target,sketch,holes,_,_=self.plate()
+        cad.select_all(dict(action='DESELECT',**OWNER))
+        overlay=[]
+        for i,identifier in enumerate(holes):
+            center=[.2+i*.15,.5]
+            for ref,construction in [('reference_'+identifier,True),(identifier,False)]:
+                overlay.append(dict(id=ref,points=[],closed=False,construction=construction,
+                                    handles=[dict(part='CENTER',point=center)]))
+        with patch.object(runtime,'overlay',return_value=overlay):
+            for i,identifier in enumerate(holes):
+                cad.select(dict(u=.2+i*.15,v=.5,additive=True,**OWNER))
+            self.assertEqual([r['id'] for r in cad._refs()],holes)
+            # A nearer reference still wins; this is not a construction filter.
+            overlay[0]['handles'][0]['point']=[.2,.51]
+            self.assertEqual(cad._pick(dict(u=.2,v=.51))['id'],'reference_'+holes[0])
+        self.cut(target,sketch,[r['id'] for r in cad._refs()]);cad.confirm(OWNER)
+        self.assertEqual(runtime.doc()['features'][-1]['entity_ids'],holes)
+
+    def test_shown_profiles_accumulate_toggle_and_cut_together_without_editing(self):
+        _,target,sketch,holes,center,inner=self.plate();cad.sketch_finish(OWNER)
+        cad.sketch_visibility(dict(sketch_id=sketch,visible=True,**OWNER))
+        # Hit the shown profiles through the same coordinate command as Android.
+        overlay=[dict(id=identifier,points=[[x-.02,.48],[x+.02,.48],[x+.02,.52],[x-.02,.52]],closed=True)
+                 for identifier,x in zip(holes,[.2,.4,.6,.8])]
+        with patch.object(runtime,'overlay',return_value=overlay):
+            for x in [.2,.4,.6,.8]:cad.select(dict(u=x,v=.5,additive=True,**OWNER))
+            self.assertIsNone(runtime.active_sketch_id)
+            self.assertEqual([r['id'] for r in cad._refs()],['profile_'+i for i in holes])
+            cad.select(dict(u=.4,v=.5,additive=True,**OWNER))
+            self.assertEqual(len(cad._refs()),3)
+            cad.select(dict(u=.4,v=.5,additive=True,**OWNER))
+        before=model.dumps(runtime.doc());baseline=volume(self.obj())
+        state=cad.extrude_begin(dict(operation='CUT',profile_ids=[r['id'] for r in cad._refs()],target_id=target,depth=.006,**OWNER))
+        self.assertTrue(state['session']['can_confirm']);self.assertIsNone(runtime.active_sketch_id)
+        self.assertEqual(model.dumps(runtime.doc()),before)
+        with patch.object(cad,'undo_push') as undo:cad.confirm(OWNER);undo.assert_called_once()
+        self.assertEqual(set(runtime.doc()['features'][-1]['entity_ids']),set(holes))
+        self.assertAlmostEqual(baseline-volume(self.obj()),4*math.pi*.002**2*.006,delta=3e-10)
+    def test_shown_profile_group_replaces_whole_sketch_or_other_sketch(self):
+        _,_,sketch,holes,_,_=self.plate();cad.sketch_finish(OWNER)
+        cad.select(dict(kind='SKETCH',id=sketch,**OWNER))
+        cad.select(dict(kind='PROFILE',id='profile_'+holes[0],additive=True,**OWNER))
+        self.assertEqual([r['id'] for r in cad._refs()],['profile_'+holes[0]])
+        cad.sketch_create(dict(plane='XY',**OWNER));other=self.draw('CIRCLE',(.03,.03),(.031,.03));cad.sketch_finish(OWNER)
+        cad.select(dict(kind='PROFILE',id='profile_'+holes[0],additive=True,**OWNER))
+        cad.select(dict(kind='PROFILE',id='profile_'+other,additive=True,**OWNER))
+        self.assertEqual([r['id'] for r in cad._refs()],['profile_'+other])
+    def test_selected_profile_list_rejects_empty_duplicates_and_mixed_sketches(self):
+        base,target,sketch,holes,_,_=self.plate();cad.sketch_finish(OWNER)
+        before=model.dumps(runtime.doc())
+        for ids in ([],['profile_'+holes[0]]*2,['profile_'+holes[0],'profile_'+base],['profile_'+sketch]):
+            with self.subTest(ids=ids),self.assertRaises(CommandError):
+                cad.extrude_begin(dict(operation='CUT',profile_ids=ids,target_id=target,depth=.006,**OWNER))
+            self.assertIsNone(runtime.session);self.assertEqual(model.dumps(runtime.doc()),before)
+    def test_shown_closed_chain_resolves_its_members(self):
+        _,target,sketch,holes,_,_=self.plate()
+        points=[(.025,.01),(.035,.01),(.035,.02),(.025,.02)]
+        lines=[self.draw('LINE',a,b) for a,b in zip(points,points[1:]+points[:1])]
+        source=model.find(runtime.doc(),'sketches',sketch)
+        chain=next(e for e in model.closed_entities(source) if set(e.get('members',[]))==set(lines))
+        cad.sketch_finish(OWNER)
+        cad.extrude_begin(dict(operation='CUT',profile_ids=['profile_'+holes[0],'profile_'+chain['id']],target_id=target,depth=.006,**OWNER))
+        cad.confirm(OWNER)
+        self.assertEqual(set(runtime.doc()['features'][-1]['entity_ids']),set(lines+[holes[0]]))
+
     def test_subset_follows_dimensions_and_unused_geometry_is_not_a_cutter(self):
         _,target,sketch,holes,center,_=self.plate();self.cut(target,sketch,holes);cad.confirm(OWNER)
         before=volume(self.obj())

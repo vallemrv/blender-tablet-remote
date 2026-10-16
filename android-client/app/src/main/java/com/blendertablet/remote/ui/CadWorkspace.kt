@@ -99,6 +99,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     val editing = cad.activeSketchId != null
     val selectedSketch = cad.selectedSketch
     val cutSelection = cadCutSelection(cad)
+    val shownProfiles = cadShownProfiles(cad)
+    val multipleProfiles = shownProfiles.size > 1
     val selectionTarget = targets.firstOrNull { it.bodyId == cad.activeSketch?.bodyId }
     val bodyHistory = cad.history.filter { cad.activeBodyId == null || it.bodyId == cad.activeBodyId }
     val lastNode = bodyHistory.lastOrNull()
@@ -129,6 +131,11 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     }
     fun beginFeature(operation: String) {
         vm.cadTool(null)
+        if (operation == "CUT" && multipleProfiles) {
+            command("cad.extrude.begin", "profile_ids" to shownProfiles, "depth" to cad.step * 10,
+                "operation" to operation, "target_id" to target?.id, "target_body_id" to target?.bodyId)
+            return
+        }
         command("cad.extrude.begin", "profile_id" to cad.selectionId.takeIf { cad.selectionKind == "PROFILE" },
             "sketch_id" to cad.selectionId.takeIf { cad.selectionKind == "SKETCH" }, "depth" to cad.step * 10,
             "operation" to operation, "target_id" to target?.id, "target_body_id" to target?.bodyId)
@@ -203,25 +210,25 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             }
             RailDivider()
             if ("LOFT" in capabilities.features) CadAction("LOFT", "Solevado: une este perfil con el de otro croquis", selected = loftFrom != null,
-                enabled = connected && !cad.sessionActive && (loftFrom != null || cad.selectionKind in listOf("PROFILE", "SKETCH"))) {
+                enabled = connected && !cad.sessionActive && !multipleProfiles && (loftFrom != null || cad.selectionKind in listOf("PROFILE", "SKETCH"))) {
                 loftFrom = if (loftFrom != null) null else cad.selectionKind!! to cad.selectionId!!
             }
             if ("SWEEP" in capabilities.features) CadAction("SWEEP", "Barrido: lleva este perfil por las líneas y arcos de otro croquis", selected = sweepFrom != null,
-                enabled = connected && !cad.sessionActive && (sweepFrom != null || cad.selectionKind in listOf("PROFILE", "SKETCH"))) {
+                enabled = connected && !cad.sessionActive && !multipleProfiles && (sweepFrom != null || cad.selectionKind in listOf("PROFILE", "SKETCH"))) {
                 sweepFrom = if (sweepFrom != null) null else cad.selectionKind!! to cad.selectionId!!
                 if (sweepFrom != null) onStackOpen(true)
             }
             if ("REVOLVE" in capabilities.features) CadAction("REVOLVE", "Revolución: gira el perfil alrededor de un eje del croquis (puede apoyarse en él)",
-                enabled = connected && !cad.sessionActive && cad.selectionKind in listOf("PROFILE", "SKETCH")) {
+                enabled = connected && !cad.sessionActive && !multipleProfiles && cad.selectionKind in listOf("PROFILE", "SKETCH")) {
                 command("cad.revolve.create", (if (cad.selectionKind == "SKETCH") "sketch_id" else "profile_id") to cad.selectionId)
             }
             if ("HELIX" in capabilities.features) CadAction("HELIX", "Barrido helicoidal del perfil alrededor de un eje del croquis",
-                enabled = connected && !cad.sessionActive && cad.selectionKind in listOf("PROFILE", "SKETCH")) {
+                enabled = connected && !cad.sessionActive && !multipleProfiles && cad.selectionKind in listOf("PROFILE", "SKETCH")) {
                 command("cad.helix.create", (if (cad.selectionKind == "SKETCH") "sketch_id" else "profile_id") to cad.selectionId)
             }
             capabilities.features.filter { it in listOf("EXTRUDE", "CUT") }.forEach { operation ->
-                CadAction(operation, cadLabel(operation), selected = depthPreview && cad.operation == operation,
-                    enabled = connected && !cad.sessionActive && cad.selectionKind in listOf("PROFILE", "SKETCH") && (operation != "CUT" || target != null)) { beginFeature(operation) }
+                CadAction(operation, if (operation == "CUT" && multipleProfiles) "Vaciar selección (${shownProfiles.size})" else cadLabel(operation), selected = depthPreview && cad.operation == operation,
+                    enabled = connected && !cad.sessionActive && cad.selectionKind in listOf("PROFILE", "SKETCH") && (operation != "CUT" || target != null) && (!multipleProfiles || operation == "CUT" && capabilities.profileMultiselect)) { beginFeature(operation) }
             }
         }
     }
@@ -583,6 +590,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 entity?.isFillet == true -> "Redondeo: cambia su radio · su papelera en Figuras recupera la esquina"
                 editing -> "Cursor: toca para seleccionar o quitar · dos dedos giran la vista y se queda · Girar 90° y Enderezar la colocan"
                 !editing && cad.rollbackId != null -> "Vista del pasado: ${cad.history.firstOrNull { it.id == cad.rollbackId }?.name.orEmpty()} · toca un nodo para ver el modelo en ese momento · Final restaura la pila completa"
+                multipleProfiles -> "${shownProfiles.size} contornos seleccionados · Vaciar usa solo estos · toca uno seleccionado para quitarlo"
+                cad.selectionKind == "PROFILE" && capabilities.profileMultiselect -> "Toca más contornos del mismo boceto para añadirlos · repetir un toque los quita · Vaciar usa la selección"
                 cad.selectionKind == "SKETCH" -> "${selectedSketch?.name.orEmpty()} completo · Extruir crea volumen y conserva los contornos interiores como huecos"
                 selectedSketch != null -> "${selectedSketch.name} · perfil seleccionado · Seleccionar todo elige el croquis completo para extruir"
                 else -> "Abre la pila (derecha) para editar un boceto · o crea uno en Planos, arriba, y selecciona un perfil para extruir"

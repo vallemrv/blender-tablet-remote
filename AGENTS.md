@@ -1129,3 +1129,21 @@ no quedan archivos o referencias temporales.
   Valida continuidad, radio disponible y restricciones antes de persistir; no
   prolonga elementos separados ni ofrece redondeo ARC+ARC. LINE+LINE conserva
   su reconocimiento por coincidencias/tangencias sin migrar documentos antiguos.
+
+- Vaciar conserva una preview ajustable si el corte inicial no alcanza material
+  (`cad_cut_miss` del nodo nuevo): muestra el sólido previo y permite editar
+  profundidad/Hasta cara/Perforar todo; Confirmar permanece deshabilitado. Alcanzar
+  material habilita el único undo normal. Volver a una profundidad vacía restaura
+  el sólido previo, nunca confirma el último corte válido por error. Otros fallos
+  de la pila no se convierten en cortes vacíos ajustables.
+- En la selección de croquis, dos centros coincidentes se desempatan a favor de
+  la figura dibujada frente a una referencia de construcción. Conserva la prioridad
+  de distancia y de las etiquetas de cotas; Figuras permite seleccionar contornos
+  aunque una etiqueta cubra su centro.
+
+- Mostrar boceto permite alternar varios perfiles del mismo croquis directamente
+  en 3D (`profile_multiselect`). Vaciar recibe `profile_ids`, resuelve círculos y
+  cadenas a `entity_ids` del original y reutiliza el vaciado por selección. No
+  incluye contornos sin marcar ni entra en edición. Otro boceto/selección completa
+  sustituye el grupo; repetir un perfil lo quita. Las herramientas de perfil único
+  quedan deshabilitadas para un grupo, nunca usan silenciosamente el último.
