@@ -7,6 +7,7 @@ from ..errors import BadPayload, CommandError
 
 VERSION = 1
 KEY = 'btr_cad_document'
+DEFERRED_SKETCH = 'deferred_sketch_id'
 PLANES = ('XY', 'XZ', 'YZ')
 TYPES = ('LINE', 'RECTANGLE', 'CIRCLE', 'ARC', 'NGON', 'SLOT', 'GEAR', 'POINT')
 # NGON is a regular polygon: its across-flats size (inscribed diameter, the
@@ -170,6 +171,18 @@ def loads(raw):
                 validate_entity(e)
             from .sketch import validate_constraints
             validate_constraints(sketch)
+        deferred = doc.get(DEFERRED_SKETCH)
+        if deferred is not None:
+            if not isinstance(deferred, str): raise ValueError('invalid deferred sketch')
+            find(doc, 'sketches', deferred)
+        def feature_profile(identifier, sketch_id, entity_ids=None):
+            # The drawings/constraints remain fully validated. A used contour
+            # may temporarily open while its solid is deliberately frozen.
+            if deferred is not None and sketch_id == deferred:
+                if not isinstance(identifier, str) or not identifier.startswith('profile_'):
+                    raise ValueError('invalid deferred profile')
+                return find(doc, 'sketches', sketch_id), None
+            return profile(doc, identifier, entity_ids)
         seen_features = set()
         for feature in doc['features']:
             unique(feature['id'])
@@ -190,8 +203,8 @@ def loads(raw):
                 seen_features.add(feature['id'])
                 continue
             if feature.get('type') == 'LOFT':
-                first, _ = profile(doc, feature['profile_id'])
-                second, _ = profile(doc, feature.get('to_profile_id'))
+                first, _ = feature_profile(feature['profile_id'], feature['sketch_id'])
+                second, _ = feature_profile(feature.get('to_profile_id'), feature.get('to_sketch_id'))
                 feature.setdefault('body_id', first['body_id'])
                 find(doc,'bodies',feature['body_id'])
                 if first['id'] != feature['sketch_id'] or second['id'] != feature.get('to_sketch_id') or \
@@ -200,7 +213,7 @@ def loads(raw):
                 seen_features.add(feature['id'])
                 continue
             if feature.get('type') == 'SWEEP':
-                sketch, _ = profile(doc, feature['profile_id'])
+                sketch, _ = feature_profile(feature['profile_id'], feature['sketch_id'])
                 path = find(doc, 'sketches', feature.get('path_sketch_id'))
                 feature.setdefault('body_id', sketch['body_id'])
                 find(doc,'bodies',feature['body_id'])
@@ -209,7 +222,7 @@ def loads(raw):
                 seen_features.add(feature['id'])
                 continue
             if feature.get('type') in ('HELIX', 'REVOLVE'):
-                sketch, _ = profile(doc, feature['profile_id'])
+                sketch, _ = feature_profile(feature['profile_id'], feature['sketch_id'])
                 feature.setdefault('body_id', sketch['body_id'])
                 find(doc,'bodies',feature['body_id'])
                 if sketch['id'] != feature['sketch_id'] or not isinstance(feature['enabled'], bool):
@@ -220,7 +233,7 @@ def loads(raw):
             if 'entity_ids' in feature and (not isinstance(feature['entity_ids'], list) or
                     feature.get('operation', feature['type']) != 'CUT'):
                 raise ValueError('invalid selected-cut profile')
-            sketch, _ = profile(doc, feature['profile_id'], feature.get('entity_ids'))
+            sketch, _ = feature_profile(feature['profile_id'], feature['sketch_id'], feature.get('entity_ids'))
             feature.setdefault('body_id',sketch['body_id'])
             find(doc,'bodies',feature['body_id'])
             if feature['type'] not in ('EXTRUDE', 'CUT', 'MIRROR') or sketch['id'] != feature['sketch_id'] or not isinstance(feature['enabled'], bool):

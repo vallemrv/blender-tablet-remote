@@ -95,6 +95,7 @@ data class CadState(
     val segments: Int = 1,
     val overlay: List<CadOverlay> = emptyList(),
     val error: String? = null,
+    val sketchPending: Boolean = false,
     val selection: List<CadSelection> = emptyList(),
     val step: Double = .001,
     val increment: Boolean = true,

@@ -735,3 +735,21 @@ y demás figuras cerradas funcionan individualmente; para contornos hechos de
 líneas/arcos selecciona todos sus tramos. Puntos, construcción y contornos abiertos
 no generan vaciado. La operación conserva los IDs elegidos y sigue sus cotas al
 editar el boceto; no incorpora automáticamente figuras añadidas después.
+
+### Editar sin reconstruir el sólido a cada paso
+
+Mientras se edita un boceto, dibujos, cotas, restricciones y arrastres actualizan
+solo el croquis. El sólido conserva la última evaluación válida; las operaciones
+posteriores no bloquean un paso intermedio de edición. La bandeja indica
+«Pieza pendiente de actualizar» cuando ese croquis alimenta operaciones.
+
+**Finalizar boceto** valida y evalúa la pila una vez. Si falla, conserva los cambios
+y mantiene el boceto abierto para corregirlos. Abrir otro boceto, volver a Vista
+3D/Object o iniciar una operación de sólido también cierra la edición pendiente.
+Cada acción de croquis conserva su undo; publicar la pieza al finalizar añade el
+paso de actualización del sólido. Una salida sin cambios no añade undo.
+
+Guardar durante la edición conserva el croquis pendiente y el último sólido
+válido, sin ejecutar el kernel en el handler de guardado. Al volver a CAD tras
+cargar el archivo se recupera ese boceto. Borrar referencias utilizadas continúa
+protegido; esta edición diferida no elimina operaciones dependientes.

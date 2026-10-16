@@ -47,6 +47,7 @@ def _set_mode(target: str, owner=None) -> dict:
                 bpy.ops.object.mode_set(mode="OBJECT")
         runtime.workspace = True
         runtime.workspace_owner = owner
+        if doc.get("deferred_sketch_id"):runtime.active_sketch_id=doc["deferred_sketch_id"]
         objects=runtime.objects(doc)
         if doc['features'] and (not objects or any(not obj.get(BODY_KEY) for obj in objects)):
             runtime.rebuild(doc,limit=runtime.bar(doc))
@@ -85,13 +86,27 @@ def _set_mode(target: str, owner=None) -> dict:
     return {"mode": obj.mode}
 
 
+def _finish_sketch_before_mode(target):
+    from ..cad.runtime import runtime
+    if target != 'CAD' and runtime.workspace:
+        if runtime.session:runtime.cancel()
+        try:
+            runtime.doc()
+        except CommandError as exc:
+            if exc.code == 'cad_document_invalid':return  # Preserve escape from corrupt CAD files.
+            raise
+        yield from runtime.finish_sketch_steps()
+
+
 @command("mode.object", mutating=False)
 def mode_object(payload: dict) -> dict:
+    yield from _finish_sketch_before_mode("OBJECT")
     return _set_mode("OBJECT")
 
 
 @command("mode.edit", mutating=False)
 def mode_edit(payload: dict) -> dict:
+    yield from _finish_sketch_before_mode("EDIT")
     return _set_mode("EDIT")
 
 
@@ -100,10 +115,13 @@ def mode_set(payload: dict) -> dict:
     target = str(payload.get("mode", "")).upper()
     if target not in VALID_MODES:
         raise BadPayload(f"'mode' must be one of {', '.join(sorted(VALID_MODES))}")
+    yield from _finish_sketch_before_mode(target)
     return _set_mode(target, payload.get("_client_id"))
 
 
 @command("mode.toggle", mutating=False)
 def mode_toggle(payload: dict) -> dict:
     obj = active_object()
-    return _set_mode("OBJECT" if obj.mode == "EDIT" else "EDIT")
+    target = "OBJECT" if obj.mode == "EDIT" else "EDIT"
+    yield from _finish_sketch_before_mode(target)
+    return _set_mode(target)

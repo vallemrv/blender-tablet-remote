@@ -1101,3 +1101,12 @@ no quedan archivos o referencias temporales.
   Selecciones vacías/abiertas, puntos y construcción se rechazan; los elementos
   usados quedan protegidos. Simetría/Patrón heredan ese mismo operando. La caché
   conserva también las dependencias completas de otras operaciones del boceto.
+
+- Editar un croquis difiere la reconstrucción de sus operaciones: dibujos, solver,
+  cotas y arrastres actualizan solo el boceto y conservan el último sólido válido.
+  `deferred_sketch_id` persiste el trabajo pendiente; la validación de los perfiles
+  usados se completa al salir, sin relajar entidades, restricciones ni dependencias
+  de borrado. Finalizar evalúa en el worker; fallo conserva croquis/cambios y éxito
+  publica la pieza con undo. Cambiar de boceto, Vista 3D/Object o una operación de
+  sólido resuelve antes el pendiente. Guardar conserva croquis y sólido congelado;
+  volver a CAD recupera la edición, sin kernel dentro de los handlers.

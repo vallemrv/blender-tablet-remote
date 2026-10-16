@@ -534,6 +534,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                         " · arrastra las flechas: roja/verde lo deslizan, azul (o fuera de ellas) lo separa · positivo: ${plane.positiveLabel.lowercase()} · ✓ " +
                         (if (plane.planeId != null) "aplica la posición" else "crea el croquis")
                 } ?: "Colocando plano"
+                editing && cad.sketchPending -> "Pieza pendiente de actualizar · pulsa Finalizar boceto al terminar"
                 editing && !cad.sessionActive && capabilities.selectedCut && cutSelection.isNotEmpty() -> "${cutSelection.size} elementos seleccionados · Vaciar utiliza solo estos contornos"
                 offsetSource != null -> "Desfase vinculado: elige dentro o fuera y escribe el grosor · ✓ crea el contorno"
                 mirrorSource != null -> "Simetría de ${mirrorSource!!.name}: elige el plano y su posición · ✓ crea la operación vinculada"

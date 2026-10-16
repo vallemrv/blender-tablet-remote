@@ -83,6 +83,9 @@ class HistoryTests(CadTests):
         cad.sketch_activate(dict(sketch_id=s1,**OWNER))
         entity=runtime.doc()['sketches'][0]['entities'][0]
         cad.entity_set(dict(entity_id=entity['id'],values=dict(width=.04),**OWNER))
+        self.assertAlmostEqual(self.visible_volume(),.08*.045*.02,places=9)
+        cad.sketch_finish(OWNER)
+        self.assertEqual(runtime.bar(),bar)
         self.assertAlmostEqual(self.visible_volume(),.04*.045*.02,places=9)
         cad.history_rollback(OWNER)
         self.assertAlmostEqual(self.visible_volume(),.04*.045*.02+math.pi*.005**2*.02,delta=2e-9)

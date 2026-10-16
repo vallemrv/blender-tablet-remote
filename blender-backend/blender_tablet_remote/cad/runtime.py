@@ -97,6 +97,7 @@ class CadRuntime:
         self._current_evaluation = {}
         self._epoch = 0
         self._materialized = {}
+        self.sketch_error = None
         from .surface import SurfaceSelection
         self.surface = SurfaceSelection()
 
@@ -133,7 +134,12 @@ class CadRuntime:
             # independent document, including while solving previews.
             value = model.loads(raw)
             self._doc_raw, self._doc_value = raw, value
-        return copy.deepcopy(self._doc_value)
+        doc = copy.deepcopy(self._doc_value)
+        deferred = doc.get(model.DEFERRED_SKETCH)
+        if self.workspace and deferred and self.active_sketch_id is None and self.session is None:
+            self.active_sketch_id = deferred
+            self.focus(model.find(doc, 'sketches', deferred))
+        return doc
 
     def public_document(self, doc):
         # Revision alone is insufficient: previews change geometry before commit.
@@ -239,19 +245,83 @@ class CadRuntime:
     def rebuild(self, doc, *, limit=None, extrusion_cache=None):
         return blocking(self.rebuild_steps(doc, limit=limit, extrusion_cache=extrusion_cache))
 
-    def rebuild_steps(self, doc, *, limit=None, extrusion_cache=None):
+    def _defer_sketch(self, doc):
+        current = self.doc()
+        identifier = self.active_sketch_id if self.workspace else doc.get(model.DEFERRED_SKETCH)
+        if not identifier:
+            return False
+        # Only sketch edits are deferred. Explicit solid/plane/body operations
+        # still evaluate their complete candidate before publishing anything.
+        if any(doc.get(key) != current.get(key) for key in ('planes', 'bodies')):
+            return False
+        def operations(document):
+            result = []
+            for feature in document['features']:
+                item = dict(feature)
+                # Fillet/remove-fillet remaps a closed chain's identity while
+                # editing the same sketch; that is not a solid operation edit.
+                for sketch_key, profile_key in (('sketch_id', 'profile_id'), ('to_sketch_id', 'to_profile_id')):
+                    if item.get(sketch_key) == identifier:item.pop(profile_key, None)
+                result.append(item)
+            return result
+        if operations(doc) != operations(current):
+            return False
+        others = lambda d: [s for s in d['sketches'] if s['id'] != identifier]
+        if others(doc) != others(current):
+            return False
+        sketch = next((s for s in doc['sketches'] if s['id'] == identifier), None)
+        previous = next((s for s in current['sketches'] if s['id'] == identifier), None)
+        if sketch is None or previous is None:
+            return False
+        used = any(identifier in (f.get('sketch_id'), f.get('to_sketch_id'), f.get('path_sketch_id')) for f in doc['features'])
+        if used and sketch != previous:
+            doc[model.DEFERRED_SKETCH] = identifier
+        self.sketch_error = None
+        return True
+
+    def finish_sketch_steps(self):
+        """Publish the deferred solid once; an invalid stack leaves editing open."""
+        doc = self.doc()
+        if not doc.get(model.DEFERRED_SKETCH):
+            return
+        try:
+            yield from self.rebuild_steps(doc, limit=self.bar(doc), force=True)
+        except CommandError as exc:
+            self.sketch_error = 'No se pudo actualizar la pieza: '+exc.message
+            raise
+        self.persist(doc)
+        self.sketch_error = None
+        with self.saving():
+            undo_push('CAD finalizar edición de boceto')
+
+    def rebuild_steps(self, doc, *, limit=None, extrusion_cache=None, force=False):
         """Evaluate snapshots off-process; publish compact geometry on the pump."""
-        model.resolve_supports(doc)
+        if not force and self._defer_sketch(doc):
+            return
+        pending = doc.get(model.DEFERRED_SKETCH)
+        if pending:
+            # Full reference/profile validation only at the evaluation boundary.
+            candidate = copy.deepcopy(doc)
+            candidate.pop(model.DEFERRED_SKETCH)
+            try:
+                model.loads(model.dumps(candidate))
+            except CommandError as exc:
+                if isinstance(exc.__cause__, CommandError):
+                    raise exc.__cause__
+                raise
+        else:
+            candidate = doc
+        model.resolve_supports(candidate)
         scale = max(float(bpy.context.scene.unit_settings.scale_length), 1e-12)
         from .occt import geometry_key, require_available
         occt_path = require_available()
-        key = geometry_key(doc, limit, scale)
+        key = geometry_key(candidate, limit, scale)
         cached = self._evaluations.get(key)
         if cached is None and not any(f['enabled'] for f in doc['features']):
             cached = dict(display={}, tips={}, solids={}, profiles={})
         if cached is None:
             epoch, scene, raw = self._epoch, bpy.context.scene.as_pointer(), bpy.context.scene.get(model.KEY)
-            cached = yield Calculation(operation='evaluate', doc=copy.deepcopy(doc), limit=limit, scale=scale,
+            cached = yield Calculation(operation='evaluate', doc=copy.deepcopy(candidate), limit=limit, scale=scale,
                                        occt_path=occt_path)
             if (epoch != self._epoch or scene != bpy.context.scene.as_pointer()
                     or raw != bpy.context.scene.get(model.KEY)):
@@ -263,6 +333,9 @@ class CadRuntime:
         if extrusion_cache is not None:
             extrusion_cache.entries = cached['profiles'].copy()
         self._publish(doc, cached)
+        if pending:
+            doc.clear()
+            doc.update(candidate)
 
     def _publish(self, doc, evaluated):
         from .surface import stamp
@@ -444,7 +517,10 @@ class CadRuntime:
         from .occt import geometry_key, require_available
         require_available()
         scale = max(float(bpy.context.scene.unit_settings.scale_length), 1e-12)
-        key = geometry_key(baseline, self.bar(baseline), scale)
+        sketch_gesture = self.active_sketch_id and operation in model.TYPES+('DRAG','POLYGON','TRIM')
+        key = (model.dumps(('frozen_sketch', baseline['id'], baseline['revision']))
+               if sketch_gesture or baseline.get(model.DEFERRED_SKETCH)
+               else geometry_key(baseline, self.bar(baseline), scale))
         cached = self._evaluations.get(key)
         if cached is None:
             # On the first session after loading, restoring the published solid
@@ -511,6 +587,9 @@ class CadRuntime:
         return local.dot(Vector(basis['x'])),local.dot(Vector(basis['y']))
 
     def enter_sketch(self, sketch):
+        pending = self.doc().get(model.DEFERRED_SKETCH)
+        if pending and pending != sketch['id']:
+            raise CommandError('Finaliza el boceto actual antes de abrir otro', code='cad_sketch_pending')
         found=find_view3d()
         if found: camera.sync_from_region(found[3])
         if self.active_sketch_id is None: self._solid_view=camera.as_dict()
@@ -743,7 +822,8 @@ class CadRuntime:
                                       plane=_plane_public(session) if session and session['operation'] in ('PLANE','SPLIT') else None,
                                      can_confirm=bool(session and session.get('candidate')),
                                      can_close=bool(session and session.get('can_close'))),
-                        overlay=self.overlay(doc),error=session.get('error') if session else None,
+                        overlay=self.overlay(doc),error=session.get('error') if session else self.sketch_error,
+                        sketch_pending=bool(doc.get(model.DEFERRED_SKETCH)),
                         kernel=_kernel_public())
         except CommandError as exc:
             return dict(version=1,workspace=self.workspace,isolated=bool(self.workspace),document=None,active_sketch_id=None,

@@ -92,8 +92,10 @@ class FeedbackTests(CadTests):
         self.assertEqual(len(sketch['entities']),5)
         self.assertEqual(len(model.profiles(sketch)),1)
         self.assertEqual(doc['features'][0]['id'],f)
+        self.assertAlmostEqual(volume(self.obj()),.08*.045*.02,delta=2e-9)
+        cad.sketch_finish(OWNER)
         self.assertAlmostEqual(volume(self.obj()),(.08*.045-.005**2*(1-math.pi/4))*.02,delta=2e-9)
-        model.loads(model.dumps(doc))
+        model.loads(model.dumps(runtime.doc()))
 
     def test_custom_planes_are_persistent_and_drive_sketches_in_meters(self):
         cad.plane_create(dict(base='XZ',translation=[.01,.02,.03],rotation=[30,20,15],**OWNER))

@@ -2274,3 +2274,20 @@ Las cotas originales siguen gobernando el resultado. Borrar/abrir elementos usad
 se rechaza atómicamente; los elementos no usados no se protegen por este vaciado.
 Sin `entity_ids`, los perfiles individuales y el boceto completo conservan su
 comportamiento anterior. Una lista vacía nunca equivale al boceto completo.
+
+### Edición de croquis con sólido diferido
+
+El documento puede incluir `deferred_sketch_id`: sus dibujos y restricciones ya
+están validados y guardados, mientras el objeto publicado sigue siendo la última
+evaluación válida. La validación geométrica de perfiles usados de ese croquis se
+pospone hasta cerrar la edición; un contorno puede estar abierto temporalmente.
+`cad.state.sketch_pending` informa de ese estado. No cambia los IDs de operaciones
+ni añade una segunda fuente de geometría.
+
+`cad.sketch.finish` ahora puede suspenderse durante la evaluación del worker.
+Retira el marcador solo tras evaluar/publicar correctamente y registra la
+actualización del sólido en undo. Un error conserva el documento pendiente y el
+boceto activo. Abrir otro boceto, Vista 3D, operaciones de sólido y salir de CAD
+resuelven también la edición pendiente. Guardar conserva el marcador y el sólido
+congelado; al cargar y entrar en CAD se reabre el croquis pendiente. Los handlers
+de guardado/carga no ejecutan OpenCascade.

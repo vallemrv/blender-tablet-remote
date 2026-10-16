@@ -50,6 +50,9 @@ def history_rollback(payload):
     if runtime.session:
         runtime.require(payload)
         runtime.cancel()
+    if runtime.doc().get(model.DEFERRED_SKETCH):
+        yield from runtime.finish_sketch_steps()
+        runtime.solid_view()
     identifier = payload.get('node_id')
     if identifier is not None:
         if identifier not in _sequence(runtime.doc()):
@@ -87,6 +90,7 @@ def state(payload):
 
 @command('cad.sketch.create')
 def sketch_create(payload):
+    yield from runtime.finish_sketch_steps()
     plane = str(payload.get('plane','XY')).upper()
     if plane not in model.PLANES:
         raise BadPayload('Plano CAD no compatible')
@@ -132,6 +136,8 @@ def sketch_activate(payload):
     doc = runtime.doc()
     sketch = model.find(doc,'sketches',payload.get('sketch_id'))
     _require_reachable(doc,sketch['id'])
+    if runtime.doc().get(model.DEFERRED_SKETCH)!=sketch['id']:
+        yield from runtime.finish_sketch_steps()
     runtime.enter_sketch(sketch)
     return runtime.status()
 
@@ -153,6 +159,7 @@ def sketch_finish(payload):
     if runtime.session:
         runtime.require(payload)
         runtime.cancel()
+    yield from runtime.finish_sketch_steps()
     active=runtime.active_sketch_id
     runtime.solid_view()
     doc=runtime.doc()
@@ -792,6 +799,7 @@ def _reach_face(doc, feature, face):
 
 @command('cad.extrude.begin')
 def extrude_begin(payload):
+    yield from runtime.finish_sketch_steps()
     depth = model.number(payload.get('depth',.02),positive=True)
     doc = runtime.doc()
     profile_id = 'profile_' + str(payload['sketch_id']) if payload.get('sketch_id') else payload.get('profile_id')
@@ -1334,6 +1342,7 @@ def feature_delete(payload):
 @command('cad.convert')
 def convert(payload):
     runtime.require_workspace()
+    yield from runtime.finish_sketch_steps()
     if runtime.session:
         raise CommandError('Confirma o cancela antes de convertir',code='session_active')
     doc = runtime.doc()
@@ -1884,6 +1893,7 @@ def sketch_copy(payload):
 
 @command('cad.body.create')
 def body_create(payload):
+    yield from runtime.finish_sketch_steps()
     def change(doc):
         body=dict(id=model.uid('body'),name='Cuerpo '+str(len(doc['bodies'])+1))
         doc['bodies'].append(body); runtime.active_body_id=body['id']
@@ -1893,6 +1903,7 @@ def body_create(payload):
 
 @command('cad.body.activate')
 def body_activate(payload):
+    yield from runtime.finish_sketch_steps()
     runtime.require_workspace()
     if runtime.session: raise CommandError('Termina la preview antes de cambiar de cuerpo',code='session_active')
     body=model.find(runtime.doc(),'bodies',payload.get('body_id'))
@@ -1993,6 +2004,7 @@ def _face_plane(doc, frame, source, offset=0.):
 
 @command('cad.sketch.on_face')
 def sketch_on_face(payload):
+    yield from runtime.finish_sketch_steps()
     frame=runtime.surface.face_frame()  # The visible selection, never a second raycast.
     source=runtime.surface.items[0]
     # Metres along the face normal: positive leaves the material, negative enters it.
@@ -2142,6 +2154,7 @@ def plane_begin(payload):
     """Start placing a plane: `base` XY/XZ/YZ/FACE, or `plane_id` to move a saved one."""
     import numpy as np
     runtime.require_workspace()
+    yield from runtime.finish_sketch_steps()
     plane_id=payload.get('plane_id')
     base=str(payload.get('base','XY')).upper()
     face=None
@@ -2330,5 +2343,6 @@ def view_solid(payload):
     runtime.require_workspace()
     if runtime.session:
         runtime.require(payload); runtime.cancel()
+    yield from runtime.finish_sketch_steps()
     runtime.solid_view()
     return runtime.status()
