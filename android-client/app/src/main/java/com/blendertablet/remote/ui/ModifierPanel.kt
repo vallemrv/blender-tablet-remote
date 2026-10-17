@@ -280,6 +280,7 @@ private fun ModifierParameter(
     state: BlenderState,
     set: (String, String, Any?) -> Unit,
 ) {
+    if (!modifierParameterVisible(item, declaredSpec)) return
     val actualMaximum = declaredSpec.maxParameter?.let { (item.parameters[it] as? Number)?.toDouble() }
     val spec = if (declaredSpec.type != "action" && actualMaximum != null)
         declaredSpec.copy(max = actualMaximum) else declaredSpec
@@ -296,25 +297,25 @@ private fun ModifierParameter(
             set(item.name, spec.name, true)
         }
         "bool" -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(spec.name, color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.weight(1f))
+            Text(spec.label, color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.weight(1f))
             IconAction(
                 Icons.Default.Check,
-                if (value == true) "${spec.name}: activado" else "${spec.name}: desactivado",
+                if (value == true) "${spec.label}: activado" else "${spec.label}: desactivado",
                 selected = value == true,
                 tint = Ink.Faint,
             ) { set(item.name, spec.name, value != true) }
         }
 
         "enum" -> ChoiceRow(
-            label = spec.name,
-            current = value?.toString() ?: "—",
-            options = spec.values.map { it to it },
+            label = spec.label,
+            current = spec.valueLabels[value?.toString()] ?: value?.toString() ?: "—",
+            options = spec.values.map { it to (spec.valueLabels[it] ?: it) },
         ) { set(item.name, spec.name, it) }
 
         // El operando de un booleano no puede ser el propio objeto ni una luz: el
         // filtro lo declara el backend y aquí solo se obedece.
         "object" -> ChoiceRow(
-            label = spec.name,
+            label = spec.label,
             current = value?.toString() ?: "ninguno",
             options = buildList {
                 add(null to "Sin operando")
@@ -481,6 +482,7 @@ private fun labelOf(type: String): String = when (type) {
     "SOLIDIFY" -> "Solidificar"
     "BOOLEAN" -> "Booleano"
     "MIRROR" -> "Espejo"
+    "SIMPLE_DEFORM" -> "Deformación simple"
     else -> type
 }
 
@@ -526,3 +528,6 @@ private fun ModifierDefault.wireValue(): Any? = when (this) {
     is ModifierDefault.Vector -> value
     ModifierDefault.Null -> null
 }
+
+internal fun modifierParameterVisible(item: ModifierState, spec: ModifierParameterDescriptor): Boolean =
+    spec.visibleWhen.all { (key, values) -> item.parameters[key]?.toString() in values }

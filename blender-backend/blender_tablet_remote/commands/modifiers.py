@@ -1,7 +1,7 @@
 """modifier.* — pila no destructiva del objeto activo.
 
 API de datablock (`obj.modifiers.new`), no operadores. El catálogo es deliberadamente
-corto: Subsurf, Multires, Array, Bevel, Solidify, Boolean y Mirror. Bevel aquí no es `mesh.bevel`.
+corto: Subsurf, Multires, Array, Bevel, Solidify, Boolean, Mirror y Simple Deform. Bevel aquí no es `mesh.bevel`.
 """
 
 from __future__ import annotations
@@ -39,6 +39,20 @@ SCHEMA = {
         "angle_limit": {"type": "float", "default": 30.0, "min": 0.0, "max": 180.0, "step": 1.0},
         "profile": {"type": "float", "default": 0.5, "min": 0.0, "max": 1.0, "step": 0.05},
     },
+    "SIMPLE_DEFORM": {
+        "deform_method": {"type":"enum", "default":"TWIST", "values":["TWIST","BEND","TAPER","STRETCH"], "label":"Método",
+                          "value_labels":{"TWIST":"Torsión","BEND":"Curvar","TAPER":"Estrechar","STRETCH":"Estirar"}},
+        "deform_axis": {"type":"enum", "default":"Z", "values":["X","Y","Z"], "label":"Eje"},
+        "angle": {"type":"float", "default":45., "min":-36000., "max":36000., "step":5., "label":"Ángulo", "unit":"ANGLE", "editable":True,
+                  "visible_when":{"deform_method":["TWIST","BEND"]}},
+        "factor": {"type":"float", "default":.5, "min":-1000., "max":1000., "step":.1, "label":"Factor", "editable":True,
+                   "visible_when":{"deform_method":["TAPER","STRETCH"]}},
+        "limit_lower": {"type":"float", "default":0., "min":0., "max":1., "step":.05, "label":"Límite inferior (0–1)", "editable":True},
+        "limit_upper": {"type":"float", "default":1., "min":0., "max":1., "step":.05, "label":"Límite superior (0–1)", "editable":True},
+        **{f"lock_{axis}": {"type":"bool", "default":False, "label":"Bloquear "+axis.upper(),
+                            "visible_when":{"deform_method":["TWIST","TAPER","STRETCH"]}} for axis in "xyz"},
+        "origin": {"type":"object", "default":None, "label":"Objeto de origen", "object_filter":{"exclude_self":True}},
+    },
     "SOLIDIFY": {
         "thickness": {"type": "float", "default": 0.1, "min": -1000.0, "max": 1000.0, "step": 0.01},
         "offset": {"type": "float", "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.1},
@@ -72,6 +86,7 @@ CATALOG = {
     "MULTIRES": {"blender": "MULTIRES", "default_name": "Multires"},
     "ARRAY": {"blender": "ARRAY", "default_name": "Array"},
     "BEVEL": {"blender": "BEVEL", "default_name": "Bevel"},
+    "SIMPLE_DEFORM": {"blender":"SIMPLE_DEFORM", "default_name":"Deformación simple"},
     "SOLIDIFY": {"blender": "SOLIDIFY", "default_name": "Solidify"},
     "BOOLEAN": {"blender": "BOOLEAN", "default_name": "Boolean"},
     "MIRROR": {"blender": "MIRROR", "default_name": "Mirror"},
@@ -172,6 +187,27 @@ def _write(mod, kind: str, params: dict, obj, preserve_current: bool = False) ->
         mod.limit_method = limit
         mod.angle_limit = math.radians(_bounded_float(data["angle_limit"], "angle_limit", 0.0, 180.0))
         mod.profile = _bounded_float(data["profile"], "profile", 0.0, 1.0)
+    elif kind == "SIMPLE_DEFORM":
+        method, axis = str(data['deform_method']).upper(), str(data['deform_axis']).upper()
+        if method not in SCHEMA[kind]['deform_method']['values'] or axis not in ('X','Y','Z'):
+            raise BadPayload('Método o eje de deformación no válido')
+        angle = _bounded_float(data['angle'],'angle',-36000.,36000.) if method in ('TWIST','BEND') else None
+        factor = _bounded_float(data['factor'],'factor',-1000.,1000.) if method in ('TAPER','STRETCH') else None
+        lower = _bounded_float(data['limit_lower'],'limit_lower',0.,1.)
+        upper = _bounded_float(data['limit_upper'],'limit_upper',0.,1.)
+        if lower > upper: raise BadPayload('El límite inferior no puede superar al superior')
+        for key in ('lock_x','lock_y','lock_z'):
+            if not isinstance(data[key],bool): raise BadPayload(key+' debe ser booleano')
+        origin = bpy.data.objects.get(str(data['origin'])) if data['origin'] else None
+        if data['origin'] and origin is None: raise BadPayload('El objeto de origen no existe')
+        if origin == obj: raise BadPayload('El origen debe ser otro objeto')
+        mod.deform_method, mod.deform_axis = method, axis
+        # Blender shares storage for angle/factor: write only the active quantity.
+        if method in ('TWIST','BEND'): mod.angle = math.radians(angle)
+        else: mod.factor = factor
+        mod.limits = (lower,upper)
+        for key in ('lock_x','lock_y','lock_z'):setattr(mod,key,data[key])
+        mod.origin = origin
     elif kind == "SOLIDIFY":
         mod.thickness = float(data["thickness"])
         mod.offset = _bounded_float(data["offset"], "offset", -1.0, 1.0)
@@ -249,6 +285,12 @@ def _read(mod) -> dict:
             "angle_limit": math.degrees(float(mod.angle_limit)),
             "profile": float(mod.profile),
         }
+    elif kind == "SIMPLE_DEFORM":
+        params = dict(deform_method=mod.deform_method, deform_axis=mod.deform_axis,
+                      angle=math.degrees(mod.angle), factor=mod.factor,
+                      limit_lower=float(mod.limits[0]), limit_upper=float(mod.limits[1]),
+                      lock_x=mod.lock_x, lock_y=mod.lock_y, lock_z=mod.lock_z,
+                      origin=mod.origin.name if mod.origin else None)
     elif kind == "SOLIDIFY":
         params = {
             "thickness": float(mod.thickness),
@@ -308,6 +350,7 @@ def add_options(payload: dict) -> dict:
             "angle_limit": dict(_number("float", 30.0, 0.0, 180.0, 1.0), label="Ángulo", editable=True, unit="ANGLE"),
             "profile": dict(_number("float", 0.5, 0.0, 1.0, 0.05), label="Perfil", editable=True),
         }},
+        "SIMPLE_DEFORM": {"parameters": SCHEMA["SIMPLE_DEFORM"]},
         "SOLIDIFY": {"parameters": {"thickness": _number("float", 0.1, -1000.0, 1000.0, 0.01), "offset": _number("float", -1.0, -1.0, 1.0, 0.1), "use_even_offset": {"type": "bool", "default": True}, "use_rim": {"type": "bool", "default": True}}},
         "BOOLEAN": {"parameters": {"operation": _enum("DIFFERENCE", ["DIFFERENCE", "UNION", "INTERSECT"]), "object": {"type": "object", "default": None, "object_filter": {"type": "MESH", "exclude_self": True}}, "solver": _enum("EXACT", ["EXACT", "FAST"])}},
         "MIRROR": {"parameters": {

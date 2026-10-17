@@ -10,6 +10,26 @@ class ModifierInputsTest {
     private val width = ModifierParameterDescriptor("width", "float", ModifierDefault.Decimal(.1),
         min = 0.0, max = 1000.0, step = .01, editable = true, unit = "LENGTH")
 
+    @Test fun simpleDeformSchemaSwitchesQuantityAndKeepsNativeEnumValues() {
+        val spec = StateParser.modifierOptions(JSONObject("""{"types":{"SIMPLE_DEFORM":{"parameters":{
+            "deform_method":{"type":"enum","default":"TWIST","label":"Método","values":["TWIST","BEND","TAPER","STRETCH"],"value_labels":{"TWIST":"Torsión"}},
+            "angle":{"type":"float","default":45,"unit":"ANGLE","editable":true,"visible_when":{"deform_method":["TWIST","BEND"]}},
+            "factor":{"type":"float","default":0.5,"editable":true,"visible_when":{"deform_method":["TAPER","STRETCH"]}}
+        }}}}""")).single().parameters
+        val method = spec.first { it.name == "deform_method" }
+        assertEquals("Torsión", method.valueLabels["TWIST"])
+        assertEquals("TWIST", method.values.first())
+        for (choice in method.values) {
+            val item = ModifierState("Deformación", "SIMPLE_DEFORM", parameters = mapOf("deform_method" to choice))
+            assertEquals(choice in listOf("TWIST", "BEND"), modifierParameterVisible(item, spec.first { it.name == "angle" }))
+            assertEquals(choice in listOf("TAPER", "STRETCH"), modifierParameterVisible(item, spec.first { it.name == "factor" }))
+            assertTrue(modifierParameterVisible(item, method))
+        }
+        val angle = spec.first { it.name == "angle" }
+        assertEquals(1.0, modifierScalarFactor(angle, BlenderState(unitScaleLength = .001)), 0.0)
+        assertEquals(-63.25, parseModifierScalar("-63,25", angle, 1.0)!!.toDouble(), 0.0)
+    }
+
     @Test fun decimalWidthUsesSceneScaleAndPresetWithoutStepRounding() {
         for ((unit, text) in listOf(LengthUnit.MILLIMETERS to "2,34567", LengthUnit.CENTIMETERS to "0,234567", LengthUnit.METERS to "0,00234567")) {
             for (scale in listOf(1.0, .001)) {

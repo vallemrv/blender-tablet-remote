@@ -136,7 +136,9 @@ object StateParser {
                         ObjectChoiceFilter(it.optString("type").takeIf(String::isNotBlank), it.optBoolean("exclude_self"))
                     }, label = p.optString("label", name), readOnly = p.optBoolean("read_only"),
                     maxParameter = p.optString("max_parameter").takeIf { it.isNotBlank() },
-                    editable = p.optBoolean("editable"), unit = p.optString("unit").takeIf { it.isNotBlank() })
+                    editable = p.optBoolean("editable"), unit = p.optString("unit").takeIf { it.isNotBlank() },
+                    valueLabels = p.optJSONObject("value_labels")?.let { labels -> labels.keys().asSequence().associateWith { labels.getString(it) } }.orEmpty(),
+                    visibleWhen = p.optJSONObject("visible_when")?.let { rules -> rules.keys().asSequence().associateWith { strings(rules.optJSONArray(it)) } }.orEmpty())
             }.toList())
         }.toList()
     }

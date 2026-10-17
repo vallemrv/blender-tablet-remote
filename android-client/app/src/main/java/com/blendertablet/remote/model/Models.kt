@@ -42,6 +42,8 @@ data class ModifierParameterDescriptor(
     val values: List<String> = emptyList(), val objectFilter: ObjectChoiceFilter? = null,
     val label: String = name, val readOnly: Boolean = false, val maxParameter: String? = null,
     val editable: Boolean = false, val unit: String? = null,
+    val valueLabels: Map<String, String> = emptyMap(),
+    val visibleWhen: Map<String, List<String>> = emptyMap(),
 )
 data class ModifierTypeDescriptor(val type: String, val parameters: List<ModifierParameterDescriptor>)
 data class ModifierState(

@@ -1035,7 +1035,7 @@ Pila no destructiva del objeto activo. No confundir `modifier.add type=BEVEL` co
 | Comando | Payload |
 |---|---|
 | `modifier.add_options` | `object?` — catálogo con descriptores tipados |
-| `modifier.add` | `object?`, `type`: `SUBSURF`\|`MULTIRES`\|`ARRAY`\|`BEVEL`\|`SOLIDIFY`\|`BOOLEAN`\|`MIRROR`, `name?`, `parameters?` |
+| `modifier.add` | `object?`, `type`: `SUBSURF`\|`MULTIRES`\|`ARRAY`\|`BEVEL`\|`SOLIDIFY`\|`BOOLEAN`\|`MIRROR`\|`SIMPLE_DEFORM`, `name?`, `parameters?` |
 | `modifier.remove` | `object?`, `name` |
 | `modifier.move` | `object?`, `name`, `index` |
 | `modifier.set` | `object?`, `name`, `parameters{}` |
@@ -2347,3 +2347,19 @@ listas vacías, duplicados, perfiles de distintos bocetos y mezclar `profile_ids
 con `sketch_id`, `profile_id` o `entity_ids`. Un único perfil y el boceto completo
 mantienen sus entradas existentes. Android anuncia el recuento y no permite
 aplicar herramientas de perfil único al último elemento de un grupo.
+
+### Deformación simple
+
+`modifier.add {type:"SIMPLE_DEFORM"}` añade el modificador nativo, inicialmente
+TWIST sobre Z con 45°. `modifier.set` admite `deform_method` (TWIST/BEND/TAPER/STRETCH),
+`deform_axis` (X/Y/Z), `angle` en grados para TWIST/BEND, `factor` para TAPER/STRETCH,
+`limit_lower/limit_upper` entre 0 y 1 ordenados, `lock_x/y/z` y `origin` (nombre de
+otro objeto o null). Ángulo y factor comparten almacenamiento en Blender: solo se
+escribe la cantidad activa. Validar un cambio precede a cualquier modificación.
+Se integra con mover en pila, activar, aplicar, borrar y undo existentes.
+
+Los descriptores de modificadores admiten `value_labels` (valor → texto) y
+`visible_when` (parámetro → lista de valores admitidos, todas las condiciones).
+Android usa estos metadatos para elegir ángulo/factor y traducir métodos sin
+ramas de interfaz propias de Simple Deform. Los campos sin condiciones siguen
+siempre visibles; los valores enviados siguen siendo los identificadores nativos.

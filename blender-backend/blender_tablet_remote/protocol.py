@@ -6,7 +6,7 @@ ENUMS = {
     "mode": ["OBJECT", "EDIT", "CAD", "SCULPT", "MATERIAL"],
     "selection_mode": ["VERTEX", "EDGE", "FACE"],
     "tool": ["SELECT", "MOVE", "ROTATE", "SCALE", "EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE", "BISECT", "REVOLVE", "SWEEP"],
-    "modifier_type": ["SUBSURF", "MULTIRES", "ARRAY", "BEVEL", "SOLIDIFY", "BOOLEAN", "MIRROR"],
+    "modifier_type": ["SUBSURF", "MULTIRES", "ARRAY", "BEVEL", "SOLIDIFY", "BOOLEAN", "MIRROR", "SIMPLE_DEFORM"],
     "subdivision_type": ["CATMULL_CLARK", "SIMPLE"],
     "boolean_operation": ["DIFFERENCE", "UNION", "INTERSECT"],
     "boolean_solver": ["EXACT", "FAST"],
