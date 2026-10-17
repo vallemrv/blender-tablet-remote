@@ -1147,3 +1147,7 @@ no quedan archivos o referencias temporales.
   incluye contornos sin marcar ni entra en edición. Otro boceto/selección completa
   sustituye el grupo; repetir un perfil lo quita. Las herramientas de perfil único
   quedan deshabilitadas para un grupo, nunca usan silenciosamente el último.
+
+- Enderezar (`cad.view.align`, flecha del boceto) solo restablece la orientación
+  frontal de los ejes del croquis. Conserva exactamente zoom/distancia, posición
+  desplazada y proyección. El encuadre inicial al abrir un boceto sigue separado.

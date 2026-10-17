@@ -792,3 +792,6 @@ recorrer solamente aire. La herramienta permanece abierta con Confirmar desactiv
 aumenta **Profundidad**, elige **Hasta cara** o **Perforar todo** para alcanzar el
 material. Al obtener un corte válido se habilita Confirmar. Cancelar conserva la
 pieza original.
+
+La flecha **Enderezar** conserva el zoom y el desplazamiento actuales: solo vuelve
+a orientar los ejes del boceto. No necesitas acercar la pieza otra vez tras usarla.

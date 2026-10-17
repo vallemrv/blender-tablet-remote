@@ -2383,10 +2383,10 @@ def view_roll(payload):
 
 @command('cad.view.align')
 def view_align(payload):
-    """Look straight at the sketch, with world up on screen. No document change."""
+    """Straighten the sketch axes without changing zoom, pan or projection."""
     runtime.require_workspace()
     sketch = model.find(runtime.doc(), 'sketches', runtime.active_sketch_id)
-    runtime.focus(sketch)
+    runtime.focus(sketch, reframe=False)
     return runtime.status()
 
 

@@ -658,7 +658,7 @@ class CadRuntime:
                         high=Vector(tuple(max(p[i] for p in corners) for i in range(3)))
                         camera.look_at((low+high)*.5,corners,found[3])
 
-    def focus(self, sketch):
+    def focus(self, sketch, *, reframe=True):
         found = find_view3d()
         if found:
             camera.sync_from_region(found[3])
@@ -672,17 +672,18 @@ class CadRuntime:
         from mathutils import Matrix
         right = up.cross(normal)
         camera.rotation = Matrix((right,up,normal)).transposed().to_quaternion()
-        bounds = [p for e in sketch['entities'] for p in model.outline(e)]
-        scale = max(float(bpy.context.scene.unit_settings.scale_length),1e-12)
-        if bounds:
-            lo = [min(p[i] for p in bounds) for i in (0,1)]
-            hi = [max(p[i] for p in bounds) for i in (0,1)]
-            camera.location = Vector(world(sketch,(lo[0]+hi[0])/2,(lo[1]+hi[1])/2))/scale
-            camera.distance = max(.15, max(hi[i]-lo[i] for i in (0,1))*2)/scale
-        else:
-            camera.location = Vector(world(sketch,0,0))/scale
-            camera.distance = .2/scale
-        camera.perspective = self.sketch_projection
+        if reframe:
+            bounds = [p for e in sketch['entities'] for p in model.outline(e)]
+            scale = max(float(bpy.context.scene.unit_settings.scale_length),1e-12)
+            if bounds:
+                lo = [min(p[i] for p in bounds) for i in (0,1)]
+                hi = [max(p[i] for p in bounds) for i in (0,1)]
+                camera.location = Vector(world(sketch,(lo[0]+hi[0])/2,(lo[1]+hi[1])/2))/scale
+                camera.distance = max(.15, max(hi[i]-lo[i] for i in (0,1))*2)/scale
+            else:
+                camera.location = Vector(world(sketch,0,0))/scale
+                camera.distance = .2/scale
+            camera.perspective = self.sketch_projection
         camera.axis_view = None
         camera._synced = True
         camera._frame_cache = None

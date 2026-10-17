@@ -233,6 +233,27 @@ class FeedbackTests(CadTests):
         self.assertIsNone(runtime.session)
         reconnect.clear()
 
+    def test_straighten_sketch_preserves_zoom_pan_projection_and_document(self):
+        from mathutils import Euler
+        self.rect()
+        sketch=runtime.doc()['sketches'][0]
+        before=model.dumps(runtime.doc())
+        for projection in ('ORTHO','PERSP'):
+            for distance in (.003,2.7):
+                camera.apply(location=(.007,-.012,.004),rotation=Euler((.2,.4,.6)).to_quaternion(),
+                             distance=distance,perspective=projection)
+                original=(camera.location.copy(),camera.distance,camera.perspective)
+                with patch('blender_tablet_remote.cad.runtime.undo_push') as undo:
+                    cad.view_align(OWNER);cad.view_align(OWNER);undo.assert_not_called()
+                self.assertEqual((camera.location,camera.distance,camera.perspective),original)
+                basis=model.frame(sketch)
+                self.assertGreater((camera.rotation@Vector((0,0,1))).dot(Vector(basis['normal'])),.99999)
+                self.assertGreater((camera.rotation@Vector((0,1,0))).dot(Vector(basis['y'])),.99999)
+                self.assertEqual(model.dumps(runtime.doc()),before)
+        # Opening a sketch still has its independent initial framing behavior.
+        runtime.focus(sketch)
+        self.assertNotEqual(camera.distance,2.7)
+
     @unittest.skipIf(bpy.app.background,'GPU viewport required')
     def test_sketch_orbit_gesture_peeks_in_perspective_and_returns_to_plane_view(self):
         from blender_tablet_remote.gestures import GestureManager
