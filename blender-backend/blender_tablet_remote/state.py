@@ -170,6 +170,10 @@ def object_info(obj) -> dict:
         "modifiers": _modifier_info(obj),
     }
     if obj.type == "MESH":
+        from .commands import vertex_groups
+        info['vertex_groups'] = vertex_groups.describe(obj)
+        info['vertex_groups_available'] = vertex_groups.available(obj)
+        info['active_vertex_group'] = obj.vertex_groups.active.name if obj.vertex_groups.active else None
         mesh = obj.data
         info["mesh"] = {
             "vertices": len(mesh.vertices),
@@ -252,6 +256,7 @@ class StateWatcher:
             "object_count": len(view_layer.objects),
             "context": self._context(selected_names),
             "modifiers": {obj.name: _modifiers_sig(obj) for obj in view_layer.objects if obj.modifiers},
+            "vertex_groups": (active.name, tuple((g.name,g.lock_weight) for g in active.vertex_groups), active.vertex_groups.active_index) if active and active.type=='MESH' else None,
             "hidden": tuple(sorted(o.name for o in view_layer.objects if o.hide_get())),
         }
 
@@ -287,6 +292,8 @@ class StateWatcher:
             events.append(_event("scene.changed", {"object_count": current["object_count"]}))
         if prev["context"] != current["context"]:
             events.append(_event("context.changed", current["context"]))
+        if prev['vertex_groups'] != current['vertex_groups']:
+            events.append(_event('vertex_groups.changed', {}))
         if prev["modifiers"] != current["modifiers"]:
             changed = next((name for name in set(prev["modifiers"]) | set(current["modifiers"])
                             if prev["modifiers"].get(name) != current["modifiers"].get(name)),
@@ -307,8 +314,10 @@ def _modifiers_sig(obj) -> tuple:
     bits = []
     for mod in obj.modifiers:
         entry = [mod.name, mod.type, bool(mod.show_viewport), bool(mod.show_render)]
+        from .commands.modifiers import RNA_TYPES,_read_rna
+        if mod.type in RNA_TYPES:entry.append(tuple(_read_rna(mod,mod.type).items()))
         for attr in ("levels", "sculpt_levels", "total_levels", "render_levels", "count", "width", "segments", "thickness",
-                     "offset", "operation", "solver", "affect", "limit_method", "profile"):
+                     "offset", "operation", "solver", "affect", "limit_method", "profile", "vertex_group", "invert_vertex_group"):
             if hasattr(mod, attr):
                 value = getattr(mod, attr)
                 entry.append(tuple(value) if hasattr(value, "__iter__") and not isinstance(value, str) else value)

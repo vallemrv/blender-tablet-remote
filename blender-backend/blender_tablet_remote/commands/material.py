@@ -146,26 +146,10 @@ def select(payload):
 @command('material.group')
 def group(payload):
     runtime.require(payload.get('_client_id'))
-    name=payload.get('name','Zona de pintura')
-    if not isinstance(name,str) or not name.strip() or len(name.encode('utf-8'))>63: raise BadPayload('Nombre de grupo inválido o demasiado largo')
-    selections=[(o,[v.index for v in o.data.vertices if v.select]) for o in runtime.objects()]
-    if any(not ids for _,ids in selections): raise BadPayload('Selecciona vértices o caras en Edit antes de guardar la zona')
-    if any(o.vertex_groups.get(name) for o,_ in selections): raise BadPayload('Ya existe un grupo con ese nombre; elige otro')
+    from .vertex_groups import save_selection
     runtime.cancel()
-    created=[]
-    try:
-        for obj,ids in selections:
-            old=obj.data; obj.data=old.copy()
-            created.append((obj,old,None))
-            group=obj.vertex_groups.new(name=name); created[-1]=(obj,old,group)
-            group.add(ids,1.,'REPLACE')
-        undo_push('Guardar zona de pintura')
-    except Exception:
-        for obj,old,group in created:
-            if group: obj.vertex_groups.remove(group)
-            new=obj.data; obj.data=old
-            if new.users==0: bpy.data.meshes.remove(new)
-        raise
+    name=save_selection(runtime.objects(),payload.get('name','Grupo'),payload.get('weight',1.))
+    undo_push('Guardar selección como grupo')
     runtime.scope='GROUP:'+name
     return {'material':runtime.status()}
 

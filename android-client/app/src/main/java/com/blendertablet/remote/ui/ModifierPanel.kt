@@ -38,6 +38,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -71,6 +72,7 @@ data class ModifierActions(
     val move: (String, Int) -> Unit,
     val apply: (String) -> Unit,
     val remove: (String) -> Unit,
+    val group: (String, Map<String, Any?>) -> Unit,
     val close: () -> Unit,
 )
 
@@ -89,19 +91,11 @@ fun ModifierPanel(state: BlenderState, actions: ModifierActions, modifier: Modif
     FloatingPanel(modifier.widthIn(max = 300.dp).heightIn(max = 560.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Header(state, actions)
-            if (state.modifiers.isEmpty()) {
-                Empty()
-            } else {
-                Column(
-                    Modifier
-                        .heightIn(max = 420.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    state.modifiers.forEachIndexed { index, item ->
-                        ModifierCard(item, index, state, actions)
-                    }
-                }
+            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (state.vertexGroupsAvailable) VertexGroupControls(state, actions.group)
+                if (state.modifiers.isEmpty()) Empty()
+                else state.modifiers.forEachIndexed { index, item -> ModifierCard(item, index, state, actions) }
             }
         }
     }
@@ -116,6 +110,7 @@ fun ModifierPanel(state: BlenderState, actions: ModifierActions, modifier: Modif
 @Composable
 private fun Header(state: BlenderState, actions: ModifierActions) {
     var addOpen by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
 
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         IconAction(
@@ -136,7 +131,7 @@ private fun Header(state: BlenderState, actions: ModifierActions) {
                 "Añadir modificador",
                 selected = addOpen,
                 enabled = state.modifierOptions.isNotEmpty(),
-                onClick = { addOpen = true },
+                onClick = { query = ""; addOpen = true },
             )
             DropdownMenu(
                 expanded = addOpen,
@@ -144,9 +139,13 @@ private fun Header(state: BlenderState, actions: ModifierActions) {
                 containerColor = Ink.PanelSolid,
                 modifier = Modifier.widthIn(min = 190.dp),
             ) {
-                for (descriptor in state.modifierOptions) {
+                OutlinedTextField(query, { query = it }, singleLine = true, label = { Text("Buscar modificador") },
+                    modifier = Modifier.width(260.dp).padding(horizontal = 8.dp))
+                val matches = state.modifierOptions.filter { modifierMatchesQuery(it.type, it.label, query) }
+                if (matches.isEmpty()) Text("Sin coincidencias", color = Ink.Muted, modifier = Modifier.padding(12.dp))
+                for (descriptor in matches) {
                     DropdownMenuItem(
-                        text = { Text(labelOf(descriptor.type), color = Ink.OnPanel, fontSize = 13.sp) },
+                        text = { Text(descriptor.label, color = Ink.OnPanel, fontSize = 13.sp) },
                         leadingIcon = {
                             Icon(iconOf(descriptor.type), null, Modifier.size(18.dp), tint = Ink.Muted)
                         },
@@ -314,6 +313,11 @@ private fun ModifierParameter(
 
         // El operando de un booleano no puede ser el propio objeto ni una luz: el
         // filtro lo declara el backend y aquí solo se obedece.
+        "vertex_group" -> ChoiceRow(
+            label = spec.label,
+            current = value?.toString()?.takeIf { it.isNotEmpty() } ?: "Todo el objeto",
+            options = listOf("" to "Todo el objeto") + state.vertexGroups.map { it.name to it.name },
+        ) { set(item.name, spec.name, it.orEmpty()) }
         "object" -> ChoiceRow(
             label = spec.label,
             current = value?.toString() ?: "ninguno",
@@ -474,17 +478,6 @@ private fun iconOf(type: String): ImageVector = when (type) {
     else -> Icons.Default.Tune
 }
 
-private fun labelOf(type: String): String = when (type) {
-    "MULTIRES" -> "Multiresolución"
-    "SUBSURF" -> "Subdivisión"
-    "ARRAY" -> "Matriz"
-    "BEVEL" -> "Bisel"
-    "SOLIDIFY" -> "Solidificar"
-    "BOOLEAN" -> "Booleano"
-    "MIRROR" -> "Espejo"
-    "SIMPLE_DEFORM" -> "Deformación simple"
-    else -> type
-}
 
 private fun step(spec: ModifierParameterDescriptor): Double =
     spec.step ?: if (spec.type == "int") 1.0 else 0.1
@@ -531,3 +524,11 @@ private fun ModifierDefault.wireValue(): Any? = when (this) {
 
 internal fun modifierParameterVisible(item: ModifierState, spec: ModifierParameterDescriptor): Boolean =
     spec.visibleWhen.all { (key, values) -> item.parameters[key]?.toString() in values }
+
+internal fun modifierMatchesQuery(type: String, label: String, query: String): Boolean {
+    fun normalize(value: String) = java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFD)
+        .replace(Regex("\\p{M}+"), "").lowercase(java.util.Locale.ROOT).replace('_', ' ')
+    val terms = normalize(query).trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    val searchable = normalize(type + " " + label)
+    return terms.all { it in searchable }
+}

@@ -96,6 +96,9 @@ object StateParser {
             objects = objects(json.optJSONArray("objects")),
             hiddenObjects = hiddenObjects(json.optJSONArray("hidden_objects")),
             modifiers = modifiers(json.optJSONObject("active")?.optJSONArray("modifiers")),
+            vertexGroups = vertexGroups(json.optJSONObject("active")?.optJSONArray("vertex_groups")),
+            vertexGroupsAvailable = json.optJSONObject("active")?.optBoolean("vertex_groups_available") == true,
+            activeVertexGroup = json.optJSONObject("active")?.optString("active_vertex_group")?.takeIf { it.isNotBlank() && it != "null" },
             editSettings = editSettings(json.optJSONObject("edit_settings")),
             sceneScale = sceneScale(json.optJSONObject("scene_scale")),
         )
@@ -122,6 +125,11 @@ object StateParser {
                 jsonMap(item.optJSONObject("parameters")))
         }
 
+    fun vertexGroups(array: JSONArray?): List<VertexGroupState> = if (array == null) emptyList() else
+        (0 until array.length()).map { index -> array.getJSONObject(index).let {
+            VertexGroupState(it.getString("name"), it.optBoolean("locked"))
+        } }
+
     fun modifierOptions(json: JSONObject?): List<ModifierTypeDescriptor> {
         val types = json?.optJSONObject("types") ?: return emptyList()
         return types.keys().asSequence().map { type ->
@@ -139,7 +147,7 @@ object StateParser {
                     editable = p.optBoolean("editable"), unit = p.optString("unit").takeIf { it.isNotBlank() },
                     valueLabels = p.optJSONObject("value_labels")?.let { labels -> labels.keys().asSequence().associateWith { labels.getString(it) } }.orEmpty(),
                     visibleWhen = p.optJSONObject("visible_when")?.let { rules -> rules.keys().asSequence().associateWith { strings(rules.optJSONArray(it)) } }.orEmpty())
-            }.toList())
+            }.toList(), label = types.getJSONObject(type).optString("label", type))
         }.toList()
     }
 

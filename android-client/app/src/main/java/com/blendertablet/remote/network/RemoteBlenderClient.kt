@@ -159,6 +159,7 @@ interface RemoteBlenderClient {
 
     /** Presets que anuncia el servidor; vacío si no los publica. */
     val sceneScalePresets: StateFlow<List<SceneScale>>
+    fun vertexGroupCommand(action: String, payload: Map<String, Any?>)
     fun modifierAdd(type: String, parameters: Map<String, Any?> = emptyMap())
     fun modifierRemove(name: String)
     fun modifierMove(name: String, index: Int)

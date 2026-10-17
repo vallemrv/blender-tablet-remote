@@ -1157,3 +1157,30 @@ no quedan archivos o referencias temporales.
   Angle/factor comparten almacenamiento nativo: se escribe solo el activo, tras
   validar el cambio completo. La bandeja usa `visible_when` y `value_labels` del
   esquema compartido; conserva las acciones habituales de pila y undo.
+
+- Modificadores incluye Grupos de vértices del objeto activo: crear, renombrar,
+  borrar y, en Edit, asignar/quitar seleccionados con peso 0–1 o seleccionar sus
+  miembros. Usa la capa deform del BMesh vivo sin cambiar de modo; al crearla se
+  renuevan las referencias a vértices. Cada acción crea un undo. Renombrar/borrar
+  actualiza las referencias de grupo en los modificadores del objeto. Los grupos
+  bloqueados rechazan asignación; una preview activa debe terminar primero.
+- Simple Deform acepta grupo e inversión mediante el tipo de campo `vertex_group`.
+  Los snapshots incluyen nombres, bloqueo, grupo activo y disponibilidad; nunca
+  recorren pesos por vértice a cada broadcast. Las mallas CAD requieren conversión
+  antes de asignar grupos. Cambiar de objeto renueva las opciones y los borradores.
+
+- Guardar selección como grupo es una acción común de Pintura y Modificadores:
+  mismo diálogo Android y mismo servicio `vertex_groups.save_selection`. Crea y
+  asigna en un solo undo; el grupo nativo sirve para ambas zonas. Edit usa BMesh;
+  Pintura usa la selección conservada de Edit y copia las mallas enlazadas antes
+  de escribir pesos. Valida todos los objetos antes de modificar cualquiera.
+
+- El catálogo de modificadores incluye búsqueda por identificador y nombre recibido
+  del servidor (sin acentos). Lattice usa el generador de campos RNA y el mismo
+  inspector genérico: jaula, intensidad, grupo e inversión. Crear jaula ajustada es
+  una acción explícita con un undo: 4×4×4 puntos, encuadre en coordenadas locales y
+  matriz del objeto, sin deformación inicial. La edición táctil de puntos Lattice
+  no está implementada; la inspección de propiedades no se anuncia como ese soporte.
+- La reflexión de RNA se aplica gradualmente con adaptadores para contexto y
+  acciones. El catálogo disponible sigue controlado; no se exponen colecciones,
+  propiedades internas ni sockets de Geometry Nodes como campos ordinarios.

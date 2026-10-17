@@ -1035,7 +1035,7 @@ Pila no destructiva del objeto activo. No confundir `modifier.add type=BEVEL` co
 | Comando | Payload |
 |---|---|
 | `modifier.add_options` | `object?` — catálogo con descriptores tipados |
-| `modifier.add` | `object?`, `type`: `SUBSURF`\|`MULTIRES`\|`ARRAY`\|`BEVEL`\|`SOLIDIFY`\|`BOOLEAN`\|`MIRROR`\|`SIMPLE_DEFORM`, `name?`, `parameters?` |
+| `modifier.add` | `object?`, `type`: `SUBSURF`\|`MULTIRES`\|`ARRAY`\|`BEVEL`\|`SOLIDIFY`\|`BOOLEAN`\|`MIRROR`\|`SIMPLE_DEFORM`\|`LATTICE`, `name?`, `parameters?` |
 | `modifier.remove` | `object?`, `name` |
 | `modifier.move` | `object?`, `name`, `index` |
 | `modifier.set` | `object?`, `name`, `parameters{}` |
@@ -2363,3 +2363,56 @@ Los descriptores de modificadores admiten `value_labels` (valor → texto) y
 Android usa estos metadatos para elegir ángulo/factor y traducir métodos sin
 ramas de interfaz propias de Simple Deform. Los campos sin condiciones siguen
 siempre visibles; los valores enviados siguen siendo los identificadores nativos.
+
+### Grupos de vértices
+
+`active.vertex_groups:[{name,locked}]`, `active.active_vertex_group` y
+`active.vertex_groups_available` describen los grupos del objeto activo.
+`vertex_groups.changed` provoca un nuevo snapshot al crear/renombrar/borrar grupos
+fuera de la tablet. No se transmiten los pesos completos en cada actualización.
+
+- `vertex_group.create {name,object?}` crea un grupo vacío.
+- `vertex_group.rename {name,new_name,object?}` conserva pesos y referencias en modificadores.
+- `vertex_group.delete {name,object?}` borra el grupo y limpia esas referencias.
+- `vertex_group.edit {name,action,weight?,object?}` requiere Edit. ASSIGN reemplaza
+  el peso de los vértices seleccionados (0–1, cero válido); REMOVE quita su pertenencia.
+  SELECT reemplaza la selección por los miembros visibles y activa Vértices;
+  DESELECT retira esos miembros de la selección. Las coordenadas permanecen intactas.
+
+`object` es una comprobación del objeto activo, no un selector de otro objeto.
+Cada comando devuelve un snapshot de escena y tiene undo nativo. Se rechazan
+pesos inválidos, asignación a grupos bloqueados, escenas CAD sin convertir y
+herramientas modales activas. Los pesos se escriben en el BMesh vivo sin salir de Edit.
+
+SIMPLE_DEFORM admite `vertex_group` (nombre o cadena vacía para todo el objeto) e
+`invert_vertex_group`. El campo por esquema de tipo `vertex_group` usa los nombres
+del objeto activo; el backend valida su existencia antes de modificar el nativo.
+
+`vertex_group.create {name,assign_selection:true,weight?:1}` guarda directamente
+la selección como grupo. `material.group {name,weight?:1}` delega en el mismo
+servicio para todos los objetos de pintura y activa `GROUP:<name>`. La validación
+de nombres, pesos y selección es compartida; un fallo de validación en un objeto
+no crea grupos en ninguno. Android reutiliza el diálogo Guardar selección como
+grupo en los dos contextos. `create` sin `assign_selection` conserva la creación
+explícita de un grupo vacío para clientes existentes.
+
+### Catálogo buscable y propiedades RNA de Lattice
+
+Cada tipo de `modifier.add_options.types` anuncia `label`; Android busca tanto
+ese nombre como el identificador nativo, ignorando mayúsculas/acentos. `LATTICE`
+anuncia `source:"RNA"`: sus campos escalares, booleanos, grupo y objeto se generan
+desde `bpy.types.LatticeModifier.bl_rna`. El adaptador restringe `object` a LATTICE
+y aporta nombres localizados. La lectura, validación y escritura comparten el
+mismo camino RNA; valida todos los parámetros antes de modificar el nativo.
+
+`modifier.set {name,parameters:{create_cage:true}}` crea y vincula una jaula 4×4×4
+ajustada a los límites evaluados del objeto, con su transformación y sin deformar
+inicialmente. Rechaza una segunda jaula y no mezcla esta acción con parámetros.
+Es una acción con undo, no una propiedad RNA. Aplicar/borrar el modificador no
+borra la jaula. Mover sus puntos desde la tablet no forma parte de este cambio.
+
+La reflexión no convierte todos los 83 tipos nativos de esta versión de Blender
+en modificadores soportados: se mantiene el catálogo probado. RNA no proporciona
+por sí solo disposición, condiciones de visibilidad, operaciones de creación/
+subdivisión/bake ni interfaces dinámicas de sockets. La arquitectura admite nuevos
+tipos mediante metadatos y adaptadores, sin otra bandeja Compose por modificador.

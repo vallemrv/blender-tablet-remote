@@ -524,6 +524,10 @@ class WebSocketRemoteBlenderClient(
     override fun requestSceneScales() = command("scene.scale")
     override fun setSceneScale(preset: String) =
         command("scene.scale_set", JSONObject().put("preset", preset))
+    override fun vertexGroupCommand(action: String, payload: Map<String, Any?>) {
+        require(action in setOf("create", "rename", "delete", "edit"))
+        command("vertex_group.$action", JSONObject(payload).put("object", _state.value.activeObject))
+    }
     override fun modifierAdd(type: String, parameters: Map<String, Any?>) = command("modifier.add", JSONObject().put("type", type).put("parameters", JSONObject(parameters)))
     override fun modifierRemove(name: String) = command("modifier.remove", JSONObject().put("name", name))
     override fun modifierMove(name: String, index: Int) = command("modifier.move", JSONObject().put("name", name).put("index", index))
@@ -1008,6 +1012,7 @@ class WebSocketRemoteBlenderClient(
                                 scale, _state.value.unitScaleLength),
                         )
                     }
+                    command != null && command.startsWith("vertex_group.") -> result?.let(::updateState)
                     command != null && command.startsWith("modifier.") -> result?.let { stack ->
                         _state.value = _state.value.copy(modifiers = StateParser.modifiers(stack.optJSONArray("modifiers")))
                     }

@@ -50,6 +50,7 @@ def load_all() -> None:
         modal,
         mode,
         modifiers,
+        vertex_groups,
         objects,
         scene,
         sculpt,

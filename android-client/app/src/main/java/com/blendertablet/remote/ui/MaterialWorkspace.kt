@@ -153,7 +153,6 @@ fun MaterialTopActions(state: AppUiState, vm: MainViewModel) {
     var zoneOpen by remember { mutableStateOf(false) }
     var lightOpen by remember { mutableStateOf(false) }
     var groupOpen by remember { mutableStateOf(false) }
-    var groupName by remember { mutableStateOf("Zona de pintura") }
     val targets = material.targets.size
     val zone = material.regions.firstOrNull { it.id == material.scope }
 
@@ -188,7 +187,7 @@ fun MaterialTopActions(state: AppUiState, vm: MainViewModel) {
             }
         }
     }
-    IconAction(AppIcons.material("SAVE_ZONE"), "Guardar la selección de Edit como zona",
+    IconAction(AppIcons.material("SAVE_ZONE"), "Guardar selección como grupo",
         enabled = targets > 0) { groupOpen = true }
     Box {
         IconAction(AppIcons.material("LIGHT"),
@@ -201,13 +200,9 @@ fun MaterialTopActions(state: AppUiState, vm: MainViewModel) {
             }
         }
     }
-    if (groupOpen) AlertDialog(onDismissRequest = { groupOpen = false }, title = { Text("Guardar zona de pintura") },
-        text = { Column {
-            Text("Guarda los vértices seleccionados en Edit. La zona incluye las caras cuyos vértices pertenecen al grupo.")
-            OutlinedTextField(groupName, { groupName = it }, label = { Text("Nombre") }, singleLine = true)
-        } }, confirmButton = { TextButton(enabled = groupName.isNotBlank(), onClick = {
-            vm.materialCommand("material.group", mapOf("name" to groupName.trim())); groupOpen = false
-        }) { Text("Guardar") } }, dismissButton = { TextButton(onClick = { groupOpen = false }) { Text("Cancelar") } })
+    if (groupOpen) SaveVertexGroupDialog(onDismiss = { groupOpen = false }, onSave = { name ->
+        vm.materialCommand("material.group", mapOf("name" to name)); groupOpen = false
+    })
 }
 
 /** Cuántos objetos hay debajo del icono, en la esquina, como los badges del rail. */

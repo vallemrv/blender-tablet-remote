@@ -45,7 +45,8 @@ data class ModifierParameterDescriptor(
     val valueLabels: Map<String, String> = emptyMap(),
     val visibleWhen: Map<String, List<String>> = emptyMap(),
 )
-data class ModifierTypeDescriptor(val type: String, val parameters: List<ModifierParameterDescriptor>)
+data class ModifierTypeDescriptor(val type: String, val parameters: List<ModifierParameterDescriptor>, val label: String = type)
+data class VertexGroupState(val name: String, val locked: Boolean = false)
 data class ModifierState(
     val name: String, val type: String, val showViewport: Boolean = true,
     val showRender: Boolean = true, val parameters: Map<String, Any?> = emptyMap(),
@@ -463,6 +464,9 @@ data class BlenderState(
     val hiddenObjects: List<HiddenObject> = emptyList(),
     val modifiers: List<ModifierState> = emptyList(),
     val modifierOptions: List<ModifierTypeDescriptor> = emptyList(),
+    val vertexGroups: List<VertexGroupState> = emptyList(),
+    val vertexGroupsAvailable: Boolean = false,
+    val activeVertexGroup: String? = null,
     val features: ServerFeatures = ServerFeatures(),
     val editSettings: EditSettings = EditSettings(),
     /** Metros físicos representados por una Blender Unit. */

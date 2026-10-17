@@ -415,7 +415,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 if (modifiersOpen) ModifierPanel(
                     state.blender,
                     ModifierActions(vm::addModifier, vm::setModifier, vm::toggleModifier,
-                        vm::moveModifier, vm::applyModifier, vm::removeModifier) { modifiersOpen = false },
+                        vm::moveModifier, vm::applyModifier, vm::removeModifier, vm::vertexGroupCommand) { modifiersOpen = false },
                     Modifier
                         .align(Alignment.TopEnd)
                         .padding(

@@ -15,6 +15,37 @@ from ..bpy_utils import active_object, get_int, undo_push, view3d_override
 from ..errors import BadPayload, CommandError
 from . import command
 
+def _rna_schema(rna_type):
+    """Generate ordinary controls from native RNA; context rules are adapters."""
+    base=set(bpy.types.Modifier.bl_rna.properties.keys())
+    result={}
+    for prop in rna_type.bl_rna.properties:
+        if prop.identifier in base or prop.is_readonly:continue
+        key=prop.identifier
+        if prop.type=='BOOLEAN':spec=dict(type='bool',default=bool(prop.default))
+        elif prop.type=='ENUM':
+            spec=dict(type='enum',default=prop.default,values=[i.identifier for i in prop.enum_items],
+                      value_labels={i.identifier:i.name for i in prop.enum_items})
+        elif prop.type in ('FLOAT','INT') and not prop.is_array:
+            angular=prop.subtype=='ANGLE'
+            convert=math.degrees if angular else float
+            spec=dict(type='int' if prop.type=='INT' else 'float',default=convert(prop.default),
+                      min=convert(prop.hard_min),max=convert(prop.hard_max),
+                      step=1 if prop.type=='INT' else (1 if angular else max(.01,prop.step/100)),editable=True)
+            if angular:spec['unit']='ANGLE'
+            elif prop.subtype=='DISTANCE':spec['unit']='LENGTH'
+        elif prop.type=='POINTER' and prop.fixed_type.identifier=='Object':
+            spec=dict(type='object',default=None,object_filter=dict(exclude_self=True))
+        elif prop.type=='STRING' and 'vertex_group' in key:spec=dict(type='vertex_group',default='')
+        else:continue
+        spec['label']=prop.name
+        result[key]=spec
+    return result
+
+
+RNA_TYPES={'LATTICE':bpy.types.LatticeModifier}
+
+
 SCHEMA = {
     "MULTIRES": {
         key: {"type": "int", "default": 1, "min": 0, "max": 6, "step": 1}
@@ -52,6 +83,8 @@ SCHEMA = {
         **{f"lock_{axis}": {"type":"bool", "default":False, "label":"Bloquear "+axis.upper(),
                             "visible_when":{"deform_method":["TWIST","TAPER","STRETCH"]}} for axis in "xyz"},
         "origin": {"type":"object", "default":None, "label":"Objeto de origen", "object_filter":{"exclude_self":True}},
+        "vertex_group": {"type":"vertex_group", "default":"", "label":"Grupo de vértices"},
+        "invert_vertex_group": {"type":"bool", "default":False, "label":"Invertir grupo"},
     },
     "SOLIDIFY": {
         "thickness": {"type": "float", "default": 0.1, "min": -1000.0, "max": 1000.0, "step": 0.01},
@@ -81,6 +114,13 @@ SCHEMA = {
     },
 }
 
+SCHEMA.update({kind:_rna_schema(cls) for kind,cls in RNA_TYPES.items()})
+SCHEMA['LATTICE']['object'].update(label='Jaula Lattice',object_filter=dict(type='LATTICE',exclude_self=True))
+SCHEMA['LATTICE']['strength']['label']='Intensidad'
+SCHEMA['LATTICE']['vertex_group']['label']='Grupo de vértices'
+SCHEMA['LATTICE']['invert_vertex_group']['label']='Invertir grupo'
+
+
 CATALOG = {
     "SUBSURF": {"blender": "SUBSURF", "default_name": "Subdivision"},
     "MULTIRES": {"blender": "MULTIRES", "default_name": "Multires"},
@@ -90,6 +130,7 @@ CATALOG = {
     "SOLIDIFY": {"blender": "SOLIDIFY", "default_name": "Solidify"},
     "BOOLEAN": {"blender": "BOOLEAN", "default_name": "Boolean"},
     "MIRROR": {"blender": "MIRROR", "default_name": "Mirror"},
+    "LATTICE": {"blender":"LATTICE", "default_name":"Lattice"},
 }
 
 
@@ -144,12 +185,53 @@ def _mirror_object(obj, name):
     return other
 
 
+def _write_rna(mod,kind,data,obj):
+    pending={}
+    for key,spec in SCHEMA[kind].items():
+        value=data[key];typ=spec['type']
+        if typ=='bool':
+            if not isinstance(value,bool):raise BadPayload(key+' debe ser booleano')
+        elif typ in ('float','int'):
+            value=(_bounded_int if typ=='int' else _bounded_float)(value,key,spec['min'],spec['max'])
+            if spec.get('unit')=='ANGLE':value=math.radians(value)
+        elif typ=='enum':
+            if value not in spec['values']:raise BadPayload('Valor no válido para '+key)
+        elif typ=='vertex_group':
+            if not isinstance(value,str) or (value and not obj.vertex_groups.get(value)):raise BadPayload('El grupo no existe en este objeto')
+        elif typ=='object':
+            target=bpy.data.objects.get(str(value)) if value else None
+            filter=spec.get('object_filter',{})
+            if value and target is None:raise BadPayload('El objeto no existe')
+            if target and ((filter.get('exclude_self') and target==obj) or (filter.get('type') and target.type!=filter['type'])):
+                raise BadPayload('Elige un objeto de tipo '+filter.get('type','compatible')+' distinto del objeto deformado')
+            value=target
+        pending[key]=value
+    before={key:getattr(mod,key) for key in pending}
+    try:
+        for key,value in pending.items():setattr(mod,key,value)
+    except Exception:
+        for key,value in before.items():setattr(mod,key,value)
+        raise
+
+
+def _read_rna(mod,kind):
+    result={}
+    for key,spec in SCHEMA[kind].items():
+        value=getattr(mod,key)
+        if spec['type']=='object':value=value.name if value else None
+        elif spec.get('unit')=='ANGLE':value=math.degrees(value)
+        result[key]=value
+    return result
+
+
 def _write(mod, kind: str, params: dict, obj, preserve_current: bool = False) -> None:
     current = _read(mod)["parameters"] if preserve_current else {}
     data = _defaults(kind)
     data.update(current)
     data.update({key: params[key] for key in _keys(kind) if key in params})
-    if kind == "MULTIRES":
+    if kind in RNA_TYPES:
+        _write_rna(mod,kind,data,obj)
+    elif kind == "MULTIRES":
         values = {key: _bounded_int(data[key], key, 0, mod.total_levels) for key in _keys(kind)}
         with view3d_override(), bpy.context.temp_override(object=obj, active_object=obj):
             previous_mode = obj.mode
@@ -201,6 +283,10 @@ def _write(mod, kind: str, params: dict, obj, preserve_current: bool = False) ->
         origin = bpy.data.objects.get(str(data['origin'])) if data['origin'] else None
         if data['origin'] and origin is None: raise BadPayload('El objeto de origen no existe')
         if origin == obj: raise BadPayload('El origen debe ser otro objeto')
+        group = data['vertex_group']
+        if not isinstance(group,str) or (group and not obj.vertex_groups.get(group)):
+            raise BadPayload('El grupo no existe en este objeto')
+        if not isinstance(data['invert_vertex_group'],bool):raise BadPayload('Invertir grupo debe ser booleano')
         mod.deform_method, mod.deform_axis = method, axis
         # Blender shares storage for angle/factor: write only the active quantity.
         if method in ('TWIST','BEND'): mod.angle = math.radians(angle)
@@ -208,6 +294,8 @@ def _write(mod, kind: str, params: dict, obj, preserve_current: bool = False) ->
         mod.limits = (lower,upper)
         for key in ('lock_x','lock_y','lock_z'):setattr(mod,key,data[key])
         mod.origin = origin
+        mod.vertex_group = group
+        mod.invert_vertex_group = data['invert_vertex_group']
     elif kind == "SOLIDIFY":
         mod.thickness = float(data["thickness"])
         mod.offset = _bounded_float(data["offset"], "offset", -1.0, 1.0)
@@ -260,7 +348,10 @@ def _bounded_int(value, key, minimum, maximum):
 def _read(mod) -> dict:
     kind = next((key for key, spec in CATALOG.items() if spec["blender"] == mod.type), None)
     params: dict = {}
-    if kind == "MULTIRES":
+    if kind in RNA_TYPES:
+        params = _read_rna(mod,kind)
+        if kind=='LATTICE':params['cage_count']=int(mod.object is not None)
+    elif kind == "MULTIRES":
         params = {key: int(getattr(mod, key)) for key in _keys(kind)}
         params['total_levels'] = int(mod.total_levels)
     elif kind == "SUBSURF":
@@ -290,7 +381,8 @@ def _read(mod) -> dict:
                       angle=math.degrees(mod.angle), factor=mod.factor,
                       limit_lower=float(mod.limits[0]), limit_upper=float(mod.limits[1]),
                       lock_x=mod.lock_x, lock_y=mod.lock_y, lock_z=mod.lock_z,
-                      origin=mod.origin.name if mod.origin else None)
+                      origin=mod.origin.name if mod.origin else None,
+                      vertex_group=mod.vertex_group, invert_vertex_group=mod.invert_vertex_group)
     elif kind == "SOLIDIFY":
         params = {
             "thickness": float(mod.thickness),
@@ -334,7 +426,7 @@ def describe(obj) -> list[dict]:
 
 @command("modifier.add_options")
 def add_options(payload: dict) -> dict:
-    return {"types": {
+    types = {
         "MULTIRES": {"parameters": {
             **{key: dict(_number('int', 1, 0, 6, 1), label=label, max_parameter='total_levels')
                for key, label in [('levels','Vista'), ('sculpt_levels','Escultura'), ('render_levels','Render')]},
@@ -351,6 +443,8 @@ def add_options(payload: dict) -> dict:
             "profile": dict(_number("float", 0.5, 0.0, 1.0, 0.05), label="Perfil", editable=True),
         }},
         "SIMPLE_DEFORM": {"parameters": SCHEMA["SIMPLE_DEFORM"]},
+        **{kind:{"parameters":dict(SCHEMA[kind], create_cage=dict(type='action',label='Crear jaula ajustada',max=1,max_parameter='cage_count')),
+                 "source":"RNA"} for kind in RNA_TYPES},
         "SOLIDIFY": {"parameters": {"thickness": _number("float", 0.1, -1000.0, 1000.0, 0.01), "offset": _number("float", -1.0, -1.0, 1.0, 0.1), "use_even_offset": {"type": "bool", "default": True}, "use_rim": {"type": "bool", "default": True}}},
         "BOOLEAN": {"parameters": {"operation": _enum("DIFFERENCE", ["DIFFERENCE", "UNION", "INTERSECT"]), "object": {"type": "object", "default": None, "object_filter": {"type": "MESH", "exclude_self": True}}, "solver": _enum("EXACT", ["EXACT", "FAST"])}},
         "MIRROR": {"parameters": {
@@ -361,7 +455,13 @@ def add_options(payload: dict) -> dict:
             "merge_threshold": _number("float", 0.001, 0.0, 1.0, 0.001),
             "mirror_object": {"type": "object", "default": None, "object_filter": {"exclude_self": True}}
         }}
-    }}
+    }
+    native={item.identifier:item.name for item in bpy.types.Modifier.bl_rna.properties['type'].enum_items}
+    labels=dict(SUBSURF='Subdivisión',MULTIRES='Multiresolución',ARRAY='Matriz',BEVEL='Bisel',
+                SOLIDIFY='Solidificar',BOOLEAN='Booleano',MIRROR='Espejo',SIMPLE_DEFORM='Deformación simple',LATTICE='Lattice · Jaula')
+    for kind,spec in types.items():spec['label']=labels.get(kind,native.get(kind,kind))
+    return dict(types=types)
+
 
 
 def _number(kind, default, minimum, maximum, step):
@@ -469,6 +569,35 @@ def move(payload: dict) -> dict:
     return stack(obj)
 
 
+def _create_lattice_cage(obj,mod):
+    if mod.object is not None:raise BadPayload('El modificador ya tiene una jaula')
+    if not obj.data.vertices:raise BadPayload('La malla está vacía')
+    from mathutils import Matrix
+    evaluated=obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    corners=[Vector(p) for p in evaluated.bound_box]
+    low=Vector(tuple(min(p[i] for p in corners) for i in range(3)))
+    high=Vector(tuple(max(p[i] for p in corners) for i in range(3)))
+    size=high-low;minimum=max(max(size)*.01,1e-6)
+    size=Vector(tuple(max(v,minimum) for v in size))
+    data=bpy.data.lattices.new('Jaula de '+obj.name)
+    cage=None
+    try:
+        data.points_u=data.points_v=data.points_w=4
+        cage=bpy.data.objects.new(data.name,data)
+        bpy.context.scene.collection.objects.link(cage)
+        rest_low=Vector(tuple(min(p.co[i] for p in data.points) for i in range(3)))
+        rest_high=Vector(tuple(max(p.co[i] for p in data.points) for i in range(3)))
+        cage_scale=tuple(size[i]/max(rest_high[i]-rest_low[i],1e-9) for i in range(3))
+        cage.matrix_world=(obj.matrix_world@Matrix.Translation((low+high)*.5)
+                           @Matrix.Diagonal((*cage_scale,1.))@Matrix.Translation(-(rest_low+rest_high)*.5))
+        cage.show_in_front=True;mod.object=cage
+    except Exception:
+        mod.object=None
+        if cage:bpy.data.objects.remove(cage,do_unlink=True)
+        if data.users==0:bpy.data.lattices.remove(data)
+        raise
+
+
 @command("modifier.set", mutating=True)
 def set_params(payload: dict) -> dict:
     obj = _target(payload)
@@ -479,6 +608,11 @@ def set_params(payload: dict) -> dict:
     params = payload.get("parameters", payload)
     if not isinstance(params, dict):
         raise BadPayload("'parameters' must be an object")
+    if kind=='LATTICE' and params.get('create_cage') is True:
+        if any(key in params for key in _keys(kind)):raise BadPayload('Crea la jaula antes de cambiar sus parámetros')
+        _create_lattice_cage(obj,mod)
+        undo_push('Remote crear jaula Lattice')
+        return stack(obj)
     if kind == 'MULTIRES':
         from .sessions import cancel_all
         cancel_all()

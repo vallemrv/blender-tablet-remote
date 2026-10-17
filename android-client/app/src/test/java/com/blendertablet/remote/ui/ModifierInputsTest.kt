@@ -10,6 +10,16 @@ class ModifierInputsTest {
     private val width = ModifierParameterDescriptor("width", "float", ModifierDefault.Decimal(.1),
         min = 0.0, max = 1000.0, step = .01, editable = true, unit = "LENGTH")
 
+    @Test fun modifierSearchUsesServerLabelsAndNativeNamesWithoutAccents() {
+        assertTrue(modifierMatchesQuery("LATTICE", "Lattice · Jaula", "jaula"))
+        assertTrue(modifierMatchesQuery("LATTICE", "Lattice · Jaula", "latt"))
+        assertTrue(modifierMatchesQuery("SIMPLE_DEFORM", "Deformación simple", "deformacion"))
+        assertTrue(modifierMatchesQuery("SIMPLE_DEFORM", "Deformación simple", "simple deform"))
+        assertFalse(modifierMatchesQuery("LATTICE", "Lattice · Jaula", "bisel"))
+        val options = StateParser.modifierOptions(JSONObject("""{"types":{"LATTICE":{"label":"Lattice · Jaula","parameters":{}}}}"""))
+        assertEquals("Lattice · Jaula", options.single().label)
+    }
+
     @Test fun simpleDeformSchemaSwitchesQuantityAndKeepsNativeEnumValues() {
         val spec = StateParser.modifierOptions(JSONObject("""{"types":{"SIMPLE_DEFORM":{"parameters":{
             "deform_method":{"type":"enum","default":"TWIST","label":"Método","values":["TWIST","BEND","TAPER","STRETCH"],"value_labels":{"TWIST":"Torsión"}},
