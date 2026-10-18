@@ -1,78 +1,11 @@
 package com.blendertablet.remote.ui
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.CallMade
-import androidx.compose.material.icons.automirrored.filled.CallSplit
-import androidx.compose.material.icons.automirrored.filled.CompareArrows
-import androidx.compose.material.icons.automirrored.filled.RotateRight
-import androidx.compose.material.icons.automirrored.filled.ShowChart
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Landscape
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Brush
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.AccountTree
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Adjust
-import androidx.compose.material.icons.filled.AspectRatio
-import androidx.compose.material.icons.filled.AutoFixHigh
-import androidx.compose.material.icons.filled.BlurOn
-import androidx.compose.material.icons.filled.BookmarkAdd
-import androidx.compose.material.icons.filled.CenterFocusStrong
-import androidx.compose.material.icons.filled.Draw
-import androidx.compose.material.icons.filled.FormatColorReset
-import androidx.compose.material.icons.filled.Grain
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.ContentCut
-import androidx.compose.material.icons.filled.CropFree
-import androidx.compose.material.icons.filled.CropSquare
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.Deselect
-import androidx.compose.material.icons.filled.DoNotDisturb
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FiberManualRecord
-import androidx.compose.material.icons.filled.Flip
-import androidx.compose.material.icons.filled.Grid4x4
-import androidx.compose.material.icons.filled.GridOn
-import androidx.compose.material.icons.filled.Hexagon
-import androidx.compose.material.icons.filled.Hub
-import androidx.compose.material.icons.filled.JoinFull
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.LibraryAdd
-import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.LinearScale
-import androidx.compose.material.icons.filled.Lens
-import androidx.compose.material.icons.filled.Mouse
-import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.filled.OpenWith
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.RoundedCorner
-import androidx.compose.material.icons.filled.RestartAlt
-import androidx.compose.material.icons.filled.Rowing
-import androidx.compose.material.icons.filled.SelectAll
-import androidx.compose.material.icons.filled.HighlightAlt
-import androidx.compose.material.icons.filled.ScatterPlot
-import androidx.compose.material.icons.filled.Straighten
-import androidx.compose.material.icons.filled.TextFields
-import androidx.compose.material.icons.filled.Timeline
-import androidx.compose.material.icons.filled.TouchApp
-import androidx.compose.material.icons.filled.Transform
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.ViewInAr
-import androidx.compose.material.icons.filled.ViewWeek
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.filled.Waves
-import androidx.compose.material.icons.filled.WbSunny
-import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
 import com.blendertablet.remote.model.SelectionMode
 import com.blendertablet.remote.model.TransformMode
@@ -80,27 +13,6 @@ import com.blendertablet.remote.model.ActionId
 import com.blendertablet.remote.model.AddCategory
 import com.blendertablet.remote.model.EditTool
 import com.blendertablet.remote.model.SnapType
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.AutoAwesomeMotion
-import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Deblur
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Keyboard
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.LinkOff
-import androidx.compose.material.icons.filled._3dRotation
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.CallMerge
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.Redo
-import androidx.compose.material.icons.automirrored.filled.Undo
 
 /**
  * Vocabulario visual único de la aplicación.
@@ -110,117 +22,75 @@ import androidx.compose.material.icons.automirrored.filled.Undo
  * y permite reemplazar un símbolo por uno propio sin perseguir usos por toda la UI.
  */
 object AppIcons {
-    /** Manipulador sobre la selección: distinto de Mover, que abre la barra numérica. */
-    val gizmo: ImageVector get() = Icons.Default._3dRotation
+    val gizmo: ImageVector get() = StudioIcons["GIZMO"]
+    val Confirm: ImageVector get() = StudioIcons["CONFIRM"]
+    val Cancel: ImageVector get() = StudioIcons["CANCEL"]
+    val Checked: ImageVector get() = StudioIcons["CONFIRM"]
+    val Undo: ImageVector get() = StudioIcons["UNDO"]
+    val Redo: ImageVector get() = StudioIcons["REDO"]
+    val Back: ImageVector get() = StudioIcons["BACK"]
+    val Add: ImageVector get() = StudioIcons["ADD"]
+    val Delete: ImageVector get() = StudioIcons["DELETE"]
+    val MoveUp: ImageVector get() = StudioIcons["UP"]
+    val MoveDown: ImageVector get() = StudioIcons["DOWN"]
+    val SubmenuOpen: ImageVector get() = StudioIcons["RIGHT"]
+    val SubmenuBack: ImageVector get() = StudioIcons["LEFT"]
+    val Dropdown: ImageVector get() = StudioIcons["EXPAND"]
+    val Render: ImageVector get() = StudioIcons["CAMERA"]
+    val Debug: ImageVector get() = StudioIcons["DEBUG"]
+    val Modifiers: ImageVector get() = StudioIcons["MODIFIERS"]
+    val EditShortcuts: ImageVector get() = StudioIcons["SHORTCUTS"]
+    val Views: ImageVector get() = StudioIcons["VIEWS"]
+    val SelectTool: ImageVector get() = StudioIcons["SELECT"]
+    val Wireframe: ImageVector get() = StudioIcons["WIREFRAME"]
+    val Proportional: ImageVector get() = StudioIcons["PROPORTIONAL"]
+    val AutoMerge: ImageVector get() = StudioIcons["AUTO_MERGE"]
+    val ModeObject: ImageVector get() = StudioIcons["OBJECT_MODE"]
+    val ModeEdit: ImageVector get() = StudioIcons["EDIT_MODE"]
+    val materials: ImageVector get() = StudioIcons["MATERIALS"]
+    val Fallback: ImageVector get() = StudioIcons["FALLBACK"]
+    val Duplicate: ImageVector get() = StudioIcons["DUPLICATE"]
+    val DuplicateLinked: ImageVector get() = StudioIcons["DUPLICATE_LINKED"]
+    val Tweak: ImageVector get() = StudioIcons["TWEAK"]
+    val SnapAuto: ImageVector get() = StudioIcons["SNAP_AUTO"]
+    val Move: ImageVector get() = StudioIcons["MOVE"]
+    val Rotate: ImageVector get() = StudioIcons["ROTATE"]
+    val Scale: ImageVector get() = StudioIcons["SCALE"]
+    val Reset: ImageVector get() = StudioIcons["RESET"]
+    val Frame: ImageVector get() = StudioIcons["FRAME"]
+    val Multires: ImageVector get() = StudioIcons["MULTIRES"]
+    val Reference: ImageVector get() = StudioIcons["REFERENCE"]
+    val More: ImageVector get() = StudioIcons["MORE"]
 
-    // Controles comunes: las mismas salidas, flechas y marcas en bandejas, menús y paneles.
-    val Confirm: ImageVector = Icons.Default.Check
-    val Cancel: ImageVector = Icons.Default.Close
-    /** Marca de la opción elegida en un desplegable. */
-    val Checked: ImageVector = Icons.Default.Check
-    val Undo: ImageVector = Icons.AutoMirrored.Filled.Undo
-    val Redo: ImageVector = Icons.AutoMirrored.Filled.Redo
-    val Back: ImageVector = Icons.AutoMirrored.Filled.ArrowBack
-    val Add: ImageVector = Icons.Default.Add
-    val Delete: ImageVector = Icons.Default.Delete
-    val MoveUp: ImageVector = Icons.Default.ArrowUpward
-    val MoveDown: ImageVector = Icons.Default.ArrowDownward
-    val SubmenuOpen: ImageVector = Icons.Default.ChevronRight
-    val SubmenuBack: ImageVector = Icons.Default.ChevronLeft
-    val Dropdown: ImageVector = Icons.Default.ArrowDropDown
-    val Render: ImageVector = Icons.Default.PhotoCamera
-    val Debug: ImageVector = Icons.Default.BugReport
-    val Modifiers: ImageVector = Icons.Default.Build
-    val EditShortcuts: ImageVector = Icons.Default.Keyboard
-    val Views: ImageVector = Icons.Default.ViewInAr
-    val SelectTool: ImageVector = Icons.Default.Mouse
-    val Wireframe: ImageVector = Icons.Default.Grid4x4
-    val Proportional: ImageVector = Icons.Default.BlurOn
-    val AutoMerge: ImageVector = Icons.AutoMirrored.Filled.CallMerge
-    val ModeObject: ImageVector = Icons.Default.ViewInAr
-    val ModeEdit: ImageVector = Icons.Default.Straighten
-
-    /** Fila desplegable de una lista: flecha abajo abierta, a la derecha cerrada. */
-    fun disclosure(open: Boolean): ImageVector =
-        if (open) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight
-    /** Panel que crece hacia arriba (pie de vistas). */
-    fun drawer(open: Boolean): ImageVector = if (open) Icons.Default.ExpandMore else Icons.Default.ExpandLess
-    /** Estado visible/oculto de un elemento. */
-    fun visibility(visible: Boolean): ImageVector =
-        if (visible) Icons.Default.Visibility else Icons.Default.VisibilityOff
-    /** Cadena de proporciones de Escalar. */
-    fun chain(linked: Boolean): ImageVector = if (linked) Icons.Default.Link else Icons.Default.LinkOff
-    fun selectionMode(mode: SelectionMode): ImageVector = when (mode) {
-        SelectionMode.VERTEX -> Icons.Default.ScatterPlot
-        SelectionMode.EDGE -> Icons.Default.LinearScale
-        SelectionMode.FACE -> Icons.Default.CropSquare
-    }
-    fun transform(mode: TransformMode): ImageVector = when (mode) {
-        TransformMode.MOVE -> Move
-        TransformMode.ROTATE -> Rotate
-        TransformMode.SCALE -> Scale
-    }
-    fun origin(intent: String): ImageVector = when (intent) {
-        "CURSOR" -> Icons.Default.MyLocation
-        "GEOMETRY" -> Icons.Default.CenterFocusStrong
-        else -> Icons.Default.Adjust
-    }
-    /** Un icono por familia de modificador; un tipo nuevo cae en el genérico. */
+    fun disclosure(open: Boolean): ImageVector = StudioIcons[if (open) "EXPAND" else "RIGHT"]
+    fun drawer(open: Boolean): ImageVector = StudioIcons[if (open) "EXPAND" else "COLLAPSE"]
+    fun visibility(visible: Boolean): ImageVector = StudioIcons[if (visible) "VISIBLE" else "HIDDEN"]
+    fun chain(linked: Boolean): ImageVector = StudioIcons[if (linked) "CHAIN" else "UNCHAIN"]
+    fun selectionMode(mode: SelectionMode): ImageVector = StudioIcons[mode.name]
+    fun transform(mode: TransformMode): ImageVector = StudioIcons[mode.name]
+    fun origin(intent: String): ImageVector = StudioIcons[when (intent) {
+        "CURSOR" -> "ORIGIN_CURSOR"
+        "GEOMETRY" -> "ORIGIN_GEOMETRY"
+        else -> "ORIGIN_MASS"
+    }]
     fun modifier(type: String): ImageVector = when (type) {
-        "MULTIRES" -> Multires
-        "SUBSURF" -> Icons.Default.Deblur
-        "ARRAY" -> Icons.Default.AutoAwesomeMotion
-        "BEVEL" -> Icons.Default.RoundedCorner
-        "SOLIDIFY" -> Icons.Default.Layers
-        "BOOLEAN" -> Icons.Default.JoinFull
-        "MIRROR" -> Icons.Default.Flip
+        "MULTIRES", "SUBSURF", "ARRAY", "BEVEL", "SOLIDIFY", "BOOLEAN", "MIRROR", "LATTICE" -> StudioIcons[type]
+        "SIMPLE_DEFORM" -> StudioIcons["DEFORM"]
         else -> Fallback
     }
-    val materials: ImageVector get() = Icons.Default.Palette
-    val Fallback: ImageVector = Icons.Default.Tune
-    val Duplicate: ImageVector = Icons.Default.ContentCopy
-    val DuplicateLinked: ImageVector = Icons.Default.AccountTree
-    val Tweak: ImageVector = Icons.Default.TouchApp
-    val SnapAuto: ImageVector = Icons.Default.AutoFixHigh
-    val Move: ImageVector = Icons.Default.OpenWith
-    val Rotate: ImageVector = Icons.AutoMirrored.Filled.RotateRight
-    val Scale: ImageVector = Icons.Default.AspectRatio
-    val Reset: ImageVector = Icons.Default.RestartAlt
-    val Frame: ImageVector = Icons.Default.CenterFocusStrong
-    val Multires: ImageVector = Icons.Default.Layers
-
-    val Reference: ImageVector = Icons.Default.Image
-
-    /** Modos, trazos y ayudas del taller de materiales; el rail solo pide intención. */
     fun material(intent: String): ImageVector = when (intent.uppercase()) {
-        "SELECT" -> Icons.Default.TouchApp
-        "PAINT" -> Icons.Default.Brush
-        "ERASE" -> Icons.Default.FormatColorReset
-        "LIGHTS" -> Icons.Default.Lightbulb
-        "ROUND" -> Icons.Default.Lens
-        "AIRBRUSH" -> Icons.Default.BlurOn
-        "SPRAY" -> Icons.Default.Grain
-        "STYLUS" -> Icons.Default.Draw
-        "ISOLATE" -> Icons.Default.CenterFocusStrong
-        "SAVE_ZONE" -> Icons.Default.BookmarkAdd
-        "OBJECTS" -> Icons.Default.ViewInAr
-        "ZONE_ALL" -> Icons.Default.SelectAll
-        "ZONE" -> Icons.Default.CropFree
-        "LIGHT" -> Icons.Default.WbSunny
+        "SELECT" -> SelectTool
+        "PAINT", "ERASE", "AIRBRUSH", "SPRAY", "STYLUS", "ISOLATE", "SAVE_ZONE", "ZONE" -> StudioIcons[intent.uppercase()]
+        "LIGHTS" -> StudioIcons["LIGHT_MOVE"]
+        "ROUND" -> StudioIcons["BRUSH_ROUND"]
+        "OBJECTS" -> StudioIcons["OBJECT_LIST"]
+        "ZONE_ALL" -> StudioIcons["SELECT_ALL"]
+        "LIGHT" -> StudioIcons["ENVIRONMENT"]
         else -> Fallback
     }
-
     fun sculpt(intent: String): ImageVector = when (intent.uppercase()) {
-        "DRAW" -> Icons.Default.Brush
-        "CLAY" -> Icons.Default.Layers
-        "INFLATE" -> Icons.Default.Lens
-        "CREASE" -> Icons.Default.Timeline
-        "FLATTEN" -> Icons.Default.LinearScale
-        "GRAB" -> Icons.Default.TouchApp
-        "SMOOTH" -> Icons.Default.Waves
-        "MASK" -> Icons.Default.Flip
-        "PINCH" -> Icons.Default.CenterFocusStrong
-        "TOPOLOGY" -> Icons.Default.Grid4x4
+        "DRAW" -> StudioIcons["SCULPT_DRAW"]
+        "CLAY", "INFLATE", "CREASE", "FLATTEN", "GRAB", "SMOOTH", "MASK", "PINCH", "TOPOLOGY" -> StudioIcons[intent.uppercase()]
         else -> Fallback
     }
 
@@ -261,16 +131,12 @@ object AppIcons {
         "SUBDIVIDE" to "M3,12 L21,12 M3,8 L3,16 M21,8 L21,16 M12,9 L12,15 M12,4 L12,6 M12,18 L12,20",
         "SYMMETRIC" to "M12,2 L12,6 M12,9 L12,15 M12,18 L12,22 M3,8 L8,12 L3,16 Z M21,8 L16,12 L21,16 Z",
         "SYMMETRIC_LINE" to "M2,22 L6,18 M10,14 L14,10 M18,6 L22,2 M4,12 L12,20 M5.8,12 A1.8,1.8 0,1,1 2.2,12 A1.8,1.8 0,1,1 5.8,12 M13.8,20 A1.8,1.8 0,1,1 10.2,20 A1.8,1.8 0,1,1 13.8,20",
-        "MIRROR" to "M12,2 L12,6 M12,9 L12,15 M12,18 L12,22 M2,18 L9,18 L9,5 Z M22,18 L15,18 L15,5 Z",
         "OFFSET" to "M6,7 L18,7 A5,5 0,0,1 18,17 L6,17 A5,5 0,0,1 6,7 Z M6,10 L18,10 A2,2 0,0,1 18,14 L6,14 A2,2 0,0,1 6,10 Z",
         "ORIGIN" to "M12,2 L12,22 M2,12 L22,12 M16,12 A4,4 0,1 1,8,12 A4,4 0,1 1,16,12",
         "CONSTRUCTION" to "M2,18 L6,15 M9,12 L13,9 M16,6 L21,2 M2,2 L5,5 M8,8 L11,11 M14,14 L17,17 M20,20 L22,22",
         "WELD" to "M2,5 L9,10 M22,5 L15,10 M2,19 L9,14 M22,19 L15,14 M12,8 L16,12 L12,16 L8,12 Z",
         "FIX" to "M5,10 L19,10 L19,21 L5,21 Z M8,10 L8,6 A4,4 0,0 1,16,6 L16,10 M12,14 L12,17",
-        "EXTRUDE" to "M3,11 L12,15 L21,11 L12,7 Z M3,11 L3,19 L12,23 L21,19 L21,11 M12,15 L12,23 M12,11 L12,1 M8,5 L12,1 L16,5",
         "LOFT" to "M4,20 L20,20 L20,16 L4,16 Z M9,4 A3,3 0,1 1,15,4 A3,3 0,1 1,9,4 M4,16 L9,4 M20,16 L15,4",
-        "SWEEP" to "M3,21 L3,13 A8,8 0,0 1,11,5 L21,5 M1,21 L5,21 M18,2 L18,8 M18,2 L21,5 L18,8",
-        "REVOLVE" to "M12,2 L12,22 M12,5 L6,5 L6,13 L12,13 M4,17 A8,3 0,0 0,20,17 M20,17 L19.6,13.8 M20,17 L17,18.2",
         "HELIX" to "M12,2 L12,22 M6,5 L18,8 M6,10 L18,13 M6,15 L18,18 M6,5 L6,10 M18,8 L18,13 M6,10 L6,15 M18,13 L18,18",
         "CUT" to "M3,9 L3,20 L21,20 L21,9 M3,9 L8,9 L8,16 L16,16 L16,9 L21,9 M12,2 L12,12 M9,9 L12,12 L15,9",
         "SKETCH" to "M3,5 L14,5 M3,5 L3,21 L19,21 L19,12 M8,16 L9,12 L19,2 L22,5 L12,15 Z",
@@ -280,16 +146,9 @@ object AppIcons {
         "SECTION" to "M3,9 L12,4 L21,9 L21,17 L12,22 L3,17 Z M12,4 L12,22 M1,13 L23,13",
         "PROJECT" to "M4,5 L14,9 M14,9 L11,7 M14,9 L12,12 M3,18 L21,18 M8,14 L8,18 M16,14 L16,18",
         "POLYGON" to "M3,17 L8,4 L15,7 L21,12 L13,20 Z M8,4 L8.7,6 M15,7 L14,9 M20,12 L18,13.5",
-        "SELECT" to "M5,3 L5,20 L10,15 L14,22 L17,20 L13,13 L21,13 Z",
     )
     private val cadVectors by lazy {
-        cadPaths.mapValues { (name, data) ->
-            ImageVector.Builder("CAD $name", 24.dp, 24.dp, 24f, 24f).addPath(
-                pathData = PathParser().parsePathString(data).toNodes(),
-                stroke = SolidColor(Color.White), strokeLineWidth = 1.7f,
-                strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round,
-            ).build()
-        }
+        cadPaths.mapValues { (name, data) -> StudioIcons.vector("CAD $name", data) }
     }
     /**
      * Sketch planes share one Blender-coloured axis triad (X red, Y green, Z blue,
@@ -323,18 +182,13 @@ object AppIcons {
     /** Icons whose colours carry meaning and must not be tinted. */
     fun cadMulticolor(intent: String) = intent in planeFaces
     fun cad(intent: String): ImageVector = when (intent) {
-        "VERTEX" -> selectionMode(SelectionMode.VERTEX)
-        "EDGE" -> selectionMode(SelectionMode.EDGE)
-        "FACE" -> selectionMode(SelectionMode.FACE)
-        "SELECT_ALL" -> Icons.Default.SelectAll
-        "DESELECT_ALL" -> Icons.Default.Deselect
-        "FINISH" -> Icons.Default.Check
-        "CANCEL" -> Icons.Default.Close
-        "MODEL" -> Icons.Default.AccountTree
-        "DELETE" -> Icons.Default.Delete
-        "CONVERT" -> Icons.Default.ViewInAr
-        "VISIBLE" -> Icons.Default.Visibility
-        "SCENE" -> Icons.Default.Landscape
+        "VERTEX", "EDGE", "FACE", "SELECT_ALL", "DESELECT_ALL", "SELECT", "DELETE", "VISIBLE",
+        "EXTRUDE", "REVOLVE", "SWEEP", "MIRROR", "SCENE" -> StudioIcons[intent]
+        "FINISH" -> Confirm
+        "CANCEL" -> Cancel
+        "MODEL" -> StudioIcons["STACK"]
+        "CONVERT" -> StudioIcons["CONVERT_MESH"]
+        "NEW_PLANE", "VIEW_ROLL", "VIEW_ALIGN" -> StudioIcons[intent]
         else -> planeVectors[intent] ?: cadVectors[intent] ?: Fallback
     }
 
@@ -345,107 +199,74 @@ object AppIcons {
         } else null
 
     fun action(id: ActionId): ImageVector = when (id) {
-        ActionId.PLACE_OBJECT -> Icons.AutoMirrored.Filled.CompareArrows
-        ActionId.ADD_OBJECT -> Icons.Default.Add
-        ActionId.SELECT_ALL -> Icons.Default.SelectAll
-        ActionId.TOOL_BOX -> Icons.Default.HighlightAlt
-        ActionId.TOOL_CIRCLE -> Icons.Default.BlurOn
-        ActionId.DESELECT_ALL -> Icons.Default.Deselect
-        ActionId.SELECT_INVERT -> Icons.Default.Flip
-        ActionId.SELECT_UNDER -> SelectTool
-        ActionId.SELECT_ADD_UNDER -> Icons.Default.LibraryAdd
-        ActionId.SELECT_LOOP -> Icons.Default.Timeline
-        ActionId.SELECT_RING -> Icons.Default.Rowing
-        ActionId.SELECT_LINKED -> Icons.Default.Hub
-        ActionId.HIDE_OBJECT, ActionId.HIDE_GEOMETRY -> Icons.Default.VisibilityOff
-        ActionId.SHADE_OBJECT -> Icons.Default.Lens
-        ActionId.VIEW_LOCAL -> Icons.Default.CenterFocusStrong
+        ActionId.PLACE_OBJECT -> StudioIcons["PLACE"]
+        ActionId.ADD_OBJECT -> Add
+        ActionId.SELECT_ALL -> StudioIcons["SELECT_ALL"]
+        ActionId.TOOL_BOX -> StudioIcons["BOX_SELECT"]
+        ActionId.TOOL_CIRCLE -> StudioIcons["CIRCLE_SELECT"]
+        ActionId.DESELECT_ALL -> StudioIcons["DESELECT_ALL"]
+        ActionId.SELECT_INVERT -> StudioIcons["INVERT"]
+        ActionId.SELECT_UNDER -> StudioIcons["SELECT_UNDER"]
+        ActionId.SELECT_ADD_UNDER -> StudioIcons["SELECT_ADD_UNDER"]
+        ActionId.SELECT_LOOP -> StudioIcons["LOOP_SELECT"]
+        ActionId.SELECT_RING -> StudioIcons["RING_SELECT"]
+        ActionId.SELECT_LINKED -> StudioIcons["LINKED_SELECT"]
+        ActionId.HIDE_OBJECT, ActionId.HIDE_GEOMETRY -> visibility(false)
+        ActionId.SHADE_OBJECT -> StudioIcons["SHADE_SMOOTH"]
+        ActionId.VIEW_LOCAL -> StudioIcons["ISOLATE"]
         ActionId.DUPLICATE -> Duplicate
-        ActionId.RENAME -> Icons.Default.Edit
+        ActionId.RENAME -> StudioIcons["RENAME"]
         ActionId.DELETE -> Delete
-        ActionId.DISSOLVE -> Icons.Default.DeleteSweep
-        ActionId.APPLY_TRANSFORMS -> Icons.Default.Transform
-        ActionId.EDIT_MESH_TOOLS -> Icons.Default.GridOn
+        ActionId.DISSOLVE -> StudioIcons["DISSOLVE"]
+        ActionId.APPLY_TRANSFORMS -> StudioIcons["APPLY"]
+        ActionId.EDIT_MESH_TOOLS -> StudioIcons["MESH_TOOLS"]
         else -> Fallback
     }
 
     fun editCatalog(id: String): ImageVector = when (id) {
-        "MAKE_EDGE_FACE" -> Icons.Default.CropFree
-        "CONNECT_VERTICES" -> Icons.Default.LinearScale
-        "SELECT_SHORTEST_PATH" -> Icons.Default.LinearScale
-        "SELECT_LOOP" -> Icons.Default.Timeline
-        "SELECT_RING" -> Icons.Default.Rowing
-        "BRIDGE_EDGE_LOOPS" -> Icons.AutoMirrored.Filled.CompareArrows
-        "EXTRUDE" -> Icons.AutoMirrored.Filled.CallMade
-        "BEVEL" -> Icons.Default.RoundedCorner
-        "INSET" -> Icons.Default.CropFree
-        "SUBDIVIDE" -> Icons.Default.Grid4x4
-        "REVOLVE" -> Icons.AutoMirrored.Filled.RotateRight
-        "SWEEP" -> Icons.Default.Timeline
-        "LOOP_CUT" -> Icons.Default.ViewWeek
-        "KNIFE", "BISECT" -> Icons.Default.ContentCut
-        "SEPARATE" -> Icons.Default.AccountTree
-        "SPLIT" -> Icons.AutoMirrored.Filled.CallSplit
-        "DISSOLVE" -> Icons.Default.DeleteSweep
-        "DELETE" -> Icons.Default.Delete
-        "HIDE" -> Icons.Default.VisibilityOff
-        "REVEAL" -> Icons.Default.Visibility
-        "NORMALS" -> Icons.Default.Layers
+        "MAKE_EDGE_FACE" -> StudioIcons["FILL"]
+        "CONNECT_VERTICES" -> StudioIcons["CONNECT"]
+        "SELECT_SHORTEST_PATH" -> StudioIcons["SHORTEST_PATH"]
+        "SELECT_LOOP" -> action(ActionId.SELECT_LOOP)
+        "SELECT_RING" -> action(ActionId.SELECT_RING)
+        "SELECT_LINKED" -> action(ActionId.SELECT_LINKED)
+        "BRIDGE_EDGE_LOOPS" -> StudioIcons["BRIDGE"]
+        "EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "REVOLVE", "SWEEP", "LOOP_CUT",
+        "KNIFE", "BISECT", "SEPARATE", "SPLIT", "DISSOLVE", "DELETE", "NORMALS" -> StudioIcons[id]
+        "CUT" -> StudioIcons["KNIFE"]
+        "HIDE" -> visibility(false)
+        "REVEAL" -> visibility(true)
+        "RECALCULATE_NORMALS_OUTSIDE" -> StudioIcons["NORMALS"]
+        "RECALCULATE_NORMALS_INSIDE" -> StudioIcons["NORMALS_INSIDE"]
+        "FLIP_NORMALS" -> StudioIcons["NORMALS_FLIP"]
+        "LOOPTOOLS_CIRCLE" -> StudioIcons["MAKE_CIRCLE"]
         else -> Fallback
     }
 
-    fun editTool(tool: EditTool): ImageVector = when (tool) {
-        EditTool.EXTRUDE -> editCatalog("EXTRUDE")
-        EditTool.BEVEL -> editCatalog("BEVEL")
-        EditTool.INSET -> editCatalog("INSET")
-        EditTool.SUBDIVIDE -> editCatalog("SUBDIVIDE")
-        EditTool.REVOLVE -> editCatalog("REVOLVE")
-        EditTool.SWEEP -> editCatalog("SWEEP")
-        EditTool.LOOP_CUT -> editCatalog("LOOP_CUT")
-        EditTool.BISECT -> editCatalog("BISECT")
-        EditTool.BRIDGE_EDGE_LOOPS -> editCatalog("BRIDGE_EDGE_LOOPS")
-        EditTool.KNIFE -> editCatalog("KNIFE")
-        EditTool.ALIGN -> action(ActionId.PLACE_OBJECT)
-    }
+    fun editTool(tool: EditTool): ImageVector =
+        if (tool == EditTool.ALIGN) StudioIcons["ALIGN"] else editCatalog(tool.name)
 
     fun toolbarFamily(id: String): ImageVector = editCatalog(id)
 
-    fun toolbarVariant(familyId: String, variantId: String?): ImageVector =
-        if (familyId == "EXTRUDE") when (variantId) {
-            "CURSOR" -> Icons.Default.TouchApp
-            "MANIFOLD" -> Icons.Default.JoinFull
-            "ALONG_NORMALS" -> Icons.Default.ZoomOutMap
-            "INDIVIDUAL" -> Icons.AutoMirrored.Filled.CallSplit
+    /** Variantes del rail y del menú comparten el dibujo de la operación efectiva. */
+    fun toolbarVariant(familyId: String, variantId: String?): ImageVector = when (familyId) {
+        "EXTRUDE" -> when (variantId) {
+            "CURSOR" -> StudioIcons["EXTRUDE_CURSOR"]
+            "MANIFOLD" -> StudioIcons["EXTRUDE_MANIFOLD"]
+            "ALONG_NORMALS" -> StudioIcons["EXTRUDE_NORMALS"]
+            "INDIVIDUAL" -> StudioIcons["EXTRUDE_INDIVIDUAL"]
             else -> editCatalog(familyId)
-        } else toolbarFamily(familyId)
-
-    /** Un símbolo reconocible por destino; SnapControl solo decide estado y color. */
-    fun snap(type: SnapType): ImageVector = when (type) {
-        SnapType.NONE -> Icons.Default.DoNotDisturb
-        SnapType.INCREMENT -> Icons.Default.Straighten
-        SnapType.GRID -> Icons.Default.GridOn
-        SnapType.VERTEX -> Icons.Default.FiberManualRecord
-        SnapType.EDGE -> Icons.Default.LinearScale
-        SnapType.EDGE_CENTER -> Icons.Default.Adjust
-        SnapType.FACE -> Icons.Default.CropFree
-        SnapType.FACE_CENTER -> Icons.Default.CenterFocusStrong
-        SnapType.CURSOR -> Icons.Default.MyLocation
+        }
+        "CUT" -> editCatalog(if (variantId == "BISECT") "BISECT" else "KNIFE")
+        "INSET" -> if (variantId == "INDIVIDUAL") StudioIcons["INSET_INDIVIDUAL"] else editCatalog(familyId)
+        else -> toolbarFamily(familyId)
     }
 
-    fun addCategory(category: AddCategory): ImageVector = when (category) {
-        AddCategory.MESH -> Icons.Default.ViewInAr
-        AddCategory.CURVE -> Icons.AutoMirrored.Filled.ShowChart
-        AddCategory.SURFACE -> Icons.Default.Waves
-        AddCategory.METABALL -> Icons.Default.BlurOn
-        AddCategory.TEXT -> Icons.Default.TextFields
-        AddCategory.EMPTY -> Icons.Default.CropFree
-        AddCategory.LIGHT -> Icons.Default.Lightbulb
-        AddCategory.CAMERA -> Icons.Default.PhotoCamera
-    }
+    /** La flecha hacia geometría distingue el destino de snap del modo de selección. */
+    fun snap(type: SnapType): ImageVector = StudioIcons["SNAP_${type.name}"]
+    fun addCategory(category: AddCategory): ImageVector = StudioIcons[category.name]
 
-    fun shading(smooth: Boolean): ImageVector =
-        if (smooth) Icons.Default.Hexagon else Icons.Default.Lens
-
-    fun localView(active: Boolean): ImageVector =
-        if (active) Icons.Default.ZoomOutMap else Icons.Default.CenterFocusStrong
+    // El parámetro describe el estado actual: se dibuja la acción ofrecida al tocar.
+    fun shading(smooth: Boolean): ImageVector = StudioIcons[if (smooth) "SHADE_FLAT" else "SHADE_SMOOTH"]
+    fun localView(active: Boolean): ImageVector = StudioIcons[if (active) "ISOLATE_EXIT" else "ISOLATE"]
 }

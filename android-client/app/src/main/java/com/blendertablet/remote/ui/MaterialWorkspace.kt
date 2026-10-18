@@ -13,9 +13,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -182,7 +179,7 @@ fun MaterialTopActions(state: AppUiState, vm: MainViewModel) {
         DropdownMenu(zoneOpen, { zoneOpen = false }, Modifier.heightIn(max = 360.dp)) {
             material.regions.forEach { region ->
                 DropdownMenuItem(text = { Text(region.label) }, trailingIcon = {
-                    if (region.id == material.scope) Icon(Icons.Default.Check, null, tint = Ink.Accent)
+                    if (region.id == material.scope) Icon(AppIcons.Checked, null, tint = Ink.Accent)
                 }, onClick = { zoneOpen = false; vm.materialSettings(mapOf("scope" to region.id)) })
             }
         }
@@ -195,7 +192,7 @@ fun MaterialTopActions(state: AppUiState, vm: MainViewModel) {
         DropdownMenu(lightOpen, { lightOpen = false }, Modifier.heightIn(max = 360.dp)) {
             material.environments.forEach { env ->
                 DropdownMenuItem(text = { Text(env.label) }, trailingIcon = {
-                    if (env.id == material.environment) Icon(Icons.Default.Check, null, tint = Ink.Accent)
+                    if (env.id == material.environment) Icon(AppIcons.Checked, null, tint = Ink.Accent)
                 }, onClick = { lightOpen = false; vm.materialSettings(mapOf("environment" to env.id)) })
             }
         }
@@ -283,7 +280,7 @@ private fun MaterialLibrary(
     FloatingPanel(modifier.heightIn(max = 560.dp)) {
         Column(Modifier.width(288.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                IconAction(Icons.AutoMirrored.Filled.ArrowBack, "Cerrar biblioteca", onClick = onClose)
+                IconAction(AppIcons.Back, "Cerrar biblioteca", onClick = onClose)
                 Text("MATERIALES", color = Ink.Accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f).padding(start = 2.dp))
             }

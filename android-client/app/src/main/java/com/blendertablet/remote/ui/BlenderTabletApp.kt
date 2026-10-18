@@ -683,7 +683,7 @@ private fun editCatalogActions(actions: List<EditCatalogAction>, vm: MainViewMod
                 opensChildrenOnClick = false,
                 onClick = { vm.editCatalogAction(action, default.id) },
                 children = variants.map { variant ->
-                    QuickAction(variant.label, AppIcons.editCatalog(action.id), enabled = action.enabled) {
+                    QuickAction(variant.label, AppIcons.toolbarVariant(action.id, variant.id), enabled = action.enabled) {
                         vm.editCatalogAction(action, variant.id)
                     }
                 },

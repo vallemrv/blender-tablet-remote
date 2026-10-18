@@ -14,16 +14,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AccountTree
-import androidx.compose.material.icons.filled.CenterFocusStrong
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.automirrored.filled.RotateRight
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.North
-import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
@@ -265,14 +255,14 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     if (!stackOpen) FloatingPanel(
         Modifier.align(Alignment.TopEnd).padding(top = 142.dp, end = stackEnd),
     ) {
-        IconAction(Icons.Default.AccountTree, "Abrir pila de operaciones") { onStackOpen(true) }
+        IconAction(AppIcons.cad("MODEL"), "Abrir pila de operaciones") { onStackOpen(true) }
     }
     if (stackOpen) FloatingPanel(
         Modifier.align(Alignment.TopEnd).fillMaxHeight().padding(top = 142.dp, end = stackEnd, bottom = stackBottom)
     ) {
         Column(Modifier.width(300.dp).fillMaxHeight()) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                IconAction(Icons.AutoMirrored.Filled.ArrowBack, "Cerrar pila de operaciones") { onStackOpen(false) }
+                IconAction(AppIcons.Back, "Cerrar pila de operaciones") { onStackOpen(false) }
                 Text(if (editing) "Editando ${cad.activeSketch?.name.orEmpty()}" else "Pila de operaciones",
                     color = Ink.Accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f).padding(start = 2.dp))
@@ -1021,7 +1011,7 @@ fun CadTopActions(state: AppUiState, vm: MainViewModel) {
     // Ver escena vale para todo CAD (3D, boceto y planos): muestra lo que el aislamiento oculta.
     IconAction(AppIcons.cad("SCENE"), if (cad.showScene) "Ocultar el resto de la escena" else "Ver escena: mostrar también los objetos que no son CAD",
         selected = cad.showScene, enabled = connected) { command("cad.settings", "show_scene" to !cad.showScene) }
-    if (!editing) IconAction(Icons.Default.Layers, "Nuevo plano y croquis", enabled = connected && !cad.sessionActive) {
+    if (!editing) IconAction(AppIcons.cad("NEW_PLANE"), "Nuevo plano y croquis", enabled = connected && !cad.sessionActive) {
         command("cad.plane.begin", "base" to if (cad.surface.canSketch) "FACE" else if (cad.surface.canEdgePlane) "EDGE" else "XY")
     }
     if (editing) {
@@ -1031,20 +1021,20 @@ fun CadTopActions(state: AppUiState, vm: MainViewModel) {
         val perspective = state.blender.view.perspective == Projection.PERSP
         IconAction(AppIcons.cad("PERSPECTIVE"), if (perspective) "Volver a vista ortográfica" else "Ver el boceto en perspectiva",
             selected = perspective, enabled = connected) { vm.viewPerspective(if (perspective) Projection.ORTHO else Projection.PERSP) }
-        IconAction(Icons.AutoMirrored.Filled.RotateRight, "Girar la vista 90° sobre el plano",
+        IconAction(AppIcons.cad("VIEW_ROLL"), "Girar la vista 90° sobre el plano",
             enabled = connected && !cad.sessionActive) { command("cad.view.roll", "degrees" to 90) }
-        IconAction(Icons.Default.North, "Enderezar: de frente y sin girar",
+        IconAction(AppIcons.cad("VIEW_ALIGN"), "Enderezar: de frente y sin girar",
             enabled = connected && !cad.sessionActive) { command("cad.view.align") }
         IconAction(AppIcons.cad("FINISH"), "Finalizar boceto", enabled = connected && !cad.sessionActive) {
             vm.cadTool(null); command("cad.sketch.finish")
         }
     } else {
-        IconAction(Icons.Default.CenterFocusStrong, "Encuadrar la vista 3D del sólido",
+        IconAction(AppIcons.Frame, "Encuadrar la vista 3D del sólido",
             enabled = connected && !cad.sessionActive) {
             command("cad.view.solid")
         }
         cad.selectedSketch?.let { sketch ->
-            IconAction(Icons.Default.Edit, "Editar ${sketch.name}", enabled = connected && !cad.sessionActive) {
+            IconAction(AppIcons.cad("SKETCH"), "Editar ${sketch.name}", enabled = connected && !cad.sessionActive) {
                 vm.cadTool(null); command("cad.sketch.activate", "sketch_id" to sketch.id)
             }
         }
@@ -1203,7 +1193,7 @@ private fun CadStackNodeRow(icon: String, label: String, selected: Boolean, dimm
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Icon(AppIcons.cad(icon), null, tint = if (dimmed) Ink.Faint else Ink.Muted, modifier = Modifier.size(20.dp))
             PillButton(label, modifier = Modifier.weight(1f), selected = selected, enabled = enabled && !dimmed, onClick = tap)
-            IconAction(Icons.Default.MoreVert, "Acciones del nodo", enabled = enabled && !dimmed) { menuOpen = true }
+            IconAction(AppIcons.More, "Acciones del nodo", enabled = enabled && !dimmed) { menuOpen = true }
         }
         DropdownMenu(menuOpen, { menuOpen = false }) {
             actions.forEach { item ->

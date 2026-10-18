@@ -183,8 +183,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - No se mantienen caminos antiguo y nuevo para una misma función.
 - Las decisiones duraderas se resumen aquí; Git conserva el historial.
 - APK y ZIP se compilan desde el mismo estado cuando cambia el contrato entre ambos.
-- Cada entrega Android incluye automáticamente el APK por Telegram, sin esperar
-  otra petición del usuario. Es una preferencia permanente indicada por el usuario.
+- Cada entrega Android incluye automáticamente el APK por el chat de Valle Bots.
+  En Blender remoto no se usa Telegram, salvo petición explícita posterior del usuario.
 - El add-on se instala en este Manjaro: el agente instala la versión entregada y
   reinicia Blender, guardando antes y reabriendo la escena actual. Esta tarea ya
   está autorizada; no se delega al usuario ni se pide confirmación de nuevo.
@@ -675,6 +675,14 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   menú, flechas, visibilidad, modos y Mover/Rotar/Escalar también salen de `AppIcons`;
   el menú radial usa `AppIcons.action(id)`, el mismo icono que la barra. Una intención
   distinta nunca comparte símbolo (Manipulador ≠ Mover, Atajos ≠ Modificadores).
+- Los dibujos originales comunes viven en `ui/StudioIcons.kt`: cuadrícula 24×24,
+  trazo 1,7 y extremos/uniones redondos, como los iconos CAD. El color indica estado;
+  las acciones se distinguen por geometría, también sin color. Encuadrar/Aislar,
+  Conectar/Camino más corto, modo de selección/destino de snap y las variantes de
+  Cortar/Extruir/Inset tienen dibujos distintos. Rail y menú resuelven las variantes
+  mediante `AppIcons.toolbarVariant`; Bisecar nunca hereda el icono de Cuchillo.
+  `android-client/tools/export_icon_catalog.py` genera la lámina HTML y el paquete
+  SVG desde los mismos trazados del APK, sin mantener una segunda colección manual.
 - Los ejes X/Y/Z tienen un único color, el del tema por defecto de Blender:
   `Ink.AxisX/Y/Z` en Android y `palette.AXIS_COLORS` en el vídeo (manipulador, plano
   CAD). Ninguna pantalla define su propia paleta de ejes.
