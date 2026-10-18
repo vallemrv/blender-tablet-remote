@@ -40,6 +40,7 @@ interface RemoteBlenderClient {
     val capturePng: StateFlow<String?>
     fun clearCapture()
     fun materialCommand(name: String, payload: Map<String, Any?> = emptyMap())
+    fun versioningCommand(action: String, payload: Map<String, Any?> = emptyMap())
     fun captureScene()
     fun sculptCommand(name: String, payload: Map<String, Any?> = emptyMap()) {}
 

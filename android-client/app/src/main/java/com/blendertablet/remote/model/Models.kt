@@ -87,6 +87,7 @@ data class ServerFeatures(
     val sceneScale: Boolean = false,
     val cad: CadCapabilities = CadCapabilities(),
     val transformStepSelection: Boolean = false,
+    val versioning: Boolean = false,
 )
 
 data class EditSettings(
@@ -449,6 +450,7 @@ data class Transform(
 data class BlenderState(
     val mode: BlenderMode = BlenderMode.OBJECT,
     val cad: CadState = CadState(),
+    val versioning: VersioningState = VersioningState(),
     val sculpt: SculptState = SculptState(),
     val material: MaterialState = MaterialState(),
     val activeObject: String? = null,

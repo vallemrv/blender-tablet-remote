@@ -180,6 +180,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     var modifiersOpen by remember { mutableStateOf(false) }
     var cadStackOpen by rememberSaveable { mutableStateOf(true) }
     var referencesOpen by rememberSaveable { mutableStateOf(false) }
+    var versionsOpen by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(state.blender.activeObject, state.blender.mode, state.blender.features.modifiers, state.blender.cad.workspace, state.blender.material.active) {
         if (state.blender.material.active || state.blender.cad.workspace || !state.blender.features.modifiers || state.blender.mode != BlenderMode.OBJECT || state.blender.activeObjectType != "MESH") modifiersOpen = false
     }
@@ -232,6 +233,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
         onSceneScale = vm::setSceneScale,
         onReferences = { referencesOpen = true },
         onCapture = vm::captureScene,
+        onVersions = { versionsOpen = true },
     )
 
     val session by vm.transformSession.collectAsStateWithLifecycle()
@@ -682,6 +684,10 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 },
             )
         }
+
+        if (versionsOpen) VersioningDialog(state, vm::versioningCommand,
+            onDismiss = { versionsOpen = false },
+            onSaveAs = { versionsOpen = false; fileBrowserMode = FileBrowserMode.SAVE; vm.openFileBrowser() })
 
         pendingDiscard?.let { pending ->
             ConfirmDiscardDialog(

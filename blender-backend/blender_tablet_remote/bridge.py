@@ -356,6 +356,8 @@ def _pump() -> float | None:
 
     try:
         _poll_pending_cad()
+        from .versioning.runtime import runtime as versions
+        versions.poll()
         _gestures.flush()
     except Exception:  # noqa: BLE001
         _stats["errors"] += 1

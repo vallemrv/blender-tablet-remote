@@ -1184,3 +1184,21 @@ no quedan archivos o referencias temporales.
 - La reflexión de RNA se aplica gradualmente con adaptadores para contexto y
   acciones. El catálogo disponible sigue controlado; no se exponen colecciones,
   propiedades internas ni sockets de Geometry Nodes como campos ordinarios.
+
+- Archivo → Versiones integra ValleTrack (fork de valle.mrv, original intacto).
+  Un repositorio Git/LFS privado por ID persistente del `.blend` versiona solo
+  `model.blend` y `.gitattributes`; nunca toma el repositorio padre ni usa add .,
+  reset --hard o force-push. Guardar versión y subir son acciones separadas.
+  Gitea usa cuenta/token propio fuera de escenas/Git, no visible en snapshots;
+  HTTPS predeterminado y HTTP solo por elección explícita del usuario.
+- Git/LFS/HTTP corren en un hilo sin bpy; guardar/cargar pertenecen al pump.
+  Explorar desde un commit crea una idea/ramificación permanente en ese punto;
+  Continuar idea abre su último paso. Antes se conserva el avance del camino de
+  origen, incluidas ediciones durante la preparación. El selector Ver historial
+  solo inspecciona. Se muestran padres, punto común e idea activa. Subir publica
+  todas las ideas atómicamente; Descargar conserva divergencias locales.
+  Los clones tienen copia de trabajo separada del snapshot Git; los antiguos se
+  separan antes de navegar. `restore` se resuelve por el mismo flujo Explorar. Un cambio de archivo impide aplicarla; los conflictos de
+  historiales binarios no se mezclan automáticamente. Los recursos externos se
+  incluyen solo si Blender puede empaquetarlos y el usuario lo marca. El alcance,
+  formato de clonación y requisitos están en `docs/valletrack-integration.md`.

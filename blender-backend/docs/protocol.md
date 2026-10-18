@@ -2416,3 +2416,33 @@ en modificadores soportados: se mantiene el catálogo probado. RNA no proporcion
 por sí solo disposición, condiciones de visibilidad, operaciones de creación/
 subdivisión/bake ni interfaces dinámicas de sockets. La arquitectura admite nuevos
 tipos mediante metadatos y adaptadores, sin otra bandeja Compose por modificador.
+
+### ValleTrack / Gitea
+
+`features.versioning:{version:1,provider:"ValleTrack",gitea:true,lfs:true,ideas:true}` habilita
+Archivo → Versiones. `versioning.status {refresh?:true}` devuelve el estado; con
+refresh inicia una consulta I/O. `versioning.action` admite `action`:
+
+- `commit {message,pack_resources?:false}` guarda el `.blend` en el pump y crea una versión Git/LFS.
+- `explore {revision,label?:""}` guarda el avance del recorrido actual y abre una nueva idea que parte exactamente del commit elegido.
+- `switch {branch}` guarda el avance actual y continúa el último commit de una idea existente.
+- `restore {revision}` se resuelve como `explore` para clientes anteriores; no mantiene otra implementación.
+- `connect {server,access_token,author_name?,author_email?,allow_http?:false}` valida `/api/v1/user` y guarda la cuenta privada.
+- `identity {author_name,author_email}` establece autor local; `forget` elimina el token.
+- `link {url}` conecta un repositorio de la misma instancia Gitea.
+- `create_remote {name}` crea explícitamente un repositorio privado de la cuenta.
+- `push`, `pull`: sincronizan todas las ideas. Push es atómico; pull valida divergencias antes de avanzar referencias locales. Nunca fuerzan ni mezclan un conflicto binario.
+- `clone {url}` descarga un repositorio de esta integración y abre `model.blend`.
+
+Las respuestas son estados inmediatos `{available,busy,action,source,repo_id,
+ready,local_path,branch,remote,lfs_available,scene_dirty,file_changed,ahead,behind,
+account,commits,message,error}`. `account` contiene servidor, usuario, autor y
+`has_token`, nunca el secreto. `commits` contiene `{id,date,message,author,parents}` del recorrido inspeccionado.
+`branches:[{name,tip,label,active,base}]` enumera las ideas; `head`, `branch` y
+`primary_branch` identifican el estado activo. `history_branch` identifica el
+historial mostrado y puede cambiarse con `versioning.status {refresh:true,
+history_branch}` sin cargar otra escena. Se muestran hasta 100 pasos por recorrido.
+El evento `versioning.changed` y las consultas sin refresh actualizan el progreso.
+El cliente refresca también archivo/escena al completar una acción. Las versiones
+usan el mismo proyecto al Guardar como (ID en la escena), y un almacenamiento
+independiente del Git del directorio donde vive el archivo de trabajo.

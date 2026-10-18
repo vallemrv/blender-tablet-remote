@@ -182,6 +182,7 @@ object StateParser {
             f.optJSONObject("scene_scale") != null,
             CadParser.capabilities(f.optJSONObject("cad")),
             transformStepSelection = f.optJSONObject("transform_modal")?.optBoolean("edit_step_selection") == true,
+            versioning = f.optJSONObject("versioning")?.optInt("version") == 1,
         )
     }
 

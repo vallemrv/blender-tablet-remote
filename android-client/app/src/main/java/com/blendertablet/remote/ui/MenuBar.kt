@@ -96,6 +96,7 @@ data class MenuActions(
     val onSceneScale: (String) -> Unit,
     val onReferences: () -> Unit,
     val onCapture: () -> Unit,
+    val onVersions: () -> Unit,
 )
 
 // ------------------------------------------------------------- árbol de menú
@@ -130,6 +131,7 @@ private fun fileMenu(state: AppUiState, actions: MenuActions, close: () -> Unit)
     MenuLeaf("Abrir…", enabled = state.blender.features.fileBrowse) { close(); actions.onBrowseOpen() },
     MenuLeaf("Capturar escena…", enabled = state.connection == ConnectionStatus.CONNECTED) { close(); actions.onCapture() },
     MenuLeaf("Imágenes de referencia…") { close(); actions.onReferences() },
+    MenuLeaf("Versiones · ValleTrack…", enabled = state.blender.features.versioning) { close(); actions.onVersions() },
     MenuSeparator,
     // Una sola entrada "Guardar": sin ruta previa abre el diálogo de nombre por su
     // cuenta. Antes había dos entradas que hacían lo mismo en ese caso.

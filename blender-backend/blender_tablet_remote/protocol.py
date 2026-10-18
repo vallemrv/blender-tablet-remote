@@ -445,6 +445,7 @@ FEATURES = {
              "shading": ENUMS["shading"], "local_view": True, "overlays": True},
     "stream": {"version": 2, "preferred": "H264", "transports": ["H264", "MJPEG"],
                "framing": "btr-h264-v1", "capture_default": "OFFSCREEN"},
+    "versioning": {"version": 1, "provider": "ValleTrack", "gitea": True, "lfs": True, "ideas": True},
     "modifiers": {"version": 3, "types": ENUMS["modifier_type"],
                   "parameter_actions": True, "dynamic_limits": True,
                   "commands": ["modifier.add_options", "modifier.add", "modifier.remove",

@@ -71,6 +71,11 @@ class WebSocketRemoteBlenderClient(
     private val _capturePng = MutableStateFlow<String?>(null)
     override val capturePng: StateFlow<String?> = _capturePng.asStateFlow()
     override fun clearCapture() { _capturePng.value = null }
+    override fun versioningCommand(action: String, payload: Map<String, Any?>) {
+        if (!_state.value.features.versioning) return
+        if (action == "status") command("versioning.status", JSONObject(payload))
+        else command("versioning.action", JSONObject(payload).put("action", action))
+    }
     override fun captureScene() { command("scene.capture") }
     override fun materialCommand(name: String, payload: Map<String, Any?>) {
         require(name.startsWith("material.") || (name == "mode.set" && payload["mode"] == "MATERIAL"))
@@ -987,6 +992,9 @@ class WebSocketRemoteBlenderClient(
                             unitScaleLength = StateParser.unitScaleLength(caps),
                         )
                     }
+                    command != null && command.startsWith("versioning.") -> result?.let {
+                        updateVersioning(it)
+                    }
                     command == "modifier.add_options" -> result?.let { options ->
                         _state.value = _state.value.copy(modifierOptions = StateParser.modifierOptions(options))
                     }
@@ -1129,6 +1137,9 @@ class WebSocketRemoteBlenderClient(
                         _state.value = _state.value.copy(cad = CadParser.state(payload))
                     message.optString("event") == "tool.session" ->
                         _toolSession.value = StateParser.toolSession(payload)
+                    message.optString("event") == "versioning.changed" -> payload?.let {
+                        updateVersioning(it)
+                    }
                     message.optString("event") == "modifiers.changed" -> payload?.let {
                         _state.value = _state.value.copy(modifiers = StateParser.modifiers(it.optJSONArray("modifiers")))
                     }
@@ -1214,6 +1225,15 @@ class WebSocketRemoteBlenderClient(
         }
     }
 
+    private fun updateVersioning(json: JSONObject) {
+        val value = VersioningParser.state(json)
+        _state.value = _state.value.copy(versioning = value)
+        if (!value.busy) {
+            requestState()
+            command("file.info")
+        }
+    }
+
     private fun updateState(json: JSONObject) {
         val old = _state.value
         val parsed = StateParser.state(json)
@@ -1222,6 +1242,7 @@ class WebSocketRemoteBlenderClient(
         // sabíamos en vez de rebobinar la proyección y el wireframe.
         _state.value = parsed.copy(
             features = old.features,
+            versioning = old.versioning,
             cad = if (json.has("cad")) parsed.cad else old.cad,
             sculpt = if (json.has("sculpt")) parsed.sculpt else old.sculpt,
             modifierOptions = old.modifierOptions,

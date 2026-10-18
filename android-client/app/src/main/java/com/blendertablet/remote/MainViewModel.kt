@@ -916,6 +916,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setSceneScale(preset: String) = client.setSceneScale(preset = preset)
 
     fun vertexGroupCommand(action: String, payload: Map<String, Any?>) = client.vertexGroupCommand(action, payload)
+    fun versioningCommand(action: String, payload: Map<String, Any?> = emptyMap()) = client.versioningCommand(action, payload)
     fun addModifier(type: String, parameters: Map<String, Any?> = emptyMap()) = client.modifierAdd(type, parameters)
     fun removeModifier(name: String) = client.modifierRemove(name)
     fun moveModifier(name: String, index: Int) = client.modifierMove(name, index)

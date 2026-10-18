@@ -51,6 +51,7 @@ def load_all() -> None:
         mode,
         modifiers,
         vertex_groups,
+        versioning,
         objects,
         scene,
         sculpt,
