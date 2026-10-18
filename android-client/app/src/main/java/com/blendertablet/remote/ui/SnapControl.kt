@@ -69,23 +69,25 @@ private fun <T> SnapOptions(
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(label(option)) },
-                    leadingIcon = {
-                        Icon(
-                            icon(option),
-                            null,
-                            tint = if (option == selected) Ink.Accent else Ink.Muted,
-                        )
-                    },
-                    trailingIcon = {
-                        if (option == selected) Icon(AppIcons.Checked, null, tint = Ink.Accent)
-                    },
-                    onClick = {
-                        expanded = false
-                        onSelect(option)
-                    },
-                )
+                HoverHelp(label(option), IconHelp.explanation(icon(option), label(option))) {
+                    DropdownMenuItem(
+                        text = { Text(label(option)) },
+                        leadingIcon = {
+                            Icon(
+                                icon(option),
+                                null,
+                                tint = if (option == selected) Ink.Accent else Ink.Muted,
+                            )
+                        },
+                        trailingIcon = {
+                            if (option == selected) Icon(AppIcons.Checked, null, tint = Ink.Accent)
+                        },
+                        onClick = {
+                            expanded = false
+                            onSelect(option)
+                        },
+                    )
+                }
             }
         }
     }

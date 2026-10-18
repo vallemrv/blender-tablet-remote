@@ -683,6 +683,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   mediante `AppIcons.toolbarVariant`; Bisecar nunca hereda el icono de Cuchillo.
   `android-client/tools/export_icon_catalog.py` genera la lámina HTML y el paquete
   SVG desde los mismos trazados del APK, sin mantener una segunda colección manual.
+- Las ayudas de iconos usan `HoverHelp` e `IconHelp`: acercar lápiz/borrador o ratón
+  durante 450 ms muestra nombre y explicación, también en controles deshabilitados.
+  Retirar el puntero, tocar, cancelar la entrada, retirar el control o pausar la app
+  oculta la ayuda. No toma foco ni consume eventos; en el radial comparte la entrada
+  con el velo que resuelve los toques. Las variantes muestran su explicación propia.
 - Los ejes X/Y/Z tienen un único color, el del tema por defecto de Blender:
   `Ink.AxisX/Y/Z` en Android y `palette.AXIS_COLORS` en el vídeo (manipulador, plano
   CAD). Ninguna pantalla define su propia paleta de ejes.

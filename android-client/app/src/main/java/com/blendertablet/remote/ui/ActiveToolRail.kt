@@ -70,11 +70,16 @@ private fun FamilyToolButton(
     val selected = activeVariant != null
     val enabledVariants = family.variants.filter { it.enabled }
     val displayedVariant = displayedVariantOf(family, activeVariant, rememberedVariant)
+    val icon = AppIcons.toolbarVariant(family.id, displayedVariant?.id)
     val description = displayedVariant?.let { "${family.label}: ${it.label}" } ?: family.label
 
     Box {
-        Box(
-            Modifier
+        HoverHelp(
+            title = description,
+            explanation = IconHelp.explanation(icon, description) +
+                if (hasLongClickMenu(family)) " Mantén pulsado para elegir otra variante." else "",
+            enabled = displayedVariant?.availableIn(selectionMode) == true,
+            modifier = Modifier
                 .size(Metrics.Touch)
                 .clip(RoundedCornerShape(10.dp))
                 .background(if (selected) Ink.Accent.copy(alpha = .22f) else Color.Transparent)
@@ -86,27 +91,30 @@ private fun FamilyToolButton(
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(AppIcons.toolbarVariant(family.id, displayedVariant?.id), description, tint = if (selected) Ink.Accent else Ink.OnPanel)
+            Icon(icon, description, tint = if (selected) Ink.Accent else Ink.OnPanel)
             if (hasLongClickMenu(family)) {
                 VariantBadge(variantBadge(family.id, displayedVariant?.id), selected)
             }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             for (variant in enabledVariants) {
-                DropdownMenuItem(
-                    text = { Text(variant.label) },
-                    leadingIcon = {
-                        Icon(AppIcons.toolbarVariant(family.id, variant.id), null)
-                    },
-                    trailingIcon = {
-                        if (variant.id == displayedVariant?.id) Icon(AppIcons.Checked, null, tint = Ink.Accent)
-                    },
-                    enabled = variant.availableIn(selectionMode),
-                    onClick = {
-                        expanded = false
-                        vm.activateToolbarFamily(family, variant.id)
-                    },
-                )
+                HoverHelp(variant.label, IconHelp.explanation(AppIcons.toolbarVariant(family.id, variant.id), variant.label),
+                    enabled = variant.availableIn(selectionMode)) {
+                    DropdownMenuItem(
+                        text = { Text(variant.label) },
+                        leadingIcon = {
+                            Icon(AppIcons.toolbarVariant(family.id, variant.id), null)
+                        },
+                        trailingIcon = {
+                            if (variant.id == displayedVariant?.id) Icon(AppIcons.Checked, null, tint = Ink.Accent)
+                        },
+                        enabled = variant.availableIn(selectionMode),
+                        onClick = {
+                            expanded = false
+                            vm.activateToolbarFamily(family, variant.id)
+                        },
+                    )
+                }
             }
         }
     }

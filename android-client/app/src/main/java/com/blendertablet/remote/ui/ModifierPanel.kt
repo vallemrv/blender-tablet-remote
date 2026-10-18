@@ -234,8 +234,9 @@ private fun ModifierHeaderButton(
     selected: Boolean = false,
     onClick: () -> Unit,
 ) {
-    Box(
-        Modifier
+    HoverHelp(
+        title = description, explanation = IconHelp.explanation(icon, description), enabled = enabled,
+        modifier = Modifier
             .size(28.dp)
             .clip(RoundedCornerShape(7.dp))
             .background(if (selected) Ink.Accent.copy(alpha = .18f) else Color.Transparent)

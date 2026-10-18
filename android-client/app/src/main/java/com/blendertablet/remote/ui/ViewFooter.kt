@@ -112,8 +112,10 @@ fun ViewFooter(
                 }
             }
 
-            Box(
-                Modifier
+            HoverHelp(
+                title = if (expanded) "Plegar vistas" else "Desplegar vistas",
+                explanation = "Abre o recoge los controles de orientación, proyección y atajos.",
+                modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .clickableNoRipple { expanded = !expanded }
                     .padding(horizontal = 8.dp, vertical = 4.dp),
@@ -177,8 +179,9 @@ private fun PageKey(
 ) {
     val background = if (selected) Ink.Accent.copy(alpha = .24f) else Color.White.copy(alpha = .05f)
     val content = if (selected) Ink.Accent else Ink.Muted
-    Box(
-        Modifier
+    HoverHelp(
+        title = description, explanation = IconHelp.explanation(icon, description),
+        modifier = Modifier
             .size(38.dp)
             .clip(RoundedCornerShape(9.dp))
             .background(background)
@@ -207,8 +210,9 @@ private fun NumKey(
         selected -> Ink.Accent
         else -> Ink.Muted
     }
-    Box(
-        Modifier
+    HoverHelp(
+        title = description, enabled = enabled,
+        modifier = Modifier
             .size(38.dp)
             .clip(RoundedCornerShape(9.dp))
             .background(background)

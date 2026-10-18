@@ -141,8 +141,9 @@ fun IconAction(
         selected -> Ink.Accent
         else -> tint ?: Ink.OnPanel
     }
-    Box(
-        modifier
+    HoverHelp(
+        title = description, explanation = IconHelp.explanation(icon, description), enabled = enabled,
+        modifier = modifier
             .size(Metrics.Touch)
             .clip(RoundedCornerShape(10.dp))
             .background(background)
@@ -330,8 +331,9 @@ fun RoundAction(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Box(
-        modifier
+    HoverHelp(
+        title = description, explanation = IconHelp.explanation(icon, description),
+        modifier = modifier
             .size(Metrics.Touch)
             .clip(RoundedCornerShape(12.dp))
             .background(color.copy(alpha = .25f))

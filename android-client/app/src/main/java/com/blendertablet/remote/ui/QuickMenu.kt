@@ -226,8 +226,9 @@ private fun RadialItem(
     dy: Dp,
     progress: Float,
 ) {
-    Column(
-        Modifier
+    HoverHelp(
+        title = action.label, explanation = IconHelp.explanation(action.icon, action.label), enabled = action.enabled,
+        modifier = Modifier
             .offset { IntOffset(x.roundToInt(), y.roundToInt()) }
             .offset(dx - 30.dp, dy - 30.dp)
             .size(60.dp)
@@ -236,26 +237,28 @@ private fun RadialItem(
             .clip(RoundedCornerShape(14.dp))
             .background(if (action.enabled) Ink.Elevated else Ink.Elevated.copy(alpha = .5f))
             .padding(4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        contentAlignment = Alignment.TopCenter,
     ) {
-        Box(Modifier.size(28.dp).clip(CircleShape), contentAlignment = Alignment.Center) {
-            Icon(
-                action.icon,
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.size(28.dp).clip(CircleShape), contentAlignment = Alignment.Center) {
+                Icon(
+                    action.icon,
+                    action.label,
+                    Modifier.size(20.dp),
+                    tint = when {
+                        !action.enabled -> Ink.Faint
+                        action.tint != null -> action.tint
+                        else -> Ink.OnPanel
+                    },
+                )
+            }
+            Text(
                 action.label,
-                Modifier.size(20.dp),
-                tint = when {
-                    !action.enabled -> Ink.Faint
-                    action.tint != null -> action.tint
-                    else -> Ink.OnPanel
-                },
+                color = if (action.enabled) Ink.Muted else Ink.Faint,
+                fontSize = 9.sp,
+                maxLines = 1,
             )
         }
-        Text(
-            action.label,
-            color = if (action.enabled) Ink.Muted else Ink.Faint,
-            fontSize = 9.sp,
-            maxLines = 1,
-        )
     }
 }
 
@@ -358,34 +361,36 @@ private fun VerticalMenuPanel(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SheetRow(action: QuickAction, onClick: () -> Unit, onLongClick: (() -> Unit)?) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = 44.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .then(if (action.enabled) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick) else Modifier)
-            .padding(horizontal = 10.dp, vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            action.icon,
-            action.label,
-            Modifier.size(20.dp),
-            tint = when {
-                !action.enabled -> Ink.Faint
-                action.tint != null -> action.tint
-                else -> Ink.Muted
-            },
-        )
-        Spacer(Modifier.width(12.dp))
-        Text(
-            action.label,
-            color = if (action.enabled) Ink.OnPanel else Ink.Faint,
-            fontSize = 13.sp,
-            modifier = Modifier.weight(1f),
-        )
-        if (action.isGroup) {
-            Icon(AppIcons.SubmenuOpen, null, Modifier.size(16.dp), tint = Ink.Faint)
+    HoverHelp(action.label, IconHelp.explanation(action.icon, action.label), enabled = action.enabled) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 44.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .then(if (action.enabled) Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick) else Modifier)
+                .padding(horizontal = 10.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                action.icon,
+                action.label,
+                Modifier.size(20.dp),
+                tint = when {
+                    !action.enabled -> Ink.Faint
+                    action.tint != null -> action.tint
+                    else -> Ink.Muted
+                },
+            )
+            Spacer(Modifier.width(12.dp))
+            Text(
+                action.label,
+                color = if (action.enabled) Ink.OnPanel else Ink.Faint,
+                fontSize = 13.sp,
+                modifier = Modifier.weight(1f),
+            )
+            if (action.isGroup) {
+                Icon(AppIcons.SubmenuOpen, null, Modifier.size(16.dp), tint = Ink.Faint)
+            }
         }
     }
 }
