@@ -344,6 +344,15 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   posible, evitando nuevas ramas específicas en Compose.
 - Los componentes compartidos poseen disposición, estado, unidades y ciclo de sesión;
   Blender conserva únicamente la lógica geométrica específica.
+- El manipulador (`commands/gizmo.py`) vive sobre la selección en Object/Edit con la
+  herramienta de selección normal: flechas mueven por eje, cajas escalan por eje,
+  anillos rotan, el aro blanco escala todo y el círculo central mueve en la vista.
+  Se dibuja en GPUOffScreen y el backend decide el asa al empezar el arrastre, como
+  Tweak: abre la sesión `transform` de siempre y la confirma al soltar con un undo;
+  sin asa el arrastre orbita y un toque sigue seleccionando. Sigue al dedo 1:1 y usa
+  el snap Incremento y el paso común. Los anillos vistos de canto se ocultan. Android
+  lo activa con `gizmo.set` solo sin otra herramienta, forma ni sesión; el botón de
+  la barra lo apaga. Su sesión interna no abre la barra de transformación.
 - Mover usa un único `MovementControls` en Object y Edit sobre la misma sesión modal.
 - En Edit, Mover/Rotar/Escalar continúan por pasos al tocar otra selección. Un único
   `transform.select` sondea la preview viva, confirma el cambio anterior con un undo

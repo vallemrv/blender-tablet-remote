@@ -348,6 +348,18 @@ el rayo solo considera la jaula del objeto editado, de modo que otro objeto detr
 cuenta como vacío, y un vacío con `TOGGLE` también deselecciona todo: Android envía
 `TOGGLE` en el toque sin modificador para acumular sin Mayús.
 
+`gizmo.set` (`enabled`) y `gizmo.drag` (`phase` BEGIN/UPDATE/END/CANCEL, `u`, `v`,
+`dx`, `dy`) forman el manipulador sobre la selección (`transform_modal.gizmo`). Con
+`enabled` y sin otra sesión, GPUOffScreen dibuja en el centro de la selección flechas
+(mover por eje), cajas (escalar por eje), anillos (rotar; se ocultan vistos de canto),
+un aro blanco (escalar todo) y un círculo central (mover libre en la vista). BEGIN
+sondea esas asas con la cámara de la tablet; si toca una abre la sesión `transform`
+habitual con ese modo y eje (`snap_type` NONE/INCREMENT y `steps` {MOVE, ROTATE,
+SCALE}, `scale_step_unit`). UPDATE sigue al dedo con el punto absoluto: el eje
+proyectado, el ángulo alrededor del centro o la razón de distancias. END confirma un
+único undo y devuelve `gizmo_finished` con el `session_id`; sin cambios cancela sin
+undo. Un BEGIN sin asa no abre sesión y los UPDATE orbitan (`miss_behavior: ORBIT`).
+
 `selection.tweak` está disponible en Edit y submodos VERTEX/EDGE/FACE. BEGIN selecciona
 el elemento bajo el punto inicial (conserva el grupo si ya estaba seleccionado) y
 abre una transformación MOVE reversible; UPDATE

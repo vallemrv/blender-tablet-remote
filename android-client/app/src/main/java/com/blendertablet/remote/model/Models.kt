@@ -88,6 +88,8 @@ data class ServerFeatures(
     val cad: CadCapabilities = CadCapabilities(),
     val transformStepSelection: Boolean = false,
     val versioning: Boolean = false,
+    /** `transform_modal.gizmo`: manipulador de mover/rotar/escalar sobre la selección. */
+    val gizmo: Boolean = false,
 )
 
 data class EditSettings(
@@ -578,6 +580,10 @@ data class AppUiState(
     val scaleStepValue: Double = 1.0,
     /** Mayús alterna como el Shift+click de Blender; Alt resta. */
     val selectionOp: SelectionOp = SelectionOp.SET,
+    /** El usuario quiere ver el manipulador sobre la selección (botón de la barra). */
+    val gizmoEnabled: Boolean = true,
+    /** Un arrastre del manipulador en curso: su sesión interna no abre la barra. */
+    val gizmoDragging: Boolean = false,
     /** Ctrl armado para que el siguiente toque seleccione el camino más corto. */
     val shortestPathActive: Boolean = false,
     /** Herramienta de forma (B/C) armada en la barra superior. */

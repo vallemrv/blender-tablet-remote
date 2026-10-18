@@ -44,6 +44,112 @@ def marker_segments(kind, x, y, radius):
     return [p for i, point in enumerate(points) for p in (point, points[(i + 1) % len(points)])]
 
 
+def _polylines(paths, width, height):
+    """Trazos en píxeles con contorno oscuro y su color, como los marcadores."""
+    shader = gpu.shader.from_builtin("POLYLINE_UNIFORM_COLOR")
+    old_blend = gpu.state.blend_get()
+    old_depth = gpu.state.depth_test_get()
+    old_mask = gpu.state.depth_mask_get()
+    old_viewport = gpu.state.viewport_get()
+    try:
+        gpu.state.viewport_set(0, 0, width, height)
+        gpu.state.blend_set("ALPHA")
+        gpu.state.depth_test_set("NONE")
+        gpu.state.depth_mask_set(False)
+        with gpu.matrix.push_pop(), gpu.matrix.push_pop_projection():
+            gpu.matrix.load_identity()
+            gpu.matrix.load_projection_matrix(Matrix.Identity(4))
+            shader.bind()
+            shader.uniform_float("viewportSize", (width, height))
+            for color, line_width, points in paths:
+                coords = [(x * 2 / width - 1, y * 2 / height - 1, 0) for x, y in points]
+                batch = batch_for_shader(shader, "LINES", {"pos": coords})
+                shader.uniform_float("lineWidth", line_width + 2.0)
+                shader.uniform_float("color", (0.03, 0.04, 0.05, 0.85))
+                batch.draw(shader)
+                shader.uniform_float("lineWidth", line_width)
+                shader.uniform_float("color", color)
+                batch.draw(shader)
+    finally:
+        gpu.state.blend_set(old_blend)
+        gpu.state.depth_test_set(old_depth)
+        gpu.state.depth_mask_set(old_mask)
+        gpu.state.viewport_set(*old_viewport)
+
+
+def _loop(points):
+    return [p for i, point in enumerate(points) for p in (point, points[(i + 1) % len(points)])]
+
+
+def gizmo_paths(gizmo, height, active=None):
+    """Flechas (mover), cajas (escalar por eje), anillos (rotar) y aro (escalar todo).
+
+    Con `active` solo se dibuja la guía del asa arrastrada. Las coordenadas del
+    manipulador están en alturas de vídeo con y hacia abajo; aquí pasan a píxeles GPU.
+    """
+    from ..commands import gizmo as module
+
+    def px(point):
+        return (point.x * height, (1.0 - point.y) * height)
+
+    origin = gizmo["origin"]
+    paths = []
+    circle = lambda center, radius, n=32: _loop([
+        px(center + Vector((math.cos(i * math.tau / n), math.sin(i * math.tau / n))) * radius)
+        for i in range(n)])
+    if active is not None:
+        axis = active["axis"]
+        color = module.COLORS[axis["name"] if axis else None]
+        if axis is None:
+            radius = module.UNIFORM if active["mode"] == "SCALE" else module.CENTER
+            paths.append((color, 2.0, circle(origin, radius, 48)))
+        elif active["mode"] == "ROTATE":
+            ring = next((a["ring"] for a in gizmo["axes"] if a["name"] == axis["name"]), [])
+            if ring:
+                paths.append((color, 2.5, _loop([px(p) for p in ring])))
+        else:
+            direction = axis["direction"]
+            paths.append((color, 1.5, [px(origin - direction * 4.0), px(origin + direction * 4.0)]))
+        return paths
+    for axis in gizmo["axes"]:
+        color = module.COLORS[axis["name"]]
+        if axis["ring"]:
+            paths.append((color, 1.5, _loop([px(p) for p in axis["ring"]])))
+    paths.append((module.COLORS[None], 1.5, circle(origin, module.UNIFORM, 64)))
+    for axis in gizmo["axes"]:
+        if not axis["visible"]:
+            continue
+        color = module.COLORS[axis["name"]]
+        direction = axis["direction"]
+        side = Vector((-direction.y, direction.x))
+        tip = origin + direction * module.ARROW
+        back = tip - direction * 0.025
+        paths.append((color, 3.0, [px(origin + direction * module.ARROW_START), px(tip)]))
+        paths.append((color, 3.0, [px(tip), px(back + side * 0.012), px(tip), px(back - side * 0.012)]))
+        box = origin + direction * module.SCALE_BOX
+        half = module.BOX_HALF
+        paths.append((color, 2.5, _loop([px(box + Vector((x, y)) * half)
+                                         for x, y in ((-1, -1), (1, -1), (1, 1), (-1, 1))])))
+    paths.append((module.COLORS[None], 2.5, circle(origin, module.CENTER)))
+    return paths
+
+
+def draw_gizmo(rv3d, width, height):
+    from ..commands import gizmo as module
+    from ..commands.modal import session
+
+    active = module.drag_guide()
+    if active is not None and session.active and session.session_id == active["session_id"]:
+        layout = module.layout(rv3d, width / height, session.center_base())
+    elif module.visible():
+        active = None
+        layout = module.layout(rv3d, width / height)
+    else:
+        return
+    if layout is not None:
+        _polylines(gizmo_paths(layout, height, active), width, height)
+
+
 def draw_transform_markers(rv3d, width, height):
     from ..commands.modal import session
 

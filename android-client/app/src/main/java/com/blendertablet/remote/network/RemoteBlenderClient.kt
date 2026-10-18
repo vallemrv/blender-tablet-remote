@@ -178,6 +178,15 @@ interface RemoteBlenderClient {
      * [settings] solo viaja en `BEGIN`: configura el gesto entero y el servidor lo
      * conserva hasta soltar, así que repetirlo en cada UPDATE sería ruido.
      */
+    /** Muestra u oculta el manipulador; el servidor solo lo dibuja si no hay otra sesión. */
+    fun gizmoSet(enabled: Boolean)
+
+    /**
+     * Arrastre de un dedo con el manipulador visible. BEGIN lleva el punto donde bajó
+     * el dedo y los ajustes de snap; sin asa bajo él, el servidor orbita.
+     */
+    fun gizmoDrag(phase: GesturePhase, u: Double, v: Double, dx: Double, dy: Double, settings: Map<String, Any?> = emptyMap())
+
     fun selectionTweak(
         phase: GesturePhase,
         u: Double = 0.0,

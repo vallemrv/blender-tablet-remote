@@ -597,6 +597,12 @@ class WebSocketRemoteBlenderClient(
     override fun fileDefaultFolder(path: String) =
         command("file.default_folder", JSONObject().put("path", path))
 
+    override fun gizmoSet(enabled: Boolean) = command("gizmo.set", JSONObject().put("enabled", enabled))
+
+    override fun gizmoDrag(phase: GesturePhase, u: Double, v: Double, dx: Double, dy: Double, settings: Map<String, Any?>) =
+        command("gizmo.drag", JSONObject(settings).put("phase", phase.name)
+            .put("u", u).put("v", v).put("dx", dx).put("dy", dy))
+
     override fun selectionTweak(
         phase: GesturePhase,
         u: Double,
@@ -1057,6 +1063,13 @@ class WebSocketRemoteBlenderClient(
                     }
                     // Los modales devuelven el estado de la sesión; confirmar y
                     // cancelar la cierran y sí necesitan refrescar la escena.
+                    command == "gizmo.drag" -> {
+                        val finished = result?.optString("gizmo_finished")?.takeIf { it.isNotBlank() }
+                        if (finished != null && finished == _transformSession.value.sessionId) {
+                            _transformSession.value = TransformSession()
+                        }
+                        tweakSceneSnapshot(result)?.let(::updateState)
+                    }
                     command == "selection.tweak" -> {
                         val finished = result?.optString("tweak_finished")?.takeIf { it.isNotBlank() }
                         if (finished != null && finished == _transformSession.value.sessionId) {

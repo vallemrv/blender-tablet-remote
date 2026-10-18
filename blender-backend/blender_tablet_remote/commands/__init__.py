@@ -44,6 +44,7 @@ def load_all() -> None:
         cad_operations,
         reconnect,
         file,
+        gizmo,
         history,
         mesh,
         material,

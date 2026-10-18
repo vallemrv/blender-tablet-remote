@@ -473,6 +473,8 @@ def _handle(client: WSClient, msg: dict) -> None:
         session.owner_disconnected(msg["client_id"])
         from .commands.tools import tool_session
         tool_session.owner_disconnected(msg["client_id"])
+        from .commands import gizmo
+        gizmo.owner_disconnected(msg["client_id"])
         from .cad.runtime import runtime
         if runtime.session and runtime.session["owner"] == msg["client_id"]:
             runtime.cancel()

@@ -56,6 +56,8 @@ fun InputSurface(
     onToolGesture: (GesturePhase, Float, Float) -> Unit,
     /** Posición absoluta del dedo durante la herramienta, normalizada 0..1. */
     onToolPointer: (Float, Float) -> Unit = { _, _ -> },
+    /** Punto donde bajó el dedo, justo antes del BEGIN de un arrastre de un dedo. */
+    onDragStart: (Float, Float) -> Unit = { _, _ -> },
     onViewGesture: (Gesture, GesturePhase, Float, Float, Float) -> Unit,
     onTap: (Float, Float, Boolean) -> Unit,
     onDoubleTap: () -> Unit,
@@ -123,6 +125,7 @@ fun InputSurface(
                 view.knifeActive = knifeActive
                 view.onKnifeDrag = onKnifeDrag
                 view.tweakActive = tweakActive
+                view.onDragStart = onDragStart
                 view.onTweakDrag = onTweakDrag
                 view.longPressEnabled = longPressEnabled
                 view.navigationOrbitEnabled = navigationOrbitEnabled
@@ -252,6 +255,7 @@ private class GestureView(
             field = value
         }
     var onTweakDrag: (GesturePhase, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> }
+    var onDragStart: (Float, Float) -> Unit = { _, _ -> }
     private var tweakDrawing = false
     private var suppressSingleAfterTweak = false
     var navigationOrbitEnabled: Boolean = false
@@ -856,6 +860,7 @@ private class GestureView(
 
         if (!toolActive) {
             toolActive = true
+            onDragStart(nx(startX), ny(startY))
             onToolGesture(GesturePhase.BEGIN, 0f, 0f)
             lastDispatchAt = e.eventTime
         }

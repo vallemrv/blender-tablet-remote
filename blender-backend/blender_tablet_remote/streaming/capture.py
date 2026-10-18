@@ -23,7 +23,7 @@ from .. import log
 from ..camera import camera
 from .encoder import VideoEncoder
 from .frames import FrameBuffer
-from .markers import draw_transform_markers
+from .markers import draw_gizmo, draw_transform_markers
 from .cad_selection import draw_cad_cut, draw_cad_plane, draw_cad_selection
 
 # Tras varios fallos seguidos dejamos de intentarlo: si no hay GPU o no hay VIEW_3D,
@@ -290,6 +290,7 @@ class ViewportCapture:
                 self._sculpt_depth = None
             if not clean and not materials.active:
                 draw_transform_markers(rv3d, width, height)
+                draw_gizmo(rv3d, width, height)
                 draw_cad_cut(rv3d, width, height)
                 draw_cad_plane(rv3d, width, height)
                 draw_cad_selection(rv3d, width, height)

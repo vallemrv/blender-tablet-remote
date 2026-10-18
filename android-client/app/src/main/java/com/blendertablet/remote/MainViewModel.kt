@@ -15,6 +15,7 @@ import com.blendertablet.remote.model.ActiveTool
 import com.blendertablet.remote.model.Axis
 import com.blendertablet.remote.model.AppUiState
 import com.blendertablet.remote.model.BlenderMode
+import com.blendertablet.remote.model.BlenderState
 import com.blendertablet.remote.model.ConnectionStatus
 import com.blendertablet.remote.model.Constraint
 import com.blendertablet.remote.model.EditTool
@@ -92,6 +93,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var facePickRole: String? = null
     private var lastFacePointer: Pair<Float, Float>? = null
     private var lastReferencePointer: Pair<Float, Float>? = null
+    /** Punto donde bajó el dedo del arrastre en curso: BEGIN del manipulador. */
+    private var dragStartPoint: Pair<Float, Float>? = null
+    /** El arrastre de un dedo pertenece al manipulador (o a su órbita si no tocó asa). */
+    private var gizmoDragActive = false
+    private var gizmoPendingDx = 0f
+    private var gizmoPendingDy = 0f
+    private var gizmoLastPointer: Pair<Float, Float>? = null
     /** Último toque de selección en Edit (u, v, uptime) para reconocer el doble toque. */
     private var lastEditTap: Triple<Float, Float, Long>? = null
     // Debe inicializarse antes de `init`: StateFlow emite su valor actual en cuanto
@@ -178,6 +186,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 status == ConnectionStatus.CONNECTED && remote.features.overlays
             }.distinctUntilChanged().collect { ready ->
                 if (ready) client.viewOverlays(local.value.controlsVisible)
+            }
+        }
+        // El manipulador solo se dibuja cuando el arrastre de un dedo le pertenece.
+        viewModelScope.launch {
+            combine(client.connection, client.state, local) { status, remote, ui ->
+                (status == ConnectionStatus.CONNECTED && remote.features.gizmo) to gizmoWanted(remote, ui)
+            }.distinctUntilChanged().collect { (connected, wanted) ->
+                if (connected) client.gizmoSet(wanted)
             }
         }
         // Las unidades de Mover y Escalar siguen al preset real de la escena. Se observa
@@ -1047,6 +1063,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Seguimiento absoluto del dedo para snap geométrico durante el arrastre. */
     fun toolPointer(u: Float, v: Float) {
+        if (gizmoDragActive) {
+            // UPDATE lleva juntos el delta acumulado (órbita) y el punto absoluto (asa).
+            gizmoLastPointer = u to v
+            client.gizmoDrag(GesturePhase.UPDATE, u.toDouble(), v.toDouble(),
+                gizmoPendingDx.toDouble(), gizmoPendingDy.toDouble())
+            gizmoPendingDx = 0f; gizmoPendingDy = 0f
+            return
+        }
         if (client.state.value.cad.workspace || choosingTransformSelection()) return
         val surfaceTool = client.toolSession.value
         if (surfaceTool.active && surfaceTool.input == "FACE_PAIR") {
@@ -1585,11 +1609,72 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         ) client.requestToolStatus()
     }
 
+    fun dragStart(u: Float, v: Float) {
+        dragStartPoint = u to v
+    }
+
+    fun toggleGizmo() = local.update { it.copy(gizmoEnabled = !it.gizmoEnabled) }
+
+    /** El manipulador se ofrece en Object/Edit con la selección normal, sin otras herramientas. */
+    private fun gizmoWanted(remote: BlenderState, ui: AppUiState): Boolean =
+        remote.features.gizmo && ui.gizmoEnabled && !remote.cad.workspace && !remote.material.active &&
+            (remote.mode == BlenderMode.OBJECT || remote.mode == BlenderMode.EDIT) &&
+            ui.activeTool == ActiveTool.SELECT && ui.shapeTool == ShapeTool.NONE &&
+            !ui.shortestPathActive && !ui.loopCutAwaitingTap
+
+    /**
+     * Arrastre de un dedo con el manipulador visible: BEGIN con el punto de apoyo y el
+     * snap común; el servidor decide si agarra un asa u orbita. Devuelve si lo atendió.
+     */
+    private fun gizmoGesture(phase: GesturePhase, dx: Float, dy: Float): Boolean {
+        if (phase == GesturePhase.BEGIN) {
+            val start = dragStartPoint
+            dragStartPoint = null
+            val idle = !client.transformSession.value.active && !client.toolSession.value.active &&
+                !client.toolSession.value.armed
+            if (start == null || !idle || !gizmoWanted(client.state.value, local.value)) return false
+            gizmoDragActive = true
+            gizmoPendingDx = 0f; gizmoPendingDy = 0f
+            gizmoLastPointer = start
+            local.update { it.copy(gizmoDragging = true) }
+            client.gizmoDrag(GesturePhase.BEGIN, start.first.toDouble(), start.second.toDouble(), 0.0, 0.0, gizmoSettings())
+            return true
+        }
+        if (!gizmoDragActive) return false
+        when (phase) {
+            GesturePhase.UPDATE -> { gizmoPendingDx += dx; gizmoPendingDy += dy }
+            else -> {
+                val (u, v) = gizmoLastPointer ?: (0f to 0f)
+                client.gizmoDrag(phase, u.toDouble(), v.toDouble(), gizmoPendingDx.toDouble(), gizmoPendingDy.toDouble())
+                gizmoDragActive = false
+                gizmoPendingDx = 0f; gizmoPendingDy = 0f
+                gizmoLastPointer = null
+                local.update { it.copy(gizmoDragging = false) }
+            }
+        }
+        return true
+    }
+
+    /** Los mismos pasos que abrirían Mover/Rotar/Escalar desde el rail. */
+    private fun gizmoSettings(): Map<String, Any?> {
+        val scaleLength = client.state.value.unitScaleLength
+        val move = moveStepInBlenderUnits(local.value.moveStepValue, local.value.moveStepUnit, scaleLength)
+            ?: stepInBlenderUnits(stepsFor(TransformMode.MOVE)[localStepIndex(TransformMode.MOVE)], TransformMode.MOVE, scaleLength)
+        val rotate = stepInBlenderUnits(stepsFor(TransformMode.ROTATE)[localStepIndex(TransformMode.ROTATE)], TransformMode.ROTATE, scaleLength)
+        val scale = scaleStepForWire(local.value.scaleStepValue, local.value.scaleUnit, scaleLength)
+        return mapOf(
+            "snap_type" to if (local.value.snapType == SnapType.INCREMENT) "INCREMENT" else "NONE",
+            "steps" to mapOf("MOVE" to move, "ROTATE" to rotate, "SCALE" to scale),
+            "scale_step_unit" to local.value.scaleUnit.scaleStepWireUnit,
+        )
+    }
+
     /**
      * Arrastre de un dedo/stylus: se traduce al gesto de la herramienta activa.
      * El servidor lo agrupa y cierra un único paso de undo al soltar.
      */
     fun toolGesture(phase: GesturePhase, dx: Float, dy: Float) {
+        if (gizmoGesture(phase, dx, dy)) return
         if (choosingTransformSelection()) return
         if (client.toolSession.value.armed && client.toolSession.value.input == "REPEAT_TAP") return
         if (client.state.value.cad.workspace) {

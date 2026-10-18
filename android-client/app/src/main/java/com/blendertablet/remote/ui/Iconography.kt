@@ -87,6 +87,8 @@ import com.blendertablet.remote.model.SnapType
  * y permite reemplazar un símbolo por uno propio sin perseguir usos por toda la UI.
  */
 object AppIcons {
+    /** Manipulador de mover/rotar/escalar sobre la selección. */
+    val gizmo: ImageVector get() = Icons.Default.OpenWith
     val materials: ImageVector get() = Icons.Default.Palette
     val Fallback: ImageVector = Icons.Default.Tune
     val Duplicate: ImageVector = Icons.Default.ContentCopy

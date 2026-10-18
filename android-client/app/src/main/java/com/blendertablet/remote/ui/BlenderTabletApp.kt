@@ -287,6 +287,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             onDebug = vm::updateInput,
             onToolGesture = vm::toolGesture,
             onToolPointer = vm::toolPointer,
+            onDragStart = vm::dragStart,
             onKnifeDrag = vm::knifeDrag,
             onTweakDrag = vm::tweakGesture,
             onCadGesture = vm::cadGesture,
@@ -452,7 +453,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     )
                 }
 
-                if (state.activeTool != ActiveTool.TWEAK) TransformBar(
+                if (state.activeTool != ActiveTool.TWEAK && !state.gizmoDragging) TransformBar(
                     session = session,
                     unitScaleLength = state.blender.unitScaleLength,
                     proportionalUnit = state.blender.sceneScale.lengthUnit,
@@ -752,6 +753,7 @@ class ViewportInput(
     val onDebug: (com.blendertablet.remote.model.InputDebug) -> Unit,
     val onToolGesture: (GesturePhase, Float, Float) -> Unit,
     val onToolPointer: (Float, Float) -> Unit,
+    val onDragStart: (Float, Float) -> Unit,
     val onKnifeDrag: (GesturePhase, Float, Float) -> Unit,
     val onTweakDrag: (GesturePhase, Float, Float, Float, Float) -> Unit,
     val onCadGesture: (GesturePhase, Float, Float) -> Unit,
@@ -824,6 +826,7 @@ private fun ViewportLayer(
                     onDebug = input.onDebug,
                     onToolGesture = input.onToolGesture,
                     onToolPointer = input.onToolPointer,
+                    onDragStart = input.onDragStart,
                     onViewGesture = input.onViewGestureLive,
                     onTap = input.onTap,
                     onDoubleTap = input.onDoubleTap,
@@ -867,6 +870,7 @@ private fun ViewportLayer(
                 onDebug = input.onDebug,
                 onToolGesture = input.onToolGesture,
                 onToolPointer = input.onToolPointer,
+                onDragStart = input.onDragStart,
                 onViewGesture = input.onViewGesturePlain,
                 onTap = input.onTap,
                 onDoubleTap = input.onDoubleTap,
@@ -925,6 +929,7 @@ private fun ViewportLayer(
                 onDebug = input.onDebug,
                 onToolGesture = input.onToolGesture,
                 onToolPointer = input.onToolPointer,
+                onDragStart = input.onDragStart,
                 onViewGesture = input.onViewGestureLive,
                 onTap = input.onTap,
                 onDoubleTap = input.onDoubleTap,

@@ -84,6 +84,7 @@ fun TopToolbar(
                         }
                     }
                     if (!blender.cad.workspace && blender.mode != BlenderMode.SCULPT && !blender.material.active) {
+                    if (blender.features.gizmo) IconAction(AppIcons.gizmo, "Manipulador", selected = state.gizmoEnabled) { vm.toggleGizmo() }
                     PillButton("Mayús", selected = state.selectionOp == SelectionOp.TOGGLE && !state.shortestPathActive) { vm.toggleSelectionOp(SelectionOp.TOGGLE) }
                     if (inEdit && blender.features.selectionShortestPath) {
                         PillButton("Ctrl", selected = state.shortestPathActive) { vm.toggleShortestPath() }
