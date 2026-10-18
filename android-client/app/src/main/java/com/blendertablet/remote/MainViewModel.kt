@@ -77,6 +77,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val local = MutableStateFlow(AppUiState(
         snapType = snapPreferences.current.type,
         snapStep = snapPreferences.current.step,
+        distanceStepMeters = snapPreferences.current.distanceStepMeters,
     ))
     private val preferences = ConnectionPreferences(application)
     private val stream = ViewportStream(viewModelScope)
@@ -181,8 +182,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // también al abrir otro .blend, no solo cuando el usuario toca el menú.
         viewModelScope.launch {
             client.state.map { it.sceneScale.lengthUnit }.distinctUntilChanged().collect { unit ->
-                local.update { it.copy(moveStepUnit = unit.transformStepUnit()) }
-                setScaleStep(local.value.scaleStepValue, unit.transformStepUnit())
+                val stepUnit = unit.transformStepUnit()
+                val shared = local.value.distanceStepMeters
+                local.update { it.copy(
+                    moveStepUnit = stepUnit,
+                    moveStepValue = shared?.let { meters -> meters / stepUnit.meters } ?: it.moveStepValue,
+                ) }
+                applyScaleStep(shared?.let { it / stepUnit.meters } ?: local.value.scaleStepValue, stepUnit)
             }
         }
         // El catálogo de escalas no viaja en el snapshot (es fijo) y el menú Escena
@@ -1014,7 +1020,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "snap_type" -> (value as? String)?.let { wire ->
                 SnapType.entries.firstOrNull { it.name == wire }?.let(::rememberSnapType)
             }
-            "snap_step" -> (value as? Number)?.toDouble()?.let(::rememberSnapStep)
+            "snap_step" -> (value as? Number)?.toDouble()?.let { step ->
+                if (client.toolSession.value.tool in DISTANCE_STEP_TOOLS)
+                    rememberDistanceStep(step * client.state.value.unitScaleLength)
+                else rememberSnapStep(step)
+            }
         }
         client.toolParameter(mapOf(key to value))
     }
@@ -1153,21 +1163,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val extrudeGeometric = tool == EditTool.EXTRUDE &&
             (parameters["variant"] ?: "REGION") in setOf("REGION", "MANIFOLD")
         val compatible = if (extrudeGeometric || !chosen.geometric) chosen else SnapType.NONE
+        val shared = local.value.distanceStepMeters
+        val distanceTool = tool in DISTANCE_STEP_TOOLS
+        // El paso común elegido por el usuario sustituye al automático por tamaño.
+        val step = if (distanceTool && shared != null)
+            shared / client.state.value.unitScaleLength.coerceAtLeast(1e-12) else local.value.snapStep
         return parameters + mapOf(
             "snap_type" to compatible.name,
-            "snap_step" to local.value.snapStep,
-        ) + if (tool in setOf(EditTool.EXTRUDE, EditTool.BEVEL, EditTool.INSET))
-            mapOf("auto_size" to true) else emptyMap()
+            "snap_step" to step,
+        ) + if (distanceTool && shared == null) mapOf("auto_size" to true) else emptyMap()
     }
 
     private fun rememberSnapType(type: SnapType) {
         local.update { it.copy(snapType = type) }
-        snapPreferences.save(SnapSettings(type, local.value.snapStep))
+        snapPreferences.save(SnapSettings(type, local.value.snapStep, local.value.distanceStepMeters))
+    }
+
+    /**
+     * Fija el paso métrico común y lo refleja en los pasos visibles de Mover, Escalar
+     * (si usa mm/cm/m) y Tweak libre. Extruir/Bisel/Inset lo leen al abrirse.
+     */
+    private fun rememberDistanceStep(meters: Double) {
+        if (!meters.isFinite() || meters <= 0.0) return
+        val scaleLength = client.state.value.unitScaleLength.coerceAtLeast(1e-12)
+        local.update { state -> state.copy(
+            distanceStepMeters = meters,
+            moveStepValue = if (state.moveStepUnit == TransformStepUnit.PERCENT) state.moveStepValue
+                else meters / state.moveStepUnit.meters,
+            scaleStepValue = if (state.scaleUnit == TransformStepUnit.PERCENT) state.scaleStepValue
+                else meters / state.scaleUnit.meters,
+            tweak = if (state.tweak.motion == TweakMotion.FREE) state.tweak.copy(snapStep = meters / scaleLength)
+                else state.tweak,
+        ) }
+        snapPreferences.save(SnapSettings(local.value.snapType, local.value.snapStep, meters))
     }
 
     private fun rememberSnapStep(step: Double) {
         local.update { it.copy(snapStep = step) }
-        snapPreferences.save(SnapSettings(local.value.snapType, step))
+        snapPreferences.save(SnapSettings(local.value.snapType, step, local.value.distanceStepMeters))
     }
 
     /**
@@ -1245,7 +1278,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         loopCutArmed = false
         local.update { it.copy(loopCutAwaitingTap = false) }
         if (mode == TransformMode.SCALE) {
-            local.update { it.copy(scaleUnit = client.state.value.sceneScale.lengthUnit.transformStepUnit()) }
+            val unit = client.state.value.sceneScale.lengthUnit.transformStepUnit()
+            local.update { it.copy(scaleUnit = unit,
+                scaleStepValue = it.distanceStepMeters?.let { meters -> meters / unit.meters } ?: it.scaleStepValue) }
         }
         val preset = stepsFor(mode)[localStepIndex(mode)]
         val scaleLength = uiState.value.blender.unitScaleLength
@@ -1306,6 +1341,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val settings = if (phase == GesturePhase.BEGIN) local.value.tweak.let {
             if (uiState.value.blender.selectionMode == SelectionMode.FACE)
                 it.copy(motion = TweakMotion.FREE) else it
+        }.let { settings ->
+            // El movimiento libre usa el paso común; SLIDE conserva su fracción del riel.
+            val shared = local.value.distanceStepMeters
+            if (settings.motion == TweakMotion.FREE && shared != null)
+                settings.copy(snapStep = shared / client.state.value.unitScaleLength.coerceAtLeast(1e-12))
+            else settings
         } else null
         client.selectionTweak(phase, u.toDouble(), v.toDouble(), dx.toDouble(), dy.toDouble(), settings)
         if (phase == GesturePhase.END || phase == GesturePhase.CANCEL) {
@@ -1321,13 +1362,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         local.update { it.copy(tweak = change(it.tweak)) }
     }
 
-    fun setTweakMotion(motion: TweakMotion) = updateTweakSettings { it.copy(motion = motion) }
+    fun setTweakMotion(motion: TweakMotion) = updateTweakSettings { settings ->
+        val shared = local.value.distanceStepMeters
+        settings.copy(motion = motion, snapStep = if (motion == TweakMotion.FREE && shared != null)
+            shared / client.state.value.unitScaleLength.coerceAtLeast(1e-12) else settings.snapStep)
+    }
 
     fun setTweakSnapType(snapType: SnapType) = updateTweakSettings { it.copy(snapType = snapType) }
 
     fun setTweakSnapStep(step: Double) {
         if (!step.isFinite() || step <= 0.0) return
         updateTweakSettings { it.copy(snapStep = step) }
+        if (local.value.activeTool == ActiveTool.TWEAK && local.value.tweak.motion == TweakMotion.FREE)
+            rememberDistanceStep(step * client.state.value.unitScaleLength)
     }
 
     fun toggleTweakClamp() = updateTweakSettings { it.copy(clamp = !it.clamp) }
@@ -1452,16 +1499,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setMoveStep(value: Double, unit: TransformStepUnit) {
         if (value <= 0.0) return
-        local.update { it.copy(moveStepValue = value, moveStepUnit = unit) }
+        // Cambiar solo la unidad expresa el paso común en ella; escribir un paso lo fija.
+        val unitOnly = unit != local.value.moveStepUnit
+        val shared = local.value.distanceStepMeters
+        val step = if (unitOnly && shared != null && unit != TransformStepUnit.PERCENT) shared / unit.meters else value
+        local.update { it.copy(moveStepValue = step, moveStepUnit = unit) }
+        if (!unitOnly && unit != TransformStepUnit.PERCENT) rememberDistanceStep(step * unit.meters)
         val session = client.transformSession.value
         if (!session.active || session.mode != TransformMode.MOVE) return
-        val blenderStep = moveStepInBlenderUnits(value, unit, uiState.value.blender.unitScaleLength)
-            ?: ((session.referenceDistance ?: return) * value / 100.0)
+        val blenderStep = moveStepInBlenderUnits(step, unit, uiState.value.blender.unitScaleLength)
+            ?: ((session.referenceDistance ?: return) * step / 100.0)
         client.transformSnap(SnapType.INCREMENT, blenderStep, session.snapToSelection)
     }
 
     /** Una sola unidad para dimensiones, botones e incremento de Escalar. */
     fun setScaleStep(value: Double, unit: TransformStepUnit) {
+        if (!value.isFinite() || value <= 0.0) return
+        // Cambiar solo la unidad expresa el paso común en ella; escribir un paso lo fija.
+        val shared = local.value.distanceStepMeters
+        if (unit == TransformStepUnit.PERCENT) applyScaleStep(value, unit)
+        else if (unit != local.value.scaleUnit) applyScaleStep(shared?.let { it / unit.meters } ?: value, unit)
+        else {
+            applyScaleStep(value, unit)
+            rememberDistanceStep(value * unit.meters)
+        }
+    }
+
+    private fun applyScaleStep(value: Double, unit: TransformStepUnit) {
         if (!value.isFinite() || value <= 0.0) return
         local.update { it.copy(scaleStepValue = value, scaleUnit = unit) }
         val session = client.transformSession.value
@@ -1589,3 +1653,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
     }
 }
+
+/** Herramientas Edit cuyo paso es una distancia y comparten el paso métrico común. */
+private val DISTANCE_STEP_TOOLS = setOf(EditTool.EXTRUDE, EditTool.BEVEL, EditTool.INSET)

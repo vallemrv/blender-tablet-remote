@@ -394,6 +394,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   rápidas; Distancia numérica es exacta y no se vuelve a redondear por snap.
   Editar Distancia sustituye al destino geométrico
   sondeado. Knife usa el mismo desplegable de Snap.
+- Paso común: el último paso métrico que el usuario escribe en Mover, Escalar (mm/cm/m),
+  Extruir/Bisel/Inset o Tweak libre se guarda en metros en la tablet y gobierna todos
+  ellos, también tras reiniciar o abrir otro `.blend`, hasta que lo cambie. Con él
+  Extruir/Bisel/Inset no usan el paso automático por tamaño. Cambiar solo la unidad lo
+  expresa en ella sin alterarlo. Porcentajes, SLIDE de Tweak y CAD conservan su paso.
 - En Bisel, Ancho se muestra en la unidad elegida; con Incremento/Rejilla sus
   botones −/+ restan/suman el paso activo y conservan las pulsaciones rápidas.
 - Extruir Región desplaza y selecciona únicamente los vértices nuevos. Los vértices

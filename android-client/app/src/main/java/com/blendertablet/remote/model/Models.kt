@@ -555,6 +555,12 @@ data class AppUiState(
     val snapType: SnapType = SnapType.NONE,
     /** Último paso elegido para las herramientas paramétricas con snap escalar. */
     val snapStep: Double = 0.1,
+    /**
+     * Paso métrico común, en metros: el último que el usuario escribió en Mover,
+     * Escalar, Extruir/Bisel/Inset o Tweak libre. Gobierna todos hasta que lo cambie;
+     * null deja los pasos automáticos de cada herramienta.
+     */
+    val distanceStepMeters: Double? = null,
     val stepIndex: Map<TransformMode, Int> = emptyMap(),
     /** Restricción elegida para la próxima transformación. */
     val constraint: Constraint = Constraint.FREE,

@@ -79,7 +79,10 @@ enum class SnapType(val label: String, val geometric: Boolean = false) {
 }
 
 enum class TransformStepUnit(val label: String) {
-    MM("mm"), CM("cm"), M("m"), PERCENT("%")
+    MM("mm"), CM("cm"), M("m"), PERCENT("%");
+
+    /** Metros por unidad; PERCENT no es una distancia. */
+    val meters: Double get() = when (this) { MM -> 0.001; CM -> 0.01; M -> 1.0; PERCENT -> 1.0 }
 }
 
 /** Cómo se mueve el elemento arrastrado con Tweak. Viaja como `motion`. */
