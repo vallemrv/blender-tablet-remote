@@ -372,8 +372,11 @@ nuevas superficies y la adaptación gradual de las existentes.
   No cambia matrices, mallas ni parentesco; solo pertenencias a colecciones de la
   escena actual, conservando las pertenencias externas. Valida todo el lote antes
   de crear/enlazar/desenlazar y restaura los enlaces si falla. Las colecciones
-  vacías y anidadas aparecen en el filtro; este incluye descendientes y admite
-  varios padres. Objetos y colecciones se identifican por ID efímero, no por nombre.
+  vacías y anidadas aparecen en un árbol plegable con raíz «/», nombres simples
+  y objetos bajo su colección. El mismo árbol elige destino y padre. La búsqueda
+  revela las ramas coincidentes sin perder los pliegues previos; admite varios
+  padres. El lápiz renombra cada colección nativa con un undo, excepto la raíz.
+  Objetos y colecciones se identifican por ID efímero, no por nombre.
   Crear o modificar colecciones desde el PC también refresca el Outliner.
 - El encuadre y el clipping siguen el tamaño visto, también en piezas de 1 mm y
   menores; los rangos de preset se convierten por `scale_length`. Edit/CAD no

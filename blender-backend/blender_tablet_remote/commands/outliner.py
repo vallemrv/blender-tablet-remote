@@ -52,8 +52,8 @@ def _scene_collections():
             if parent is not None: found[key][1]['parents'].append(parent)
             return
         root = collection == bpy.context.scene.collection
-        label = 'Escena' if root else collection.name
-        full_path = f'{path} / {label}' if path else label
+        label = '/' if root else collection.name
+        full_path = f'/ {label}' if path == "/" else (f'{path} / {label}' if path else label)
         row = dict(id=key, name=label, path=full_path, root=root,
                    parents=[] if parent is None else [parent], count=len(collection.objects),
                    editable=collection.library is None)
@@ -93,7 +93,7 @@ def listing(payload):
 def collection_action(payload):
     _require_object_context()
     action = payload.get('action')
-    if action not in {'CREATE', 'MOVE_OBJECTS'}:
+    if action not in {'CREATE', 'MOVE_OBJECTS', 'RENAME'}:
         raise BadPayload('Acción de colección desconocida')
     collections = _scene_collections()
     key = payload.get('parent_id' if action == 'CREATE' else 'collection_id')
@@ -104,9 +104,16 @@ def collection_action(payload):
     if not destination[1]['editable']:
         raise CommandError('La colección enlazada es de solo lectura', code='read_only')
     container = destination[0]
-    name = payload.get('name', 'Colección')
-    if action == 'CREATE' and (not isinstance(name, str) or not name.strip() or len(name.strip().encode('utf-8')) > 63):
+    name = payload.get('name', 'Colección' if action == 'CREATE' else None)
+    if action in {'CREATE', 'RENAME'} and (not isinstance(name, str) or not name.strip() or len(name.strip().encode('utf-8')) > 63):
         raise BadPayload('Escribe un nombre de colección entre 1 y 63 bytes')
+    if action == 'RENAME':
+        if destination[1]['root']:
+            raise BadPayload('La raíz / no se puede renombrar')
+        if container.name != name.strip():
+            container.name = name.strip()
+            undo_push('Remote rename collection')
+        return _result()
     ids = payload.get('object_ids', [])
     if not isinstance(ids, list) or any(not isinstance(i, str) for i in ids):
         raise BadPayload('object_ids debe contener identificadores de objetos')

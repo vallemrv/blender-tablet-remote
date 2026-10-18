@@ -377,6 +377,9 @@ Con `outliner.collections:true`, listados, respuestas y `outliner.changed` añad
 y `editable`. Se incluyen colecciones vacías y la raíz de la escena. Cada objeto
 añade `collection_ids` a sus nombres de colección. Los padres múltiples conservan
 la misma identidad; `path` es una ruta de presentación, no una dirección de escritura.
+La raíz se presenta como `/`; Android dibuja nombres simples en un árbol plegable
+derivado de `parents`, con objetos bajo sus colecciones. La búsqueda revela las
+ramas coincidentes incluso si estaban plegadas.
 `outliner.collection` recibe `action:CREATE`, `name`, `parent_id` opcional (raíz si
 se omite) y `object_ids` opcionales para moverlos a la nueva colección; responde
 también `created_collection:{id,name}`. `action:MOVE_OBJECTS` recibe `collection_id`
@@ -385,6 +388,10 @@ las pertenencias anteriores de la escena actual, conservando las externas, matri
 datos y parentesco. Colecciones enlazadas de origen/destino no son editables.
 IDs obsoletos se rechazan antes de cualquier cambio. Crear y mover el lote forman
 un único undo; mover a la única colección actual no crea undo vacío.
+`action:RENAME` recibe `collection_id` y `name` (1–63 bytes UTF-8 tras quitar
+espacios externos). Renombra la colección nativa en un undo, conserva identidad y
+pertenencias, y devuelve el listado actualizado. Rechaza la raíz, colecciones
+enlazadas e IDs obsoletos; repetir el nombre actual no crea undo.
 
 `object.properties` (`object_properties.version:1`) recibe `object_id`, `revision`
 y `values` con únicamente los campos modificados. `active.properties` publica la

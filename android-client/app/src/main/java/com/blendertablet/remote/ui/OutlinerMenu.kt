@@ -15,7 +15,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,7 +34,8 @@ import androidx.compose.ui.unit.sp
 import com.blendertablet.remote.model.ActionId
 import com.blendertablet.remote.model.OutlinerObject
 import com.blendertablet.remote.model.OutlinerCollection
-import com.blendertablet.remote.model.outlinerCollectionScope
+import com.blendertablet.remote.model.outlinerTreeRows
+import com.blendertablet.remote.model.treeName
 
 @Composable
 fun OutlinerMenu(
@@ -50,8 +50,8 @@ fun OutlinerMenu(
     var rename by remember { mutableStateOf<OutlinerObject?>(null) }
     var createCollection by remember { mutableStateOf(false) }
     var moveToCollection by remember { mutableStateOf<OutlinerObject?>(null) }
-    var collectionFilter by remember { mutableStateOf<String?>(null) }
-    val chosenCollection = collections.firstOrNull { it.id == collectionFilter }
+    var renameCollection by remember { mutableStateOf<OutlinerCollection?>(null) }
+    var collapsed by remember { mutableStateOf(emptySet<String>()) }
     val width = (LocalConfiguration.current.screenWidthDp - 32).coerceIn(280, 560).dp
     val maxHeight = (LocalConfiguration.current.screenHeightDp - 100).coerceAtLeast(140).dp
     Box {
@@ -67,72 +67,74 @@ fun OutlinerMenu(
                     PillButton("+ Nueva colección", enabled = editable && collections.any { it.editable }) {
                         createCollection = true; open = false
                     }
-                    Box {
-                        var filterOpen by remember { mutableStateOf(false) }
-                        PillButton(chosenCollection?.name ?: "Todas las colecciones ▾") { filterOpen = true }
-                        DropdownMenu(filterOpen, { filterOpen = false }, Modifier.heightIn(max = 320.dp)) {
-                            DropdownMenuItem(text = { Text("Todas las colecciones") }, onClick = { collectionFilter = null; filterOpen = false })
-                            collections.forEach { collection -> DropdownMenuItem(
-                                text = { Text(collection.path) },
-                                onClick = { collectionFilter = collection.id; filterOpen = false }) }
-                        }
-                    }
                 }
                 BasicTextField(query, { query = it }, singleLine = true,
                     textStyle = TextStyle(color = Ink.OnPanel, fontSize = 13.sp), cursorBrush = SolidColor(Ink.Accent),
                     modifier = Modifier.fillMaxWidth().background(Color.White.copy(alpha = .06f), RoundedCornerShape(8.dp)).padding(10.dp),
-                    decorationBox = { inner -> Box { if (query.isEmpty()) Text("Buscar objeto…", color = Ink.Faint, fontSize = 13.sp); inner() } })
+                    decorationBox = { inner -> Box { if (query.isEmpty()) Text("Buscar objeto o colección…", color = Ink.Faint, fontSize = 13.sp); inner() } })
                 if (!editable) Text("Termina la herramienta y entra en Object para modificar objetos.", color = Ink.Muted, fontSize = 11.sp)
-                val scope = chosenCollection?.let { outlinerCollectionScope(collections, it.id) }
-                val filtered = objects.filter { obj ->
-                    (scope == null || obj.collectionIds.any(scope::contains)) &&
-                        (obj.name.contains(query, ignoreCase = true) || obj.collections.any { c -> c.contains(query, true) })
-                }
-                if (filtered.isEmpty()) Text(if (chosenCollection != null && query.isBlank()) "Colección vacía." else if (objects.isEmpty()) "No hay objetos en esta escena." else "No hay coincidencias.",
-                    color = Ink.Muted, fontSize = 12.sp, modifier = Modifier.padding(12.dp))
-                filtered.forEach { obj ->
-                    Row(Modifier.fillMaxWidth().background(if (obj.active) Ink.Accent.copy(alpha = .16f) else Color.Transparent,
-                        RoundedCornerShape(8.dp)).padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        HoverHelp(obj.name, "Selecciona este objeto y muestra sus propiedades.",
-                            modifier = Modifier.weight(1f), enabled = editable && obj.canSelect) {
-                            Column(Modifier.fillMaxWidth().heightIn(min = 44.dp)
-                                .then(if (editable && obj.canSelect) Modifier.clickableNoRipple {
-                                    onAction(obj.id, "SELECT", null, null)
-                                } else Modifier), verticalArrangement = Arrangement.Center) {
-                                Text(obj.name, color = if (obj.visible) Ink.OnPanel else Ink.Faint, fontSize = 13.sp,
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                val location = obj.parent?.let { "↳ $it" } ?: obj.collections.joinToString(" · ")
-                                val status = when {
-                                    !obj.inViewLayer -> "Fuera de la capa de vista"
-                                    !obj.visible && !obj.hidden -> "Oculto por colección o aislamiento"
-                                    obj.locked -> "Selección bloqueada"
-                                    obj.hidden -> "Oculto"
-                                    else -> location
+                val rows = outlinerTreeRows(collections, objects, collapsed, query)
+                if (rows.isEmpty()) Text("No hay coincidencias.", color = Ink.Muted, fontSize = 12.sp)
+                rows.forEach { entry ->
+                    val collection = entry.collection
+                    if (collection != null) {
+                        CollectionRow(collection, entry.depth, entry.expanded, entry.hasChildren,
+                            onToggle = { collapsed = if (collection.id in collapsed) collapsed - collection.id else collapsed + collection.id },
+                            toggleEnabled = query.isBlank(),
+                            onRename = if (editable && collection.editable && !collection.root) ({
+                                renameCollection = collection; open = false
+                            }) else null)
+                    }
+                    entry.obj?.let { obj ->
+                        Row(Modifier.fillMaxWidth().padding(start = (entry.depth.coerceAtMost(6) * 14).dp).background(if (obj.active) Ink.Accent.copy(alpha = .16f) else Color.Transparent,
+                            RoundedCornerShape(8.dp)).padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            HoverHelp(obj.name, "Selecciona este objeto y muestra sus propiedades.",
+                                modifier = Modifier.weight(1f), enabled = editable && obj.canSelect) {
+                                Column(Modifier.fillMaxWidth().heightIn(min = 44.dp)
+                                    .then(if (editable && obj.canSelect) Modifier.clickableNoRipple {
+                                        onAction(obj.id, "SELECT", null, null)
+                                    } else Modifier), verticalArrangement = Arrangement.Center) {
+                                    Text(obj.name, color = if (obj.visible) Ink.OnPanel else Ink.Faint, fontSize = 13.sp,
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    val status = when {
+                                        !obj.inViewLayer -> "Fuera de la capa de vista"
+                                        !obj.visible && !obj.hidden -> "Oculto por colección o aislamiento"
+                                        obj.locked -> "Selección bloqueada"
+                                        obj.hidden -> "Oculto"
+                                        else -> obj.parent?.let { "↳ $it" } ?: ""
+                                    }
+                                    if (status.isNotEmpty()) Text(status, color = Ink.Faint, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
-                                Text(status, color = Ink.Faint, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
-                        }
-                        IconAction(AppIcons.Move, "Mover ${obj.name}", enabled = editable && obj.editable && obj.canSelect) {
-                            open = false; onMove(obj.id)
-                        }
-                        IconAction(AppIcons.action(ActionId.RENAME), "Renombrar ${obj.name}", enabled = editable && obj.editable) {
-                            rename = obj; open = false
-                        }
-                        if (collectionsAvailable) IconAction(AppIcons.Collection, "Mover ${obj.name} a colección", enabled = editable && obj.editable) {
-                            moveToCollection = obj; open = false
-                        }
-                        IconAction(AppIcons.visibility(obj.visible), if (obj.hidden) "Mostrar ${obj.name}" else "Ocultar ${obj.name}",
-                            enabled = editable && obj.editable && obj.inViewLayer && (obj.hidden || obj.visible)) {
-                            onAction(obj.id, "VISIBLE", obj.hidden, null)
-                        }
-                        IconAction(AppIcons.selectionLock(obj.locked), if (obj.locked) "Desbloquear ${obj.name}" else "Bloquear ${obj.name}",
-                            selected = obj.locked, enabled = editable && obj.editable) {
-                            onAction(obj.id, "LOCK", !obj.locked, null)
+                            IconAction(AppIcons.Move, "Mover ${obj.name}", enabled = editable && obj.editable && obj.canSelect) {
+                                open = false; onMove(obj.id)
+                            }
+                            IconAction(AppIcons.action(ActionId.RENAME), "Renombrar ${obj.name}", enabled = editable && obj.editable) {
+                                rename = obj; open = false
+                            }
+                            if (collectionsAvailable) IconAction(AppIcons.Collection, "Mover ${obj.name} a colección", enabled = editable && obj.editable) {
+                                moveToCollection = obj; open = false
+                            }
+                            IconAction(AppIcons.visibility(obj.visible), if (obj.hidden) "Mostrar ${obj.name}" else "Ocultar ${obj.name}",
+                                enabled = editable && obj.editable && obj.inViewLayer && (obj.hidden || obj.visible)) {
+                                onAction(obj.id, "VISIBLE", obj.hidden, null)
+                            }
+                            IconAction(AppIcons.selectionLock(obj.locked), if (obj.locked) "Desbloquear ${obj.name}" else "Bloquear ${obj.name}",
+                                selected = obj.locked, enabled = editable && obj.editable) {
+                                onAction(obj.id, "LOCK", !obj.locked, null)
+                            }
                         }
                     }
                 }
             }
         }
+    }
+    renameCollection?.let { target ->
+        RenameDialog(target.name, title = "Renombrar colección",
+            onDismiss = { renameCollection = null; open = true }, onRename = { name ->
+                onCollection("RENAME", mapOf("collection_id" to target.id, "name" to name))
+                renameCollection = null; open = true
+            })
     }
     rename?.let { target ->
         RenameDialog(target.name, onDismiss = { rename = null; open = true }, onRename = { name ->
@@ -140,23 +142,21 @@ fun OutlinerMenu(
         })
     }
     if (createCollection) NewCollectionDialog(
-        collections, chosenCollection?.id, objects.filter { it.selected }.map { it.id }, editable,
+        collections, objects.filter { it.selected }.map { it.id }, editable,
         onDismiss = { createCollection = false; open = true },
         onCreate = { name, parent, ids ->
             onCollection("CREATE", mapOf("name" to name, "parent_id" to parent, "object_ids" to ids))
-            createCollection = false; open = true
+            collapsed = emptySet(); query = ""; createCollection = false; open = true
         })
     moveToCollection?.let { target ->
         AlertDialog(onDismissRequest = { moveToCollection = null; open = true }, containerColor = Ink.PanelSolid,
             title = { Text("Mover ${target.name} a colección", color = Ink.OnPanel, fontSize = 16.sp) },
             text = {
                 Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    collections.forEach { collection -> DropdownMenuItem(
-                        text = { Text(collection.path, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-                        enabled = editable && collection.editable, onClick = {
-                            onCollection("MOVE_OBJECTS", mapOf("collection_id" to collection.id, "object_ids" to listOf(target.id)))
-                            collectionFilter = collection.id; moveToCollection = null; open = true
-                        }) }
+                    CollectionPicker(collections, editable) { collection ->
+                        onCollection("MOVE_OBJECTS", mapOf("collection_id" to collection.id, "object_ids" to listOf(target.id)))
+                        collapsed = emptySet(); query = ""; moveToCollection = null; open = true
+                    }
                 }
             },
             confirmButton = {},
@@ -165,11 +165,11 @@ fun OutlinerMenu(
 }
 
 @Composable
-private fun NewCollectionDialog(collections: List<OutlinerCollection>, initialParent: String?, selected: List<String>,
+private fun NewCollectionDialog(collections: List<OutlinerCollection>, selected: List<String>,
                                 enabled: Boolean, onDismiss: () -> Unit,
                                 onCreate: (String, String, List<String>) -> Unit) {
     var name by remember { mutableStateOf("Colección") }
-    var parentId by remember { mutableStateOf(initialParent ?: collections.firstOrNull { it.root }?.id) }
+    var parentId by remember { mutableStateOf(collections.firstOrNull { it.root }?.id) }
     var includeSelection by remember { mutableStateOf(false) }
     var parentMenu by remember { mutableStateOf(false) }
     val parent = collections.firstOrNull { it.id == parentId }
@@ -178,10 +178,9 @@ private fun NewCollectionDialog(collections: List<OutlinerCollection>, initialPa
         text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(name, { name = it }, label = { Text("Nombre") }, singleLine = true)
             Box {
-                PillButton("Dentro de: ${parent?.name ?: "Elige colección"} ▾") { parentMenu = true }
-                DropdownMenu(parentMenu, { parentMenu = false }, Modifier.heightIn(max = 320.dp)) {
-                    collections.forEach { collection -> DropdownMenuItem(text = { Text(collection.path) },
-                        enabled = collection.editable, onClick = { parentId = collection.id; parentMenu = false }) }
+                PillButton("Dentro de: ${parent?.treeName ?: "Elige colección"} ▾") { parentMenu = true }
+                DropdownMenu(parentMenu, { parentMenu = false }, Modifier.width(300.dp).heightIn(max = 320.dp)) {
+                    CollectionPicker(collections, enabled) { collection -> parentId = collection.id; parentMenu = false }
                 }
             }
             PillButton("Mover selección (${selected.size})", selected = includeSelection, enabled = selected.isNotEmpty()) {
@@ -192,4 +191,42 @@ private fun NewCollectionDialog(collections: List<OutlinerCollection>, initialPa
             parent?.let { onCreate(name.trim(), it.id, if (includeSelection) selected else emptyList()) }
         } },
         dismissButton = { PillButton("Cancelar", onClick = onDismiss) })
+}
+
+/** Misma jerarquía para explorar, elegir destino y elegir el padre de una colección. */
+@Composable
+private fun CollectionRow(
+    collection: OutlinerCollection, depth: Int, expanded: Boolean, hasChildren: Boolean,
+    onToggle: () -> Unit, toggleEnabled: Boolean = true,
+    onChoose: (() -> Unit)? = null, chooseEnabled: Boolean = true,
+    onRename: (() -> Unit)? = null,
+) {
+    Row(Modifier.fillMaxWidth().padding(start = (depth.coerceAtMost(6) * 14).dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        IconAction(AppIcons.disclosure(expanded), "${if (expanded) "Plegar" else "Desplegar"} ${collection.treeName}",
+            enabled = hasChildren && toggleEnabled, onClick = onToggle)
+        HoverHelp(collection.treeName, if (collection.root) "Raíz: contiene todas las colecciones." else collection.path,
+            modifier = Modifier.weight(1f), enabled = chooseEnabled) {
+            Row(Modifier.fillMaxWidth().heightIn(min = 44.dp)
+                .then(if (onChoose != null && chooseEnabled) Modifier.clickableNoRipple(onChoose)
+                    else if (onChoose == null && hasChildren && toggleEnabled) Modifier.clickableNoRipple(onToggle) else Modifier),
+                verticalAlignment = Alignment.CenterVertically) {
+                Text(collection.treeName, color = if (chooseEnabled) Ink.Accent else Ink.Faint,
+                    fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        if (onRename != null) IconAction(AppIcons.action(ActionId.RENAME), "Renombrar ${collection.treeName}", onClick = onRename)
+    }
+}
+
+@Composable
+private fun CollectionPicker(collections: List<OutlinerCollection>, enabled: Boolean, onChoose: (OutlinerCollection) -> Unit) {
+    var collapsed by remember { mutableStateOf(emptySet<String>()) }
+    outlinerTreeRows(collections, collapsed = collapsed).forEach { row ->
+        row.collection?.let { collection ->
+            CollectionRow(collection, row.depth, row.expanded, row.hasChildren,
+                onToggle = { collapsed = if (collection.id in collapsed) collapsed - collection.id else collapsed + collection.id },
+                onChoose = { onChoose(collection) }, chooseEnabled = enabled && collection.editable)
+        }
+    }
 }

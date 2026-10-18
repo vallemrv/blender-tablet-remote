@@ -44,12 +44,13 @@ fun RenameDialog(
     initialName: String,
     onDismiss: () -> Unit,
     onRename: (String) -> Unit,
+    title: String = "Renombrar objeto",
 ) {
     var name by remember { mutableStateOf(initialName) }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Ink.PanelSolid,
-        title = { Text("Renombrar objeto", color = Ink.OnPanel, fontSize = 16.sp) },
+        title = { Text(title, color = Ink.OnPanel, fontSize = 16.sp) },
         text = {
             OutlinedTextField(
                 value = name,

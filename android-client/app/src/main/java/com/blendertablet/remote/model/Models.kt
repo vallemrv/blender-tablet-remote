@@ -41,15 +41,6 @@ data class OutlinerCollection(
     val root: Boolean, val editable: Boolean, val count: Int,
 )
 
-/** Las colecciones de Blender admiten varios padres; filtra también sus descendientes. */
-fun outlinerCollectionScope(collections: List<OutlinerCollection>, root: String): Set<String> {
-    val ids = mutableSetOf(root)
-    do {
-        val previous = ids.size
-        collections.filter { it.parents.any(ids::contains) }.forEach { ids += it.id }
-    } while (ids.size != previous)
-    return ids
-}
 data class ObjectChoiceFilter(val type: String? = null, val excludeSelf: Boolean = false)
 sealed interface ModifierDefault {
     data class Integer(val value: Int) : ModifierDefault

@@ -89,6 +89,33 @@ class CollectionTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(set(rows[0]['parents']), {aid, bid})
 
+    def test_rename_keeps_identity_memberships_and_updates_child_paths(self):
+        parent, pid = self.create('Antes', objects=(self.first,))
+        child, cid = self.create('Hija', pid)
+        matrix = self.first.matrix_world.copy()
+        self.undo.reset_mock()
+        result = outliner.collection_action(dict(action='RENAME', collection_id=pid, name='Después'))
+        rows = {c['id']: c for c in result['collections']}
+        self.assertEqual(rows[pid]['name'], 'Después')
+        self.assertEqual(rows[cid]['path'], '/ Después / Hija')
+        self.assertEqual(list(self.first.users_collection), [parent])
+        self.assertEqual(self.first.matrix_world, matrix)
+        self.undo.assert_called_once()
+        outliner.collection_action(dict(action='RENAME', collection_id=pid, name='Después'))
+        self.undo.assert_called_once()
+
+    def test_invalid_rename_and_root_are_rejected_without_undo(self):
+        collection, cid = self.create('Intacta')
+        root = self.identity(bpy.context.scene.collection)
+        self.undo.reset_mock()
+        for payload in [dict(collection_id=root, name='Raíz'), dict(collection_id='missing', name='Nueva'),
+                        dict(collection_id=cid, name=' '), dict(collection_id=cid, name='é' * 32),
+                        dict(collection_id=cid)]:
+            with self.assertRaises((BadPayload, CommandError)):
+                outliner.collection_action(dict(action='RENAME', **payload))
+        self.assertEqual(collection.name, 'Intacta')
+        self.undo.assert_not_called()
+
     def test_native_collection_membership_persists_in_blend(self):
         collection, _ = self.create('Guardada', objects=(self.first,))
         object_name, collection_name = self.first.name, collection.name
