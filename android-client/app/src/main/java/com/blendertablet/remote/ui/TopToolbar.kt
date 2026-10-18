@@ -3,19 +3,6 @@ package com.blendertablet.remote.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Redo
-import androidx.compose.material.icons.automirrored.filled.Undo
-import androidx.compose.material.icons.automirrored.filled.CallMerge
-import androidx.compose.material.icons.filled.CropSquare
-import androidx.compose.material.icons.filled.BlurOn
-import androidx.compose.material.icons.filled.Brush
-import androidx.compose.material.icons.filled.Grid4x4
-import androidx.compose.material.icons.filled.LinearScale
-import androidx.compose.material.icons.filled.ScatterPlot
-import androidx.compose.material.icons.filled.Straighten
-import androidx.compose.material.icons.filled.ViewInAr
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,19 +52,19 @@ fun TopToolbar(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     if (blender.features.shading && !blender.material.active) {
                         IconAction(
-                            Icons.Default.Grid4x4, "Wireframe",
+                            AppIcons.Wireframe, "Wireframe",
                             selected = blender.view.shading == Shading.WIREFRAME,
                         ) { vm.toggleShading() }
                     }
                     if (inEdit && blender.features.editSettings) {
                         IconAction(
-                            Icons.Default.BlurOn, "Edición proporcional",
+                            AppIcons.Proportional, "Edición proporcional",
                             selected = blender.editSettings.proportional,
                         ) {
                             vm.toggleProportional()
                         }
                         IconAction(
-                            Icons.AutoMirrored.Filled.CallMerge, "Auto Merge",
+                            AppIcons.AutoMerge, "Auto Merge",
                             selected = blender.editSettings.autoMerge,
                         ) {
                             vm.toggleAutoMerge()
@@ -95,8 +82,8 @@ fun TopToolbar(
                     // iconos en esta misma fila, delante de Deshacer.
                     if (blender.material.active) MaterialTopActions(state, vm)
                     if (blender.cad.workspace) CadTopActions(state, vm)
-                    IconAction(Icons.AutoMirrored.Filled.Undo, "Deshacer") { vm.undo() }
-                    IconAction(Icons.AutoMirrored.Filled.Redo, "Rehacer") { vm.redo() }
+                    IconAction(AppIcons.Undo, "Deshacer") { vm.undo() }
+                    IconAction(AppIcons.Redo, "Rehacer") { vm.redo() }
                     if (blender.cad.workspace) CadSelectionActions(state, vm)
                     if (!blender.cad.workspace && blender.mode != BlenderMode.SCULPT && !blender.material.active && blender.features.repeatLast) {
                         PillButton("⇧R") { vm.repeatLast() }
@@ -107,7 +94,7 @@ fun TopToolbar(
 
         FloatingPanel {
             IconAction(
-                icon = if (chromeVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                icon = AppIcons.visibility(!chromeVisible),
                 description = if (chromeVisible) "Ocultar controles" else "Mostrar controles",
                 onClick = onToggleChrome,
             )
@@ -137,15 +124,15 @@ fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier
             FloatingPanel {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     IconAction(
-                        Icons.Default.ScatterPlot, "Vértices",
+                        AppIcons.selectionMode(SelectionMode.VERTEX), "Vértices",
                         selected = blender.selectionMode == SelectionMode.VERTEX,
                     ) { vm.setSelectionMode(SelectionMode.VERTEX) }
                     IconAction(
-                        Icons.Default.LinearScale, "Aristas",
+                        AppIcons.selectionMode(SelectionMode.EDGE), "Aristas",
                         selected = blender.selectionMode == SelectionMode.EDGE,
                     ) { vm.setSelectionMode(SelectionMode.EDGE) }
                     IconAction(
-                        Icons.Default.CropSquare, "Caras",
+                        AppIcons.selectionMode(SelectionMode.FACE), "Caras",
                         selected = blender.selectionMode == SelectionMode.FACE,
                     ) { vm.setSelectionMode(SelectionMode.FACE) }
                 }
@@ -157,11 +144,11 @@ fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier
                 // Object como salida.
                 if (!blender.cad.workspace) {
                     IconAction(
-                        Icons.Default.ViewInAr, "Object Mode",
+                        AppIcons.ModeObject, "Object Mode",
                         selected = blender.mode == BlenderMode.OBJECT && !blender.cad.workspace && !blender.material.active,
                     ) { vm.setMode(BlenderMode.OBJECT) }
                     IconAction(
-                        Icons.Default.Straighten, "Edit Mode",
+                        AppIcons.ModeEdit, "Edit Mode",
                         selected = inEdit,
                         enabled = editable,
                     ) { vm.setMode(BlenderMode.EDIT) }
@@ -171,7 +158,7 @@ fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier
                 if (blender.features.cad.available) PillButton("CAD", selected = blender.cad.workspace) { vm.enterCad() }
                 if (blender.cad.workspace) {
                     IconAction(
-                        Icons.Default.ViewInAr, "Salir de CAD a Object Mode",
+                        AppIcons.ModeObject, "Salir de CAD a Object Mode",
                     ) { vm.setMode(BlenderMode.OBJECT) }
                 } else {
                     IconAction(

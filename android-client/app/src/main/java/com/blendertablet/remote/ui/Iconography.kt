@@ -74,10 +74,33 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.unit.dp
+import com.blendertablet.remote.model.SelectionMode
+import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.ActionId
 import com.blendertablet.remote.model.AddCategory
 import com.blendertablet.remote.model.EditTool
 import com.blendertablet.remote.model.SnapType
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.AutoAwesomeMotion
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Deblur
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled._3dRotation
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.CallMerge
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
 
 /**
  * Vocabulario visual único de la aplicación.
@@ -87,8 +110,72 @@ import com.blendertablet.remote.model.SnapType
  * y permite reemplazar un símbolo por uno propio sin perseguir usos por toda la UI.
  */
 object AppIcons {
-    /** Manipulador de mover/rotar/escalar sobre la selección. */
-    val gizmo: ImageVector get() = Icons.Default.OpenWith
+    /** Manipulador sobre la selección: distinto de Mover, que abre la barra numérica. */
+    val gizmo: ImageVector get() = Icons.Default._3dRotation
+
+    // Controles comunes: las mismas salidas, flechas y marcas en bandejas, menús y paneles.
+    val Confirm: ImageVector = Icons.Default.Check
+    val Cancel: ImageVector = Icons.Default.Close
+    /** Marca de la opción elegida en un desplegable. */
+    val Checked: ImageVector = Icons.Default.Check
+    val Undo: ImageVector = Icons.AutoMirrored.Filled.Undo
+    val Redo: ImageVector = Icons.AutoMirrored.Filled.Redo
+    val Back: ImageVector = Icons.AutoMirrored.Filled.ArrowBack
+    val Add: ImageVector = Icons.Default.Add
+    val Delete: ImageVector = Icons.Default.Delete
+    val MoveUp: ImageVector = Icons.Default.ArrowUpward
+    val MoveDown: ImageVector = Icons.Default.ArrowDownward
+    val SubmenuOpen: ImageVector = Icons.Default.ChevronRight
+    val SubmenuBack: ImageVector = Icons.Default.ChevronLeft
+    val Dropdown: ImageVector = Icons.Default.ArrowDropDown
+    val Render: ImageVector = Icons.Default.PhotoCamera
+    val Debug: ImageVector = Icons.Default.BugReport
+    val Modifiers: ImageVector = Icons.Default.Build
+    val EditShortcuts: ImageVector = Icons.Default.Keyboard
+    val Views: ImageVector = Icons.Default.ViewInAr
+    val SelectTool: ImageVector = Icons.Default.Mouse
+    val Wireframe: ImageVector = Icons.Default.Grid4x4
+    val Proportional: ImageVector = Icons.Default.BlurOn
+    val AutoMerge: ImageVector = Icons.AutoMirrored.Filled.CallMerge
+    val ModeObject: ImageVector = Icons.Default.ViewInAr
+    val ModeEdit: ImageVector = Icons.Default.Straighten
+
+    /** Fila desplegable de una lista: flecha abajo abierta, a la derecha cerrada. */
+    fun disclosure(open: Boolean): ImageVector =
+        if (open) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight
+    /** Panel que crece hacia arriba (pie de vistas). */
+    fun drawer(open: Boolean): ImageVector = if (open) Icons.Default.ExpandMore else Icons.Default.ExpandLess
+    /** Estado visible/oculto de un elemento. */
+    fun visibility(visible: Boolean): ImageVector =
+        if (visible) Icons.Default.Visibility else Icons.Default.VisibilityOff
+    /** Cadena de proporciones de Escalar. */
+    fun chain(linked: Boolean): ImageVector = if (linked) Icons.Default.Link else Icons.Default.LinkOff
+    fun selectionMode(mode: SelectionMode): ImageVector = when (mode) {
+        SelectionMode.VERTEX -> Icons.Default.ScatterPlot
+        SelectionMode.EDGE -> Icons.Default.LinearScale
+        SelectionMode.FACE -> Icons.Default.CropSquare
+    }
+    fun transform(mode: TransformMode): ImageVector = when (mode) {
+        TransformMode.MOVE -> Move
+        TransformMode.ROTATE -> Rotate
+        TransformMode.SCALE -> Scale
+    }
+    fun origin(intent: String): ImageVector = when (intent) {
+        "CURSOR" -> Icons.Default.MyLocation
+        "GEOMETRY" -> Icons.Default.CenterFocusStrong
+        else -> Icons.Default.Adjust
+    }
+    /** Un icono por familia de modificador; un tipo nuevo cae en el genérico. */
+    fun modifier(type: String): ImageVector = when (type) {
+        "MULTIRES" -> Multires
+        "SUBSURF" -> Icons.Default.Deblur
+        "ARRAY" -> Icons.Default.AutoAwesomeMotion
+        "BEVEL" -> Icons.Default.RoundedCorner
+        "SOLIDIFY" -> Icons.Default.Layers
+        "BOOLEAN" -> Icons.Default.JoinFull
+        "MIRROR" -> Icons.Default.Flip
+        else -> Fallback
+    }
     val materials: ImageVector get() = Icons.Default.Palette
     val Fallback: ImageVector = Icons.Default.Tune
     val Duplicate: ImageVector = Icons.Default.ContentCopy
@@ -216,8 +303,8 @@ object AppIcons {
     )
     private val planeNormals = mapOf("PLANE_XY" to 'Z', "PLANE_XZ" to 'Y', "PLANE_YZ" to 'X')
     private val planeVectors by lazy {
-        val axes = mapOf('X' to ("M4,14 L15.3,20.5" to Color(0xFFFF5555)), 'Y' to ("M4,14 L15.3,7.5" to Color(0xFF8BDB3D)),
-            'Z' to ("M4,14 L4,1" to Color(0xFF4D8DFF)))
+        val axes = mapOf('X' to ("M4,14 L15.3,20.5" to Ink.AxisX), 'Y' to ("M4,14 L15.3,7.5" to Ink.AxisY),
+            'Z' to ("M4,14 L4,1" to Ink.AxisZ))
         planeFaces.mapValues { (name, face) ->
             ImageVector.Builder("CAD $name", 24.dp, 24.dp, 24f, 24f).apply {
                 fun axis(key: Char) = axes.getValue(key).let { (data, color) ->
@@ -236,9 +323,9 @@ object AppIcons {
     /** Icons whose colours carry meaning and must not be tinted. */
     fun cadMulticolor(intent: String) = intent in planeFaces
     fun cad(intent: String): ImageVector = when (intent) {
-        "VERTEX" -> Icons.Default.ScatterPlot
-        "EDGE" -> Icons.Default.LinearScale
-        "FACE" -> Icons.Default.CropSquare
+        "VERTEX" -> selectionMode(SelectionMode.VERTEX)
+        "EDGE" -> selectionMode(SelectionMode.EDGE)
+        "FACE" -> selectionMode(SelectionMode.FACE)
         "SELECT_ALL" -> Icons.Default.SelectAll
         "DESELECT_ALL" -> Icons.Default.Deselect
         "FINISH" -> Icons.Default.Check
@@ -265,7 +352,7 @@ object AppIcons {
         ActionId.TOOL_CIRCLE -> Icons.Default.BlurOn
         ActionId.DESELECT_ALL -> Icons.Default.Deselect
         ActionId.SELECT_INVERT -> Icons.Default.Flip
-        ActionId.SELECT_UNDER -> Icons.Default.Mouse
+        ActionId.SELECT_UNDER -> SelectTool
         ActionId.SELECT_ADD_UNDER -> Icons.Default.LibraryAdd
         ActionId.SELECT_LOOP -> Icons.Default.Timeline
         ActionId.SELECT_RING -> Icons.Default.Rowing
@@ -275,7 +362,7 @@ object AppIcons {
         ActionId.VIEW_LOCAL -> Icons.Default.CenterFocusStrong
         ActionId.DUPLICATE -> Duplicate
         ActionId.RENAME -> Icons.Default.Edit
-        ActionId.DELETE -> Icons.Default.Delete
+        ActionId.DELETE -> Delete
         ActionId.DISSOLVE -> Icons.Default.DeleteSweep
         ActionId.APPLY_TRANSFORMS -> Icons.Default.Transform
         ActionId.EDIT_MESH_TOOLS -> Icons.Default.GridOn

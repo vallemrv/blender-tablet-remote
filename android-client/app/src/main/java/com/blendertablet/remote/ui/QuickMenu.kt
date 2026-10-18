@@ -24,9 +24,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -317,7 +314,7 @@ private fun VerticalMenuPanel(
                         maxLines = 1,
                         modifier = Modifier.weight(1f).padding(start = 8.dp),
                     )
-                    IconAction(Icons.Default.Close, "Cerrar menú", onClick = onDismiss)
+                    IconAction(AppIcons.Cancel, "Cerrar menú", onClick = onDismiss)
                 }
                 Box(
                     Modifier
@@ -388,7 +385,7 @@ private fun SheetRow(action: QuickAction, onClick: () -> Unit, onLongClick: (() 
             modifier = Modifier.weight(1f),
         )
         if (action.isGroup) {
-            Icon(Icons.Default.ChevronRight, null, Modifier.size(16.dp), tint = Ink.Faint)
+            Icon(AppIcons.SubmenuOpen, null, Modifier.size(16.dp), tint = Ink.Faint)
         }
     }
 }
@@ -405,7 +402,7 @@ private fun BackRow(onBack: () -> Unit) {
             .padding(horizontal = 10.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Default.ChevronLeft, null, Modifier.size(18.dp), tint = Ink.Accent)
+        Icon(AppIcons.SubmenuBack, null, Modifier.size(18.dp), tint = Ink.Accent)
         Spacer(Modifier.width(12.dp))
         Text("Atrás", color = Ink.Accent, fontSize = 13.sp, modifier = Modifier.weight(1f))
     }

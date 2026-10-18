@@ -17,10 +17,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
@@ -63,11 +59,7 @@ import com.blendertablet.remote.model.scaleValuesAfterAxisEdit
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-private val AxisColors = mapOf(
-    Axis.X to Color(0xFFE05B62),
-    Axis.Y to Color(0xFF8BC34A),
-    Axis.Z to Color(0xFF4A90D9),
-)
+private val AxisColors = mapOf(Axis.X to Ink.AxisX, Axis.Y to Ink.AxisY, Axis.Z to Ink.AxisZ)
 
 /**
  * Barra de opciones de la transformación modal.
@@ -220,9 +212,9 @@ fun TransformBar(
             Spacer(Modifier.width(10.dp))
             // Confirmar y descartar, fijos a la derecha: son las dos únicas salidas
             // y no deben confundirse entre sí ni desplazarse con el scroll.
-            RoundAction(Icons.Default.Close, "Descartar", Ink.Bad, onCancel)
+            RoundAction(AppIcons.Cancel, "Descartar", Ink.Bad, onCancel)
             Spacer(Modifier.width(4.dp))
-            RoundAction(Icons.Default.Check, "Confirmar", Ink.Ok, onConfirm)
+            RoundAction(AppIcons.Confirm, "Confirmar", Ink.Ok, onConfirm)
         }
     }
 }
@@ -335,7 +327,7 @@ private fun ParametricAxisInputs(
     var scaleLinked by remember(session.sessionId) { mutableStateOf(true) }
     if (session.mode == TransformMode.SCALE) {
         IconAction(
-            icon = if (scaleLinked) Icons.Default.Link else Icons.Default.LinkOff,
+            icon = AppIcons.chain(scaleLinked),
             description = if (scaleLinked) "Dimensiones vinculadas" else "Dimensiones independientes",
             selected = scaleLinked,
         ) { scaleLinked = !scaleLinked }

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -100,7 +99,7 @@ private fun FamilyToolButton(
                         Icon(AppIcons.toolbarVariant(family.id, variant.id), null)
                     },
                     trailingIcon = {
-                        if (variant.id == displayedVariant?.id) Icon(Icons.Default.Check, null, tint = Ink.Accent)
+                        if (variant.id == displayedVariant?.id) Icon(AppIcons.Checked, null, tint = Ink.Accent)
                     },
                     enabled = variant.availableIn(selectionMode),
                     onClick = {

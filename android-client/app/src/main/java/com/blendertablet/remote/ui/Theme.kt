@@ -25,9 +25,10 @@ object Ink {
     val Warn = Color(0xFFE8B454)
     val Bad = Color(0xFFE8685D)
 
-    val AxisX = Color(0xFFE05B62)
-    val AxisY = Color(0xFF8BC34A)
-    val AxisZ = Color(0xFF4A90D9)
+    /** Ejes del tema por defecto de Blender; el backend dibuja los mismos (`palette.py`). */
+    val AxisX = Color(0xFFFF3352)
+    val AxisY = Color(0xFF8BDC00)
+    val AxisZ = Color(0xFF2890FF)
 }
 
 object Metrics {

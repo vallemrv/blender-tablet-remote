@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -80,7 +79,7 @@ private fun <T> SnapOptions(
                         )
                     },
                     trailingIcon = {
-                        if (option == selected) Icon(Icons.Default.Check, null, tint = Ink.Accent)
+                        if (option == selected) Icon(AppIcons.Checked, null, tint = Ink.Accent)
                     },
                     onClick = {
                         expanded = false

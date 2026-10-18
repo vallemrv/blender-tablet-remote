@@ -3,6 +3,7 @@ import gpu
 from gpu_extras.batch import batch_for_shader
 from mathutils import Matrix, Vector
 from ..camera import camera
+from ..palette import AXIS_COLORS
 
 
 def draw_cad_selection(rv3d, width, height):
@@ -132,7 +133,7 @@ def draw_cad_plane(rv3d, width, height):
     sheet=batch_for_shader(fill,'TRIS',{'pos':[quad[0],quad[1],quad[2],quad[0],quad[2],quad[3]]})
     border=batch_for_shader(line,'LINES',{'pos':[p for i in range(4) for p in (quad[i],quad[(i+1)%4])]})
     grabbed=(session.get('grab') or {}).get('handle')
-    colors={'X':(1.,.33,.33,1.),'Y':(.55,.86,.24,1.),'N':(.3,.55,1.,1.)}
+    colors={'X':AXIS_COLORS['X'],'Y':AXIS_COLORS['Y'],'N':AXIS_COLORS['Z']}
     axes=[]
     for key,(start,tip,direction,side) in gizmo['handles'].items():
         head=(tip-start).length*.22

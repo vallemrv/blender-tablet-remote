@@ -13,9 +13,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material3.Text
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -153,8 +150,8 @@ fun EditToolTray(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     SchemaToolParameters(session.controls, session.parameters, lengthUnit, unitScaleLength,
                         onParameter, Modifier.weight(1f))
-                    RoundAction(Icons.Default.Close, if (session.active) "Descartar" else "Salir", Ink.Bad, onCancel)
-                    if (session.active) RoundAction(Icons.Default.Check, "Confirmar", if (session.canConfirm) Ink.Ok else Ink.Faint,
+                    RoundAction(AppIcons.Cancel, if (session.active) "Descartar" else "Salir", Ink.Bad, onCancel)
+                    if (session.active) RoundAction(AppIcons.Confirm, "Confirmar", if (session.canConfirm) Ink.Ok else Ink.Faint,
                         onClick = { if (session.canConfirm) onConfirm() })
                 }
             }
@@ -169,7 +166,7 @@ fun EditToolTray(
                     modifier = Modifier.padding(horizontal = 8.dp),
                 )
                 Spacer(Modifier.width(8.dp))
-                RoundAction(Icons.Default.Close, "Cancelar", Ink.Bad, onCancel)
+                RoundAction(AppIcons.Cancel, "Cancelar", Ink.Bad, onCancel)
             }
             return@FloatingPanel
         }
@@ -220,12 +217,12 @@ fun EditToolTray(
             }
             Spacer(Modifier.width(10.dp))
             if (session.tool == EditTool.LOOP_CUT && session.loopCount > 1) {
-                RoundAction(Icons.AutoMirrored.Filled.Undo, "Deshacer último loop", Ink.Muted, onLoopPop)
+                RoundAction(AppIcons.Undo, "Deshacer último loop", Ink.Muted, onLoopPop)
                 Spacer(Modifier.width(4.dp))
             }
-            RoundAction(Icons.Default.Close, "Descartar", Ink.Bad, onCancel)
+            RoundAction(AppIcons.Cancel, "Descartar", Ink.Bad, onCancel)
             Spacer(Modifier.width(4.dp))
-            RoundAction(Icons.Default.Check, "Confirmar", Ink.Ok, onConfirm)
+            RoundAction(AppIcons.Confirm, "Confirmar", Ink.Ok, onConfirm)
         }
     }
 }
@@ -466,11 +463,11 @@ fun KnifeTray(
                 }
             }
             Spacer(Modifier.width(10.dp))
-            RoundAction(Icons.Default.Close, "Descartar", Ink.Bad, onCancel)
+            RoundAction(AppIcons.Cancel, "Descartar", Ink.Bad, onCancel)
             Spacer(Modifier.width(4.dp))
             // Confirmar solo actúa con un segmento válido (el backend lo exige).
             RoundAction(
-                Icons.Default.Check, "Confirmar",
+                AppIcons.Confirm, "Confirmar",
                 if (session.points.size >= 2 || session.strokes.isNotEmpty()) Ink.Ok else Ink.Faint,
                 onClick = { if (session.points.size >= 2 || session.strokes.isNotEmpty()) onConfirm() },
             )
@@ -508,7 +505,7 @@ fun BisectTray(
                     modifier = Modifier.padding(horizontal = 8.dp),
                 )
                 Spacer(Modifier.width(8.dp))
-                RoundAction(Icons.Default.Close, "Cancelar", Ink.Bad, onCancel)
+                RoundAction(AppIcons.Cancel, "Cancelar", Ink.Bad, onCancel)
             }
             return@FloatingPanel
         }
@@ -539,9 +536,9 @@ fun BisectTray(
                 }
             }
             Spacer(Modifier.width(10.dp))
-            RoundAction(Icons.Default.Close, "Descartar", Ink.Bad, onCancel)
+            RoundAction(AppIcons.Cancel, "Descartar", Ink.Bad, onCancel)
             Spacer(Modifier.width(4.dp))
-            RoundAction(Icons.Default.Check, "Confirmar", Ink.Ok, onConfirm)
+            RoundAction(AppIcons.Confirm, "Confirmar", Ink.Ok, onConfirm)
         }
     }
 }

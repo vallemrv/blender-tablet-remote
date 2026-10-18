@@ -17,23 +17,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.AutoAwesomeMotion
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Deblur
-import androidx.compose.material.icons.filled.JoinFull
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.Flip
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.RoundedCorner
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -114,7 +97,7 @@ private fun Header(state: BlenderState, actions: ModifierActions) {
 
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         IconAction(
-            Icons.AutoMirrored.Filled.ArrowBack,
+            AppIcons.Back,
             "Cerrar modificadores",
             onClick = actions.close,
         )
@@ -127,7 +110,7 @@ private fun Header(state: BlenderState, actions: ModifierActions) {
         )
         Box {
             IconAction(
-                Icons.Default.Add,
+                AppIcons.Add,
                 "Añadir modificador",
                 selected = addOpen,
                 enabled = state.modifierOptions.isNotEmpty(),
@@ -147,7 +130,7 @@ private fun Header(state: BlenderState, actions: ModifierActions) {
                     DropdownMenuItem(
                         text = { Text(descriptor.label, color = Ink.OnPanel, fontSize = 13.sp) },
                         leadingIcon = {
-                            Icon(iconOf(descriptor.type), null, Modifier.size(18.dp), tint = Ink.Muted)
+                            Icon(AppIcons.modifier(descriptor.type), null, Modifier.size(18.dp), tint = Ink.Muted)
                         },
                         onClick = {
                             addOpen = false
@@ -195,10 +178,10 @@ private fun ModifierCard(
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ModifierHeaderButton(
-                    if (expanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    AppIcons.disclosure(expanded),
                     if (expanded) "Plegar ${item.name}" else "Desplegar ${item.name}",
                 ) { expanded = !expanded }
-                Icon(iconOf(item.type), item.type, Modifier.size(16.dp), tint = Ink.Accent)
+                Icon(AppIcons.modifier(item.type), item.type, Modifier.size(16.dp), tint = Ink.Accent)
                 Spacer(Modifier.width(4.dp))
                 Text(
                     item.name,
@@ -208,20 +191,20 @@ private fun ModifierCard(
                     modifier = Modifier.weight(1f),
                 )
                 ModifierHeaderButton(
-                    Icons.Default.ArrowUpward, "Subir en la pila",
+                    AppIcons.MoveUp, "Subir en la pila",
                     enabled = index > 0,
                 ) { actions.move(item.name, index - 1) }
                 ModifierHeaderButton(
-                    Icons.Default.ArrowDownward, "Bajar en la pila",
+                    AppIcons.MoveDown, "Bajar en la pila",
                     enabled = index < state.modifiers.lastIndex,
                 ) { actions.move(item.name, index + 1) }
                 ModifierHeaderButton(
-                    Icons.Default.Visibility,
+                    AppIcons.visibility(true),
                     if (item.showViewport) "Visible en el viewport" else "Oculto en el viewport",
                     selected = item.showViewport,
                 ) { actions.toggle(item.name, !item.showViewport, null) }
                 ModifierHeaderButton(
-                    Icons.Default.PhotoCamera,
+                    AppIcons.Render,
                     if (item.showRender) "Visible en el render" else "Oculto en el render",
                     selected = item.showRender,
                 ) { actions.toggle(item.name, null, !item.showRender) }
@@ -234,8 +217,8 @@ private fun ModifierCard(
 
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     Spacer(Modifier.weight(1f))
-                    IconAction(Icons.Default.Check, "Aplicar", tint = Ink.Ok) { actions.apply(item.name) }
-                    IconAction(Icons.Default.Delete, "Eliminar", tint = Ink.Bad) { actions.remove(item.name) }
+                    IconAction(AppIcons.Confirm, "Aplicar", tint = Ink.Ok) { actions.apply(item.name) }
+                    IconAction(AppIcons.Delete, "Eliminar", tint = Ink.Bad) { actions.remove(item.name) }
                 }
             }
         }
@@ -298,7 +281,7 @@ private fun ModifierParameter(
         "bool" -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(spec.label, color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.weight(1f))
             IconAction(
-                Icons.Default.Check,
+                AppIcons.Checked,
                 if (value == true) "${spec.label}: activado" else "${spec.label}: desactivado",
                 selected = value == true,
                 tint = Ink.Faint,
@@ -405,7 +388,7 @@ private fun EditableModifierScalar(
             onDone = ::commit,
         )
         StepperButton("+", valid && (spec.max == null || value < spec.max)) { nudge(1) }
-        if (draft != null) ModifierHeaderButton(Icons.Default.Check, "Confirmar ${spec.label}", enabled = typed != null) { commit() }
+        if (draft != null) ModifierHeaderButton(AppIcons.Confirm, "Confirmar ${spec.label}", enabled = typed != null) { commit() }
     }
 }
 
@@ -461,22 +444,6 @@ private fun ChoiceRow(
     }
 }
 
-/**
- * Un icono por familia de modificador.
- *
- * El tipo llega del backend como texto, así que un tipo nuevo cae en el icono genérico
- * en vez de dejar el hueco vacío: la app puede ser más vieja que el servidor.
- */
-private fun iconOf(type: String): ImageVector = when (type) {
-    "MULTIRES" -> AppIcons.Multires
-    "SUBSURF" -> Icons.Default.Deblur
-    "ARRAY" -> Icons.Default.AutoAwesomeMotion
-    "BEVEL" -> Icons.Default.RoundedCorner
-    "SOLIDIFY" -> Icons.Default.Layers
-    "BOOLEAN" -> Icons.Default.JoinFull
-    "MIRROR" -> Icons.Default.Flip
-    else -> Icons.Default.Tune
-}
 
 
 private fun step(spec: ModifierParameterDescriptor): Double =

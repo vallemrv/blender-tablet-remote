@@ -19,52 +19,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Adjust
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AspectRatio
-import androidx.compose.material.icons.filled.BlurOn
-import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.automirrored.filled.CallMade
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.CenterFocusStrong
-import androidx.compose.material.icons.filled.CropFree
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.Deselect
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Flip
-import androidx.compose.material.icons.filled.Grid4x4
-import androidx.compose.material.icons.filled.Hexagon
-import androidx.compose.material.icons.filled.Hub
-import androidx.compose.material.icons.filled.JoinFull
-import androidx.compose.material.icons.filled.LibraryAdd
-import androidx.compose.material.icons.filled.ContentCut
-import androidx.compose.material.icons.filled.Lens
-import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.LinearScale
-import androidx.compose.material.icons.filled.Mouse
-import androidx.compose.material.icons.filled.OpenWith
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.automirrored.filled.Redo
-import androidx.compose.material.icons.automirrored.filled.RotateRight
-import androidx.compose.material.icons.automirrored.filled.ShowChart
-import androidx.compose.material.icons.filled.RoundedCorner
-import androidx.compose.material.icons.filled.Rowing
-import androidx.compose.material.icons.filled.SelectAll
-import androidx.compose.material.icons.filled.ShowChart
-import androidx.compose.material.icons.filled.TextFields
-import androidx.compose.material.icons.filled.Timeline
-import androidx.compose.material.icons.filled.TouchApp
-import androidx.compose.material.icons.automirrored.filled.Undo
-import androidx.compose.material.icons.filled.ViewInAr
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.filled.Transform
-import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.filled.Waves
-import androidx.compose.material.icons.filled.WbSunny
-import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -375,7 +329,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                         fontSize = 12.sp,
                         modifier = Modifier.padding(start = 6.dp, end = 2.dp),
                     )
-                    IconAction(Icons.Default.Close, "Volver a la selección normal") {
+                    IconAction(AppIcons.Cancel, "Volver a la selección normal") {
                         vm.toggleShapeTool(state.shapeTool)
                     }
                 }
@@ -408,7 +362,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                             .align(Alignment.TopEnd)
                             .padding(top = 142.dp, end = Metrics.EdgeMargin),
                     ) {
-                        IconAction(Icons.Default.Build, "Abrir modificadores") {
+                        IconAction(AppIcons.Modifiers, "Abrir modificadores") {
                             modifiersOpen = true
                             vm.openModifiers()
                         }
@@ -1006,7 +960,7 @@ private fun RailContent(
 
     RailLabel("HERRAMIENTA")
     IconAction(
-        Icons.Default.Mouse, "Seleccionar",
+        AppIcons.SelectTool, "Seleccionar",
         selected = state.activeTool == ActiveTool.SELECT && !session.active && !toolSession.active,
         onClick = vm::selectTool,
     )
@@ -1018,19 +972,19 @@ private fun RailContent(
         )
     }
     IconAction(
-        Icons.Default.OpenWith, "Mover",
+        AppIcons.transform(TransformMode.MOVE), "Mover",
         selected = isTransformToolSelected(state.activeTool, session, TransformMode.MOVE),
         enabled = editable,
         onClick = { vm.transformBegin(TransformMode.MOVE) },
     )
     IconAction(
-        Icons.AutoMirrored.Filled.RotateRight, "Rotar",
+        AppIcons.transform(TransformMode.ROTATE), "Rotar",
         selected = isTransformToolSelected(state.activeTool, session, TransformMode.ROTATE),
         enabled = editable,
         onClick = { vm.transformBegin(TransformMode.ROTATE) },
     )
     IconAction(
-        Icons.Default.AspectRatio, "Escalar",
+        AppIcons.transform(TransformMode.SCALE), "Escalar",
         selected = isTransformToolSelected(state.activeTool, session, TransformMode.SCALE),
         enabled = editable,
         onClick = { vm.transformBegin(TransformMode.SCALE) },
@@ -1083,7 +1037,7 @@ private fun RailContent(
     }
 
     RailDivider()
-    IconAction(Icons.Default.BugReport, "Diagnóstico", selected = state.debugVisible, onClick = vm::toggleDebug)
+    IconAction(AppIcons.Debug, "Diagnóstico", selected = state.debugVisible, onClick = vm::toggleDebug)
 }
 
 /** Qué borra `mesh.delete` según el submodo de selección. */
@@ -1118,7 +1072,7 @@ private fun quickActions(
         // categorías con salida por la X de la cabecera. Al ser un panel vertical con
         // scroll (plan 001), Malla no necesita paginarse aunque tenga diez primitivas.
         ActionId.ADD_OBJECT -> QuickAction(
-            label, Icons.Default.Add, tint = Ink.Accent,
+            label, AppIcons.action(id), tint = Ink.Accent,
             children = AddCategory.entries.map { category ->
                 val items = AddObject.of(category)
                 // Texto y Cámara son categorías de un solo elemento: un subnivel con
@@ -1139,23 +1093,23 @@ private fun quickActions(
         // servidor, ya sin lo que vive en el anillo (Loop/Ring/Ocultar) ni en la
         // barra izquierda (Extrude/Inset/Loop Cut/Cut).
         ActionId.EDIT_MESH_TOOLS -> QuickAction(label, AppIcons.action(id), children = meshToolsChildren)
-        ActionId.SELECT_ALL -> QuickAction(label, Icons.Default.SelectAll) { vm.selectAll() }
-        ActionId.DESELECT_ALL -> QuickAction(label, Icons.Default.Deselect) { vm.deselectAll() }
+        ActionId.SELECT_ALL -> QuickAction(label, AppIcons.action(id)) { vm.selectAll() }
+        ActionId.DESELECT_ALL -> QuickAction(label, AppIcons.action(id)) { vm.deselectAll() }
         // Caja y Círculo arman el arrastre por forma y cierran el menú: el siguiente
         // arrastre de un dedo dibuja la forma en vez de orbitar.
         ActionId.TOOL_BOX -> QuickAction(label, AppIcons.action(id)) { vm.armShapeTool(ShapeTool.BOX) }
-        ActionId.TOOL_CIRCLE -> QuickAction(label, Icons.Default.BlurOn) { vm.armShapeTool(ShapeTool.CIRCLE) }
-        ActionId.SELECT_INVERT -> QuickAction(label, Icons.Default.Flip) { vm.invertSelection() }
-        ActionId.SELECT_UNDER -> QuickAction(label, Icons.Default.TouchApp) {
+        ActionId.TOOL_CIRCLE -> QuickAction(label, AppIcons.action(id)) { vm.armShapeTool(ShapeTool.CIRCLE) }
+        ActionId.SELECT_INVERT -> QuickAction(label, AppIcons.action(id)) { vm.invertSelection() }
+        ActionId.SELECT_UNDER -> QuickAction(label, AppIcons.action(id)) {
             context.objectName?.let { vm.selectObject(it, add = false) }
         }
-        ActionId.SELECT_ADD_UNDER -> QuickAction(label, Icons.Default.LibraryAdd) {
+        ActionId.SELECT_ADD_UNDER -> QuickAction(label, AppIcons.action(id)) {
             context.objectName?.let { vm.selectObject(it, add = true) }
         }
-        ActionId.SELECT_LOOP -> QuickAction(label, Icons.Default.Timeline) { vm.selectLoop() }
-        ActionId.SELECT_RING -> QuickAction(label, Icons.Default.Rowing) { vm.selectRing() }
-        ActionId.SELECT_LINKED -> QuickAction(label, Icons.Default.Hub) { vm.selectLinked() }
-        ActionId.HIDE_OBJECT -> QuickAction(label, Icons.Default.VisibilityOff) { vm.hideObject(context.objectName) }
+        ActionId.SELECT_LOOP -> QuickAction(label, AppIcons.action(id)) { vm.selectLoop() }
+        ActionId.SELECT_RING -> QuickAction(label, AppIcons.action(id)) { vm.selectRing() }
+        ActionId.SELECT_LINKED -> QuickAction(label, AppIcons.action(id)) { vm.selectLinked() }
+        ActionId.HIDE_OBJECT -> QuickAction(label, AppIcons.action(id)) { vm.hideObject(context.objectName) }
         // Iconos por cara del interruptor: el rótulo dice qué hará y el icono lo repite
         // sin leer. Suave = esfera, plano = facetas; aislar = enfocar, ver todo = salir.
         ActionId.SHADE_OBJECT -> QuickAction(
@@ -1166,7 +1120,7 @@ private fun quickActions(
             label,
             AppIcons.localView(context.localView),
         ) { vm.toggleLocalView() }
-        ActionId.HIDE_GEOMETRY -> QuickAction(label, Icons.Default.VisibilityOff) { vm.hideSelection() }
+        ActionId.HIDE_GEOMETRY -> QuickAction(label, AppIcons.action(id)) { vm.hideSelection() }
         ActionId.DUPLICATE -> if (context.mode == BlenderMode.EDIT) {
             QuickAction("Duplicar selección", AppIcons.Duplicate) { vm.runDuplicateVariant(false) }
         } else {
@@ -1182,16 +1136,16 @@ private fun quickActions(
                 ),
             )
         }
-        ActionId.RENAME -> QuickAction(label, Icons.Default.Edit, onClick = onRename)
-        ActionId.DISSOLVE -> QuickAction(label, Icons.Default.DeleteSweep) {
+        ActionId.RENAME -> QuickAction(label, AppIcons.action(id), onClick = onRename)
+        ActionId.DISSOLVE -> QuickAction(label, AppIcons.action(id)) {
             vm.meshDissolve(deleteWhat(context.selectionMode))
         }
         ActionId.APPLY_TRANSFORMS -> QuickAction(
-            label, Icons.Default.Transform,
+            label, AppIcons.action(id),
             children = listOf(
-                QuickAction("Posición", Icons.Default.OpenWith, onClick = { vm.applyTransform(true, false, false) }),
-                QuickAction("Rotación", Icons.AutoMirrored.Filled.RotateRight, onClick = { vm.applyTransform(false, true, false) }),
-                QuickAction("Escala", Icons.Default.AspectRatio, onClick = { vm.applyTransform(false, false, true) }),
+                QuickAction("Posición", AppIcons.transform(TransformMode.MOVE), onClick = { vm.applyTransform(true, false, false) }),
+                QuickAction("Rotación", AppIcons.transform(TransformMode.ROTATE), onClick = { vm.applyTransform(false, true, false) }),
+                QuickAction("Escala", AppIcons.transform(TransformMode.SCALE), onClick = { vm.applyTransform(false, false, true) }),
                 QuickAction("Todas", AppIcons.action(ActionId.APPLY_TRANSFORMS), onClick = { vm.applyTransform(true, true, true) }),
             ),
         )
@@ -1199,26 +1153,26 @@ private fun quickActions(
             label, AppIcons.action(id),
             children = listOf(
                 QuickAction("Alinear caras", AppIcons.editTool(EditTool.ALIGN)) { vm.beginAlignment(context.objectName) },
-                QuickAction("Origen al cursor", Icons.Default.MyLocation) { vm.snap(SnapAction.ORIGIN_TO_CURSOR) },
-                QuickAction("Origen a geometría", Icons.Default.CenterFocusStrong) { vm.snap(SnapAction.ORIGIN_TO_GEOMETRY) },
-                QuickAction("Origen al centro de masas", Icons.Default.Adjust) { vm.snap(SnapAction.ORIGIN_TO_MASS) },
+                QuickAction("Origen al cursor", AppIcons.origin("CURSOR")) { vm.snap(SnapAction.ORIGIN_TO_CURSOR) },
+                QuickAction("Origen a geometría", AppIcons.origin("GEOMETRY")) { vm.snap(SnapAction.ORIGIN_TO_GEOMETRY) },
+                QuickAction("Origen al centro de masas", AppIcons.origin("MASS")) { vm.snap(SnapAction.ORIGIN_TO_MASS) },
             ),
         )
         // Borrar es el destructivo: rojo y siempre el último del anillo.
         ActionId.DELETE -> if (context.mode == BlenderMode.EDIT) QuickAction(
-            "Borrar / disolver", Icons.Default.Delete, tint = Ink.Bad,
+            "Borrar / disolver", AppIcons.Delete, tint = Ink.Bad,
             children = listOf(
-                QuickAction("Borrar ${context.selectionMode.name.lowercase()}", Icons.Default.Delete, tint = Ink.Bad) {
+                QuickAction("Borrar ${context.selectionMode.name.lowercase()}", AppIcons.Delete, tint = Ink.Bad) {
                     vm.meshDelete(deleteWhat(context.selectionMode))
                 },
-                QuickAction("Disolver ${context.selectionMode.name.lowercase()}", Icons.Default.DeleteSweep) {
+                QuickAction("Disolver ${context.selectionMode.name.lowercase()}", AppIcons.action(ActionId.DISSOLVE)) {
                     vm.meshDissolve(deleteWhat(context.selectionMode))
                 },
             ),
-        ) else QuickAction(label, Icons.Default.Delete, tint = Ink.Bad) { vm.delete() }
+        ) else QuickAction(label, AppIcons.Delete, tint = Ink.Bad) { vm.delete() }
         // El catálogo tiene más acciones, pero son de otras superficies y
         // RadialMenu no las emite. Un `else` mudo evitaría que se notara.
-        else -> QuickAction(label, Icons.Default.Adjust, enabled = false)
+        else -> QuickAction(label, AppIcons.Fallback, enabled = false)
     }
 }
 

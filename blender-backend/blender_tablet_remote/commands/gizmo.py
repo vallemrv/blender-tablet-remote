@@ -22,11 +22,11 @@ from mathutils import Vector
 from ..bpy_utils import find_view3d, get_float
 from ..camera import camera
 from ..errors import BadPayload, CommandError
+from ..palette import AXIS_COLORS
 from . import command
 
 AXES = (("X", Vector((1.0, 0.0, 0.0))), ("Y", Vector((0.0, 1.0, 0.0))), ("Z", Vector((0.0, 0.0, 1.0))))
-COLORS = {"X": (0.96, 0.32, 0.36, 1.0), "Y": (0.55, 0.86, 0.25, 1.0),
-          "Z": (0.30, 0.56, 1.0, 1.0), None: (0.95, 0.95, 0.95, 1.0)}
+COLORS = {**AXIS_COLORS, None: (0.95, 0.95, 0.95, 1.0)}
 # Longitudes en fracciones de la altura del vídeo.
 ARROW = 0.10
 ARROW_START = 0.30 * ARROW

@@ -12,9 +12,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -297,7 +294,7 @@ private fun MenuAnchor(
         ) {
             Text(title, color = if (open) Ink.Accent else Ink.Muted, fontSize = 13.sp)
             Icon(
-                Icons.Default.ArrowDropDown,
+                AppIcons.Dropdown,
                 null,
                 Modifier.size(18.dp),
                 tint = if (open) Ink.Accent else Ink.Faint,
@@ -332,7 +329,7 @@ private fun MenuLevel(nodes: List<MenuNode>, onEnterGroup: (MenuGroup) -> Unit) 
             is MenuGroup -> DropdownMenuItem(
                 text = { Text(node.label, color = Ink.OnPanel, fontSize = 13.sp) },
                 trailingIcon = {
-                    Icon(Icons.Default.ChevronRight, null, Modifier.size(16.dp), tint = Ink.Faint)
+                    Icon(AppIcons.SubmenuOpen, null, Modifier.size(16.dp), tint = Ink.Faint)
                 },
                 onClick = { onEnterGroup(node) },
             )

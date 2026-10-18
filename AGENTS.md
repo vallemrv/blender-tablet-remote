@@ -668,7 +668,13 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Un boceto sobre la cara superior sigue el plano/altura de su operación soporte.
   Los soportes con dependientes no se borran; crear una copia de malla conserva sus referencias.
 - La iconografía se resuelve por intención desde `ui/Iconography.kt`; las pantallas no
-  eligen símbolos ni mantienen tablas de iconos propias.
+  eligen símbolos ni mantienen tablas de iconos propias. Confirmar/Cancelar, marcas de
+  menú, flechas, visibilidad, modos y Mover/Rotar/Escalar también salen de `AppIcons`;
+  el menú radial usa `AppIcons.action(id)`, el mismo icono que la barra. Una intención
+  distinta nunca comparte símbolo (Manipulador ≠ Mover, Atajos ≠ Modificadores).
+- Los ejes X/Y/Z tienen un único color, el del tema por defecto de Blender:
+  `Ink.AxisX/Y/Z` en Android y `palette.AXIS_COLORS` en el vídeo (manipulador, plano
+  CAD). Ninguna pantalla define su propia paleta de ejes.
 
 ## Compilación
 

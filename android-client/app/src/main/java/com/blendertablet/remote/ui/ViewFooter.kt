@@ -10,10 +10,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -76,10 +72,10 @@ fun ViewFooter(
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     if (inEdit && showEditShortcuts) {
                         Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                            PageKey(Icons.Default.ViewInAr, "Página de vistas", selected = !editPage) {
+                            PageKey(AppIcons.Views, "Página de vistas", selected = !editPage) {
                                 editPage = false
                             }
-                            PageKey(Icons.Default.Build, "Atajos de Edit", selected = editPage) {
+                            PageKey(AppIcons.EditShortcuts, "Atajos de Edit", selected = editPage) {
                                 editPage = true
                             }
                         }
@@ -124,7 +120,7 @@ fun ViewFooter(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    if (expanded) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
+                    AppIcons.drawer(expanded),
                     if (expanded) "Plegar vistas" else "Desplegar vistas",
                     Modifier.size(16.dp), tint = Ink.Faint,
                 )
