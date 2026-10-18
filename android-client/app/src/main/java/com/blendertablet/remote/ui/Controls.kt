@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -45,6 +46,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -353,8 +355,31 @@ fun TrayTitle(text: String, modifier: Modifier = Modifier) {
         color = Ink.Accent,
         fontSize = 11.sp,
         fontWeight = FontWeight.SemiBold,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
         modifier = modifier.widthIn(max = 160.dp),
     )
+}
+
+/** Una fila: título y salidas fijos, todos los controles en un único scroll horizontal. */
+@Composable
+fun SingleLineTray(
+    title: String,
+    onCancel: () -> Unit,
+    onConfirm: (() -> Unit)? = null,
+    confirmEnabled: Boolean = true,
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
+    FloatingPanel(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            TrayTitle(title)
+            Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+                content = content)
+            TrayExits(onCancel, onConfirm, confirmEnabled)
+        }
+    }
 }
 
 /**

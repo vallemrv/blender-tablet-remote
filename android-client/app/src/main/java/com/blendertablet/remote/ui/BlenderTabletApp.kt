@@ -212,7 +212,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     var cadFooterHeightPx by remember { mutableStateOf(0) }
     val density = LocalDensity.current
     var objectTrayHeightPx by remember { mutableStateOf(0) }
-    val objectTrayHeight = with(density) { objectTrayHeightPx.toDp() }.coerceAtLeast(120.dp)
+    val objectTrayHeight = with(density) { objectTrayHeightPx.toDp() }.coerceAtLeast(Metrics.TrayInset)
     val cadTrayHeight = with(density) { cadTrayHeightPx.toDp() }
     val cadFooterHeight = with(density) { cadFooterHeightPx.toDp() }
     val cadFooterVisible = state.blender.cad.activeSketchId == null

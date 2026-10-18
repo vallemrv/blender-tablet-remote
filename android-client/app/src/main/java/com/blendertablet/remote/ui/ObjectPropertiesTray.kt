@@ -1,15 +1,12 @@
 package com.blendertablet.remote.ui
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
@@ -22,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import com.blendertablet.remote.model.LengthUnit
 import com.blendertablet.remote.model.ObjectProperties
@@ -69,49 +67,54 @@ fun ObjectPropertiesTray(
     }
     val valid = properties != null && drafts.isNotEmpty() && values.values.none { it == null } && !changedRemotely && pending == null
 
-    FloatingPanel(modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                TrayTitle(properties?.let { "Objeto · ${it.name}" } ?: "Objeto")
-                Box {
-                    var objectMenu by remember { mutableStateOf(false) }
-                    IconAction(AppIcons.material("OBJECTS"), "Elegir objeto o imagen",
-                        enabled = drafts.isEmpty() && pending == null) { onOpenObjects(); objectMenu = true }
-                    DropdownMenu(objectMenu, { objectMenu = false }, Modifier.heightIn(max = 320.dp)) {
-                        objects.forEach { (name, type) -> DropdownMenuItem(
-                            text = { Text("$name · $type") },
-                            onClick = { objectMenu = false; onSelectObject(name) }) }
-                    }
-                }
-                Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    groups.forEach { name -> PillButton(name, selected = name == selectedGroup) { group = name } }
-                }
-                TrayExits(onCancel = { if (pending == null) { drafts = emptyMap(); baseline = null } },
-                    onConfirm = {
-                        if (valid && properties != null) {
-                            val token = java.util.UUID.randomUUID().toString()
-                            pending = token
-                            onApply(properties.id, baseline ?: properties.revision, values, token)
-                        }
-                    }, confirmEnabled = valid)
+    val help = when {
+        properties == null -> "Elige un objeto o imagen con el selector de objetos."
+        pending != null -> "Aplicando propiedades…"
+        changedRemotely -> "El objeto ha cambiado. Cancela el borrador para cargar sus valores actuales."
+        drafts.isNotEmpty() -> "Cambios sin aplicar: Confirmar los guarda; Cancelar descarta el borrador."
+        selectedGroup == "Posición" -> properties.note
+        else -> "Propiedades del objeto activo · ${unit.short}"
+    }
+    SingleLineTray(
+        title = "Objeto",
+        modifier = modifier,
+        onCancel = { if (pending == null) { drafts = emptyMap(); baseline = null } },
+        onConfirm = {
+            if (valid && properties != null) {
+                val token = java.util.UUID.randomUUID().toString()
+                pending = token
+                onApply(properties.id, baseline ?: properties.revision, values, token)
             }
-            Text(when {
-                properties == null -> "Elige un objeto o imagen con el selector de objetos."
-                pending != null -> "Aplicando propiedades…"
-                changedRemotely -> "El objeto ha cambiado. Cancela el borrador para cargar sus valores actuales."
-                drafts.isNotEmpty() -> "Cambios sin aplicar · Confirmar los guarda; Cancelar descarta el borrador."
-                selectedGroup == "Posición" -> properties.note
-                else -> "Propiedades del objeto activo · ${unit.short}"
-            }, color = if (changedRemotely) Ink.Bad else Ink.Muted, fontSize = 11.sp)
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                fields.filter { it.group == selectedGroup }.forEach { field ->
-                    PropertyControl(field, drafts[field.id] ?: properties?.values?.get(field.id),
-                        field.id in drafts, unit, pending == null && !field.readOnly) { edit(field, it) }
-                }
+        },
+        confirmEnabled = valid,
+    ) {
+        Box {
+            var objectMenu by remember { mutableStateOf(false) }
+            IconAction(AppIcons.material("OBJECTS"), "Elegir objeto o imagen",
+                enabled = drafts.isEmpty() && pending == null) { onOpenObjects(); objectMenu = true }
+            DropdownMenu(objectMenu, { objectMenu = false }, Modifier.heightIn(max = 320.dp)) {
+                objects.forEach { (name, type) -> DropdownMenuItem(
+                    text = { Text("$name · $type") },
+                    onClick = { objectMenu = false; onSelectObject(name) }) }
             }
+        }
+        HoverHelp(properties?.name ?: "Elegir objeto", help) {
+            Text(properties?.name ?: "Elige un objeto", color = Ink.Muted, fontSize = 12.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 160.dp))
+        }
+        groups.forEach { name -> PillButton(name, selected = name == selectedGroup) { group = name } }
+        fields.filter { it.group == selectedGroup }.forEach { field ->
+            PropertyControl(field, drafts[field.id] ?: properties?.values?.get(field.id),
+                field.id in drafts, unit, pending == null && !field.readOnly) { edit(field, it) }
+        }
+        val status = when {
+            pending != null -> "Aplicando…"
+            changedRemotely -> "El objeto cambió: cancela el borrador"
+            drafts.isNotEmpty() -> "Sin aplicar"
+            else -> null
+        }
+        if (status != null) HoverHelp(status, help) {
+            Text(status, color = if (changedRemotely) Ink.Bad else Ink.Muted, fontSize = 11.sp, maxLines = 1)
         }
     }
 }
@@ -130,7 +133,8 @@ private fun PropertyControl(field: ObjectPropertyField, value: Any?, draft: Bool
             if (enabled) CompactNumericField(text, { onChange(it) }, modifier = Modifier.width(104.dp),
                 textColor = if (draft && objectPropertyNumber(text, field, unit) == null) Ink.Bad else Ink.OnPanel,
                 selectAllOnFocus = true, onDone = {})
-            else Text(text, color = Ink.Faint, fontSize = 12.sp, modifier = Modifier.width(104.dp).padding(6.dp))
+            else Text(text, color = Ink.Faint, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.width(104.dp).padding(6.dp))
             Text(suffix, color = Ink.Muted, fontSize = 12.sp)
         }
         "bool" -> PillButton("${field.label}: ${if (value == true) "Sí" else "No"}",

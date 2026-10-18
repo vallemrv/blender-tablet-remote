@@ -370,11 +370,19 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   `TrayTitle` (herramienta en mayúsculas, color de acento) y termina con `TrayExits`
   (Cancelar rojo y, si procede, Confirmar verde) fijos a la derecha; también los
   avisos de herramienta armada. Ninguna bandeja dibuja sus salidas a mano.
-- El aviso de edición conjunta de varios arcos se muestra en la fila superior de
-  ayuda de la bandeja CAD, junto a las explicaciones; no ocupa la fila de campos.
-- Las medidas del sólido y el recuento de referencias van en una línea informativa
-  sobre los controles. Más de dos aristas muestran su longitud total, sin una lista
-  de longitudes que desplace Ancho/Paso y las acciones.
+- Regla de diseño para las barras inferiores: una única fila compacta, sin apilar
+  cabecera, pestañas, mensajes o campos en varias líneas. El contenido que no quepa
+  se recorre mediante un único scroll horizontal; no se encogen los controles ni
+  se reducen sus áreas táctiles para forzarlo a caber. Título breve fijo a la
+  izquierda y Cancelar/Confirmar fijos a la derecha, siempre accesibles.
+  Textos y nombres no envuelven: se abrevian o truncan y su detalle se ofrece en
+  la ayuda. Los avisos se resumen en la misma fila. La vista y los paneles vecinos
+  reservan solo la altura real de la barra. `SingleLineTray` es el componente común
+  para esta disposición; la primera barra adaptada es Propiedades de Object.
+- Al adaptar una bandeja a esta regla, los avisos de edición conjunta, medidas y
+  recuentos se resumen dentro de la misma fila, con el detalle en la ayuda; no
+  justifican una fila superior adicional. Más de dos aristas muestran su longitud
+  total, sin una lista de longitudes que desplace Ancho/Paso y las acciones.
 - Las nuevas herramientas deben describirse mediante catálogo/esquema siempre que sea
   posible, evitando nuevas ramas específicas en Compose.
 - Los componentes compartidos poseen disposición, estado, unidades y ciclo de sesión;
