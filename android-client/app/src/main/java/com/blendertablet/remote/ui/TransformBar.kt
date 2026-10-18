@@ -115,12 +115,7 @@ fun TransformBar(
     FloatingPanel(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             // Rótulo a la izquierda, como EditToolTray: el modo ya lo eligió el rail.
-            Text(
-                session.mode.label.uppercase(),
-                color = Ink.Accent,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+            TrayTitle(session.mode.label)
             Spacer(Modifier.width(10.dp))
             Row(
                 modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
@@ -209,12 +204,9 @@ fun TransformBar(
                     OrientationPicker(availableOrientations, orientation, onOrientation)
                 }
             }
-            Spacer(Modifier.width(10.dp))
-            // Confirmar y descartar, fijos a la derecha: son las dos únicas salidas
+            // Confirmar y cancelar, fijos a la derecha: son las dos únicas salidas
             // y no deben confundirse entre sí ni desplazarse con el scroll.
-            RoundAction(AppIcons.Cancel, "Descartar", Ink.Bad, onCancel)
-            Spacer(Modifier.width(4.dp))
-            RoundAction(AppIcons.Confirm, "Confirmar", Ink.Ok, onConfirm)
+            TrayExits(onCancel, onConfirm)
         }
     }
 }

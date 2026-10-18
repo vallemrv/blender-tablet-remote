@@ -338,7 +338,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Los atajos de Edit incluyen J para conectar vértices con la operación nativa
   `mesh.vert_connect_path`; requiere modo Vértices y al menos dos seleccionados,
   divide las caras atravesadas y registra un único undo.
-- Los parámetros viven en una bandeja común.
+- Los parámetros viven en una bandeja común. Toda bandeja inferior empieza con
+  `TrayTitle` (herramienta en mayúsculas, color de acento) y termina con `TrayExits`
+  (Cancelar rojo y, si procede, Confirmar verde) fijos a la derecha; también los
+  avisos de herramienta armada. Ninguna bandeja dibuja sus salidas a mano.
 - El aviso de edición conjunta de varios arcos se muestra en la fila superior de
   ayuda de la bandeja CAD, junto a las explicaciones; no ocupa la fila de campos.
 - Las medidas del sólido y el recuento de referencias van en una línea informativa

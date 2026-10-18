@@ -144,29 +144,25 @@ fun EditToolTray(
     FloatingPanel(modifier) {
         if (session.controls.isNotEmpty()) {
             Column {
-                if (session.tool == EditTool.EXTRUDE) Text("Extruir · ${variantLabel ?: "A toque"}",
-                    color = Ink.Accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Text(session.instruction, color = Ink.Muted, fontSize = 12.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TrayTitle(trayTitle(session.tool, variantLabel ?: "A toque"))
+                    Spacer(Modifier.width(10.dp))
+                    Text(session.instruction, color = Ink.Muted, fontSize = 11.sp)
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     SchemaToolParameters(session.controls, session.parameters, lengthUnit, unitScaleLength,
                         onParameter, Modifier.weight(1f))
-                    RoundAction(AppIcons.Cancel, if (session.active) "Descartar" else "Salir", Ink.Bad, onCancel)
-                    if (session.active) RoundAction(AppIcons.Confirm, "Confirmar", if (session.canConfirm) Ink.Ok else Ink.Faint,
-                        onClick = { if (session.canConfirm) onConfirm() })
+                    TrayExits(onCancel, if (session.active) onConfirm else null, session.canConfirm)
                 }
             }
             return@FloatingPanel
         }
         if (!session.active) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "Toca una arista de la malla para colocar el corte",
-                    color = Ink.Muted,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                RoundAction(AppIcons.Cancel, "Cancelar", Ink.Bad, onCancel)
+                TrayTitle(session.tool.label)
+                Spacer(Modifier.width(10.dp))
+                Text("Toca una arista de la malla para colocar el corte", color = Ink.Muted, fontSize = 11.sp)
+                TrayExits(onCancel)
             }
             return@FloatingPanel
         }
@@ -174,13 +170,7 @@ fun EditToolTray(
         Row(verticalAlignment = Alignment.CenterVertically) {
             // Rótulo, no botón: la herramienta ya la eligió el rail y volver a
             // ofrecerla aquí sería la duplicidad que el plan prohíbe.
-            Text(
-                if (session.tool == EditTool.EXTRUDE) "EXTRUIR\n${variantLabel ?: "Región"}" else session.tool.label.uppercase(),
-                color = Ink.Accent,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.widthIn(max = 160.dp),
-            )
+            TrayTitle(trayTitle(session.tool, variantLabel ?: "Región"))
             Spacer(Modifier.width(10.dp))
             Row(
                 modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
@@ -215,14 +205,11 @@ fun EditToolTray(
                     }
                 }
             }
-            Spacer(Modifier.width(10.dp))
             if (session.tool == EditTool.LOOP_CUT && session.loopCount > 1) {
+                Spacer(Modifier.width(10.dp))
                 RoundAction(AppIcons.Undo, "Deshacer último loop", Ink.Muted, onLoopPop)
-                Spacer(Modifier.width(4.dp))
             }
-            RoundAction(AppIcons.Cancel, "Descartar", Ink.Bad, onCancel)
-            Spacer(Modifier.width(4.dp))
-            RoundAction(AppIcons.Confirm, "Confirmar", Ink.Ok, onConfirm)
+            TrayExits(onCancel, onConfirm)
         }
     }
 }
@@ -428,12 +415,7 @@ fun KnifeTray(
     if (!session.active || session.tool != EditTool.KNIFE) return
     FloatingPanel(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "${session.tool.label.uppercase()} · ${session.strokes.size + 1} cortes · ${session.points.size} puntos",
-                color = Ink.Accent,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+            TrayTitle("${session.tool.label} · ${session.strokes.size + 1} cortes · ${session.points.size} puntos")
             Spacer(Modifier.width(10.dp))
             Row(
                 modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
@@ -462,15 +444,8 @@ fun KnifeTray(
                     }
                 }
             }
-            Spacer(Modifier.width(10.dp))
-            RoundAction(AppIcons.Cancel, "Descartar", Ink.Bad, onCancel)
-            Spacer(Modifier.width(4.dp))
             // Confirmar solo actúa con un segmento válido (el backend lo exige).
-            RoundAction(
-                AppIcons.Confirm, "Confirmar",
-                if (session.points.size >= 2 || session.strokes.isNotEmpty()) Ink.Ok else Ink.Faint,
-                onClick = { if (session.points.size >= 2 || session.strokes.isNotEmpty()) onConfirm() },
-            )
+            TrayExits(onCancel, onConfirm, session.points.size >= 2 || session.strokes.isNotEmpty())
         }
     }
 }
@@ -498,24 +473,15 @@ fun BisectTray(
     FloatingPanel(modifier) {
         if (!session.active) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "Arrastra una línea sobre la malla para cortar",
-                    color = Ink.Muted,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                RoundAction(AppIcons.Cancel, "Cancelar", Ink.Bad, onCancel)
+                TrayTitle(session.tool.label)
+                Spacer(Modifier.width(10.dp))
+                Text("Arrastra una línea sobre la malla para cortar", color = Ink.Muted, fontSize = 11.sp)
+                TrayExits(onCancel)
             }
             return@FloatingPanel
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                session.tool.label.uppercase(),
-                color = Ink.Accent,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+            TrayTitle(session.tool.label)
             Spacer(Modifier.width(10.dp))
             Row(
                 modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
@@ -535,10 +501,7 @@ fun BisectTray(
                     onParameter("snap", !session.flag("snap", true))
                 }
             }
-            Spacer(Modifier.width(10.dp))
-            RoundAction(AppIcons.Cancel, "Descartar", Ink.Bad, onCancel)
-            Spacer(Modifier.width(4.dp))
-            RoundAction(AppIcons.Confirm, "Confirmar", Ink.Ok, onConfirm)
+            TrayExits(onCancel, onConfirm)
         }
     }
 }
@@ -669,3 +632,7 @@ private fun format(value: Double, isInt: Boolean): String =
         val rounded = (value * 1000).roundToInt() / 1000.0
         if (rounded == 0.0) "0" else rounded.toString()
     }
+
+/** Extruir lleva su variante en el rótulo; el resto, el nombre de la herramienta. */
+internal fun trayTitle(tool: EditTool, variantLabel: String): String =
+    if (tool == EditTool.EXTRUDE) "Extruir · $variantLabel" else tool.label

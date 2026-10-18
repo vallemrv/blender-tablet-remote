@@ -342,3 +342,34 @@ fun RoundAction(
         Icon(icon, description, Modifier.size(22.dp), tint = color)
     }
 }
+
+/** Rótulo de una bandeja inferior: la herramienta en curso, igual en todas. */
+@Composable
+fun TrayTitle(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text.uppercase(),
+        color = Ink.Accent,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = modifier.widthIn(max = 160.dp),
+    )
+}
+
+/**
+ * Las salidas de una bandeja, fijas a la derecha: Cancelar (rojo) y, si hay algo
+ * que aplicar, Confirmar (verde; apagado mientras no sea posible).
+ */
+@Composable
+fun TrayExits(
+    onCancel: () -> Unit,
+    onConfirm: (() -> Unit)? = null,
+    confirmEnabled: Boolean = true,
+) {
+    Spacer(Modifier.width(10.dp))
+    RoundAction(AppIcons.Cancel, "Cancelar", Ink.Bad, onCancel)
+    if (onConfirm != null) {
+        Spacer(Modifier.width(4.dp))
+        RoundAction(AppIcons.Confirm, "Confirmar", if (confirmEnabled) Ink.Ok else Ink.Faint,
+            onClick = { if (confirmEnabled) onConfirm() })
+    }
+}

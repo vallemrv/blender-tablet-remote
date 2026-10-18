@@ -50,7 +50,7 @@ fun TweakHelpersTray(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("TWEAK", color = Ink.Accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            TrayTitle("Tweak")
             PillButton(if (slide) "Proporcional (sin GG)" else "Proporcional",
                 selected = !slide && editSettings.proportional, enabled = !slide,
                 onClick = onProportional)
