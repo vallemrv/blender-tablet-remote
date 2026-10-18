@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.RoundedCorner
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Rowing
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.HighlightAlt
 import androidx.compose.material.icons.filled.ScatterPlot
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.TextFields
@@ -257,7 +258,8 @@ object AppIcons {
     fun action(id: ActionId): ImageVector = when (id) {
         ActionId.PLACE_OBJECT -> Icons.AutoMirrored.Filled.CompareArrows
         ActionId.ADD_OBJECT -> Icons.Default.Add
-        ActionId.TOOL_BOX, ActionId.SELECT_ALL -> Icons.Default.SelectAll
+        ActionId.SELECT_ALL -> Icons.Default.SelectAll
+        ActionId.TOOL_BOX -> Icons.Default.HighlightAlt
         ActionId.TOOL_CIRCLE -> Icons.Default.BlurOn
         ActionId.DESELECT_ALL -> Icons.Default.Deselect
         ActionId.SELECT_INVERT -> Icons.Default.Flip
@@ -275,7 +277,6 @@ object AppIcons {
         ActionId.DISSOLVE -> Icons.Default.DeleteSweep
         ActionId.APPLY_TRANSFORMS -> Icons.Default.Transform
         ActionId.EDIT_MESH_TOOLS -> Icons.Default.GridOn
-        ActionId.EDIT_SELECTION_TOOLS -> Icons.Default.SelectAll
         else -> Fallback
     }
 

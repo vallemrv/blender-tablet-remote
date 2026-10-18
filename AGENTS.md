@@ -290,7 +290,7 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   Se abre desde Archivo → Imágenes de referencia; cerrado no ocupa la vista.
 - El encuadre y el clipping siguen el tamaño visto, también en piezas de 1 mm y
   menores; los rangos de preset se convierten por `scale_length`. Edit/CAD no
-  interpretan toques consecutivos como encuadre. El panel de vistas ofrece
+  interpretan toques consecutivos como encuadre (en Edit son el doble toque de loop). El panel de vistas ofrece
   «Encuadrar objeto» explícito; cámaras/luces ajenas no ensanchan su fallback.
 - Extruir/Bisel/Inset inicializan el paso al 1 % de la menor dimensión útil,
   redondeado a 1/2/5 y acotado por el preset. Una pieza de 1 mm usa 0,01 mm;
@@ -300,8 +300,14 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Los botones del Paso de herramientas Edit siguen su orden de magnitud y nunca
   muestran cero por falta de decimales. Sculpt muestra el radio métrico aproximado
   del plano del pivote; su parámetro de gesto continúa siendo relativo a la pantalla.
-- El radial Edit separa Selección y Malla, con Duplicar y Borrar accesibles al nivel
-  principal. Bisel permanece en el rail; Bridge vive en Malla para dejar visible
+- La selección de Edit vive en una barra fija a la izquierda de Vértices/Aristas/Caras
+  (`EditSelectionBar`): Todo/Nada en un botón, Invertir, Loop, Ring, Enlazado, Caja y
+  Círculo, a un toque y sin cambiar de posición (se deshabilitan si no aplican). El
+  radial Edit ya no tiene submenú Selección: ofrece Malla y, con selección, Ocultar,
+  Duplicar y Borrar.
+- Doble toque en Edit sin modificadores ni sesión activa: en Aristas/Caras añade el
+  loop de lo tocado (Alt+clic de Blender); en Vértices, la pieza enlazada. El segundo
+  toque envía ADD sobre el elemento y después el loop/enlazado; no encuadra. Bisel permanece en el rail; Bridge vive en Malla para dejar visible
   Cortar. Las exclusiones se derivan del catálogo del rail, sin listas duplicadas.
 - En Extruir/Bisel/Inset, los botones de distancia y el arrastre libre usan el paso
   físico de la sesión; sin snap conservan sus fracciones. La unidad elegida en Paso

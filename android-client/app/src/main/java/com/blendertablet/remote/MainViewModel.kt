@@ -92,6 +92,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var facePickRole: String? = null
     private var lastFacePointer: Pair<Float, Float>? = null
     private var lastReferencePointer: Pair<Float, Float>? = null
+    /** Último toque de selección en Edit (u, v, uptime) para reconocer el doble toque. */
+    private var lastEditTap: Triple<Float, Float, Long>? = null
     // Debe inicializarse antes de `init`: StateFlow emite su valor actual en cuanto
     // empieza el collect y Main.immediate puede ejecutar esa emisión durante el
     // propio constructor del ViewModel.
@@ -765,11 +767,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (local.value.shortestPathActive && uiState.value.blender.mode == BlenderMode.EDIT) {
             client.shortestPath(u.toDouble(), v.toDouble(), threshold)
         } else {
-            // En Edit el toque sin modificador acumula: añade o quita lo tocado, sin Mayús.
-            val op = local.value.selectionOp.let {
-                if (it == SelectionOp.SET && uiState.value.blender.mode == BlenderMode.EDIT) SelectionOp.TOGGLE else it
+            val blender = uiState.value.blender
+            val plainEdit = blender.mode == BlenderMode.EDIT && local.value.selectionOp == SelectionOp.SET
+            // Doble toque en el mismo sitio: el loop de lo tocado (Alt+clic de Blender);
+            // en Vértices, la pieza enlazada. El ADD previo lo deja como semilla activa.
+            val previous = lastEditTap
+            val now = android.os.SystemClock.uptimeMillis()
+            if (plainEdit && previous != null && now - previous.third <= EDIT_DOUBLE_TAP_MS &&
+                kotlin.math.hypot(u - previous.first, v - previous.second) <= EDIT_DOUBLE_TAP_DISTANCE) {
+                lastEditTap = null
+                client.pick(u.toDouble(), v.toDouble(), threshold, SelectionOp.ADD)
+                if (blender.selectionMode == SelectionMode.VERTEX) client.selectLinked()
+                else client.selectLoop(SelectionOp.ADD)
+                return
             }
-            client.pick(u.toDouble(), v.toDouble(), threshold, op)
+            lastEditTap = if (plainEdit) Triple(u, v, now) else null
+            // En Edit el toque sin modificador acumula: añade o quita lo tocado, sin Mayús.
+            client.pick(u.toDouble(), v.toDouble(), threshold, if (plainEdit) SelectionOp.TOGGLE else local.value.selectionOp)
         }
     }
     fun requestState() = client.requestState()
@@ -1656,3 +1670,5 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
 /** Herramientas Edit cuyo paso es una distancia y comparten el paso métrico común. */
 private val DISTANCE_STEP_TOOLS = setOf(EditTool.EXTRUDE, EditTool.BEVEL, EditTool.INSET)
+private const val EDIT_DOUBLE_TAP_MS = 320L
+private const val EDIT_DOUBLE_TAP_DISTANCE = 0.03f

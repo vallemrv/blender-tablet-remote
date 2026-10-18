@@ -1098,9 +1098,8 @@ private fun quickActions(
     vm: MainViewModel,
     /** Catálogo de vértice/arista/cara ya filtrado y sin duplicar el anillo (F1/F4). */
     meshToolsChildren: List<QuickAction>,
-    selectionOnly: Boolean = false,
     onRename: () -> Unit,
-): List<QuickAction> = (if (selectionOnly) RadialMenu.selectionActions(context) else RadialMenu.actionsFor(context))
+): List<QuickAction> = RadialMenu.actionsFor(context)
     // Sin catálogo del servidor (edit_catalog no disponible) no hay nada que abrir.
     .filter { it != ActionId.EDIT_MESH_TOOLS || meshToolsChildren.isNotEmpty() }
     .map { id ->
@@ -1132,13 +1131,11 @@ private fun quickActions(
         // servidor, ya sin lo que vive en el anillo (Loop/Ring/Ocultar) ni en la
         // barra izquierda (Extrude/Inset/Loop Cut/Cut).
         ActionId.EDIT_MESH_TOOLS -> QuickAction(label, AppIcons.action(id), children = meshToolsChildren)
-        ActionId.EDIT_SELECTION_TOOLS -> QuickAction(label, AppIcons.action(id),
-            children = quickActions(context, vm, emptyList(), selectionOnly = true, onRename = onRename))
         ActionId.SELECT_ALL -> QuickAction(label, Icons.Default.SelectAll) { vm.selectAll() }
         ActionId.DESELECT_ALL -> QuickAction(label, Icons.Default.Deselect) { vm.deselectAll() }
         // Caja y Círculo arman el arrastre por forma y cierran el menú: el siguiente
         // arrastre de un dedo dibuja la forma en vez de orbitar.
-        ActionId.TOOL_BOX -> QuickAction(label, Icons.Default.SelectAll) { vm.armShapeTool(ShapeTool.BOX) }
+        ActionId.TOOL_BOX -> QuickAction(label, AppIcons.action(id)) { vm.armShapeTool(ShapeTool.BOX) }
         ActionId.TOOL_CIRCLE -> QuickAction(label, Icons.Default.BlurOn) { vm.armShapeTool(ShapeTool.CIRCLE) }
         ActionId.SELECT_INVERT -> QuickAction(label, Icons.Default.Flip) { vm.invertSelection() }
         ActionId.SELECT_UNDER -> QuickAction(label, Icons.Default.TouchApp) {

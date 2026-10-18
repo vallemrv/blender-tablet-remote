@@ -102,33 +102,35 @@ object RadialMenu {
         if (context.objectSelected || (!context.hit && context.hasSelection)) add(ActionId.DELETE)
     }
 
+    // La selección vive en su barra fija (EditSelectionBar); el radial queda para la malla.
     private fun editActions(context: TouchContext): List<ActionId> = buildList {
-        add(ActionId.EDIT_SELECTION_TOOLS)
         add(ActionId.EDIT_MESH_TOOLS)
         if (context.hasSelection) {
+            add(ActionId.HIDE_GEOMETRY)
             add(ActionId.DUPLICATE)
             add(ActionId.DELETE)
         }
     }
+}
 
-    fun selectionActions(context: TouchContext): List<ActionId> = buildList {
-        // Selection lives in one submenu; destructive mesh operations stay outside.
-        add(ActionId.TOOL_BOX)
-        add(ActionId.TOOL_CIRCLE)
-        add(ActionId.SELECT_ALL)
-        add(ActionId.DESELECT_ALL)
-        add(ActionId.SELECT_INVERT)
+/**
+ * Barra de selección de Edit, junto a Vértices/Aristas/Caras: cada acción a un toque.
+ * Todas permanecen en su sitio y se deshabilitan cuando no aplican, para que el
+ * dedo encuentre siempre cada botón en la misma posición.
+ */
+object EditSelectionBar {
+    /** SELECT_ALL alterna con Deseleccionar según haya selección. */
+    val actions = listOf(
+        ActionId.SELECT_ALL, ActionId.SELECT_INVERT, ActionId.SELECT_LOOP, ActionId.SELECT_RING,
+        ActionId.SELECT_LINKED, ActionId.TOOL_BOX, ActionId.TOOL_CIRCLE,
+    )
 
+    fun enabled(id: ActionId, selectionMode: SelectionMode, hasSelection: Boolean): Boolean = when (id) {
         // En caras el último toque conserva también la dirección topológica de la
         // arista más próxima, igual que Alt+click en Blender.
-        if (context.selectionMode in setOf(SelectionMode.EDGE, SelectionMode.FACE) && context.hasSelection) {
-            add(ActionId.SELECT_LOOP)
-            add(ActionId.SELECT_RING)
-        }
+        ActionId.SELECT_LOOP, ActionId.SELECT_RING -> hasSelection && selectionMode != SelectionMode.VERTEX
         // Enlazado (la `L`) siembra con lo seleccionado: sin semilla no hay isla.
-        if (context.hasSelection) {
-            add(ActionId.SELECT_LINKED)
-            add(ActionId.HIDE_GEOMETRY)
-        }
+        ActionId.SELECT_LINKED -> hasSelection
+        else -> true
     }
 }

@@ -79,6 +79,28 @@ class EditPickTests(unittest.TestCase):
         selection.pick(dict(u=.05, v=.05, mode='REMOVE'))
         self.assertEqual(self.selected(), {a.index})
 
+    def double_tap(self, point):
+        """Lo que envía Android en el segundo toque: ADD sobre lo tocado y su loop."""
+        u, v = camera.project(point, self.rv3d)
+        selection.pick(dict(u=u, v=v, mode='TOGGLE', threshold=.05))
+        selection.pick(dict(u=u, v=v, mode='ADD', threshold=.05))
+        selection.loop_select(dict(mode='ADD'))
+
+    def test_double_tap_on_edge_selects_its_loop(self):
+        bpy.context.scene.tool_settings.mesh_select_mode = (False, True, False)
+        # Un cubo simple no tiene loops (vértices de valencia 3); subdividido, el
+        # loop que pasa por el centro de la tapa rodea el cubo en ocho aristas.
+        bmesh.ops.subdivide_edges(self.bm, edges=self.bm.edges[:], cuts=1, use_grid_fill=True)
+        bmesh.update_edit_mesh(self.obj.data)
+        self.double_tap(Vector((.005, 0, .01)) * .98)
+        self.assertEqual(sum(e.select for e in self.bm.edges), 8)
+
+    def test_double_tap_on_face_selects_its_strip(self):
+        bpy.context.scene.tool_settings.mesh_select_mode = (False, False, True)
+        near_edge = Vector((.009, 0, .01))
+        self.double_tap(near_edge)
+        self.assertEqual(sum(f.select for f in self.bm.faces), 4)
+
 
 if __name__ == '__main__':
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(EditPickTests)

@@ -22,6 +22,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.blendertablet.remote.MainViewModel
 import com.blendertablet.remote.model.AppUiState
+import com.blendertablet.remote.model.SurfaceCatalog
+import com.blendertablet.remote.model.ShapeTool
+import com.blendertablet.remote.model.EditSelectionBar
+import com.blendertablet.remote.model.ActionId
 import com.blendertablet.remote.model.BlenderMode
 import com.blendertablet.remote.model.ConnectionStatus
 import com.blendertablet.remote.model.SelectionMode
@@ -128,6 +132,7 @@ fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier
             }
         }
         if (inEdit) {
+            EditSelectionActions(state, vm)
             FloatingPanel {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     IconAction(
@@ -174,6 +179,39 @@ fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier
                         enabled = blender.sculpt.available && editable && blender.activeObjectType == "MESH",
                         onClick = { vm.setMode(BlenderMode.SCULPT) },
                     )
+                }
+            }
+        }
+    }
+}
+
+/** Selección de Edit a un toque, a la izquierda de Vértices/Aristas/Caras. */
+@Composable
+private fun EditSelectionActions(state: AppUiState, vm: MainViewModel) {
+    val blender = state.blender
+    val hasSelection = blender.context.hasSelection(blender.mode, blender.selectionMode)
+    FloatingPanel {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            EditSelectionBar.actions.forEach { id ->
+                // Un único botón alterna Seleccionar todo / Deseleccionar.
+                val shown = if (id == ActionId.SELECT_ALL && hasSelection) ActionId.DESELECT_ALL else id
+                IconAction(
+                    AppIcons.action(shown), SurfaceCatalog.labelOf(shown),
+                    selected = (shown == ActionId.TOOL_BOX && state.shapeTool == ShapeTool.BOX) ||
+                        (shown == ActionId.TOOL_CIRCLE && state.shapeTool == ShapeTool.CIRCLE),
+                    enabled = EditSelectionBar.enabled(shown, blender.selectionMode, hasSelection),
+                ) {
+                    when (shown) {
+                        ActionId.SELECT_ALL -> vm.selectAll()
+                        ActionId.DESELECT_ALL -> vm.deselectAll()
+                        ActionId.SELECT_INVERT -> vm.invertSelection()
+                        ActionId.SELECT_LOOP -> vm.selectLoop()
+                        ActionId.SELECT_RING -> vm.selectRing()
+                        ActionId.SELECT_LINKED -> vm.selectLinked()
+                        ActionId.TOOL_BOX -> vm.toggleShapeTool(ShapeTool.BOX)
+                        ActionId.TOOL_CIRCLE -> vm.toggleShapeTool(ShapeTool.CIRCLE)
+                        else -> Unit
+                    }
                 }
             }
         }
