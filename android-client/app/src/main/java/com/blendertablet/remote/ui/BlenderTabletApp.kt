@@ -420,6 +420,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     properties = state.blender.objectProperties,
                     unit = state.blender.sceneScale.lengthUnit,
                     result = state.blender.objectPropertiesResult,
+                    stepMeters = state.distanceStepMeters ?: state.blender.sceneScale.snapStep,
                     objects = state.blender.objects,
                     onOpenObjects = vm::listObjects,
                     onSelectObject = { vm.selectObject(it, false) },

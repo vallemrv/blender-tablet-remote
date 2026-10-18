@@ -365,7 +365,7 @@ fun TrayTitle(text: String, modifier: Modifier = Modifier) {
 @Composable
 fun SingleLineTray(
     title: String,
-    onCancel: () -> Unit,
+    onCancel: (() -> Unit)? = null,
     onConfirm: (() -> Unit)? = null,
     confirmEnabled: Boolean = true,
     modifier: Modifier = Modifier,
@@ -377,7 +377,7 @@ fun SingleLineTray(
             Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
                 content = content)
-            TrayExits(onCancel, onConfirm, confirmEnabled)
+            if (onCancel != null) TrayExits(onCancel, onConfirm, confirmEnabled)
         }
     }
 }

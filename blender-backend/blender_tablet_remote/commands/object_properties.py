@@ -5,6 +5,7 @@ import math
 import uuid
 
 import bpy
+from mathutils import Quaternion, Vector
 
 from . import command
 from ..bpy_utils import undo_push
@@ -15,6 +16,15 @@ _EPOCH = uuid.uuid4().hex
 
 def _identity(obj):
     return f'{_EPOCH}:{bpy.context.scene.session_uid}:{obj.session_uid}'
+
+
+def _rotation(obj):
+    if obj.rotation_mode == 'QUATERNION':
+        return obj.rotation_quaternion.to_euler('XYZ')
+    if obj.rotation_mode == 'AXIS_ANGLE':
+        angle, *axis = obj.rotation_axis_angle
+        return Quaternion(Vector(axis), angle).to_euler('XYZ')
+    return obj.rotation_euler.copy()
 
 
 def describe(obj):
@@ -41,6 +51,13 @@ def describe(obj):
         field(f'location_{axis.lower()}', axis, 'Posición', obj.location[i] * scale, unit='length')
         fields[-1]['read_only'] |= obj.lock_location[i]
 
+    rotation = _rotation(obj)
+    non_euler_locked = obj.rotation_mode in {'QUATERNION', 'AXIS_ANGLE'} and (
+        any(obj.lock_rotation) or (obj.lock_rotations_4d and obj.lock_rotation_w))
+    for i, axis in enumerate('XYZ'):
+        field(f'rotation_{axis.lower()}', axis, 'Rotación', math.degrees(rotation[i]), unit='angle')
+        fields[-1]['read_only'] |= obj.lock_rotation[i] or non_euler_locked
+
     image = obj.type == 'EMPTY' and obj.empty_display_type == 'IMAGE'
     if obj.type in {'MESH', 'CURVE', 'SURFACE', 'FONT', 'META', 'LATTICE'}:
         for i, axis in enumerate('XYZ'):
@@ -50,12 +67,13 @@ def describe(obj):
             fields[-1]['read_only'] |= obj.lock_scale[i] or abs(obj.dimensions[i]) < 1e-12
     elif obj.type == 'EMPTY':
         limits = obj.bl_rna.properties['empty_display_size']
-        field('display_size', 'Tamaño de imagen' if image else 'Tamaño', 'Tamaño',
+        field('display_size', 'Tamaño', 'Tamaño',
               obj.empty_display_size * scale, unit='length', min=limits.hard_min * scale,
               max=limits.hard_max * scale)
-        for i, axis in enumerate('XYZ'):
-            field(f'scale_{axis.lower()}', f'Escala {axis}', 'Tamaño', obj.scale[i], unit='factor')
-            fields[-1]['read_only'] |= obj.lock_scale[i]
+        if not image:
+            for i, axis in enumerate('XYZ'):
+                field(f'scale_{axis.lower()}', f'Escala {axis}', 'Tamaño', obj.scale[i], unit='factor')
+                fields[-1]['read_only'] |= obj.lock_scale[i]
 
     field('visible', 'Visible en la vista', 'Visibilidad', not obj.hide_get(), 'bool')
     if obj.type != 'EMPTY':
@@ -123,6 +141,8 @@ def apply(payload):
     # Validación completa antes de tocar RNA. Copias de valores para revertir errores.
     scale = bpy.context.scene.unit_settings.scale_length or 1.
     baseline = dict(location=obj.location.copy(), scale=obj.scale.copy(),
+                    euler=obj.rotation_euler.copy(), quaternion=obj.rotation_quaternion.copy(),
+                    axis_angle=tuple(obj.rotation_axis_angle),
                     hidden=obj.hide_get(), render=obj.hide_render, front=obj.show_in_front)
     image = obj.type == 'EMPTY' and obj.empty_display_type == 'IMAGE'
     if obj.type == 'EMPTY': baseline['size'] = obj.empty_display_size
@@ -134,8 +154,10 @@ def apply(payload):
         baseline['color'] = tuple(obj.color)
     try:
         dimensions = obj.dimensions.copy()
+        rotation = _rotation(obj)
         for key, value in validated.items():
             if key.startswith('location_'): obj.location['xyz'.index(key[-1])] = value / scale
+            elif key.startswith('rotation_'): rotation['xyz'.index(key[-1])] = math.radians(value)
             elif key.startswith('dimension_'): dimensions['xyz'.index(key[-1])] = value / scale
             elif key.startswith('scale_'): obj.scale['xyz'.index(key[-1])] = value
             elif key == 'display_size': obj.empty_display_size = value / scale
@@ -144,11 +166,19 @@ def apply(payload):
             elif key == 'in_front': obj.show_in_front = value
             elif key == 'opacity': obj.use_empty_image_alpha = True; obj.color[3] = value
             elif key in image_attrs: setattr(obj, image_attrs[key], value)
+        if any(k.startswith('rotation_') for k in validated):
+            if obj.rotation_mode == 'QUATERNION': obj.rotation_quaternion = rotation.to_quaternion()
+            elif obj.rotation_mode == 'AXIS_ANGLE':
+                axis, angle = rotation.to_quaternion().to_axis_angle()
+                obj.rotation_axis_angle = (angle, *axis)
+            else: obj.rotation_euler = rotation
         if any(k.startswith('dimension_') for k in validated):
             obj.dimensions = dimensions
         bpy.context.view_layer.update()
     except Exception:
         obj.location, obj.scale = baseline['location'], baseline['scale']
+        obj.rotation_euler, obj.rotation_quaternion = baseline['euler'], baseline['quaternion']
+        obj.rotation_axis_angle = baseline['axis_angle']
         obj.hide_set(baseline['hidden'])
         obj.hide_render, obj.show_in_front = baseline['render'], baseline['front']
         if 'size' in baseline: obj.empty_display_size = baseline['size']

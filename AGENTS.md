@@ -120,6 +120,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Mover sin snap sigue al dedo continuamente; con Incremento avanza en saltos táctiles
   perceptibles y no reutiliza la misma sensibilidad del movimiento libre.
 - Un preset de escala de trabajo nunca reescala geometría ni modifica `scale_length`.
+- La rejilla adopta el paso físico del preset al cambiarlo, cargar y arrancar.
+  Se aplica sobre `area.spaces.active.overlay` y la conversión nativa de
+  `grid_scale_unit` evita dividir dos veces por `scale_length`. Durante GPUOffScreen
+  su alcance usa el clipping y la distancia de la cámara de la tablet; restaura
+  siempre `space.clip_end` del PC y nunca modifica `rv3d`.
 - Al crear primitivas, `primitive_size` expresa metros y se divide por el
   `scale_length` vigente antes de llamar a Blender. El cubo de Pequeña mide 10 mm,
   también en archivos donde una unidad Blender equivale a un milímetro.
@@ -224,10 +229,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Sus controles se describen en el estado de herramienta y se dibujan en la bandeja
   común. Las caras fuente/destino y el candidato se dibujan en GPUOffScreen. Navegar
   con dos dedos cancela el sondeo temporal, sin fijar otra cara.
-- Debajo del ojo hay un selector horizontal Object/Edit/CAD/Sculpt; CAD solo aparece
+- Debajo del ojo hay un selector horizontal de modos; CAD solo aparece
   si el backend lo anuncia. Sculpt se habilita según `sculpt.available` sobre mallas;
-  Layouts se ha retirado. En CAD los demás modos se ocultan: solo se ve CAD y,
-  al final de la lista, Object como salida.
+  Layouts se ha retirado. CAD permanece siempre al final del selector, después
+  de Object/Edit/Materiales/Sculpt. Dentro de CAD solo se muestran Object como
+  salida y, al final, CAD.
 - Sculpt usa pinceles nativos y la cámara remota; nunca escribe en `rv3d`.
   Radio se expresa como fracción de altura del vídeo. La presión real e histórica
   del lápiz gobierna fuerza/radio por separado; cero conserva cero. Solo lápiz es
@@ -297,14 +303,21 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   cámara de la tablet y con la opacidad del panel, en un undo. El tablero local sigue
   existiendo; la copia en la escena se coloca después como cualquier objeto.
 - Object muestra una bandeja inferior de propiedades del activo cuando no hay
-  herramientas ni sesiones: Posición XYZ, Tamaño y Visibilidad. El esquema viene
+  herramientas ni sesiones: Posición XYZ, Rotación XYZ en grados, Tamaño y Visibilidad.
+  Una única lista desplegable cambia de sección, sin pestañas mezcladas con campos. El esquema viene
   del backend (`active.properties`); las longitudes viajan en metros y se muestran
-  con la unidad del preset. En imágenes nativas añade tamaño del Empty, escala,
+  con la unidad del preset. En imágenes nativas añade un único campo Tamaño, sin
+  repetir «de imagen» ni los factores Escala X/Y/Z; además ofrece
   opacidad, ortográfica/perspectiva, solo vista alineada, profundidad y lados visibles.
   El selector de objetos permite recuperar referencias sin tocarlas en la vista.
-  Los campos son borradores locales (también vacíos); Confirmar aplica el lote en
-  un undo y Cancelar lo descarta. Identidad y revisión impiden escribir en otro
-  objeto o sobrescribir cambios del PC. No abre ni altera la sesión de Mover.
+  Los cambios se aplican inmediatamente, sin Cancelar/Confirmar. Los números vacíos
+  o incompletos permanecen locales; los snapshots no interrumpen lo que se escribe.
+  Una petición en vuelo y una cola que conserva los últimos valores evitan saltos
+  y pérdidas al pulsar deprisa. Cada envío usa la revisión recién confirmada;
+  deshacer o cambiar de contexto retira los valores aún no enviados. Cada lote
+  aplicado crea un undo nativo. Identidad y revisión protegen frente a otro objeto
+  o cambios concurrentes del PC. No abre ni altera la sesión de Mover.
+  Rotación conserva el modo nativo Euler/cuaternión/eje-ángulo y los bloqueos.
   El pie de vistas y el inspector de modificadores respetan la altura de la bandeja.
 - Outliner sustituye a «Ocultos» en la barra superior. Lista todos los objetos de
   la escena, incluidos ocultos y los de colecciones excluidas, con buscador, nombre,
@@ -334,9 +347,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   Círculo, a un toque y sin cambiar de posición (se deshabilitan si no aplican). El
   radial Edit ya no tiene submenú Selección: ofrece Malla y, con selección, Ocultar,
   Duplicar y Borrar.
-- Mayús y Ring se han retirado de sus barras a petición del usuario. El doble toque
+- Mayús, Alt, ⇧R y Ring se han retirado de sus barras a petición del usuario. El doble toque
   conserva la selección de loop en Aristas/Caras y de enlazado en Vértices; no se
-  sustituye por ring. Ctrl, Alt y Repetir última operación conservan su comportamiento.
+  sustituye por ring. Ctrl permanece para camino más corto.
 - Doble toque en Edit sin modificadores ni sesión activa: en Aristas/Caras añade el
   loop de lo tocado (Alt+clic de Blender); en Vértices, la pieza enlazada. El segundo
   toque envía ADD sobre el elemento y después el loop/enlazado; no encuadra. Bisel permanece en el rail; Bridge vive en Malla para dejar visible
@@ -379,6 +392,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   la ayuda. Los avisos se resumen en la misma fila. La vista y los paneles vecinos
   reservan solo la altura real de la barra. `SingleLineTray` es el componente común
   para esta disposición; la primera barra adaptada es Propiedades de Object.
+  Las propiedades de aplicación inmediata son la excepción a las salidas fijas:
+  no muestran Cancelar/Confirmar porque cada cambio ya está aplicado.
 - Al adaptar una bandeja a esta regla, los avisos de edición conjunta, medidas y
   recuentos se resumen dentro de la misma fila, con el detalle en la ayuda; no
   justifican una fila superior adicional. Más de dos aristas muestran su longitud
@@ -420,8 +435,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   al cálculo interno y nunca se ofrecen como unidad en la interfaz.
 - Mover, Rotar y Escalar ofrecen Reset dentro de la sesión: restauran la preview a
   `0`, `0°` y `100 %` respectivamente sin cancelar ni reactivar la herramienta.
-- Los controles de incremento —paso y botones `−/+`— solo se muestran cuando el Snap
-  activo es Incremento, en Mover, Rotar y Escalar.
+- Los campos numéricos editables ofrecen `−/+` con la repetición mantenida común,
+  incluidos XYZ de Mover/Rotar/Escalar sin snap. El control para editar el paso de
+  esas transformaciones sigue apareciendo con Snap Incremento. No se duplican los
+  botones donde ya existen. En Propiedades las longitudes usan el paso métrico
+  común o el del preset, los ángulos 1° y la opacidad 1 % por pulsación.
 - En Mover, el selector de unidades va inmediatamente después del campo de incremento,
   antes de `+`. En Escalar, mm/cm/m/% junto a XYZ gobierna dimensiones, paso,
   botones y snap; `Paso` muestra la misma unidad. Cada botón cambia la dimensión de

@@ -47,6 +47,17 @@ def _find_view3d_space():
 
 
 @contextmanager
+def _tablet_grid_extent(space):
+    """El suelo nativo no debe desvanecerse con el clip del PC al alejar la tablet."""
+    previous = space.clip_end
+    try:
+        space.clip_end = max(camera.clip_end, camera.distance * 4.)
+        yield
+    finally:
+        space.clip_end = previous
+
+
+@contextmanager
 def _sculpt_grid(space):
     """Hide only the grid in tablet Sculpt frames; preserve the viewport settings."""
     obj = bpy.context.view_layer.objects.active
@@ -247,7 +258,7 @@ class ViewportCapture:
         camera.sync_from_region(rv3d)
 
         from ..materials.runtime import runtime as materials
-        with _multires_surface(), _sculpt_grid(space), offscreen.bind(), materials.presentation(space, clean):
+        with _multires_surface(), _tablet_grid_extent(space), _sculpt_grid(space), offscreen.bind(), materials.presentation(space, clean):
             fb = gpu.state.active_framebuffer_get()
             fb.clear(color=(0.0, 0.0, 0.0, 1.0), depth=1.0)
             if materials.needs_depth(camera.perspective_matrix(rv3d), width, height):

@@ -128,7 +128,6 @@ internal fun DistanceSnapStepInput(
     step: Double,
     unitScaleLength: Double,
     defaultUnit: LengthUnit,
-    showSteppers: Boolean = false,
     millimeterDecimals: Int? = null,
     onUnitChange: ((LengthUnit) -> Unit)? = null,
     onChange: (Double) -> Unit,
@@ -150,7 +149,7 @@ internal fun DistanceSnapStepInput(
     fun commit() {
         if (text == null) return
         val wire = readStep() ?: return
-        if (showSteppers) pendingStep = wire
+        pendingStep = wire
         onChange(wire)
         text = null
     }
@@ -165,7 +164,7 @@ internal fun DistanceSnapStepInput(
         onChange(wire)
     }
     Text("Paso", color = Ink.Faint, fontSize = 11.sp)
-    if (showSteppers) PillButton("−", repeatOnHold = true) { adjustStep(-1.0) }
+    PillButton("−", repeatOnHold = true) { adjustStep(-1.0) }
     CompactNumericField(
         value = text ?: formatToolDistance(displayed,
             detailDecimalPlaces(displayed, if (unit == TransformStepUnit.MM) millimeterDecimals else null)),
@@ -186,7 +185,7 @@ internal fun DistanceSnapStepInput(
             }
         }
     }
-    if (showSteppers) PillButton("+", repeatOnHold = true) { adjustStep(1.0) }
+    PillButton("+", repeatOnHold = true) { adjustStep(1.0) }
 }
 
 /** Opciones de Tweak derivadas por el mismo módulo que representa el snap. */
@@ -244,5 +243,5 @@ internal fun CadSnapStepInput(
     onChange: (Double) -> Unit,
 ) {
     DistanceSnapStepInput(step = step, unitScaleLength = 1.0, defaultUnit = unit,
-        showSteppers = true, millimeterDecimals = 2, onUnitChange = onUnitChange, onChange = onChange)
+        millimeterDecimals = 2, onUnitChange = onUnitChange, onChange = onChange)
 }

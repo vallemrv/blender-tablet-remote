@@ -118,6 +118,8 @@ def start(
     _gestures.reset()
     # Cada sesión arranca mirando donde mira el PC; a partir de ahí van por libre.
     _camera.reset()
+    from .commands.units import reset as reset_scene_scale
+    reset_scene_scale()
     _stats.update({"commands": 0, "gestures": 0, "errors": 0, "started_at": time.time()})
 
     server = WSServer(

@@ -68,24 +68,25 @@ def apply_scale(name: str) -> dict:
 
     conversion = max(unit_settings.scale_length, 1e-12)
     camera.set_clipping(scale["clip_start"] / conversion, scale["clip_end"] / conversion)
-    _apply_grid(scale["grid_scale"] / conversion)
+    _apply_grid(scale["grid_scale"])
     bpy.context.scene.tool_settings.proportional_size = (
         scale["proportional_radius"] / max(unit_settings.scale_length, 1e-12))
     return current_scale()
 
 
 def _apply_grid(grid_scale: float) -> None:
-    """Rejilla del viewport capturado, para que el suelo acompañe a la escala."""
+    """Paso físico en metros. Blender aplica scale_length al grid métrico nativo."""
     from ..bpy_utils import find_view3d
 
     found = find_view3d()
     if found is None:
         return
-    space = found[1]
-    try:
-        space.overlay.grid_scale = float(grid_scale)
-    except AttributeError:
-        pass
+    space = found[1].spaces.active
+    conversion = max(bpy.context.scene.unit_settings.scale_length, 1e-12)
+    # ED_view3d_grid_scale multiplica por 1/scale_length cuando hay unidades.
+    # Dividir aquí otra vez convertiría 1 m en 1000 m en un archivo milimétrico.
+    native_factor = space.overlay.grid_scale_unit / space.overlay.grid_scale
+    space.overlay.grid_scale = float(grid_scale / conversion / native_factor)
 
 
 def reset() -> None:
@@ -95,6 +96,7 @@ def reset() -> None:
     scale = SCENE_SCALES[_current]
     conversion = max(bpy.context.scene.unit_settings.scale_length, 1e-12)
     camera.set_clipping(scale["clip_start"] / conversion, scale["clip_end"] / conversion)
+    _apply_grid(scale["grid_scale"])
 
 
 def detail_step(obj) -> float:

@@ -140,6 +140,26 @@ class WebSocketRemoteBlenderClient(
     private val generation = AtomicInteger(0)
     private val pending = ConcurrentHashMap<String, String>()
     private val objectPropertyRequests = ConcurrentHashMap<String, String>()
+    private val liveObjectProperties = com.blendertablet.remote.model.LiveObjectProperties()
+    private val objectPropertiesLock = Any()
+
+    override fun setObjectProperties(id: String, revision: String, values: Map<String, Any?>, token: String) {
+        synchronized(objectPropertiesLock) {
+            if (_state.value.objectProperties?.id != id) return
+            liveObjectProperties.offer(id, values, token)
+            flushObjectProperties()
+        }
+    }
+
+    private fun flushObjectProperties() {
+        val request = liveObjectProperties.next(_state.value.objectProperties) ?: return
+        if (!sendCommand("object.properties", JSONObject().put("object_id", request.objectId)
+                .put("revision", request.revision).put("values", JSONObject(request.values)).put("request_token", request.token))) {
+            liveObjectProperties.acknowledge(false)
+            _state.value = _state.value.copy(objectPropertiesResult =
+                com.blendertablet.remote.model.ObjectPropertiesResult(request.token, false))
+        }
+    }
     private val sentAtNs = ConcurrentHashMap<String, Long>()
     private val stateRequestInFlight = AtomicBoolean(false)
     private val toolSnapInFlight = AtomicBoolean(false)
@@ -197,6 +217,7 @@ class WebSocketRemoteBlenderClient(
         clearSculptTransport()
         pending.clear()
         objectPropertyRequests.clear()
+        synchronized(objectPropertiesLock) { liveObjectProperties.clear() }
         sentAtNs.clear()
         stateRequestInFlight.set(false)
         pickInFlight.set(false)
@@ -252,6 +273,7 @@ class WebSocketRemoteBlenderClient(
         clearSculptTransport()
         pending.clear()
         objectPropertyRequests.clear()
+        synchronized(objectPropertiesLock) { liveObjectProperties.clear() }
         sentAtNs.clear()
         stateRequestInFlight.set(false)
         pickInFlight.set(false)
@@ -365,17 +387,28 @@ class WebSocketRemoteBlenderClient(
         }
     }
 
-    private fun sendCommand(name: String, payload: JSONObject = JSONObject()): Boolean = synchronized(sculptTransportLock) {
-        if (name in setOf("cad.session.cancel", "history.undo", "history.redo", "mode.set", "file.new", "file.open", "file.save", "file.save_as")) {
-            cadDepthQueue.clear()
-            cadInFlightRequest = null
+    private fun sendCommand(name: String, payload: JSONObject = JSONObject()): Boolean {
+        if (name in setOf("history.undo", "history.redo", "mode.set", "file.new", "file.open", "file.save", "file.save_as",
+                "object.select", "selection.pick", "outliner.action", "outliner.move", "transform.begin", "tool.begin")) {
+            synchronized(objectPropertiesLock) {
+                liveObjectProperties.discardPending()?.let { token ->
+                    _state.value = _state.value.copy(objectPropertiesResult =
+                        com.blendertablet.remote.model.ObjectPropertiesResult(token, false))
+                }
+            }
         }
-        if (CadDepthCommandQueue.waitsForResponse(name) || (cadDepthQueue.busy && !name.startsWith("view.") && name != "cad.state")) {
-            if (_connection.value != ConnectionStatus.CONNECTED) { reportOffline(); return@synchronized false }
-            cadDepthQueue.add(CadQueuedMessage(name, payload))
-            flushCadDepth()
-            true
-        } else sendCommandAfterCad(name, payload)
+        return synchronized(sculptTransportLock) {
+            if (name in setOf("cad.session.cancel", "history.undo", "history.redo", "mode.set", "file.new", "file.open", "file.save", "file.save_as")) {
+                cadDepthQueue.clear()
+                cadInFlightRequest = null
+            }
+            if (CadDepthCommandQueue.waitsForResponse(name) || (cadDepthQueue.busy && !name.startsWith("view.") && name != "cad.state")) {
+                if (_connection.value != ConnectionStatus.CONNECTED) { reportOffline(); return@synchronized false }
+                cadDepthQueue.add(CadQueuedMessage(name, payload))
+                flushCadDepth()
+                true
+            } else sendCommandAfterCad(name, payload)
+        }
     }
 
     private fun sendCommandAfterCad(name: String, payload: JSONObject): Boolean = synchronized(sculptTransportLock) {
@@ -930,10 +963,7 @@ class WebSocketRemoteBlenderClient(
             "response" -> {
                 val id = message.optString("id")
                 val command = pending.remove(id)
-                objectPropertyRequests.remove(id)?.let { token ->
-                    _state.value = _state.value.copy(objectPropertiesResult =
-                        com.blendertablet.remote.model.ObjectPropertiesResult(token, message.optBoolean("ok", false)))
-                }
+                val propertyToken = objectPropertyRequests.remove(id)
                 val sent = sentAtNs.remove(id)
                 if (command == "selection.pick" || command == "selection.shortest_path") pickInFlight.set(false)
                 if (sent != null && (command == "selection.pick" || command == "selection.shortest_path" || command?.startsWith("transform.") == true)) {
@@ -1155,6 +1185,13 @@ class WebSocketRemoteBlenderClient(
                         lastStateRefreshAt = System.currentTimeMillis()
                         requestState()
                     }
+                }
+                if (propertyToken != null) synchronized(objectPropertiesLock) {
+                    val success = message.optBoolean("ok", false)
+                    val latestToken = liveObjectProperties.acknowledge(success) ?: propertyToken
+                    _state.value = _state.value.copy(objectPropertiesResult =
+                        com.blendertablet.remote.model.ObjectPropertiesResult(latestToken, success))
+                    if (success) flushObjectProperties() else requestState()
                 }
                 synchronized(sculptTransportLock) {
                     if (message.optString("id") == cadInFlightRequest) {

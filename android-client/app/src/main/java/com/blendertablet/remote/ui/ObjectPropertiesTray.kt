@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,13 +28,16 @@ import com.blendertablet.remote.model.ObjectPropertiesResult
 import com.blendertablet.remote.model.ObjectPropertyField
 import com.blendertablet.remote.model.objectPropertyDisplay
 import com.blendertablet.remote.model.objectPropertyNumber
+import com.blendertablet.remote.model.liveObjectPropertyNumber
+import com.blendertablet.remote.model.transformStepUnit
 
-/** Inspector del activo. El esquema decide los campos; los borradores son locales. */
+/** Inspector del activo: cambios inmediatos; solo el texto incompleto permanece local. */
 @Composable
 fun ObjectPropertiesTray(
     properties: ObjectProperties?,
     unit: LengthUnit,
     result: ObjectPropertiesResult?,
+    stepMeters: Double,
     objects: List<Pair<String, String>>,
     onOpenObjects: () -> Unit,
     onSelectObject: (String) -> Unit,
@@ -41,57 +45,39 @@ fun ObjectPropertiesTray(
     modifier: Modifier = Modifier,
 ) {
     var drafts by remember(properties?.id, unit) { mutableStateOf<Map<String, Any?>>(emptyMap()) }
-    var baseline by remember(properties?.id, unit) { mutableStateOf<String?>(null) }
-    var pending by remember(properties?.id, unit) { mutableStateOf<String?>(null) }
+    var lastToken by remember(properties?.id, unit) { mutableStateOf<String?>(null) }
+    var focused by remember(properties?.id, unit) { mutableStateOf<Set<String>>(emptySet()) }
     val fields = properties?.fields.orEmpty()
     val groups = fields.map { it.group }.distinct()
     var group by remember(properties?.id) { mutableStateOf(groups.firstOrNull().orEmpty()) }
     val selectedGroup = group.takeIf { it in groups } ?: groups.firstOrNull()
-    val changedRemotely = baseline != null && baseline != properties?.revision
 
-    LaunchedEffect(result, pending) {
-        if (pending != null && result?.token == pending) {
-            if (result?.success == true) { drafts = emptyMap(); baseline = null }
-            pending = null
+    LaunchedEffect(result, lastToken) {
+        if (lastToken != null && result?.token == lastToken) {
+            drafts = drafts.filterKeys { it in focused }
+            lastToken = null
         }
     }
     fun edit(field: ObjectPropertyField, value: Any?) {
-        if (pending != null) return
-        if (drafts.isEmpty()) baseline = properties?.revision
+        val target = properties ?: return
         drafts = drafts + (field.id to value)
+        val wire = if (field.type == "number") liveObjectPropertyNumber(value as String, field, unit) else value
+        if (wire != null) {
+            val token = java.util.UUID.randomUUID().toString()
+            lastToken = token
+            onApply(target.id, target.revision, mapOf(field.id to wire), token)
+        }
     }
-    val values = drafts.mapValues { (id, value) ->
-        val field = fields.firstOrNull { it.id == id }
-        if (field == null) null
-        else if (field.type == "number") objectPropertyNumber(value as String, field, unit) else value
-    }
-    val valid = properties != null && drafts.isNotEmpty() && values.values.none { it == null } && !changedRemotely && pending == null
-
-    val help = when {
-        properties == null -> "Elige un objeto o imagen con el selector de objetos."
-        pending != null -> "Aplicando propiedades…"
-        changedRemotely -> "El objeto ha cambiado. Cancela el borrador para cargar sus valores actuales."
-        drafts.isNotEmpty() -> "Cambios sin aplicar: Confirmar los guarda; Cancelar descarta el borrador."
-        selectedGroup == "Posición" -> properties.note
-        else -> "Propiedades del objeto activo · ${unit.short}"
-    }
+    val help = if (properties == null) "Elige un objeto o imagen."
+        else "Los cambios se aplican directamente. Deshacer recupera el valor anterior."
     SingleLineTray(
         title = "Objeto",
         modifier = modifier,
-        onCancel = { if (pending == null) { drafts = emptyMap(); baseline = null } },
-        onConfirm = {
-            if (valid && properties != null) {
-                val token = java.util.UUID.randomUUID().toString()
-                pending = token
-                onApply(properties.id, baseline ?: properties.revision, values, token)
-            }
-        },
-        confirmEnabled = valid,
     ) {
         Box {
             var objectMenu by remember { mutableStateOf(false) }
             IconAction(AppIcons.material("OBJECTS"), "Elegir objeto o imagen",
-                enabled = drafts.isEmpty() && pending == null) { onOpenObjects(); objectMenu = true }
+                enabled = lastToken == null) { onOpenObjects(); objectMenu = true }
             DropdownMenu(objectMenu, { objectMenu = false }, Modifier.heightIn(max = 320.dp)) {
                 objects.forEach { (name, type) -> DropdownMenuItem(
                     text = { Text("$name · $type") },
@@ -102,27 +88,33 @@ fun ObjectPropertiesTray(
             Text(properties?.name ?: "Elige un objeto", color = Ink.Muted, fontSize = 12.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 160.dp))
         }
-        groups.forEach { name -> PillButton(name, selected = name == selectedGroup) { group = name } }
+        if (groups.isNotEmpty()) Box {
+            var sectionMenu by remember { mutableStateOf(false) }
+            PillButton("$selectedGroup ▾", selected = true) { sectionMenu = true }
+            DropdownMenu(sectionMenu, { sectionMenu = false }) {
+                groups.forEach { name -> DropdownMenuItem(
+                    text = { Text(name) },
+                    trailingIcon = { if (name == selectedGroup) Icon(AppIcons.Checked, null, tint = Ink.Accent) },
+                    onClick = { group = name; sectionMenu = false }) }
+            }
+        }
         fields.filter { it.group == selectedGroup }.forEach { field ->
             PropertyControl(field, drafts[field.id] ?: properties?.values?.get(field.id),
-                field.id in drafts, unit, pending == null && !field.readOnly) { edit(field, it) }
+                field.id in drafts, unit, !field.readOnly, stepMeters,
+                onFocus = { active ->
+                    focused = if (active) focused + field.id else focused - field.id
+                    if (!active && lastToken == null) drafts = drafts - field.id
+                }, onChange = { edit(field, it) })
         }
-        val status = when {
-            pending != null -> "Aplicando…"
-            changedRemotely -> "El objeto cambió: cancela el borrador"
-            drafts.isNotEmpty() -> "Sin aplicar"
-            else -> null
-        }
-        if (status != null) HoverHelp(status, help) {
-            Text(status, color = if (changedRemotely) Ink.Bad else Ink.Muted, fontSize = 11.sp, maxLines = 1)
-        }
+
     }
 }
 
 @Composable
 private fun PropertyControl(field: ObjectPropertyField, value: Any?, draft: Boolean, unit: LengthUnit,
-                            enabled: Boolean, onChange: (Any?) -> Unit) {
-    val suffix = when (field.unit) { "length" -> unit.short; "percent" -> "%"; "factor" -> "×"; else -> "" }
+                            enabled: Boolean, stepMeters: Double, onFocus: (Boolean) -> Unit,
+                            onChange: (Any?) -> Unit) {
+    val suffix = when (field.unit) { "length" -> unit.short; "percent" -> "%"; "factor" -> "×"; "angle" -> "°"; else -> "" }
     when (field.type) {
         "number" -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             val text = if (draft) value as? String ?: "" else (value as? Number)?.let {
@@ -130,11 +122,25 @@ private fun PropertyControl(field: ObjectPropertyField, value: Any?, draft: Bool
                 formatToolDistance(shown, detailDecimalPlaces(shown, 4))
             }.orEmpty()
             Text(field.label, color = Ink.Muted, fontSize = 12.sp)
+            val step = when (field.unit) {
+                "length" -> stepMeters / unit.transformStepUnit().meters
+                "percent", "angle" -> 1.0
+                else -> .1
+            }
+            fun nudge(direction: Int) {
+                val current = com.blendertablet.remote.model.NumericExpression.evaluate(text) ?: return
+                val raw = current.toBigDecimal().add(step.toBigDecimal().multiply(direction.toBigDecimal())).toDouble()
+                val min = field.min?.let { objectPropertyDisplay(it, field, unit) } ?: -Double.MAX_VALUE
+                val max = field.max?.let { objectPropertyDisplay(it, field, unit) } ?: Double.MAX_VALUE
+                onChange(formatToolDistance(raw.coerceIn(min, max), null))
+            }
+            StepperButton("−", enabled) { nudge(-1) }
             if (enabled) CompactNumericField(text, { onChange(it) }, modifier = Modifier.width(104.dp),
                 textColor = if (draft && objectPropertyNumber(text, field, unit) == null) Ink.Bad else Ink.OnPanel,
-                selectAllOnFocus = true, onDone = {})
+                selectAllOnFocus = true, onFocusChange = onFocus, onDone = {})
             else Text(text, color = Ink.Faint, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.width(104.dp).padding(6.dp))
+            StepperButton("+", enabled) { nudge(1) }
             Text(suffix, color = Ink.Muted, fontSize = 12.sp)
         }
         "bool" -> PillButton("${field.label}: ${if (value == true) "Sí" else "No"}",

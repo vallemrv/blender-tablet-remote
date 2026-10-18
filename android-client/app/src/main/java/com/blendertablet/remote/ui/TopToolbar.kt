@@ -16,14 +16,13 @@ import com.blendertablet.remote.model.ActionId
 import com.blendertablet.remote.model.BlenderMode
 import com.blendertablet.remote.model.ConnectionStatus
 import com.blendertablet.remote.model.SelectionMode
-import com.blendertablet.remote.model.SelectionOp
 import com.blendertablet.remote.model.Shading
 
 /**
  * Barra horizontal de tools, al lado del ojo (arriba a la derecha).
  *
  * Agrupa lo que se usa a cada toque sin abrir el rail: wireframe (toggle), los
- * modificadores Ctrl/Alt (alternar/añadir/quitar de la selección) y undo/redo,
+ * el control Ctrl de camino más corto y undo/redo,
  * que salen del rail para quedarse aquí con iconos. La selección por caja B y círculo C
  * vive en el long-click (RADIAL); armada, un chip sobre el viewport la señala y
  * la desarma.
@@ -75,7 +74,6 @@ fun TopToolbar(
                     if (inEdit && blender.features.selectionShortestPath) {
                         PillButton("Ctrl", selected = state.shortestPathActive) { vm.toggleShortestPath() }
                     }
-                    PillButton("Alt", selected = state.selectionOp == SelectionOp.REMOVE) { vm.toggleSelectionOp(SelectionOp.REMOVE) }
                     }
                     // Materiales y CAD no abren una franja propia: su contexto son
                     // iconos en esta misma fila, delante de Deshacer.
@@ -84,9 +82,6 @@ fun TopToolbar(
                     IconAction(AppIcons.Undo, "Deshacer") { vm.undo() }
                     IconAction(AppIcons.Redo, "Rehacer") { vm.redo() }
                     if (blender.cad.workspace) CadSelectionActions(state, vm)
-                    if (!blender.cad.workspace && blender.mode != BlenderMode.SCULPT && !blender.material.active && blender.features.repeatLast) {
-                        PillButton("⇧R") { vm.repeatLast() }
-                    }
                 }
             }
         }
@@ -139,8 +134,7 @@ fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier
         }
         FloatingPanel {
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                // En CAD los demás modos se ocultan: solo queda CAD y, al final,
-                // Object como salida.
+                // CAD permanece al final; dentro de ese workspace Object permite salir.
                 if (!blender.cad.workspace) {
                     IconAction(
                         AppIcons.ModeObject, "Object Mode",
@@ -154,7 +148,6 @@ fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier
                     if (blender.material.available) IconAction(AppIcons.materials, "Materiales",
                         selected = blender.material.active, enabled = blender.activeObjectType == "MESH") { vm.enterMaterials() }
                 }
-                if (blender.features.cad.available) PillButton("CAD", selected = blender.cad.workspace) { vm.enterCad() }
                 if (blender.cad.workspace) {
                     IconAction(
                         AppIcons.ModeObject, "Salir de CAD a Object Mode",
@@ -167,6 +160,7 @@ fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier
                         onClick = { vm.setMode(BlenderMode.SCULPT) },
                     )
                 }
+                if (blender.features.cad.available) PillButton("CAD", selected = blender.cad.workspace) { vm.enterCad() }
             }
         }
     }

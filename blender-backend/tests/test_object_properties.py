@@ -123,6 +123,39 @@ class ObjectPropertiesTests(unittest.TestCase):
         self.apply({'location_y': 0.})
         self.undo.assert_not_called()
 
+    def test_reference_rotation_uses_degrees_and_keeps_other_properties(self):
+        obj = self.image()
+        fields = props.describe(obj)['fields']
+        self.assertEqual([f['id'] for f in fields if f['group'] == 'Tamaño'], ['display_size'])
+        self.assertEqual(next(f['label'] for f in fields if f['id'] == 'display_size'), 'Tamaño')
+        obj.location = (2, 3, 4)
+        obj.scale = (2, 2, 2)
+        obj.rotation_euler = (.2, .3, .4)
+        self.apply({'rotation_z': 90.})
+        self.assertAlmostEqual(obj.rotation_euler.z, math.pi / 2, places=6)
+        self.assertAlmostEqual(obj.rotation_euler.x, .2, places=6)
+        self.assertAlmostEqual(obj.rotation_euler.y, .3, places=6)
+        self.assertEqual(tuple(obj.location), (2., 3., 4.))
+        self.assertEqual(tuple(obj.scale), (2., 2., 2.))
+        self.assertAlmostEqual(props.describe(obj)['values']['rotation_z'], 90., places=4)
+        self.undo.assert_called_once()
+
+    def test_quaternion_and_axis_angle_rotation_keep_native_mode(self):
+        for mode in ('QUATERNION', 'AXIS_ANGLE'):
+            obj = self.image()
+            obj.rotation_mode = mode
+            self.apply({'rotation_x': 90., 'rotation_y': 0., 'rotation_z': 0.})
+            self.assertEqual(obj.rotation_mode, mode)
+            self.assertAlmostEqual(props.describe(obj)['values']['rotation_x'], 90., places=4)
+
+    def test_locked_rotation_is_rejected_before_any_change(self):
+        obj = self.image()
+        obj.lock_rotation[2] = True
+        with self.assertRaises(BadPayload): self.apply({'location_x': 1., 'rotation_z': 90.})
+        self.assertEqual(obj.location.x, 0.)
+        self.assertEqual(obj.rotation_euler.z, 0.)
+        self.undo.assert_not_called()
+
 
 if __name__ == '__main__':
     result = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(ObjectPropertiesTests))

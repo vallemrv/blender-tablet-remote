@@ -264,7 +264,6 @@ private fun SnapToggle(
         if (session.tool in setOf(EditTool.EXTRUDE, EditTool.INSET, EditTool.BEVEL)) {
             DistanceSnapStepInput(
                 session.snapStep, unitScaleLength, lengthUnit,
-                showSteppers = true,
                 millimeterDecimals = if (session.tool == EditTool.EXTRUDE) 2 else null,
                 onUnitChange = onUnitChange,
             ) {
@@ -557,7 +556,6 @@ private fun ParamStepper(
     spec: ParamSpec,
     value: Double,
     unitScaleLength: Double,
-    showSteppers: Boolean = true,
     stepSize: Double? = null,
     lengthUnit: LengthUnit? = null,
     millimeterDecimals: Int? = null,
@@ -607,7 +605,7 @@ private fun ParamStepper(
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(spec.label, color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.padding(end = 4.dp))
-        if (showSteppers) StepperButton("−") {
+        StepperButton("−") {
             adjust(-1)
         }
         CompactNumericField(
@@ -616,7 +614,7 @@ private fun ParamStepper(
             onDone = { commit() },
             modifier = Modifier.width(64.dp),
         )
-        if (showSteppers) StepperButton("+") {
+        StepperButton("+") {
             adjust(1)
         }
         if (showReset) PillButton("Reset 0") {

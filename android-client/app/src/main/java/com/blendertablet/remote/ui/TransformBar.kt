@@ -399,11 +399,9 @@ private fun ParametricAxisInputs(
                 Text(axis.name, color = AxisColors.getValue(axis), fontSize = 13.sp,
                     fontWeight = FontWeight.Bold)
             }
-            if (snapType == SnapType.INCREMENT) {
-                PillButton("−", repeatOnHold = true) {
-                    val next = current - axisStep
-                    send(if (session.mode == TransformMode.SCALE && next < 0.0) current else next)
-                }
+            PillButton("−", repeatOnHold = true) {
+                val next = current - axisStep
+                send(if (session.mode == TransformMode.SCALE && next < 0.0) current else next)
             }
             CompactNumericField(
                 value = text, onValueChange = { text = it }, modifier = Modifier.width(72.dp),
@@ -430,9 +428,7 @@ private fun ParametricAxisInputs(
                     }
                 },
             )
-            if (snapType == SnapType.INCREMENT) {
-                PillButton("+", repeatOnHold = true) { send(current + axisStep) }
-            }
+            PillButton("+", repeatOnHold = true) { send(current + axisStep) }
         }
     }
 }
