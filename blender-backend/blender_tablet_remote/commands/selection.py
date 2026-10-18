@@ -956,7 +956,13 @@ def linked(payload: dict) -> dict:
 
 @command("selection.invert", mutating=True)
 def invert(payload: dict) -> dict:
-    obj = active_object()
+    obj = bpy.context.view_layer.objects.active
+    if obj is None or obj.mode != "EDIT":
+        # Object: la misma barra invierte los objetos visibles y seleccionables.
+        for candidate in bpy.context.view_layer.objects:
+            if candidate.visible_get() and not candidate.hide_select:
+                candidate.select_set(not candidate.select_get())
+        return _with_state({})
     bm = edit_bmesh(obj)
     active_seq = bm.verts if MODE_FLAGS["VERTEX"] == tuple(bpy.context.scene.tool_settings.mesh_select_mode) else (
         bm.edges if MODE_FLAGS["EDGE"] == tuple(bpy.context.scene.tool_settings.mesh_select_mode) else bm.faces)

@@ -85,12 +85,9 @@ object RadialMenu {
                 add(ActionId.PLACE_OBJECT)
             }
             // En el vacío no hay nada sobre lo que operar: añadir y operaciones de
-            // conjunto. Agregar va primero porque es lo que más pide un tap al hueco;
-            // Caja y Círculo arman el arrastre por forma para seleccionar varios.
+            // conjunto. Caja y Círculo viven en la barra de selección, como en Edit.
             else -> {
                 add(ActionId.ADD_OBJECT)
-                add(ActionId.TOOL_BOX)
-                add(ActionId.TOOL_CIRCLE)
                 if (context.hasSelection) {
                     add(ActionId.DUPLICATE)
                     add(ActionId.HIDE_OBJECT)
@@ -114,16 +111,17 @@ object RadialMenu {
 }
 
 /**
- * Barra de selección de Edit, junto a Vértices/Aristas/Caras: cada acción a un toque.
+ * Barra de selección de Object y Edit, a la izquierda del selector de modos: cada
+ * acción a un toque. Es la misma en ambos modos; Edit añade Loop/Ring/Enlazado.
  * Todas permanecen en su sitio y se deshabilitan cuando no aplican, para que el
  * dedo encuentre siempre cada botón en la misma posición.
  */
-object EditSelectionBar {
+object SelectionBar {
     /** SELECT_ALL alterna con Deseleccionar según haya selección. */
-    val actions = listOf(
+    fun actionsFor(mode: BlenderMode): List<ActionId> = if (mode == BlenderMode.EDIT) listOf(
         ActionId.SELECT_ALL, ActionId.SELECT_INVERT, ActionId.SELECT_LOOP, ActionId.SELECT_RING,
         ActionId.SELECT_LINKED, ActionId.TOOL_BOX, ActionId.TOOL_CIRCLE,
-    )
+    ) else listOf(ActionId.SELECT_ALL, ActionId.SELECT_INVERT, ActionId.TOOL_BOX, ActionId.TOOL_CIRCLE)
 
     fun enabled(id: ActionId, selectionMode: SelectionMode, hasSelection: Boolean): Boolean = when (id) {
         // En caras el último toque conserva también la dirección topológica de la

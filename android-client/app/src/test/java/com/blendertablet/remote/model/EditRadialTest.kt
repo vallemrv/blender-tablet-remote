@@ -10,12 +10,23 @@ class EditRadialTest {
             val main=RadialMenu.actionsFor(context)
             assertEquals(ActionId.EDIT_MESH_TOOLS,main.first())
             assertEquals(selected,ActionId.DELETE in main)
-            assertTrue(main.intersect(EditSelectionBar.actions.toSet()).isEmpty())
-            assertEquals(EditSelectionBar.actions.size,EditSelectionBar.actions.toSet().size)
+            val bar=SelectionBar.actionsFor(BlenderMode.EDIT)
+            assertTrue(main.intersect(bar.toSet()).isEmpty())
+            assertEquals(bar.size,bar.toSet().size)
             assertEquals(selected && mode!=SelectionMode.VERTEX,
-                EditSelectionBar.enabled(ActionId.SELECT_RING,mode,selected))
-            assertEquals(selected,EditSelectionBar.enabled(ActionId.SELECT_LINKED,mode,selected))
-            assertTrue(EditSelectionBar.enabled(ActionId.SELECT_ALL,mode,selected))
+                SelectionBar.enabled(ActionId.SELECT_RING,mode,selected))
+            assertEquals(selected,SelectionBar.enabled(ActionId.SELECT_LINKED,mode,selected))
+            assertTrue(SelectionBar.enabled(ActionId.SELECT_ALL,mode,selected))
         }
+    }
+
+    @Test fun objectBarLeavesTheRadialWithoutShapes() {
+        for (hit in listOf(false,true)) for (selected in listOf(false,true)) {
+            val context=TouchContext(mode=BlenderMode.OBJECT,hit=hit,objectSelected=hit,hasSelection=selected)
+            val main=RadialMenu.actionsFor(context)
+            assertTrue(main.intersect(SelectionBar.actionsFor(BlenderMode.OBJECT).toSet()).isEmpty())
+        }
+        assertEquals(listOf(ActionId.SELECT_ALL,ActionId.SELECT_INVERT,ActionId.TOOL_BOX,ActionId.TOOL_CIRCLE),
+            SelectionBar.actionsFor(BlenderMode.OBJECT))
     }
 }

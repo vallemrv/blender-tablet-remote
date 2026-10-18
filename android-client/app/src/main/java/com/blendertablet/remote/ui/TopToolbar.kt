@@ -11,7 +11,7 @@ import com.blendertablet.remote.MainViewModel
 import com.blendertablet.remote.model.AppUiState
 import com.blendertablet.remote.model.SurfaceCatalog
 import com.blendertablet.remote.model.ShapeTool
-import com.blendertablet.remote.model.EditSelectionBar
+import com.blendertablet.remote.model.SelectionBar
 import com.blendertablet.remote.model.ActionId
 import com.blendertablet.remote.model.BlenderMode
 import com.blendertablet.remote.model.ConnectionStatus
@@ -119,8 +119,10 @@ fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier
                 }
             }
         }
+        val selectionBar = !blender.cad.workspace && !blender.material.active &&
+            (blender.mode == BlenderMode.OBJECT || blender.mode == BlenderMode.EDIT)
+        if (selectionBar) SelectionActions(state, vm)
         if (inEdit) {
-            EditSelectionActions(state, vm)
             FloatingPanel {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     IconAction(
@@ -173,21 +175,21 @@ fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier
     }
 }
 
-/** Selección de Edit a un toque, a la izquierda de Vértices/Aristas/Caras. */
+/** Selección a un toque en Object y Edit, a la izquierda del selector de modos. */
 @Composable
-private fun EditSelectionActions(state: AppUiState, vm: MainViewModel) {
+private fun SelectionActions(state: AppUiState, vm: MainViewModel) {
     val blender = state.blender
     val hasSelection = blender.context.hasSelection(blender.mode, blender.selectionMode)
     FloatingPanel {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            EditSelectionBar.actions.forEach { id ->
+            SelectionBar.actionsFor(blender.mode).forEach { id ->
                 // Un único botón alterna Seleccionar todo / Deseleccionar.
                 val shown = if (id == ActionId.SELECT_ALL && hasSelection) ActionId.DESELECT_ALL else id
                 IconAction(
                     AppIcons.action(shown), SurfaceCatalog.labelOf(shown),
                     selected = (shown == ActionId.TOOL_BOX && state.shapeTool == ShapeTool.BOX) ||
                         (shown == ActionId.TOOL_CIRCLE && state.shapeTool == ShapeTool.CIRCLE),
-                    enabled = EditSelectionBar.enabled(shown, blender.selectionMode, hasSelection),
+                    enabled = SelectionBar.enabled(shown, blender.selectionMode, hasSelection),
                 ) {
                     when (shown) {
                         ActionId.SELECT_ALL -> vm.selectAll()
