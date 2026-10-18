@@ -356,6 +356,22 @@ y ocupando el 80 % de la altura visible. En Object queda seleccionado y activo; 
 otros modos no cambia el objeto activo. Un único undo; responde con el snapshot y
 los nombres `reference`/`image`.
 
+`outliner.list` (`outliner.version:1`) devuelve `objects` para toda la escena:
+`id`, `name`, `type`, `selected`, `active`, `hidden` (restricción propia), `visible`
+(visibilidad efectiva), `locked` (`hide_select`), `in_view_layer`, `editable`,
+`parent` y `collections`. `outliner.changed` publica la misma lista cuando cambia.
+`outliner.action` recibe `object_id` y `action`: SELECT, RENAME (`name`), VISIBLE
+o LOCK (`value` booleano). Las mutaciones usan un undo; SELECT no crea uno.
+Bloquear deselecciona el objeto y despeja el activo si es necesario. Desbloquear no
+lo selecciona automáticamente. Mostrar conserva el bloqueo y las colecciones.
+`outliner.move` recibe `object_id` y `transform` con los ajustes habituales de
+Mover (axes, step, snap, snap_type, orientation, value_mode). Valida identidad,
+modo, visibilidad y bloqueo; selecciona solo ese objeto y llama al mismo
+`transform.begin` con MOVE y el propietario de conexión. Fallar restaura selección;
+éxito devuelve `state`, `objects` y `transform` (estado modal). Actualizar, confirmar
+y cancelar siguen usando `transform.*`; iniciar no crea undo. Las acciones rechazan
+sesiones activas y otros workspaces sin modificar su estado.
+
 `object.properties` (`object_properties.version:1`) recibe `object_id`, `revision`
 y `values` con únicamente los campos modificados. `active.properties` publica la
 identidad efímera (proceso/escena/objeto), revisión de valores/esquema, nombre,

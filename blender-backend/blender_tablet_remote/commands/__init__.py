@@ -55,6 +55,7 @@ def load_all() -> None:
         versioning,
         objects,
         object_properties,
+        outliner,
         reference,
         scene,
         sculpt,

@@ -176,8 +176,9 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
         onConnectionSettings = openConnection,
         onReconnect = vm::onForeground,
         onDisconnect = vm::disconnect,
-        onRevealObject = vm::revealObject,
-        onRevealAllObjects = vm::revealAllObjects,
+        onOutlinerOpened = vm::listOutliner,
+        onOutlinerMove = vm::outlinerMove,
+        onOutlinerAction = vm::outlinerAction,
         onApplyTransform = vm::applyTransform,
         // El icono conmuta: si el panel ya está abierto, lo cierra.
         onModifiers = {
@@ -356,6 +357,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     streaming = stats.connected,
                     host = host,
                     actions = menuActions,
+                    objectActionsEnabled = !session.active && !toolSession.active && !toolSession.armed && !state.gizmoDragging,
                     modifier = Modifier.align(Alignment.TopStart).padding(Metrics.EdgeMargin),
                 )
 

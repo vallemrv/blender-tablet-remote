@@ -414,6 +414,7 @@ FEATURES = {
     "workspace_resume": True,
     "reference_images": {"version": 1, "commands": ["reference.add"], "formats": ["png", "jpg"]},
     "object_properties": {"version": 1, "commands": ["object.properties"], "schema": True},
+    "outliner": {"version": 1, "commands": ["outliner.list", "outliner.action", "outliner.move"]},
     "history": {"version": 1, "repeat_last": True},
     "context": {"version": 1, "events": ["context.changed"], "selection_counts": True},
     "transform_modal": {"version": 4, "edit_step_selection": True, "modes": ["OBJECT", "EDIT"],

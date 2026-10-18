@@ -131,6 +131,14 @@ object StateParser {
             HiddenObject(it.optString("name"), it.optString("type"))
         }
 
+    fun outlinerObjects(array: JSONArray?): List<OutlinerObject> = if (array == null) emptyList() else
+        (0 until array.length()).map { array.getJSONObject(it) }.map { o ->
+            OutlinerObject(o.getString("id"), o.getString("name"), o.optString("type"),
+                o.optBoolean("selected"), o.optBoolean("active"), o.optBoolean("hidden"), o.optBoolean("visible"),
+                o.optBoolean("locked"), o.optBoolean("in_view_layer"), o.optBoolean("editable"),
+                o.optString("parent").takeUnless { it.isBlank() || it == "null" }, strings(o.optJSONArray("collections")))
+        }
+
     fun modifiers(array: JSONArray?): List<ModifierState> = if (array == null) emptyList() else
         (0 until array.length()).mapNotNull { array.optJSONObject(it) }.map { item ->
             ModifierState(item.optString("name"), item.optString("type"),
@@ -199,6 +207,7 @@ object StateParser {
             gizmo = f.optJSONObject("transform_modal")?.optJSONObject("gizmo") != null,
             referenceImages = f.optJSONObject("reference_images") != null,
             objectProperties = f.optJSONObject("object_properties")?.optInt("version") == 1,
+            outliner = f.optJSONObject("outliner")?.optInt("version") == 1,
         )
     }
 

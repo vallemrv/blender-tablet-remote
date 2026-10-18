@@ -986,6 +986,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         client.listObjects()
     }
     fun listObjects() = client.listObjects()
+    fun listOutliner() = client.listOutliner()
+    fun outlinerAction(id: String, action: String, value: Boolean? = null, name: String? = null) =
+        client.outlinerAction(id, action, value, name)
+    fun outlinerMove(id: String) = beginTransform(TransformMode.MOVE, id)
     /** Preset de escala: unidades, profundidad de cámara, pasos y tamaño al añadir. */
     fun setSceneScale(preset: String) = client.setSceneScale(preset = preset)
 
@@ -1342,7 +1346,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * Abre una transformación modal. Se mantiene abierta aunque se levante el dedo:
      * termina con [transformConfirm] o [transformCancel].
      */
-    fun transformBegin(mode: TransformMode) {
+    fun transformBegin(mode: TransformMode) = beginTransform(mode)
+
+    private fun beginTransform(mode: TransformMode, outlinerTarget: String? = null) {
         if (local.value.activeTool == ActiveTool.TWEAK) {
             cancelTweakGesture()
             local.update { it.copy(activeTool = ActiveTool.SELECT) }
@@ -1378,7 +1384,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             lastReferencePointer = null
             local.update { it.copy(referencePicking = true, referenceRole = "SOURCE") }
         }
-        client.transformBegin(
+        if (outlinerTarget != null) {
+            client.outlinerMove(outlinerTarget, constraint.axes, step, snapType, local.value.orientation, local.value.valueMode)
+        } else client.transformBegin(
             mode, constraint.axes, step = step,
             snapType = snapType,
             orientation = local.value.orientation,

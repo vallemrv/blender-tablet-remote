@@ -190,6 +190,8 @@ def pick(payload: dict) -> dict:
         hit, location, _normal, face_index, obj, _matrix = bpy.context.scene.ray_cast(
             depsgraph, origin, direction
         )
+        if hit and obj.hide_select:
+            return _with_state({"hit": False})
 
     if not hit:
         # En Edit el toque acumula (TOGGLE); tocar vacío deselecciona igualmente.
@@ -506,7 +508,7 @@ def _cycle_behind(depsgraph, origin, direction, location, obj):
         )
         if not hit or candidate is None:
             break
-        if not candidate.select_get():
+        if not candidate.hide_select and not candidate.select_get():
             return origin, Vector(location), candidate
     return origin, Vector(location), obj
 
@@ -741,7 +743,7 @@ def _object_shape_select(payload: dict, contains) -> dict:
             o.select_set(False)
     affected = 0
     for o in view_layer.objects:
-        if o.hide_get():
+        if o.hide_select or not o.visible_get():
             continue
         projected = camera.project(o.matrix_world.translation, rv3d)
         if projected is not None and contains(projected[0], projected[1]):

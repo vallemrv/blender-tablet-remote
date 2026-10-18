@@ -161,6 +161,8 @@ internal object StudioIcons {
         "SHORTCUTS" to Glyph("Atajos de teclado", "Controles", "M2,5 L22,5 L22,19 L2,19 Z M6,9 L7,9 M11,9 L12,9 M16,9 L17,9 M6,12 L7,12 M11,12 L12,12 M16,12 L17,12 M7,16 L17,16"),
         "DEBUG" to Glyph("Diagnóstico", "Controles", "M7,7 L17,7 L17,17 L7,17 Z M10,10 L14,10 L14,14 L10,14 Z M10,3 L10,7 M14,3 L14,7 M10,17 L10,21 M14,17 L14,21 M3,10 L7,10 M3,14 L7,14 M17,10 L21,10 M17,14 L21,14"),
         "MORE" to Glyph("Más acciones", "Controles", "M13,5 A1,1 0,1 1,11,5 A1,1 0,1 1,13,5 M13,12 A1,1 0,1 1,11,12 A1,1 0,1 1,13,12 M13,19 A1,1 0,1 1,11,19 A1,1 0,1 1,13,19"),
+        "LOCK" to Glyph("Bloquear selección", "Controles", "M5,11 L19,11 L19,21 L5,21 Z M8,11 L8,7 A4,4 0,0 1,16,7 L16,11 M12,15 L12,18"),
+        "UNLOCK" to Glyph("Desbloquear selección", "Controles", "M5,11 L19,11 L19,21 L5,21 Z M8,11 L8,7 A4,4 0,0 1,16,7 M12,15 L12,18"),
         "FALLBACK" to Glyph("Propiedades", "Controles", "M4,4 L20,4 L20,20 L4,20 Z M8,8 L16,8 M8,12 L13,12 M8,16 L16,16"),
     )
 

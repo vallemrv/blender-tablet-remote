@@ -48,6 +48,7 @@ fun MenuBar(
     streaming: Boolean,
     host: String,
     actions: MenuActions,
+    objectActionsEnabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     TopStrip(modifier) {
@@ -58,8 +59,10 @@ fun MenuBar(
         if (state.blender.features.sceneScale) {
             MenuAnchor("Escena") { close -> sceneMenu(state, actions, close) }
         }
-        if (!state.blender.material.active && !state.blender.cad.workspace && state.blender.hiddenObjects.isNotEmpty() && state.blender.features.visibility) {
-            MenuAnchor("Ocultos") { close -> hiddenMenu(state, actions, close) }
+        if (!state.blender.material.active && !state.blender.cad.workspace && state.blender.features.outliner) {
+            OutlinerMenu(state.blender.outlinerObjects, state.connection == ConnectionStatus.CONNECTED,
+                objectActionsEnabled && state.blender.mode == BlenderMode.OBJECT,
+                actions.onOutlinerOpened, actions.onOutlinerMove, actions.onOutlinerAction)
         }
         // Modificadores no es un menú: es un panel que se enseña o se esconde, así que
         // un icono conmutable dice más que un desplegable con una sola entrada.
@@ -86,8 +89,9 @@ data class MenuActions(
     val onConnectionSettings: () -> Unit,
     val onReconnect: () -> Unit,
     val onDisconnect: () -> Unit,
-    val onRevealObject: (String) -> Unit,
-    val onRevealAllObjects: () -> Unit,
+    val onOutlinerOpened: () -> Unit,
+    val onOutlinerMove: (String) -> Unit,
+    val onOutlinerAction: (String, String, Boolean?, String?) -> Unit,
     val onApplyTransform: (Boolean, Boolean, Boolean) -> Unit,
     val onModifiers: () -> Unit,
     val onSceneScale: (String) -> Unit,
@@ -181,14 +185,6 @@ internal fun sceneMenu(state: AppUiState, actions: MenuActions, close: () -> Uni
         }
         add(MenuNote("Cambia las unidades; conserva el tamaño real. Extruir, Bisel e Inset ajustan su paso al tamaño de la selección."))
     }
-}
-
-private fun hiddenMenu(state: AppUiState, actions: MenuActions, close: () -> Unit): List<MenuNode> = buildList {
-    state.blender.hiddenObjects.forEach { hidden ->
-        add(MenuLeaf(hidden.name, selected = false, hint = hidden.type) { close(); actions.onRevealObject(hidden.name) })
-    }
-    add(MenuSeparator)
-    add(MenuLeaf("Mostrar todos") { close(); actions.onRevealAllObjects() })
 }
 
 // ------------------------------------------------------------------ Conexión

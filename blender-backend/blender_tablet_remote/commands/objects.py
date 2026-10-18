@@ -11,6 +11,8 @@ from . import command
 
 
 def _select(obj, value: bool) -> None:
+    if value and obj.hide_select:
+        return
     try:
         obj.select_set(value)
     except RuntimeError as exc:  # objeto no en el view layer activo
@@ -30,6 +32,12 @@ def select(payload: dict) -> dict:
         names = [name] if name else []
     if not isinstance(names, list):
         raise BadPayload("'names' must be a list")
+
+    if mode != 'REMOVE':
+        for name in names:
+            target = bpy.data.objects.get(name)
+            if target is not None and target.hide_select:
+                raise CommandError('Desbloquea primero este objeto', code='object_locked')
 
     view_layer = bpy.context.view_layer
     if mode == "SET":
@@ -89,6 +97,8 @@ def set_active(payload: dict) -> dict:
     obj = bpy.data.objects.get(name) if name else None
     if obj is None:
         raise CommandError(f"Object not found: {name}", code="not_found")
+    if obj.hide_select:
+        raise CommandError('Desbloquea primero este objeto', code='object_locked')
     bpy.context.view_layer.objects.active = obj
     return {"active_object": obj.name}
 
@@ -378,7 +388,7 @@ def reveal(payload: dict) -> dict:
     revealed = []
     for obj in targets:
         _hide_set(obj, False)
-        if select:
+        if select and not obj.hide_select:
             try:
                 obj.select_set(True)
             except RuntimeError:
@@ -386,5 +396,5 @@ def reveal(payload: dict) -> dict:
         revealed.append(obj.name)
     undo_push("Remote reveal")
     if select and revealed and view_layer.objects.active is None:
-        view_layer.objects.active = targets[-1]
+        view_layer.objects.active = next((obj for obj in reversed(targets) if not obj.hide_select and obj.visible_get()), None)
     return _visibility_result(revealed=revealed)

@@ -189,6 +189,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   reinicia Blender, guardando antes y reabriendo la escena actual. Esta tarea ya
   está autorizada; no se delega al usuario ni se pide confirmación de nuevo.
   El usuario instala únicamente el APK en su tablet.
+- Después de reiniciar, se verifica que `scene.get_state` incluya `view` y que
+  llegue un fotograma real; abrir los puertos no basta. No guardar una escena con
+  la consola temporal sustituyendo su vista 3D. En despliegues se usa el protocolo
+  para guardar, sin enviar teclas a una pantalla bloqueada.
 
 ## Criterio de diseño escalable
 
@@ -302,6 +306,17 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   un undo y Cancelar lo descarta. Identidad y revisión impiden escribir en otro
   objeto o sobrescribir cambios del PC. No abre ni altera la sesión de Mover.
   El pie de vistas y el inspector de modificadores respetan la altura de la bandeja.
+- Outliner sustituye a «Ocultos» en la barra superior. Lista todos los objetos de
+  la escena, incluidos ocultos y los de colecciones excluidas, con buscador, nombre,
+  colección/padre, selección, ojo y candado. Las acciones usan identidad efímera,
+  no el nombre de la fila. Mover selecciona solo ese objeto y abre la sesión MOVE
+  habitual en una petición atómica, conservando sus ajustes y undo. Renombrar,
+  ocultar/mostrar y bloquear/desbloquear registran un undo por cambio.
+  Bloquear usa `hide_select`, deselecciona y retira el activo si procede; el picking,
+  Caja/Círculo, seleccionar por nombre, Todo y revelar respetan esa restricción.
+  Las acciones requieren Object sin sesiones activas. Una colección excluida u
+  oculta se identifica en la lista; mostrar un objeto no altera la colección.
+  Los cambios desde el PC se reflejan mediante `outliner.changed`.
 - El encuadre y el clipping siguen el tamaño visto, también en piezas de 1 mm y
   menores; los rangos de preset se convierten por `scale_length`. Edit/CAD no
   interpretan toques consecutivos como encuadre (en Edit son el doble toque de loop). El panel de vistas ofrece

@@ -65,6 +65,7 @@ object AppIcons {
     fun disclosure(open: Boolean): ImageVector = StudioIcons[if (open) "EXPAND" else "RIGHT"]
     fun drawer(open: Boolean): ImageVector = StudioIcons[if (open) "EXPAND" else "COLLAPSE"]
     fun visibility(visible: Boolean): ImageVector = StudioIcons[if (visible) "VISIBLE" else "HIDDEN"]
+    fun selectionLock(locked: Boolean): ImageVector = StudioIcons[if (locked) "LOCK" else "UNLOCK"]
     fun chain(linked: Boolean): ImageVector = StudioIcons[if (linked) "CHAIN" else "UNCHAIN"]
     fun selectionMode(mode: SelectionMode): ImageVector = StudioIcons[mode.name]
     fun transform(mode: TransformMode): ImageVector = StudioIcons[mode.name]

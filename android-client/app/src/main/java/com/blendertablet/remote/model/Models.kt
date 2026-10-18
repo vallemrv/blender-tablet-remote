@@ -27,6 +27,14 @@ enum class SelectionOp { SET, ADD, REMOVE, TOGGLE }
 enum class ShapeTool { NONE, BOX, CIRCLE, LINE }
 
 data class HiddenObject(val name: String, val type: String)
+data class OutlinerObject(
+    val id: String, val name: String, val type: String,
+    val selected: Boolean, val active: Boolean, val hidden: Boolean, val visible: Boolean,
+    val locked: Boolean, val inViewLayer: Boolean, val editable: Boolean,
+    val parent: String? = null, val collections: List<String> = emptyList(),
+) {
+    val canSelect: Boolean get() = visible && !locked && inViewLayer
+}
 data class ObjectChoiceFilter(val type: String? = null, val excludeSelf: Boolean = false)
 sealed interface ModifierDefault {
     data class Integer(val value: Int) : ModifierDefault
@@ -93,6 +101,7 @@ data class ServerFeatures(
     /** `reference_images`: enviar una referencia del tablero a la escena de Blender. */
     val referenceImages: Boolean = false,
     val objectProperties: Boolean = false,
+    val outliner: Boolean = false,
 )
 
 data class EditSettings(
@@ -471,6 +480,7 @@ data class BlenderState(
     val activeShadeSmooth: Boolean = false,
     val objects: List<Pair<String, String>> = emptyList(),
     val hiddenObjects: List<HiddenObject> = emptyList(),
+    val outlinerObjects: List<OutlinerObject> = emptyList(),
     val modifiers: List<ModifierState> = emptyList(),
     val modifierOptions: List<ModifierTypeDescriptor> = emptyList(),
     val vertexGroups: List<VertexGroupState> = emptyList(),
