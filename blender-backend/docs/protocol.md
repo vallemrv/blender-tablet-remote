@@ -343,7 +343,10 @@ acepta `what: VERTS|EDGES|FACES`; son acciones distintas.
 En Object Mode selecciona el objeto tocado; en Edit Mode, con oclusión real (SOLID),
 solo considera elementos de la cara visible impactada y exige que vértices/aristas
 estén dentro del umbral táctil normalizado (`threshold`, 0.035 por defecto). Devuelve
-`{"hit": false}` si el rayo no da con nada (y deselecciona si `mode` es `SET`).
+`{"hit": false}` si el rayo no da con nada (y deselecciona si `mode` es `SET`). En Edit
+el rayo solo considera la jaula del objeto editado, de modo que otro objeto detrás
+cuenta como vacío, y un vacío con `TOGGLE` también deselecciona todo: Android envía
+`TOGGLE` en el toque sin modificador para acumular sin Mayús.
 
 `selection.tweak` está disponible en Edit y submodos VERTEX/EDGE/FACE. BEGIN selecciona
 el elemento bajo el punto inicial (conserva el grupo si ya estaba seleccionado) y

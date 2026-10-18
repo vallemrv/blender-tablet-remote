@@ -177,10 +177,9 @@ def pick(payload: dict) -> dict:
     depsgraph = bpy.context.evaluated_depsgraph_get()
 
     # En Edit Mode los índices de ``scene.ray_cast`` pertenecen a la geometría
-    # evaluada. Con Subdivision no corresponden al BMesh editable. Raycast sobre la
-    # jaula original para que cara/vértice/arista tocados sean los que se seleccionan.
-    if (active is not None and active.mode == "EDIT" and active.type == "MESH"
-            and (payload.get("_probe") or any(modifier.show_viewport for modifier in active.modifiers))):
+    # evaluada, o a otro objeto de fondo. Raycast sobre la jaula original para que
+    # cara/vértice/arista tocados sean los del BMesh editable y fuera de él sea vacío.
+    if active is not None and active.mode == "EDIT" and active.type == "MESH":
         edit_hit = _edit_cage_raycast(active, origin, direction)
         if edit_hit is None:
             hit, location, face_index, obj = False, None, -1, active
@@ -193,10 +192,12 @@ def pick(payload: dict) -> dict:
         )
 
     if not hit:
-        if mode == "SET":
-            if active is not None and active.mode == "EDIT":
+        # En Edit el toque acumula (TOGGLE); tocar vacío deselecciona igualmente.
+        if active is not None and active.mode == "EDIT":
+            if mode in ("SET", "TOGGLE"):
                 sel_elements({"mode": "SET"})
-                return _with_state({"hit": False})
+            return _with_state({"hit": False})
+        if mode == "SET":
             for o in bpy.context.view_layer.objects:
                 o.select_set(False)
         return _with_state({"hit": False})

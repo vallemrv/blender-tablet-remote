@@ -759,7 +759,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (local.value.shortestPathActive && uiState.value.blender.mode == BlenderMode.EDIT) {
             client.shortestPath(u.toDouble(), v.toDouble(), threshold)
         } else {
-            client.pick(u.toDouble(), v.toDouble(), threshold, local.value.selectionOp)
+            // En Edit el toque sin modificador acumula: añade o quita lo tocado, sin Mayús.
+            val op = local.value.selectionOp.let {
+                if (it == SelectionOp.SET && uiState.value.blender.mode == BlenderMode.EDIT) SelectionOp.TOGGLE else it
+            }
+            client.pick(u.toDouble(), v.toDouble(), threshold, op)
         }
     }
     fun requestState() = client.requestState()

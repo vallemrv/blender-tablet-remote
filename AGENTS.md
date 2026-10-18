@@ -320,6 +320,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - La cabecera muestra preset y unidad activos cuando Blender está conectado, por ejemplo
   `Conectado · Mediana · cm`.
 - Los comandos discretos viven en menús contextuales.
+- En Edit el toque sin modificador acumula: añade lo tocado o lo quita si ya estaba
+  seleccionado (`TOGGLE`). Tocar vacío, incluido otro objeto de fondo, deselecciona todo.
+  Alt sigue restando; Caja/Círculo conservan su operación.
 - Mayús + Ring añade el anillo a la selección existente (`ADD`) en Aristas y
   Caras; sin modificador reemplaza y Alt resta.
 - Los atajos de Edit incluyen J para conectar vértices con la operación nativa
