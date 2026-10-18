@@ -86,6 +86,7 @@ fun BoxScope.ReferencePanel(modifier: Modifier = Modifier, onDismiss: () -> Unit
         offset = Offset(offset.x.coerceIn(-horizontalLimit, horizontalLimit), offset.y.coerceIn(0f, verticalLimit))
     }
     Column(modifier.offset { IntOffset(offset.x.roundToInt(), offset.y.roundToInt()) }.onSizeChanged { panelHeight = it.height }, horizontalAlignment = Alignment.CenterHorizontally) {
+        // The image sits in a transparent window between two panels so lowering its opacity reveals the model.
         FloatingPanel(Modifier.width(cardWidth)) {
             Column(Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -119,23 +120,27 @@ fun BoxScope.ReferencePanel(modifier: Modifier = Modifier, onDismiss: () -> Unit
                         key(image.id) { PillButton("${index + 1}", selected = image.id == selected?.id) { selectedId = image.id } }
                     }
                 }
-                Box(Modifier.fillMaxWidth().height(cardHeight).clipToBounds().background(Ink.Background)
-                    .pointerInput(selected?.id) {
-                        detectTransformGestures { _, drag, scale, _ ->
-                            zoom = (zoom * scale).coerceIn(1f, 8f)
-                            val maxX = size.width * (zoom - 1f) / 2f
-                            val maxY = size.height * (zoom - 1f) / 2f
-                            pan = Offset((pan.x + drag.x).coerceIn(-maxX, maxX), (pan.y + drag.y).coerceIn(-maxY, maxY))
-                        }
-                    }, contentAlignment = Alignment.Center) {
-                    bitmap?.let { image ->
-                        Image(image.asImageBitmap(), selected?.name, contentScale = ContentScale.Fit,
-                            modifier = Modifier.fillMaxSize().graphicsLayer {
-                                scaleX = zoom; scaleY = zoom; translationX = pan.x; translationY = pan.y; alpha = opacity
-                            })
-                    } ?: Text(if (selected == null) "Añade fotos o dibujos desde la tablet" else "Cargando imagen…",
-                        color = Ink.Muted, fontSize = 12.sp, modifier = Modifier.padding(16.dp))
+            }
+        }
+        Box(Modifier.width(cardWidth).height(cardHeight).clipToBounds()
+            .pointerInput(selected?.id) {
+                detectTransformGestures { _, drag, scale, _ ->
+                    zoom = (zoom * scale).coerceIn(1f, 8f)
+                    val maxX = size.width * (zoom - 1f) / 2f
+                    val maxY = size.height * (zoom - 1f) / 2f
+                    pan = Offset((pan.x + drag.x).coerceIn(-maxX, maxX), (pan.y + drag.y).coerceIn(-maxY, maxY))
                 }
+            }, contentAlignment = Alignment.Center) {
+            bitmap?.let { image ->
+                Image(image.asImageBitmap(), selected?.name, contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize().graphicsLayer {
+                        scaleX = zoom; scaleY = zoom; translationX = pan.x; translationY = pan.y; alpha = opacity
+                    })
+            } ?: Text(if (selected == null) "Añade fotos o dibujos desde la tablet" else "Cargando imagen…",
+                color = Ink.Muted, fontSize = 12.sp, modifier = Modifier.background(Ink.Panel).padding(16.dp))
+        }
+        if (selected != null || error != null) FloatingPanel(Modifier.width(cardWidth)) {
+            Column(Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (selected != null) {
                     Text(selected.name, color = Ink.Muted, fontSize = 11.sp, maxLines = 1)
                     Row(verticalAlignment = Alignment.CenterVertically) {

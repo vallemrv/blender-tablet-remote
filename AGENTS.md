@@ -284,7 +284,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   historial: nunca ejecuta undo dentro de los handlers de guardado/carga.
   La tablet impide rehacer previews canceladas; el redo directo del PC es nativo.
 - Referencias es un tablero local con varias imágenes, zoom, desplazamiento y
-  opacidad. Importa copias privadas acotadas y conserva los originales; sus gestos
+  opacidad. La imagen va en una ventana sin fondo entre los controles: bajar la
+  opacidad deja ver el modelo detrás. Importa copias privadas acotadas y conserva los originales; sus gestos
   quedan en el panel. No son planos 3D ni contenido del `.blend`.
   Se abre desde Archivo → Imágenes de referencia; cerrado no ocupa la vista.
 - El encuadre y el clipping siguen el tamaño visto, también en piezas de 1 mm y
