@@ -139,6 +139,7 @@ class WebSocketRemoteBlenderClient(
     private var attempt = 0
     private val generation = AtomicInteger(0)
     private val pending = ConcurrentHashMap<String, String>()
+    private val objectPropertyRequests = ConcurrentHashMap<String, String>()
     private val sentAtNs = ConcurrentHashMap<String, Long>()
     private val stateRequestInFlight = AtomicBoolean(false)
     private val toolSnapInFlight = AtomicBoolean(false)
@@ -195,6 +196,7 @@ class WebSocketRemoteBlenderClient(
         socket = null
         clearSculptTransport()
         pending.clear()
+        objectPropertyRequests.clear()
         sentAtNs.clear()
         stateRequestInFlight.set(false)
         pickInFlight.set(false)
@@ -249,6 +251,7 @@ class WebSocketRemoteBlenderClient(
         socket?.cancel()
         clearSculptTransport()
         pending.clear()
+        objectPropertyRequests.clear()
         sentAtNs.clear()
         stateRequestInFlight.set(false)
         pickInFlight.set(false)
@@ -400,6 +403,7 @@ class WebSocketRemoteBlenderClient(
         // Registrar antes de enviar evita una carrera con sockets/fakes muy rápidos:
         // la respuesta nunca puede adelantarse a su entrada en `pending`.
         pending[id] = name
+        if (name == "object.properties") objectPropertyRequests[id] = payload.optString("request_token")
         if (CadDepthCommandQueue.waitsForResponse(name)) cadInFlightRequest = id
         sentAtNs[id] = System.nanoTime()
         return if (socket?.send(message.toString()) == true) {
@@ -410,6 +414,9 @@ class WebSocketRemoteBlenderClient(
             true
         } else {
             pending.remove(id)
+            objectPropertyRequests.remove(id)?.let { token ->
+                _state.value = _state.value.copy(objectPropertiesResult = com.blendertablet.remote.model.ObjectPropertiesResult(token, false))
+            }
             sentAtNs.remove(id)
             reportOffline()
             false
@@ -923,6 +930,10 @@ class WebSocketRemoteBlenderClient(
             "response" -> {
                 val id = message.optString("id")
                 val command = pending.remove(id)
+                objectPropertyRequests.remove(id)?.let { token ->
+                    _state.value = _state.value.copy(objectPropertiesResult =
+                        com.blendertablet.remote.model.ObjectPropertiesResult(token, message.optBoolean("ok", false)))
+                }
                 val sent = sentAtNs.remove(id)
                 if (command == "selection.pick" || command == "selection.shortest_path") pickInFlight.set(false)
                 if (sent != null && (command == "selection.pick" || command == "selection.shortest_path" || command?.startsWith("transform.") == true)) {
@@ -1041,6 +1052,7 @@ class WebSocketRemoteBlenderClient(
                             activeObject = visibility.optString("active_object").takeIf { it.isNotBlank() && it != "null" })
                     }
                     command == "object.shade" -> result?.let(::updateState)
+                    command == "object.properties" -> result?.let(::updateState)
                     // selection.pick ya incluye el snapshot: evita esperar el evento
                     // semántico y hacer un segundo viaje scene.get_state. Lo mismo
                     // box/circle/more/less, que vuelven con el estado completo.
@@ -1263,10 +1275,12 @@ class WebSocketRemoteBlenderClient(
         // sabíamos en vez de rebobinar la proyección y el wireframe.
         _state.value = parsed.copy(
             features = old.features,
+            objectPropertiesResult = old.objectPropertiesResult,
             versioning = old.versioning,
             cad = if (json.has("cad")) parsed.cad else old.cad,
             sculpt = if (json.has("sculpt")) parsed.sculpt else old.sculpt,
             modifierOptions = old.modifierOptions,
+            objects = if (json.has("objects")) parsed.objects else old.objects,
             view = if (json.has("view") || json.has("shading")) parsed.view else old.view,
             unitScaleLength = json.optJSONObject("scene_scale")?.let { scale ->
                 StateParser.sceneScaleLength(scale, old.unitScaleLength)

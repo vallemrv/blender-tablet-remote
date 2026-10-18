@@ -356,6 +356,22 @@ y ocupando el 80 % de la altura visible. En Object queda seleccionado y activo; 
 otros modos no cambia el objeto activo. Un único undo; responde con el snapshot y
 los nombres `reference`/`image`.
 
+`object.properties` (`object_properties.version:1`) recibe `object_id`, `revision`
+y `values` con únicamente los campos modificados. `active.properties` publica la
+identidad efímera (proceso/escena/objeto), revisión de valores/esquema, nombre,
+`fields` (`id`, `label`, `group`, `type:number|bool|enum`, `unit`, `read_only`,
+límites y `choices`) y `values`. Las longitudes son metros; la opacidad es 0–1.
+Posición es local al padre si existe; dimensiones y tamaño de Empty usan la
+semántica nativa de Blender. Las imágenes añaden ortográfica, perspectiva,
+solo vista alineada, profundidad y caras visibles. Los ejes bloqueados y tamaños
+sin extensión no son editables. El lote se valida entero antes de escribir;
+error revierte valores, éxito crea un único undo si hubo cambios y devuelve escena.
+Una identidad o revisión obsoleta se rechaza sin modificar nada. Es exclusivo con
+sesiones activas y solo se ofrece en Object fuera de los workspaces CAD/Materiales.
+`object.properties_changed` solicita refrescar el snapshot ante cambios desde el PC.
+Android mantiene borradores locales hasta Confirmar; `request_token` correlaciona
+la respuesta en el cliente y no es parte del documento ni de la identidad del objeto.
+
 `gizmo.set` (`enabled`) y `gizmo.drag` (`phase` BEGIN/UPDATE/END/CANCEL, `u`, `v`,
 `dx`, `dy`) forman el manipulador sobre la selección (`transform_modal.gizmo`). Con
 `enabled` y sin otra sesión, GPUOffScreen dibuja en el centro de la selección flechas

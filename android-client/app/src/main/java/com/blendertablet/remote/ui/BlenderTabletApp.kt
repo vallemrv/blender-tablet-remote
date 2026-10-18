@@ -210,15 +210,22 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     var cadTrayHeightPx by remember { mutableStateOf(0) }
     var cadFooterHeightPx by remember { mutableStateOf(0) }
     val density = LocalDensity.current
+    var objectTrayHeightPx by remember { mutableStateOf(0) }
+    val objectTrayHeight = with(density) { objectTrayHeightPx.toDp() }.coerceAtLeast(120.dp)
     val cadTrayHeight = with(density) { cadTrayHeightPx.toDp() }
     val cadFooterHeight = with(density) { cadFooterHeightPx.toDp() }
     val cadFooterVisible = state.blender.cad.activeSketchId == null
-    val trayPresent = materialActive || sculptActive || state.blender.cad.workspace || bottomTrayVisible(
+    val objectPropertiesVisible = state.connection == ConnectionStatus.CONNECTED &&
+        state.blender.features.objectProperties &&
+        state.blender.mode == BlenderMode.OBJECT && !materialActive && !state.blender.cad.workspace &&
+        !session.active && !toolSession.active && !toolSession.armed && !state.gizmoDragging &&
+        state.activeTool == ActiveTool.SELECT && state.shapeTool == ShapeTool.NONE
+    val trayPresent = objectPropertiesVisible || materialActive || sculptActive || state.blender.cad.workspace || bottomTrayVisible(
         session.active, toolSession.active, state.activeTool, state.loopCutAwaitingTap,
         toolSessionArmed = toolSession.armed,
     )
     val trayInset by animateDpAsState(
-        targetValue = if (materialActive) 104.dp else if (sculptActive) 132.dp else if (trayPresent) Metrics.TrayInset else 0.dp,
+        targetValue = if (objectPropertiesVisible) objectTrayHeight else if (materialActive) 104.dp else if (sculptActive) 132.dp else if (trayPresent) Metrics.TrayInset else 0.dp,
         animationSpec = tween(160),
         label = "tray-inset",
     )
@@ -378,7 +385,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                         .padding(
                             top = 142.dp,
                             end = Metrics.EdgeMargin,
-                            bottom = 74.dp,
+                            bottom = if (objectPropertiesVisible) trayInset + 74.dp else 74.dp,
                         ),
                 )
 
@@ -406,6 +413,18 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                         modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(Metrics.EdgeMargin),
                     )
                 }
+
+                if (objectPropertiesVisible) ObjectPropertiesTray(
+                    properties = state.blender.objectProperties,
+                    unit = state.blender.sceneScale.lengthUnit,
+                    result = state.blender.objectPropertiesResult,
+                    objects = state.blender.objects,
+                    onOpenObjects = vm::listObjects,
+                    onSelectObject = { vm.selectObject(it, false) },
+                    onApply = vm::setObjectProperties,
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                        .onSizeChanged { objectTrayHeightPx = it.height }.padding(Metrics.EdgeMargin),
+                )
 
                 if (state.activeTool != ActiveTool.TWEAK && !state.gizmoDragging) TransformBar(
                     session = session,

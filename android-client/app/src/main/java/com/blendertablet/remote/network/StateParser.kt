@@ -91,6 +91,7 @@ object StateParser {
             context = context(json),
             view = view(json.optJSONObject("view"), json.optString("shading")),
             activeObjectType = json.optJSONObject("active")?.optString("type")?.takeIf(String::isNotBlank),
+            objectProperties = objectProperties(json.optJSONObject("active")?.optJSONObject("properties")),
             activeShadeSmooth = json.optJSONObject("active")
                 ?.optJSONObject("mesh")?.optBoolean("shade_smooth") == true,
             objects = objects(json.optJSONArray("objects")),
@@ -112,6 +113,18 @@ object StateParser {
         autoMerge = json?.optBoolean("auto_merge", false) ?: false,
         mergeThreshold = json?.optDouble("merge_threshold", 0.001) ?: 0.001,
     )
+
+    fun objectProperties(json: JSONObject?): ObjectProperties? {
+        if (json == null || !json.has("id")) return null
+        val fields = json.optJSONArray("fields") ?: JSONArray()
+        return ObjectProperties(json.getString("id"), json.optString("name"), json.optString("revision"),
+            (0 until fields.length()).map { index -> fields.getJSONObject(index).let { f ->
+                ObjectPropertyField(f.getString("id"), f.optString("label"), f.optString("group"), f.optString("type"),
+                    f.optString("unit"), f.optBoolean("read_only"),
+                    f.optDouble("min").takeIf { f.has("min") }, f.optDouble("max").takeIf { f.has("max") },
+                    f.optJSONObject("choices")?.let { choices -> choices.keys().asSequence().associateWith { choices.getString(it) } }.orEmpty())
+            } }, jsonMap(json.optJSONObject("values")), json.optString("note"))
+    }
 
     fun hiddenObjects(array: JSONArray?): List<HiddenObject> = if (array == null) emptyList() else
         (0 until array.length()).mapNotNull { array.optJSONObject(it) }.map {
@@ -185,6 +198,7 @@ object StateParser {
             versioning = f.optJSONObject("versioning")?.optInt("version") == 1,
             gizmo = f.optJSONObject("transform_modal")?.optJSONObject("gizmo") != null,
             referenceImages = f.optJSONObject("reference_images") != null,
+            objectProperties = f.optJSONObject("object_properties")?.optInt("version") == 1,
         )
     }
 

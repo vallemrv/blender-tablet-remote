@@ -985,6 +985,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // habitual: se pide aparte al abrir el inspector.
         client.listObjects()
     }
+    fun listObjects() = client.listObjects()
     /** Preset de escala: unidades, profundidad de cámara, pasos y tamaño al añadir. */
     fun setSceneScale(preset: String) = client.setSceneScale(preset = preset)
 
@@ -994,6 +995,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun removeModifier(name: String) = client.modifierRemove(name)
     fun moveModifier(name: String, index: Int) = client.modifierMove(name, index)
     fun setModifier(name: String, key: String, value: Any?) = client.modifierSet(name, mapOf(key to value))
+    fun setObjectProperties(id: String, revision: String, values: Map<String, Any?>, token: String) =
+        client.setObjectProperties(id, revision, values, token)
     fun toggleModifier(name: String, viewport: Boolean? = null, render: Boolean? = null) = client.modifierToggle(name, viewport, render)
     fun applyModifier(name: String) = client.modifierApply(name)
     fun selectLoop() {

@@ -159,6 +159,7 @@ def context_snapshot() -> dict:
 
 
 def object_info(obj) -> dict:
+    from .commands.object_properties import describe
     info = {
         "name": obj.name,
         "type": obj.type,
@@ -168,6 +169,7 @@ def object_info(obj) -> dict:
         "dimensions": list(obj.dimensions),
         "visible": not obj.hide_get(),
         "modifiers": _modifier_info(obj),
+        "properties": describe(obj),
     }
     if obj.type == "MESH":
         from .commands import vertex_groups
@@ -245,6 +247,7 @@ class StateWatcher:
         return self._context_cache
 
     def _light_snapshot(self) -> dict:
+        from .commands.object_properties import describe
         view_layer = bpy.context.view_layer
         active = view_layer.objects.active
         selected_names = sorted(o.name for o in view_layer.objects if o.select_get())
@@ -254,6 +257,7 @@ class StateWatcher:
             "selected_objects": selected_names,
             "selection_mode": selection_mode(),
             "object_count": len(view_layer.objects),
+            "object_properties": describe(active),
             "context": self._context(selected_names),
             "modifiers": {obj.name: _modifiers_sig(obj) for obj in view_layer.objects if obj.modifiers},
             "vertex_groups": (active.name, tuple((g.name,g.lock_weight) for g in active.vertex_groups), active.vertex_groups.active_index) if active and active.type=='MESH' else None,
@@ -272,6 +276,8 @@ class StateWatcher:
             return []
 
         events = []
+        if prev["object_properties"] != current["object_properties"]:
+            events.append(_event("object.properties_changed", {}))
         if prev["mode"] != current["mode"]:
             events.append(_event("mode.changed", {"mode": current["mode"]}))
         if prev["active_object"] != current["active_object"]:

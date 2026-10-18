@@ -23,7 +23,7 @@ import com.blendertablet.remote.model.Shading
  * Barra horizontal de tools, al lado del ojo (arriba a la derecha).
  *
  * Agrupa lo que se usa a cada toque sin abrir el rail: wireframe (toggle), los
- * modificadores Mayús/Ctrl/Alt (alternar/añadir/quitar de la selección) y undo/redo,
+ * modificadores Ctrl/Alt (alternar/añadir/quitar de la selección) y undo/redo,
  * que salen del rail para quedarse aquí con iconos. La selección por caja B y círculo C
  * vive en el long-click (RADIAL); armada, un chip sobre el viewport la señala y
  * la desarma.
@@ -72,7 +72,6 @@ fun TopToolbar(
                     }
                     if (!blender.cad.workspace && blender.mode != BlenderMode.SCULPT && !blender.material.active) {
                     if (blender.features.gizmo) IconAction(AppIcons.gizmo, "Manipulador", selected = state.gizmoEnabled) { vm.toggleGizmo() }
-                    PillButton("Mayús", selected = state.selectionOp == SelectionOp.TOGGLE && !state.shortestPathActive) { vm.toggleSelectionOp(SelectionOp.TOGGLE) }
                     if (inEdit && blender.features.selectionShortestPath) {
                         PillButton("Ctrl", selected = state.shortestPathActive) { vm.toggleShortestPath() }
                     }

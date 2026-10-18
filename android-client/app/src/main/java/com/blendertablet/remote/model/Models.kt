@@ -92,6 +92,7 @@ data class ServerFeatures(
     val gizmo: Boolean = false,
     /** `reference_images`: enviar una referencia del tablero a la escena de Blender. */
     val referenceImages: Boolean = false,
+    val objectProperties: Boolean = false,
 )
 
 data class EditSettings(
@@ -464,6 +465,8 @@ data class BlenderState(
     val context: SceneContext = SceneContext(),
     val view: ViewState = ViewState(),
     val activeObjectType: String? = null,
+    val objectProperties: ObjectProperties? = null,
+    val objectPropertiesResult: ObjectPropertiesResult? = null,
     /** El objeto activo está sombreado suave: rotula el interruptor Plano/Suave. */
     val activeShadeSmooth: Boolean = false,
     val objects: List<Pair<String, String>> = emptyList(),

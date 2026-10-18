@@ -355,4 +355,6 @@ interface RemoteBlenderClient {
 
     /** Ejecuta exclusivamente un comando publicado por el catálogo Edit. */
     fun editCatalogCommand(command: String, payload: Map<String, Any?> = emptyMap())
+    fun setObjectProperties(id: String, revision: String, values: Map<String, Any?>, token: String) =
+        editCatalogCommand("object.properties", mapOf("object_id" to id, "revision" to revision, "values" to values, "request_token" to token))
 }

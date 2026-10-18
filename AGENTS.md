@@ -292,6 +292,16 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   Imagen de referencia nativa: Empty de imagen empaquetado en el `.blend`, frente a la
   cámara de la tablet y con la opacidad del panel, en un undo. El tablero local sigue
   existiendo; la copia en la escena se coloca después como cualquier objeto.
+- Object muestra una bandeja inferior de propiedades del activo cuando no hay
+  herramientas ni sesiones: Posición XYZ, Tamaño y Visibilidad. El esquema viene
+  del backend (`active.properties`); las longitudes viajan en metros y se muestran
+  con la unidad del preset. En imágenes nativas añade tamaño del Empty, escala,
+  opacidad, ortográfica/perspectiva, solo vista alineada, profundidad y lados visibles.
+  El selector de objetos permite recuperar referencias sin tocarlas en la vista.
+  Los campos son borradores locales (también vacíos); Confirmar aplica el lote en
+  un undo y Cancelar lo descarta. Identidad y revisión impiden escribir en otro
+  objeto o sobrescribir cambios del PC. No abre ni altera la sesión de Mover.
+  El pie de vistas y el inspector de modificadores respetan la altura de la bandeja.
 - El encuadre y el clipping siguen el tamaño visto, también en piezas de 1 mm y
   menores; los rangos de preset se convierten por `scale_length`. Edit/CAD no
   interpretan toques consecutivos como encuadre (en Edit son el doble toque de loop). El panel de vistas ofrece
@@ -305,10 +315,13 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   muestran cero por falta de decimales. Sculpt muestra el radio métrico aproximado
   del plano del pivote; su parámetro de gesto continúa siendo relativo a la pantalla.
 - La selección de Edit vive en una barra fija a la izquierda de Vértices/Aristas/Caras
-  (`EditSelectionBar`): Todo/Nada en un botón, Invertir, Loop, Ring, Enlazado, Caja y
+  (`EditSelectionBar`): Todo/Nada en un botón, Invertir, Loop, Enlazado, Caja y
   Círculo, a un toque y sin cambiar de posición (se deshabilitan si no aplican). El
   radial Edit ya no tiene submenú Selección: ofrece Malla y, con selección, Ocultar,
   Duplicar y Borrar.
+- Mayús y Ring se han retirado de sus barras a petición del usuario. El doble toque
+  conserva la selección de loop en Aristas/Caras y de enlazado en Vértices; no se
+  sustituye por ring. Ctrl, Alt y Repetir última operación conservan su comportamiento.
 - Doble toque en Edit sin modificadores ni sesión activa: en Aristas/Caras añade el
   loop de lo tocado (Alt+clic de Blender); en Vértices, la pieza enlazada. El segundo
   toque envía ADD sobre el elemento y después el loop/enlazado; no encuadra. Bisel permanece en el rail; Bridge vive en Malla para dejar visible

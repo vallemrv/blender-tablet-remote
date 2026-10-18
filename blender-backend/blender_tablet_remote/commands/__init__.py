@@ -54,6 +54,7 @@ def load_all() -> None:
         vertex_groups,
         versioning,
         objects,
+        object_properties,
         reference,
         scene,
         sculpt,
