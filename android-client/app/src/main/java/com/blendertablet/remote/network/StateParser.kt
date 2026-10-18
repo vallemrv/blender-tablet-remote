@@ -136,7 +136,14 @@ object StateParser {
             OutlinerObject(o.getString("id"), o.getString("name"), o.optString("type"),
                 o.optBoolean("selected"), o.optBoolean("active"), o.optBoolean("hidden"), o.optBoolean("visible"),
                 o.optBoolean("locked"), o.optBoolean("in_view_layer"), o.optBoolean("editable"),
-                o.optString("parent").takeUnless { it.isBlank() || it == "null" }, strings(o.optJSONArray("collections")))
+                o.optString("parent").takeUnless { it.isBlank() || it == "null" }, strings(o.optJSONArray("collections")),
+                collectionIds = strings(o.optJSONArray("collection_ids")))
+        }
+
+    fun outlinerCollections(array: JSONArray?): List<OutlinerCollection> = if (array == null) emptyList() else
+        (0 until array.length()).map { array.getJSONObject(it) }.map { c ->
+            OutlinerCollection(c.getString("id"), c.getString("name"), c.optString("path", c.getString("name")),
+                strings(c.optJSONArray("parents")), c.optBoolean("root"), c.optBoolean("editable"), c.optInt("count"))
         }
 
     fun modifiers(array: JSONArray?): List<ModifierState> = if (array == null) emptyList() else
@@ -208,6 +215,7 @@ object StateParser {
             referenceImages = f.optJSONObject("reference_images") != null,
             objectProperties = f.optJSONObject("object_properties")?.optInt("version") == 1,
             outliner = f.optJSONObject("outliner")?.optInt("version") == 1,
+            outlinerCollections = f.optJSONObject("outliner")?.optBoolean("collections") == true,
         )
     }
 

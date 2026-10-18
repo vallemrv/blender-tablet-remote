@@ -987,6 +987,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun listObjects() = client.listObjects()
     fun listOutliner() = client.listOutliner()
+    fun outlinerCollection(action: String, payload: Map<String, Any?>) = client.outlinerCollection(action, payload)
     fun outlinerAction(id: String, action: String, value: Boolean? = null, name: String? = null) =
         client.outlinerAction(id, action, value, name)
     fun outlinerMove(id: String) = beginTransform(TransformMode.MOVE, id)

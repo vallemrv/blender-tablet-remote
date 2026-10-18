@@ -21,20 +21,52 @@ def describe():
                            locked=obj.hide_select, in_view_layer=in_layer,
                            parent=obj.parent.name if obj.parent else None,
                            collections=[c.name for c in obj.users_collection],
+                           collection_ids=[_identity(c) for c in obj.users_collection],
                            editable=obj.library is None or obj.override_library is not None))
     return sorted(result, key=lambda row: row['name'].casefold())
 
 
 def _target(payload):
-    _require_idle()
-    from ..cad.runtime import runtime
-    if runtime.workspace or bpy.context.mode != 'OBJECT':
-        raise CommandError('Estas acciones requieren Object sin una herramienta activa', code='wrong_mode')
+    _require_object_context()
     identity = payload.get('object_id')
     obj = next((o for o in bpy.context.scene.objects if _identity(o) == identity), None)
     if obj is None:
         raise CommandError('El objeto ya no existe en esta escena; actualiza el Outliner', code='object_changed')
     return obj
+
+
+def _require_object_context():
+    _require_idle()
+    from ..cad.runtime import runtime
+    if runtime.workspace or bpy.context.mode != 'OBJECT':
+        raise CommandError('Estas acciones requieren Object sin una herramienta activa', code='wrong_mode')
+
+
+def _scene_collections():
+    """Cada datablock una vez; conserva padres múltiples sin guardar RNA en caché."""
+    found = {}
+
+    def visit(collection, parent=None, path=''):
+        key = _identity(collection)
+        if key in found:
+            if parent is not None: found[key][1]['parents'].append(parent)
+            return
+        root = collection == bpy.context.scene.collection
+        label = 'Escena' if root else collection.name
+        full_path = f'{path} / {label}' if path else label
+        row = dict(id=key, name=label, path=full_path, root=root,
+                   parents=[] if parent is None else [parent], count=len(collection.objects),
+                   editable=collection.library is None)
+        found[key] = (collection, row)
+        for child in sorted(collection.children, key=lambda c: c.name.casefold()):
+            visit(child, key, full_path)
+
+    visit(bpy.context.scene.collection)
+    return found
+
+
+def describe_collections():
+    return [row for _, row in _scene_collections().values()]
 
 
 def _select(obj):
@@ -49,12 +81,86 @@ def _select(obj):
 
 
 def _result():
-    return dict(state=state.snapshot(), objects=describe())
+    return dict(state=state.snapshot(), objects=describe(), collections=describe_collections())
 
 
 @command('outliner.list')
 def listing(payload):
-    return dict(objects=describe())
+    return dict(objects=describe(), collections=describe_collections())
+
+
+@command('outliner.collection', mutating=True)
+def collection_action(payload):
+    _require_object_context()
+    action = payload.get('action')
+    if action not in {'CREATE', 'MOVE_OBJECTS'}:
+        raise BadPayload('Acción de colección desconocida')
+    collections = _scene_collections()
+    key = payload.get('parent_id' if action == 'CREATE' else 'collection_id')
+    if action == 'CREATE' and key is None: key = _identity(bpy.context.scene.collection)
+    destination = collections.get(key)
+    if destination is None:
+        raise CommandError('La colección ya no pertenece a esta escena', code='collection_changed')
+    if not destination[1]['editable']:
+        raise CommandError('La colección enlazada es de solo lectura', code='read_only')
+    container = destination[0]
+    name = payload.get('name', 'Colección')
+    if action == 'CREATE' and (not isinstance(name, str) or not name.strip() or len(name.strip().encode('utf-8')) > 63):
+        raise BadPayload('Escribe un nombre de colección entre 1 y 63 bytes')
+    ids = payload.get('object_ids', [])
+    if not isinstance(ids, list) or any(not isinstance(i, str) for i in ids):
+        raise BadPayload('object_ids debe contener identificadores de objetos')
+    if action == 'MOVE_OBJECTS' and not ids:
+        raise BadPayload('Elige los objetos que quieres mover')
+    by_id = {_identity(o): o for o in bpy.context.scene.objects}
+    targets = []
+    for identity in dict.fromkeys(ids):
+        obj = by_id.get(identity)
+        if obj is None:
+            raise CommandError('Uno de los objetos ya no pertenece a la escena', code='object_changed')
+        sources = [c for c in obj.users_collection if _identity(c) in collections]
+        if any(c.library is not None for c in sources):
+            raise CommandError('Una colección de origen es de solo lectura', code='read_only')
+        targets.append((obj, sources))
+    created = None
+    changes = []
+    active = bpy.context.view_layer.objects.active
+    selected = [o for o in bpy.context.view_layer.objects if o.select_get()]
+    try:
+        if action == 'CREATE':
+            created = bpy.data.collections.new(name.strip())
+            container.children.link(created)
+            destination_collection = created
+        else:
+            destination_collection = container
+        for obj, sources in targets:
+            if sources == [destination_collection]: continue
+            # Registra antes de modificar: también restaura un error de enlace.
+            was_linked = obj.name in destination_collection.objects
+            changes.append((obj, sources, was_linked))
+            if not was_linked: destination_collection.objects.link(obj)
+            for source in sources:
+                if source != destination_collection: source.objects.unlink(obj)
+        bpy.context.view_layer.update()
+        for obj in selected:
+            if obj.name in bpy.context.view_layer.objects and not obj.hide_select and obj.visible_get(): obj.select_set(True)
+        if active is not None and active.name in bpy.context.view_layer.objects and active.visible_get():
+            bpy.context.view_layer.objects.active = active
+    except Exception:
+        for obj, sources, was_linked in reversed(changes):
+            for source in sources:
+                if obj.name not in source.objects: source.objects.link(obj)
+            if not was_linked and obj.name in destination_collection.objects: destination_collection.objects.unlink(obj)
+        if created is not None: bpy.data.collections.remove(created)
+        bpy.context.view_layer.update()
+        for obj in bpy.context.view_layer.objects: obj.select_set(obj in selected)
+        if active is not None and active.name in bpy.context.view_layer.objects:
+            bpy.context.view_layer.objects.active = active
+        raise
+    if created is not None or changes: undo_push('Remote create collection' if created else 'Remote move to collection')
+    result = _result()
+    if created is not None: result['created_collection'] = dict(id=_identity(created), name=created.name)
+    return result
 
 
 @command('outliner.action', mutating=True)

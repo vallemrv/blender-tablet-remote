@@ -90,6 +90,9 @@ captures/
 build/
 captures/
 
+# Adjuntos recibidos por el chat; no forman parte del código de la aplicación.
+/archivos/recibidos/
+
 # Python / Blender add-on
 __pycache__/
 *.pyc

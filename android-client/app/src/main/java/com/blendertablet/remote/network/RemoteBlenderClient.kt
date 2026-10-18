@@ -358,6 +358,8 @@ interface RemoteBlenderClient {
     fun setObjectProperties(id: String, revision: String, values: Map<String, Any?>, token: String) =
         editCatalogCommand("object.properties", mapOf("object_id" to id, "revision" to revision, "values" to values, "request_token" to token))
     fun listOutliner() = editCatalogCommand("outliner.list")
+    fun outlinerCollection(action: String, payload: Map<String, Any?>) =
+        editCatalogCommand("outliner.collection", payload + ("action" to action))
     fun outlinerAction(id: String, action: String, value: Boolean? = null, name: String? = null) =
         editCatalogCommand("outliner.action", mapOf("object_id" to id, "action" to action, "value" to value, "name" to name))
     fun outlinerMove(id: String, axes: Set<Axis>, step: Double, snapType: SnapType, orientation: Orientation, valueMode: ValueMode) =

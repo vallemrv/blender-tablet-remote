@@ -372,6 +372,20 @@ modo, visibilidad y bloqueo; selecciona solo ese objeto y llama al mismo
 y cancelar siguen usando `transform.*`; iniciar no crea undo. Las acciones rechazan
 sesiones activas y otros workspaces sin modificar su estado.
 
+Con `outliner.collections:true`, listados, respuestas y `outliner.changed` añaden
+`collections`: `id`, `name`, `path`, `root`, `parents`, `count` (objetos directos)
+y `editable`. Se incluyen colecciones vacías y la raíz de la escena. Cada objeto
+añade `collection_ids` a sus nombres de colección. Los padres múltiples conservan
+la misma identidad; `path` es una ruta de presentación, no una dirección de escritura.
+`outliner.collection` recibe `action:CREATE`, `name`, `parent_id` opcional (raíz si
+se omite) y `object_ids` opcionales para moverlos a la nueva colección; responde
+también `created_collection:{id,name}`. `action:MOVE_OBJECTS` recibe `collection_id`
+y una lista no vacía de `object_ids`. Primero enlaza el destino y después retira
+las pertenencias anteriores de la escena actual, conservando las externas, matrices,
+datos y parentesco. Colecciones enlazadas de origen/destino no son editables.
+IDs obsoletos se rechazan antes de cualquier cambio. Crear y mover el lote forman
+un único undo; mover a la única colección actual no crea undo vacío.
+
 `object.properties` (`object_properties.version:1`) recibe `object_id`, `revision`
 y `values` con únicamente los campos modificados. `active.properties` publica la
 identidad efímera (proceso/escena/objeto), revisión de valores/esquema, nombre,

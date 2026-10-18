@@ -389,7 +389,7 @@ class WebSocketRemoteBlenderClient(
 
     private fun sendCommand(name: String, payload: JSONObject = JSONObject()): Boolean {
         if (name in setOf("history.undo", "history.redo", "mode.set", "file.new", "file.open", "file.save", "file.save_as",
-                "object.select", "selection.pick", "outliner.action", "outliner.move", "transform.begin", "tool.begin")) {
+                "object.select", "selection.pick", "outliner.action", "outliner.move", "outliner.collection", "transform.begin", "tool.begin")) {
             synchronized(objectPropertiesLock) {
                 liveObjectProperties.discardPending()?.let { token ->
                     _state.value = _state.value.copy(objectPropertiesResult =
@@ -1083,9 +1083,13 @@ class WebSocketRemoteBlenderClient(
                     }
                     command == "object.shade" -> result?.let(::updateState)
                     command == "object.properties" -> result?.let(::updateState)
-                    command == "outliner.list" || command == "outliner.action" || command == "outliner.move" -> result?.let {
+                    command == "outliner.list" || command == "outliner.action" || command == "outliner.move" || command == "outliner.collection" -> result?.let {
                         it.optJSONObject("state")?.let(::updateState)
-                        _state.value = _state.value.copy(outlinerObjects = StateParser.outlinerObjects(it.optJSONArray("objects")))
+                        _state.value = _state.value.copy(outlinerObjects = StateParser.outlinerObjects(it.optJSONArray("objects")),
+                            outlinerCollections = StateParser.outlinerCollections(it.optJSONArray("collections")))
+                        it.optJSONObject("created_collection")?.let { created ->
+                            _notices.value = "Colección creada: ${created.optString("name")}"
+                        }
                         if (command == "outliner.move") it.optJSONObject("transform")?.let { transform ->
                             acceptTransformSession(StateParser.session(transform), allowReplace = true)
                         }
@@ -1221,7 +1225,8 @@ class WebSocketRemoteBlenderClient(
                         _state.value = _state.value.copy(modifiers = StateParser.modifiers(it.optJSONArray("modifiers")))
                     }
                     message.optString("event") == "outliner.changed" -> payload?.let {
-                        _state.value = _state.value.copy(outlinerObjects = StateParser.outlinerObjects(it.optJSONArray("objects")))
+                        _state.value = _state.value.copy(outlinerObjects = StateParser.outlinerObjects(it.optJSONArray("objects")),
+                            outlinerCollections = StateParser.outlinerCollections(it.optJSONArray("collections")))
                     }
                     message.optString("event") == "visibility.changed" -> payload?.let {
                         _state.value = _state.value.copy(hiddenObjects = StateParser.hiddenObjects(it.optJSONArray("hidden_objects")))
@@ -1324,6 +1329,7 @@ class WebSocketRemoteBlenderClient(
             features = old.features,
             objectPropertiesResult = old.objectPropertiesResult,
             outlinerObjects = old.outlinerObjects,
+            outlinerCollections = old.outlinerCollections,
             versioning = old.versioning,
             cad = if (json.has("cad")) parsed.cad else old.cad,
             sculpt = if (json.has("sculpt")) parsed.sculpt else old.sculpt,

@@ -249,6 +249,7 @@ class StateWatcher:
     def _light_snapshot(self) -> dict:
         from .commands.object_properties import describe
         from .commands.outliner import describe as outliner
+        from .commands.outliner import describe_collections
         view_layer = bpy.context.view_layer
         active = view_layer.objects.active
         selected_names = sorted(o.name for o in view_layer.objects if o.select_get())
@@ -260,6 +261,7 @@ class StateWatcher:
             "object_count": len(view_layer.objects),
             "object_properties": describe(active),
             "outliner": outliner(),
+            "outliner_collections": describe_collections(),
             "context": self._context(selected_names),
             "modifiers": {obj.name: _modifiers_sig(obj) for obj in view_layer.objects if obj.modifiers},
             "vertex_groups": (active.name, tuple((g.name,g.lock_weight) for g in active.vertex_groups), active.vertex_groups.active_index) if active and active.type=='MESH' else None,
@@ -278,8 +280,8 @@ class StateWatcher:
             return []
 
         events = []
-        if prev["outliner"] != current["outliner"]:
-            events.append(_event("outliner.changed", {"objects": current["outliner"]}))
+        if prev["outliner"] != current["outliner"] or prev["outliner_collections"] != current["outliner_collections"]:
+            events.append(_event("outliner.changed", {"objects": current["outliner"], "collections": current["outliner_collections"]}))
         if prev["object_properties"] != current["object_properties"]:
             events.append(_event("object.properties_changed", {}))
         if prev["mode"] != current["mode"]:

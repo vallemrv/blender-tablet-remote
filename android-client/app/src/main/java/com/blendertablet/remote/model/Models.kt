@@ -32,8 +32,23 @@ data class OutlinerObject(
     val selected: Boolean, val active: Boolean, val hidden: Boolean, val visible: Boolean,
     val locked: Boolean, val inViewLayer: Boolean, val editable: Boolean,
     val parent: String? = null, val collections: List<String> = emptyList(),
+    val collectionIds: List<String> = emptyList(),
 ) {
     val canSelect: Boolean get() = visible && !locked && inViewLayer
+}
+data class OutlinerCollection(
+    val id: String, val name: String, val path: String, val parents: List<String>,
+    val root: Boolean, val editable: Boolean, val count: Int,
+)
+
+/** Las colecciones de Blender admiten varios padres; filtra también sus descendientes. */
+fun outlinerCollectionScope(collections: List<OutlinerCollection>, root: String): Set<String> {
+    val ids = mutableSetOf(root)
+    do {
+        val previous = ids.size
+        collections.filter { it.parents.any(ids::contains) }.forEach { ids += it.id }
+    } while (ids.size != previous)
+    return ids
 }
 data class ObjectChoiceFilter(val type: String? = null, val excludeSelf: Boolean = false)
 sealed interface ModifierDefault {
@@ -102,6 +117,7 @@ data class ServerFeatures(
     val referenceImages: Boolean = false,
     val objectProperties: Boolean = false,
     val outliner: Boolean = false,
+    val outlinerCollections: Boolean = false,
 )
 
 data class EditSettings(
@@ -481,6 +497,7 @@ data class BlenderState(
     val objects: List<Pair<String, String>> = emptyList(),
     val hiddenObjects: List<HiddenObject> = emptyList(),
     val outlinerObjects: List<OutlinerObject> = emptyList(),
+    val outlinerCollections: List<OutlinerCollection> = emptyList(),
     val modifiers: List<ModifierState> = emptyList(),
     val modifierOptions: List<ModifierTypeDescriptor> = emptyList(),
     val vertexGroups: List<VertexGroupState> = emptyList(),

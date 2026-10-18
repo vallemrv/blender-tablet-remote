@@ -201,6 +201,42 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 
 ## Criterio de diseño escalable
 
+### Coherencia de los cuatro bordes
+
+La interfaz comparte una estructura estable entre Object, Edit, CAD, Sculpt y
+Materiales. El contexto decide qué acciones se muestran, pero no inventa otra
+disposición ni otra forma de manejar el mismo control. Estas reglas guían las
+nuevas superficies y la adaptación gradual de las existentes.
+
+| Zona | Responsabilidad |
+| --- | --- |
+| Rail izquierdo | Herramientas de uso frecuente que cambian la intención del gesto: seleccionar, mover, rotar, escalar, Tweak y herramientas propias del modo. Permanece abierto; admite desplazamiento vertical cuando haga falta. |
+| Rail derecho | Acceso e inspectores contextuales: modificadores, pila CAD, biblioteca de materiales y sus propiedades. Comparten posición, márgenes, apertura y cierre; respetan el selector de modos y el pie de vistas. |
+| Barra superior (top) | Archivo, Escena, Outliner, conexión y controles generales de vista/historial. El selector de modos conserva su lugar bajo el ojo y deja CAD siempre al final. |
+| Barra inferior (bottom) | Parámetros de la herramienta activa o propiedades del objeto seleccionado. Una única fila fina con scroll horizontal, usando `SingleLineTray` al adaptar una bandeja. |
+
+- Una acción conserva nombre, icono y comportamiento en todos sus accesos. Se
+  obtiene el símbolo por intención desde `AppIcons`; una intención distinta debe
+  ser reconocible por su forma, no solo por su color. Las ayudas al acercar el
+  lápiz explican el propósito sin activar la acción.
+- No duplicar una acción entre rail y bandeja dentro del mismo contexto. Los
+  catálogos completos y las operaciones menos frecuentes viven en menús o
+  inspectores; el viewport debe seguir siendo la superficie principal.
+- Las cuatro zonas usan los componentes, tamaños táctiles, espaciado, tipografía,
+  colores de eje y estados activo/deshabilitado del sistema común. No crear
+  botones o campos parecidos a mano para cada herramienta o workspace.
+- En bottom, el título es breve y no envuelve. Las secciones de propiedades se
+  eligen con un desplegable y muestran únicamente sus campos; no mezclar todas
+  las secciones como pestañas más controles en la misma fila.
+- Los números editables ofrecen los mismos `−/+`, repetición mantenida, unidades
+  y protección de borradores. Las propiedades inmediatas no muestran salidas;
+  las operaciones con preview mantienen Cancelar/Confirmar fijos a la derecha.
+- Ningún texto auxiliar justifica aumentar la barra inferior a varias filas:
+  mostrar un resumen corto o llevar el detalle a la ayuda. El scroll conserva el
+  tamaño de los controles y los paneles vecinos reservan solo la altura real.
+
+### Distribución y comportamiento por contexto
+
 - El rail es una superficie limitada para herramientas gestuales frecuentes, no un
   catálogo completo.
 - Una acción no se duplica entre el rail lateral y la bandeja inferior en el mismo
@@ -330,6 +366,15 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   Las acciones requieren Object sin sesiones activas. Una colección excluida u
   oculta se identifica en la lista; mostrar un objeto no altera la colección.
   Los cambios desde el PC se reflejan mediante `outliner.changed`.
+- Outliner → «Nueva colección» crea una colección nativa vacía o mueve la selección
+  a ella, con nombre y colección padre elegibles, en un solo undo. El botón de
+  carpeta de cada objeto permite moverlo a una colección existente o a la raíz.
+  No cambia matrices, mallas ni parentesco; solo pertenencias a colecciones de la
+  escena actual, conservando las pertenencias externas. Valida todo el lote antes
+  de crear/enlazar/desenlazar y restaura los enlaces si falla. Las colecciones
+  vacías y anidadas aparecen en el filtro; este incluye descendientes y admite
+  varios padres. Objetos y colecciones se identifican por ID efímero, no por nombre.
+  Crear o modificar colecciones desde el PC también refresca el Outliner.
 - El encuadre y el clipping siguen el tamaño visto, también en piezas de 1 mm y
   menores; los rangos de preset se convierten por `scale_length`. Edit/CAD no
   interpretan toques consecutivos como encuadre (en Edit son el doble toque de loop). El panel de vistas ofrece

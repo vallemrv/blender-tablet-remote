@@ -179,6 +179,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
         onOutlinerOpened = vm::listOutliner,
         onOutlinerMove = vm::outlinerMove,
         onOutlinerAction = vm::outlinerAction,
+        onOutlinerCollection = vm::outlinerCollection,
         onApplyTransform = vm::applyTransform,
         // El icono conmuta: si el panel ya está abierto, lo cierra.
         onModifiers = {

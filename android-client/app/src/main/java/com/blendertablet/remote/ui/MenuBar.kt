@@ -62,7 +62,9 @@ fun MenuBar(
         if (!state.blender.material.active && !state.blender.cad.workspace && state.blender.features.outliner) {
             OutlinerMenu(state.blender.outlinerObjects, state.connection == ConnectionStatus.CONNECTED,
                 objectActionsEnabled && state.blender.mode == BlenderMode.OBJECT,
-                actions.onOutlinerOpened, actions.onOutlinerMove, actions.onOutlinerAction)
+                actions.onOutlinerOpened, actions.onOutlinerMove, actions.onOutlinerAction,
+                collections = state.blender.outlinerCollections, collectionsAvailable = state.blender.features.outlinerCollections,
+                onCollection = actions.onOutlinerCollection)
         }
         // Modificadores no es un menú: es un panel que se enseña o se esconde, así que
         // un icono conmutable dice más que un desplegable con una sola entrada.
@@ -92,6 +94,7 @@ data class MenuActions(
     val onOutlinerOpened: () -> Unit,
     val onOutlinerMove: (String) -> Unit,
     val onOutlinerAction: (String, String, Boolean?, String?) -> Unit,
+    val onOutlinerCollection: (String, Map<String, Any?>) -> Unit,
     val onApplyTransform: (Boolean, Boolean, Boolean) -> Unit,
     val onModifiers: () -> Unit,
     val onSceneScale: (String) -> Unit,
