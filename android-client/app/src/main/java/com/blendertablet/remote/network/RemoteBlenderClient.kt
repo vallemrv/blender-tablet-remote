@@ -178,6 +178,9 @@ interface RemoteBlenderClient {
      * [settings] solo viaja en `BEGIN`: configura el gesto entero y el servidor lo
      * conserva hasta soltar, así que repetirlo en cada UPDATE sería ruido.
      */
+    /** Copia una imagen del tablero a la escena como Imagen de referencia nativa. */
+    fun referenceAdd(name: String, format: String, base64: String, opacity: Float)
+
     /** Muestra u oculta el manipulador; el servidor solo lo dibuja si no hay otra sesión. */
     fun gizmoSet(enabled: Boolean)
 

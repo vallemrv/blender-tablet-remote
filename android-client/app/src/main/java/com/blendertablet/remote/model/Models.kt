@@ -90,6 +90,8 @@ data class ServerFeatures(
     val versioning: Boolean = false,
     /** `transform_modal.gizmo`: manipulador de mover/rotar/escalar sobre la selección. */
     val gizmo: Boolean = false,
+    /** `reference_images`: enviar una referencia del tablero a la escena de Blender. */
+    val referenceImages: Boolean = false,
 )
 
 data class EditSettings(

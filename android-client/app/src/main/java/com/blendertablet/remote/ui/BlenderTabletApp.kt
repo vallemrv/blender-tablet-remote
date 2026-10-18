@@ -547,6 +547,9 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 if (sculptActive) SculptWorkspace(state, vm)
                 if (materialActive) MaterialWorkspace(state, vm)
                 if (referencesOpen) ReferencePanel(Modifier.align(Alignment.TopCenter).padding(top = 76.dp),
+                    onSendToBlender = if (state.blender.features.referenceImages && state.connection == ConnectionStatus.CONNECTED) {
+                        { image, opacity -> vm.sendReferenceToBlender(image.path, image.name, opacity) }
+                    } else null,
                     onDismiss = { referencesOpen = false })
 
                 if (!state.blender.cad.workspace || state.blender.cad.activeSketchId == null) ViewFooter(

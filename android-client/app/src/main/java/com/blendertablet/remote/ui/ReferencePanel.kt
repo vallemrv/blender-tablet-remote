@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.blendertablet.remote.data.ReferenceImage
 import com.blendertablet.remote.data.ReferenceImages
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -36,7 +37,12 @@ import kotlin.math.roundToInt
 
 /** Reference-board gestures stay on its card; the surrounding canvas keeps its single InputSurface. */
 @Composable
-fun BoxScope.ReferencePanel(modifier: Modifier = Modifier, onDismiss: () -> Unit) {
+fun BoxScope.ReferencePanel(
+    modifier: Modifier = Modifier,
+    /** Copia la imagen elegida a la escena como Imagen de referencia; null si el servidor no lo admite. */
+    onSendToBlender: ((ReferenceImage, Float) -> Unit)? = null,
+    onDismiss: () -> Unit,
+) {
     val context = LocalContext.current
     val store = remember(context) { ReferenceImages(context.applicationContext) }
     val scope = rememberCoroutineScope()
@@ -103,6 +109,9 @@ fun BoxScope.ReferencePanel(modifier: Modifier = Modifier, onDismiss: () -> Unit
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     PillButton(if (busy) "Cargando…" else "+ Imagen", enabled = !busy) { launcher.launch(arrayOf("image/*")) }
                     PillButton(if (large) "Compacta" else "Ampliar") { large = !large }
+                    if (selected != null && onSendToBlender != null) PillButton("A Blender", enabled = !busy) {
+                        onSendToBlender(selected, opacity)
+                    }
                     if (selected != null) PillButton("Quitar", enabled = !busy) {
                         scope.launch {
                             busy = true

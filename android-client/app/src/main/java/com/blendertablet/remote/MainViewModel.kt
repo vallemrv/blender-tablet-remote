@@ -56,6 +56,11 @@ import com.blendertablet.remote.network.ViewportStream
 import com.blendertablet.remote.network.H264Framing
 import com.blendertablet.remote.network.H264ViewportStream
 import android.view.Surface
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.Base64
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.blendertablet.remote.network.WebSocketRemoteBlenderClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -524,6 +529,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val capturePng = client.capturePng
     fun clearCapture() = client.clearCapture()
     fun captureScene() { client.captureScene() }
+
+    /**
+     * Envía una imagen del tablero a Blender. PNG si tiene transparencia, JPEG si no;
+     * se reduce hasta caber en un mensaje de control (base64 < 7 MB).
+     */
+    fun sendReferenceToBlender(path: String, name: String, opacity: Float) {
+        viewModelScope.launch {
+            // El panel ya decodificó esta copia privada; si desaparece, no hay nada que enviar.
+            val encoded = withContext(Dispatchers.IO) { encodeReference(path) } ?: return@launch
+            client.referenceAdd(name.substringBeforeLast('.'), encoded.first, encoded.second, opacity)
+        }
+    }
+
+    private fun encodeReference(path: String): Pair<String, String>? {
+        var bitmap = BitmapFactory.decodeFile(path) ?: return null
+        val png = bitmap.hasAlpha()
+        while (true) {
+            val bytes = java.io.ByteArrayOutputStream().use { output ->
+                bitmap.compress(if (png) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG, 92, output)
+                output.toByteArray()
+            }
+            val text = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            if (text.length < 7_000_000 || maxOf(bitmap.width, bitmap.height) < 256) {
+                return (if (png) "png" else "jpg") to text
+            }
+            bitmap = Bitmap.createScaledBitmap(bitmap, bitmap.width * 3 / 4, bitmap.height * 3 / 4, true)
+        }
+    }
     private var materialStrokeId: String? = null
     private var materialLightId: String? = null
 

@@ -288,6 +288,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   opacidad deja ver el modelo detrás. Importa copias privadas acotadas y conserva los originales; sus gestos
   quedan en el panel. No son planos 3D ni contenido del `.blend`.
   Se abre desde Archivo → Imágenes de referencia; cerrado no ocupa la vista.
+  «A Blender» copia además la imagen elegida a la escena (`reference.add`) como
+  Imagen de referencia nativa: Empty de imagen empaquetado en el `.blend`, frente a la
+  cámara de la tablet y con la opacidad del panel, en un undo. El tablero local sigue
+  existiendo; la copia en la escena se coloca después como cualquier objeto.
 - El encuadre y el clipping siguen el tamaño visto, también en piezas de 1 mm y
   menores; los rangos de preset se convierten por `scale_length`. Edit/CAD no
   interpretan toques consecutivos como encuadre (en Edit son el doble toque de loop). El panel de vistas ofrece

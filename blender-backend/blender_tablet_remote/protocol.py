@@ -412,6 +412,7 @@ FEATURES = {
             "length_unit": "METERS", "kernel": "OCCT", "kernel_required": True,
             "document_version": 1, "owned_sessions": True, "persistent": True},
     "workspace_resume": True,
+    "reference_images": {"version": 1, "commands": ["reference.add"], "formats": ["png", "jpg"]},
     "history": {"version": 1, "repeat_last": True},
     "context": {"version": 1, "events": ["context.changed"], "selection_counts": True},
     "transform_modal": {"version": 4, "edit_step_selection": True, "modes": ["OBJECT", "EDIT"],

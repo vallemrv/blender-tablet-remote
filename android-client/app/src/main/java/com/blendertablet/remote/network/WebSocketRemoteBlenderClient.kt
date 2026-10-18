@@ -597,6 +597,10 @@ class WebSocketRemoteBlenderClient(
     override fun fileDefaultFolder(path: String) =
         command("file.default_folder", JSONObject().put("path", path))
 
+    override fun referenceAdd(name: String, format: String, base64: String, opacity: Float) =
+        command("reference.add", JSONObject().put("name", name).put("format", format)
+            .put("data", base64).put("opacity", opacity.toDouble()))
+
     override fun gizmoSet(enabled: Boolean) = command("gizmo.set", JSONObject().put("enabled", enabled))
 
     override fun gizmoDrag(phase: GesturePhase, u: Double, v: Double, dx: Double, dy: Double, settings: Map<String, Any?>) =
@@ -1063,6 +1067,10 @@ class WebSocketRemoteBlenderClient(
                     }
                     // Los modales devuelven el estado de la sesión; confirmar y
                     // cancelar la cierran y sí necesitan refrescar la escena.
+                    command == "reference.add" -> result?.let {
+                        updateState(it)
+                        _notices.value = "Referencia añadida a Blender"
+                    }
                     command == "gizmo.drag" -> {
                         val finished = result?.optString("gizmo_finished")?.takeIf { it.isNotBlank() }
                         if (finished != null && finished == _transformSession.value.sessionId) {

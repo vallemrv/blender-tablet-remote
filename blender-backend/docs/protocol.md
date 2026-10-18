@@ -348,6 +348,14 @@ el rayo solo considera la jaula del objeto editado, de modo que otro objeto detr
 cuenta como vacío, y un vacío con `TOGGLE` también deselecciona todo: Android envía
 `TOGGLE` en el toque sin modificador para acumular sin Mayús.
 
+`reference.add` (`reference_images`) copia una imagen del tablero de la tablet a la
+escena: `format` png/jpg, `data` en base64 (≤ 6 MB decodificados), `name` y `opacity`
+(0–1]. Crea un Empty de imagen como Añadir → Imagen → Referencia, con la imagen
+empaquetada en el `.blend`, en el pivote de la cámara de la tablet, mirando hacia ella
+y ocupando el 80 % de la altura visible. En Object queda seleccionado y activo; en
+otros modos no cambia el objeto activo. Un único undo; responde con el snapshot y
+los nombres `reference`/`image`.
+
 `gizmo.set` (`enabled`) y `gizmo.drag` (`phase` BEGIN/UPDATE/END/CANCEL, `u`, `v`,
 `dx`, `dy`) forman el manipulador sobre la selección (`transform_modal.gizmo`). Con
 `enabled` y sin otra sesión, GPUOffScreen dibuja en el centro de la selección flechas

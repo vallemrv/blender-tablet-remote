@@ -184,6 +184,7 @@ object StateParser {
             transformStepSelection = f.optJSONObject("transform_modal")?.optBoolean("edit_step_selection") == true,
             versioning = f.optJSONObject("versioning")?.optInt("version") == 1,
             gizmo = f.optJSONObject("transform_modal")?.optJSONObject("gizmo") != null,
+            referenceImages = f.optJSONObject("reference_images") != null,
         )
     }
 
