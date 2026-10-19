@@ -108,400 +108,153 @@ internal fun stepParam(
     value: Double, step: Double, direction: Int, isInt: Boolean, min: Double?, max: Double?,
 ): Double = clampParam(value + step * direction, isInt, min, max)
 
-/**
- * Bandeja de la herramienta paramétrica de Edit Mode, en una franja horizontal.
- *
- * Antes era una columna que apilaba los parámetros y tapaba el viewport; ahora es una
- * sola línea: el rótulo a la izquierda, los parámetros en una fila desplazable y las
- * dos salidas (descartar/confirmar) fijas a la derecha. Loop Cut coloca la posición
- * con un stepper numérico (porcentaje) y el lápiz puede seguir deslizándola sobre el
- * viewport, que ya alimenta `tool.nudge`; cortes, suavidad, perfil y toggles viven en
- * la misma línea.
- *
- * Con `awaitingPick` (herramienta armada, sin sesión) se muestra el hint de tocar la
- * malla en vez de los parámetros. Sin sesión ni hint no se dibuja nada: comparte el
- * hueco de abajo con [TransformBar] y las dos a la vez se solaparían.
- */
+/** One parameter group per slot; the same inventory drives rendering and its limit test. */
 @Composable
 fun EditToolTray(
-    session: ToolSession,
-    selectionMode: SelectionMode,
-    unitScaleLength: Double,
-    onParameter: (String, Any?) -> Unit,
-    onConfirm: () -> Unit,
-    onCancel: () -> Unit,
-    onLoopPop: () -> Unit,
-    modifier: Modifier = Modifier,
-    awaitingPick: Boolean = false,
-    lengthUnit: com.blendertablet.remote.model.LengthUnit = com.blendertablet.remote.model.LengthUnit.CENTIMETERS,
-    variantLabel: String? = null,
+    session: ToolSession, selectionMode: SelectionMode, unitScaleLength: Double,
+    onParameter: (String, Any?) -> Unit, onConfirm: () -> Unit, onCancel: () -> Unit,
+    onLoopPop: () -> Unit, modifier: Modifier = Modifier, awaitingPick: Boolean = false,
+    lengthUnit: LengthUnit = LengthUnit.CENTIMETERS, variantLabel: String? = null,
 ) {
     if (!session.active && !awaitingPick && !session.armed) return
-    // Knife y Bisect tienen su propia bandeja (puntos/pop/cerrar, o el aviso de
-    // arrastre y clear inner/outer/fill).
-    if (session.tool == EditTool.KNIFE || session.tool == EditTool.BISECT) return
-    var toolUnit by remember(session.sessionId, lengthUnit) { mutableStateOf(lengthUnit) }
-    FloatingPanel(modifier) {
-        if (session.controls.isNotEmpty()) {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TrayTitle(trayTitle(session.tool, variantLabel ?: "A toque"))
-                    Spacer(Modifier.width(10.dp))
-                    Text(session.instruction, color = Ink.Muted, fontSize = 11.sp)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    SchemaToolParameters(session.controls, session.parameters, lengthUnit, unitScaleLength,
-                        onParameter, Modifier.weight(1f))
-                    TrayExits(onCancel, if (session.active) onConfirm else null, session.canConfirm)
-                }
-            }
-            return@FloatingPanel
+    if (session.tool in setOf(EditTool.KNIFE, EditTool.BISECT)) return
+    val instruction = if (session.tool == EditTool.LOOP_CUT)
+        "Arrastra para desplazar · toca otra arista para añadir otro corte"
+        else session.instruction.ifBlank { "Arrastra sobre la malla y toca el número para afinar" }
+    if (!session.active && session.controls.isEmpty()) {
+        SingleLineTray(session.tool.label, onCancel = onCancel, modifier = modifier) {
+            Text("Toca una arista para colocar el primer corte", color = Ink.Muted, fontSize = 12.sp, maxLines = 1)
         }
-        if (!session.active) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TrayTitle(session.tool.label)
-                Spacer(Modifier.width(10.dp))
-                Text("Toca una arista de la malla para colocar el corte", color = Ink.Muted, fontSize = 11.sp)
-                TrayExits(onCancel)
-            }
-            return@FloatingPanel
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // Rótulo, no botón: la herramienta ya la eligió el rail y volver a
-            // ofrecerla aquí sería la duplicidad que el plan prohíbe.
-            TrayTitle(trayTitle(session.tool, variantLabel ?: "Región"))
-            Spacer(Modifier.width(10.dp))
-            Row(
-                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (session.tool == EditTool.LOOP_CUT) {
-                    Text(
-                        "Loops: ${session.loopCount} · Mayús+toque añade",
-                        color = Ink.Muted,
-                        fontSize = 11.sp,
-                    )
-                    LoopCutParams(session, unitScaleLength, onParameter)
-                } else if (session.tool == EditTool.BRIDGE_EDGE_LOOPS) {
-                    BridgeParams(session, unitScaleLength, onParameter)
-                } else if (session.tool == EditTool.EXTRUDE) {
-                    key(session.sessionId, session.parameters["variant"]) {
-                        ExtrudeParams(session, unitScaleLength, toolUnit, { toolUnit = it }, onParameter)
-                    }
-                } else if (session.tool == EditTool.INSET) {
-                    InsetParams(session, unitScaleLength, toolUnit, { toolUnit = it }, onParameter)
-                } else if (session.tool == EditTool.BEVEL) {
-                    BevelParams(session, selectionMode, unitScaleLength, toolUnit, { toolUnit = it }, onParameter)
-                } else {
-                    for (spec in specsFor(session.tool)) {
-                        ParamStepper(
-                            spec = spec,
-                            value = session.double(spec.key) ?: defaultValue(spec),
-                            unitScaleLength = unitScaleLength,
-                            onCommit = { onParameter(spec.key, it) },
-                        )
-                    }
-                }
-            }
-            if (session.tool == EditTool.LOOP_CUT && session.loopCount > 1) {
-                Spacer(Modifier.width(10.dp))
-                RoundAction(AppIcons.Undo, "Deshacer último loop", Ink.Muted, onLoopPop)
-            }
-            TrayExits(onCancel, onConfirm)
-        }
-    }
-}
-
-/** Parámetros de Loop Cut en una línea: posición, cortes, suavidad, perfil y toggles. */
-@Composable
-private fun LoopCutParams(
-    session: ToolSession,
-    unitScaleLength: Double,
-    onParameter: (String, Any?) -> Unit,
-) {
-    PositionStepper(
-        session = session,
-        onParameter = onParameter,
-    )
-    for (spec in specsFor(EditTool.LOOP_CUT)) {
-        ParamStepper(
-            spec = spec,
-            value = session.double(spec.key) ?: defaultValue(spec),
-            unitScaleLength = unitScaleLength,
-            onCommit = { onParameter(spec.key, it) },
-        )
-    }
-    val falloff = session.falloff()
-    PillButton("Perfil: ${falloff.label}") { onParameter("falloff", falloff.next().wire) }
-    PillButton("Uniforme", selected = session.flag("even")) {
-        onParameter("even", !session.flag("even"))
-    }
-    PillButton("Invertir", selected = session.flag("flip")) {
-        onParameter("flip", !session.flag("flip"))
-    }
-    PillButton("Fijar", selected = session.flag("clamp", true)) {
-        onParameter("clamp", !session.flag("clamp", true))
-    }
-    SnapToggle(session, onParameter)
-}
-
-/** Selector de snap y control de paso declarado por la bandeja. */
-@Composable
-private fun SnapToggle(
-    session: ToolSession,
-    onParameter: (String, Any?) -> Unit,
-    unitScaleLength: Double = 1.0,
-    lengthUnit: LengthUnit = LengthUnit.METERS,
-    onUnitChange: ((LengthUnit) -> Unit)? = null,
-) {
-    val options = session.availableSnapTypes
-    if (options.isEmpty()) return
-    val selected = session.snapType
-    SnapControl(options, selected, onSelect = { onParameter("snap_type", it.name) })
-    if (session.tool in setOf(EditTool.EXTRUDE, EditTool.INSET, EditTool.BEVEL) || selected == SnapType.INCREMENT || selected == SnapType.GRID) {
-        if (session.tool in setOf(EditTool.EXTRUDE, EditTool.INSET, EditTool.BEVEL)) {
-            DistanceSnapStepInput(
-                session.snapStep, unitScaleLength, lengthUnit,
-                millimeterDecimals = if (session.tool == EditTool.EXTRUDE) 2 else null,
-                onUnitChange = onUnitChange,
-            ) {
-                onParameter("snap_step", it)
-            }
-        } else {
-            SnapStepControl(session.snapStep, FactorSnapSteps) { onParameter("snap_step", it) }
-        }
-    }
-}
-
-/**
- * Parámetros de Extrude: distancia + bloqueo de eje (Libre/X/Y/Z) y orientación
- * (Global/Local/Vista) en Región y Manifold. Las otras variantes no exponen
- * eje: el backend lo rechaza y aquí se oculta.
- */
-@Composable
-private fun ExtrudeParams(session: ToolSession, unitScaleLength: Double, lengthUnit: LengthUnit,
-    onUnitChange: (LengthUnit) -> Unit, onParameter: (String, Any?) -> Unit) {
-    for (spec in specsFor(EditTool.EXTRUDE)) {
-        ParamStepper(
-            spec = spec,
-            value = session.double(spec.key) ?: defaultValue(spec),
-            unitScaleLength = unitScaleLength,
-            stepSize = session.snapStep,
-            lengthUnit = lengthUnit,
-            millimeterDecimals = 2,
-            showReset = true,
-            onCommit = { onParameter(spec.key, it) },
-        )
-    }
-    val variant = (session.parameters["variant"] as? String) ?: "REGION"
-    if (variant !in setOf("REGION", "MANIFOLD")) {
-        SnapToggle(session, onParameter, unitScaleLength, lengthUnit, onUnitChange)
         return
     }
-    val constraint = (session.parameters["constraint"] as? String) ?: "FREE"
-    PillButton("Libre", selected = constraint == "FREE") { onParameter("constraint", "FREE") }
-    for (axis in listOf("X", "Y", "Z")) {
-        PillButton(axis, selected = constraint == axis) { onParameter("constraint", axis) }
-    }
-    if (constraint != "FREE") {
-        val orientation = (session.parameters["orientation"] as? String) ?: "GLOBAL"
-        for ((wire, label) in listOf("GLOBAL" to "Global", "LOCAL" to "Local", "VIEW" to "Vista")) {
-            PillButton(label, selected = orientation == wire) { onParameter("orientation", wire) }
+    val contents = com.blendertablet.remote.model.toolTrayContents(session, selectionMode)
+    SingleLineTray(trayTitle(session.tool, variantLabel ?: "Región"), onCancel,
+        if (session.active) onConfirm else null, session.canConfirm, modifier, help = instruction) {
+        key(session.sessionId, session.tool) {
+            contents.visible.forEach { id ->
+                if (id == "more") ToolMoreMenu(instruction) {
+                    contents.advanced.forEach { advanced ->
+                        AdvancedToolOption(toolOptionHelp(advanced, session)) {
+                            ToolControl(advanced, session, unitScaleLength, lengthUnit, onParameter, onLoopPop)
+                        }
+                    }
+                } else ToolControl(id, session, unitScaleLength, lengthUnit, onParameter, onLoopPop)
+            }
         }
     }
-    SnapToggle(session, onParameter, unitScaleLength, lengthUnit, onUnitChange)
 }
 
-/** Parámetros de Inset: grosor, profundidad y snap de incremento real (F2/F5). */
+private fun toolOptionHelp(id: String, session: ToolSession): String = session.controls.firstOrNull { it.id == id }?.help?.takeIf { it.isNotBlank() } ?: when (id) {
+    "even" -> "Desplaza el corte siguiendo la distancia de una de sus aristas laterales."
+    "flip" -> "Usa el lado opuesto como referencia al seguir la arista."
+    "clamp" -> "Impide que el corte sobrepase los extremos de la cara."
+    "smoothness" -> "Curva la nueva geometría para suavizar el contorno."
+    "falloff" -> "Elige cómo se reparte la suavidad del corte."
+    "profile" -> "Cambia la curvatura del bisel entre sus segmentos."
+    "miter_outer" -> "Define cómo se unen los biseles en las esquinas exteriores."
+    "orientation" -> "Interpreta el eje respecto al mundo, al objeto o a la vista."
+    "depth" -> "Eleva o hunde la región interior respecto a su cara original."
+    "boundary" -> "Conserva el borde abierto de la malla al crear el inset."
+    "merge" -> "Une los dos contornos en uno en lugar de crear caras entre ellos."
+    "merge_factor" -> "Sitúa el contorno fusionado entre el primero y el segundo."
+    "snap" -> "Ajusta el gesto a incrementos o a la geometría; los números escritos siguen siendo exactos."
+    "fill" -> "Cierra con caras los huecos que deja el corte."
+    else -> "Ajusta ${session.controls.firstOrNull { it.id == id }?.label?.lowercase() ?: id} de esta operación."
+}
+
 @Composable
-private fun InsetParams(
-    session: ToolSession,
-    unitScaleLength: Double,
-    lengthUnit: LengthUnit,
-    onUnitChange: (LengthUnit) -> Unit,
-    onParameter: (String, Any?) -> Unit,
-) {
-    for (spec in specsFor(EditTool.INSET)) {
-        ParamStepper(
-            spec = spec,
-            value = session.double(spec.key) ?: defaultValue(spec),
-            unitScaleLength = unitScaleLength,
-            stepSize = session.snapStep,
-            lengthUnit = lengthUnit,
-            onCommit = { onParameter(spec.key, it) },
-        )
+private fun ToolControl(id: String, session: ToolSession, scale: Double, unit: LengthUnit,
+    change: (String, Any?) -> Unit, pop: () -> Unit) {
+    session.controls.firstOrNull { it.id == id }?.let { spec ->
+        SchemaToolParameters(listOf(spec), session.parameters, unit, scale, change)
+        return
     }
-    val boundary = session.flag("boundary", true)
-    PillButton("Costura fija", selected = !boundary) {
-        onParameter("boundary", toggledInsetBoundary(boundary))
+    val spec = specsFor(session.tool).firstOrNull { it.key == id }
+    if (spec != null) {
+        ParamStepper(spec, session.double(id) ?: defaultValue(spec), scale,
+            stepSize = if (spec.mode == TransformMode.MOVE) session.snapStep else null,
+            lengthUnit = if (spec.mode == TransformMode.MOVE) unit else null,
+            onCommit = { change(id, it) })
+        return
     }
-    SnapToggle(session, onParameter, unitScaleLength, lengthUnit, onUnitChange)
+    when (id) {
+        "position" -> PositionStepper(session, change)
+        "remove_loop" -> IconAction(AppIcons.Undo, "Quitar último corte", onClick = pop)
+        "even" -> PillButton("Seguir la arista", selected = session.flag(id)) { change(id, !session.flag(id)) }
+        "flip" -> PillButton("Invertir", selected = session.flag(id)) { change(id, !session.flag(id)) }
+        "clamp" -> PillButton("No salir de la cara", selected = session.flag(id, true)) { change(id, !session.flag(id, true)) }
+        "falloff" -> PillButton("Perfil: ${session.falloff().label}") { change(id, session.falloff().next().wire) }
+        "miter_outer" -> PillButton("Esquinas: ${session.miterOuter().label}") { change(id, session.miterOuter().next().wire) }
+        "constraint" -> Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            listOf("FREE" to "Libre", "X" to "X", "Y" to "Y", "Z" to "Z").forEach { (wire, label) ->
+                PillButton(label, selected = (session.parameters[id] ?: "FREE") == wire) { change(id, wire) }
+            }
+        }
+        "orientation" -> Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            listOf("GLOBAL" to "Global", "LOCAL" to "Local", "VIEW" to "Vista").forEach { (wire, label) ->
+                PillButton(label, selected = (session.parameters[id] ?: "GLOBAL") == wire) { change(id, wire) }
+            }
+        }
+        "boundary" -> PillButton("Conservar borde abierto", selected = !session.flag(id, true)) { change(id, !session.flag(id, true)) }
+        "merge" -> PillButton("Fusionar", selected = session.flag(id)) { change(id, !session.flag(id)) }
+        "snap" -> Column {
+            SnapControl(session.availableSnapTypes, session.snapType, onSelect = { change("snap_type", it.name) })
+            if (session.snapType in setOf(SnapType.INCREMENT, SnapType.GRID)) {
+                if (session.tool in setOf(EditTool.EXTRUDE, EditTool.BEVEL, EditTool.INSET))
+                    DistanceSnapStepInput(session.snapStep, scale, unit) { change("snap_step", it) }
+                else SnapStepControl(session.snapStep, FactorSnapSteps) { change("snap_step", it) }
+            }
+        }
+    }
 }
 
 internal fun toggledInsetBoundary(boundary: Boolean): Boolean = !boundary
 
-/**
- * Parámetros de Bevel: ancho, segmentos, perfil, remate de la esquina y snap.
- *
- * El perfil y el remate son los dos que deciden la forma, así que van en la bandeja y
- * no escondidos: con un solo segmento el perfil apenas se nota, pero con varios manda
- * sobre el resultado. El remate cicla porque son tres valores y un desplegable para
- * tres opciones cortas cuesta más toques que el propio ciclo.
- */
 @Composable
-private fun BevelParams(
-    session: ToolSession,
-    selectionMode: SelectionMode,
-    unitScaleLength: Double,
-    lengthUnit: LengthUnit,
-    onUnitChange: (LengthUnit) -> Unit,
-    onParameter: (String, Any?) -> Unit,
-) {
-    for (spec in specsFor(EditTool.BEVEL)) {
-        ParamStepper(
-            spec = spec,
-            value = session.double(spec.key) ?: defaultValue(spec),
-            unitScaleLength = unitScaleLength,
-            stepSize = if (spec.key == "offset") session.snapStep else null,
-            lengthUnit = if (spec.key == "offset") lengthUnit else null,
-            onCommit = { onParameter(spec.key, it) },
-        )
-    }
-    // Miter Outer solo existe en las terminaciones de un bisel de aristas. Blender
-    // lo ignora al biselar vértices y tampoco cambia un loop cerrado completo.
-    if (selectionMode == SelectionMode.EDGE) {
-        val miter = session.miterOuter()
-        PillButton("Final: ${miter.label}") { onParameter("miter_outer", miter.next().wire) }
-    }
-    SnapToggle(session, onParameter, unitScaleLength, lengthUnit, onUnitChange)
-}
-
-/** Parámetros de Bridge Edge Loops: desfase, fusión, su toggle de fundir y snap del factor. */
-@Composable
-private fun BridgeParams(session: ToolSession, unitScaleLength: Double, onParameter: (String, Any?) -> Unit) {
-    for (spec in specsFor(EditTool.BRIDGE_EDGE_LOOPS)) {
-        ParamStepper(
-            spec = spec,
-            value = session.double(spec.key) ?: defaultValue(spec),
-            unitScaleLength = unitScaleLength,
-            onCommit = { onParameter(spec.key, it) },
-        )
-    }
-    PillButton("Fusionar", selected = session.flag("merge")) {
-        onParameter("merge", !session.flag("merge"))
-    }
-    SnapToggle(session, onParameter)
-}
-
-/**
- * Bandeja del Knife: contador de puntos, deshacer punto, cerrar, snap y las dos
- * salidas. Confirmar solo se habilita con al menos dos puntos (un segmento).
- */
-@Composable
-fun KnifeTray(
-    session: ToolSession,
-    onKnifePop: () -> Unit,
-    onKnifeNewStroke: () -> Unit,
-    onKnifeClose: () -> Unit,
-    onKnifeSnap: (Boolean) -> Unit,
-    onKnifeSnapMode: (String) -> Unit,
-    onConfirm: () -> Unit,
-    onCancel: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
+fun KnifeTray(session: ToolSession, onKnifePop: () -> Unit, onKnifeNewStroke: () -> Unit,
+    onKnifeClose: () -> Unit, onKnifeSnap: (Boolean) -> Unit, onKnifeSnapMode: (String) -> Unit,
+    onConfirm: () -> Unit, onCancel: () -> Unit, modifier: Modifier = Modifier) {
     if (!session.active || session.tool != EditTool.KNIFE) return
-    FloatingPanel(modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TrayTitle("${session.tool.label} · ${session.strokes.size + 1} cortes · ${session.points.size} puntos")
-            Spacer(Modifier.width(10.dp))
-            Row(
-                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    knifeInstruction(session.points.size),
-                    color = Ink.Muted,
-                    fontSize = 11.sp,
-                )
-                PillButton(
-                    "Deshacer punto",
-                    enabled = session.points.isNotEmpty() || session.strokes.isNotEmpty(),
-                    onClick = onKnifePop,
-                )
-                PillButton("Nuevo corte", enabled = session.points.size >= 2, onClick = onKnifeNewStroke)
-                PillButton("Cerrar", selected = session.closed, onClick = onKnifeClose)
-                KnifeSnapControl(
-                    session.flag("snap", true),
-                    (session.parameters["snap_mode"] as? String ?: "AUTO").uppercase(),
-                ) { mode ->
-                    if (mode == "NONE") onKnifeSnap(false) else {
-                        onKnifeSnapMode(mode)
-                        if (!session.flag("snap", true)) onKnifeSnap(true)
+    val contents = com.blendertablet.remote.model.toolTrayContents(session)
+    SingleLineTray("Cuchillo", onCancel, onConfirm, session.points.size >= 2 || session.strokes.isNotEmpty(), modifier,
+        help = knifeInstruction(session.points.size)) {
+        contents.visible.forEach { id -> when (id) {
+            "undo_point" -> PillButton("Deshacer punto", enabled = session.points.isNotEmpty() || session.strokes.isNotEmpty(), onClick = onKnifePop)
+            "new_cut" -> PillButton("Nuevo corte", enabled = session.points.size >= 2, onClick = onKnifeNewStroke)
+            "close_cut" -> PillButton("Cerrar", selected = session.closed, onClick = onKnifeClose)
+            "more" -> ToolMoreMenu(knifeInstruction(session.points.size)) {
+                AdvancedToolOption("Atrae el corte a puntos y aristas cercanos al lápiz.") {
+                    KnifeSnapControl(session.flag("snap", true), (session.parameters["snap_mode"] as? String ?: "AUTO").uppercase()) { mode ->
+                        if (mode == "NONE") onKnifeSnap(false) else { onKnifeSnapMode(mode); if (!session.flag("snap", true)) onKnifeSnap(true) }
                     }
                 }
             }
-            // Confirmar solo actúa con un segmento válido (el backend lo exige).
-            TrayExits(onCancel, onConfirm, session.points.size >= 2 || session.strokes.isNotEmpty())
-        }
+        } }
     }
 }
 
-internal fun knifeInstruction(pointCount: Int): String =
-    if (pointCount == 0) "Pulsa, ajusta y suelta el primer punto"
-    else if (pointCount == 1) "Coloca el segundo punto para cortar"
-    else "Añade puntos o pulsa Nuevo corte"
+internal fun knifeInstruction(pointCount: Int): String = if (pointCount == 0) "Pulsa, ajusta y suelta el primer punto"
+    else if (pointCount == 1) "Coloca el segundo punto para cortar" else "Añade puntos o pulsa Nuevo corte"
 
-/**
- * Bandeja de Bisect (F4). Armada (sin arrastre todavía) solo enseña el aviso de
- * dibujar la línea; activa, muestra clear inner/outer, fill, snap y las dos salidas.
- * Redibujar la línea no la cierra: el usuario puede ajustar el corte varias veces
- * antes de confirmar.
- */
 @Composable
-fun BisectTray(
-    session: ToolSession,
-    onParameter: (String, Any?) -> Unit,
-    onConfirm: () -> Unit,
-    onCancel: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
+fun BisectTray(session: ToolSession, onParameter: (String, Any?) -> Unit, onConfirm: () -> Unit,
+    onCancel: () -> Unit, modifier: Modifier = Modifier) {
     if (session.tool != EditTool.BISECT || (!session.active && !session.armed)) return
-    FloatingPanel(modifier) {
-        if (!session.active) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TrayTitle(session.tool.label)
-                Spacer(Modifier.width(10.dp))
-                Text("Arrastra una línea sobre la malla para cortar", color = Ink.Muted, fontSize = 11.sp)
-                TrayExits(onCancel)
-            }
-            return@FloatingPanel
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TrayTitle(session.tool.label)
-            Spacer(Modifier.width(10.dp))
-            Row(
-                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                PillButton("Vaciar interior", selected = session.flag("clear_inner")) {
-                    onParameter("clear_inner", !session.flag("clear_inner"))
+    val help = "Arrastra una línea sobre la malla para cortar"
+    val contents = com.blendertablet.remote.model.toolTrayContents(session)
+    SingleLineTray(session.tool.label, onCancel, if (session.active) onConfirm else null, modifier = modifier, help = help) {
+        if (!session.active) Text(help, color = Ink.Muted, fontSize = 12.sp, maxLines = 1)
+        else contents.visible.forEach { id -> when (id) {
+            "clear_inner", "clear_outer" -> PillButton(if (id == "clear_inner") "Vaciar interior" else "Vaciar exterior", selected = session.flag(id)) { onParameter(id, !session.flag(id)) }
+            "more" -> ToolMoreMenu(help) {
+                AdvancedToolOption("Cierra los huecos del corte con caras nuevas.") {
+                    PillButton("Rellenar", selected = session.flag("fill")) { onParameter("fill", !session.flag("fill")) }
                 }
-                PillButton("Vaciar exterior", selected = session.flag("clear_outer")) {
-                    onParameter("clear_outer", !session.flag("clear_outer"))
-                }
-                PillButton("Rellenar", selected = session.flag("fill")) {
-                    onParameter("fill", !session.flag("fill"))
-                }
-                PillButton("Snap", selected = session.flag("snap", true)) {
-                    onParameter("snap", !session.flag("snap", true))
+                AdvancedToolOption("Atrae los extremos de la línea a la geometría cercana.") {
+                    PillButton("Snap", selected = session.flag("snap", true)) { onParameter("snap", !session.flag("snap", true)) }
                 }
             }
-            TrayExits(onCancel, onConfirm)
-        }
+        } }
     }
 }
 

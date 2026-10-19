@@ -199,7 +199,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   misma entrega, sin pedir aceptación entre puntos. En ese caso no aplican «una
   incidencia activa» ni «no rediseñar asuntos adyacentes» para lo que el documento
   describe; sí un commit por punto, tests en verde y un único APK al final. Encargo
-  vigente: `~/proyectos/tareas-ui-coherencia-blender.md` (coherencia de la interfaz).
+  vigente: `~/proyectos/tareas-ui-bandejas-blender.md` (bandejas de herramientas);
+  `tareas-ui-coherencia-blender.md` ya está entregado.
 - Cada cambio debe ser pequeño y centrado en el comportamiento comunicado.
 - No se aprovecha una reparación para rediseñar o corregir asuntos adyacentes.
 - Cuando el usuario comunica un fallo distinto después de recibir una entrega, la
@@ -290,6 +291,15 @@ nuevas superficies y la adaptación gradual de las existentes.
   acercar el lápiz o pulsar Ayuda. Finalizar boceto y Aplicar modificador tienen
   iconos propios distintos de Confirmar. Los controles de plano ampliados se
   desplazan horizontalmente en la misma fila.
+
+- Las bandejas de herramientas Edit usan `[Nombre][principal][1–2 frecuentes][⋯ Más][× ✓]`.
+  Un máximo de cinco grupos de parámetros (campo con sus −/+ y chips cuenta como
+  un grupo), sin contar título y salidas. `toolTrayContents` es el inventario que
+  dibuja la fila y valida el test; no existe una lista paralela para probarla.
+  Snap vive en el mismo Más, y cada opción avanzada lleva una frase de ayuda.
+- Se recuerdan valores confirmados por herramienta/variante, convirtiendo las
+  longitudes a metros al guardar preferencias. No se recuerdan IDs, referencias,
+  caras elegidas ni la posición de Loop Cut: un nuevo corte empieza centrado.
 
 ### Distribución y comportamiento por contexto
 

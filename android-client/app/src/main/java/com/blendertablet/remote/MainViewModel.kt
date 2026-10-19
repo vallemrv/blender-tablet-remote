@@ -80,6 +80,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     private val client: RemoteBlenderClient = WebSocketRemoteBlenderClient(viewModelScope, sessionKey)
     private val snapPreferences = SnapPreferences(application)
+    private val toolPreferences = com.blendertablet.remote.data.ToolPreferences(application)
     private val local = MutableStateFlow(AppUiState(
         snapType = snapPreferences.current.type,
         snapStep = snapPreferences.current.step,
@@ -1201,6 +1202,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         client.editCatalogCommand(action.command, action.payload)
     }
     fun confirmTool() {
+        val session = client.toolSession.value
+        if (session.active) toolPreferences.save(session.tool, session.parameters, client.state.value.unitScaleLength)
         local.update { it.copy(loopCutAwaitingTap = false) }
         client.toolConfirm()
     }
@@ -1260,7 +1263,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     })
 
     private fun withGlobalSnap(tool: EditTool, parameters: Map<String, Any?>): Map<String, Any?> {
-        if ("snap_type" !in parameters) return parameters
+        if ("snap_type" !in parameters) return toolPreferences.restore(tool, parameters, client.state.value.unitScaleLength)
         val chosen = local.value.snapType
         val extrudeGeometric = tool == EditTool.EXTRUDE &&
             (parameters["variant"] ?: "REGION") in setOf("REGION", "MANIFOLD")
@@ -1270,10 +1273,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // El paso común elegido por el usuario sustituye al automático por tamaño.
         val step = if (distanceTool && shared != null)
             shared / client.state.value.unitScaleLength.coerceAtLeast(1e-12) else local.value.snapStep
-        return parameters + mapOf(
+        return toolPreferences.restore(tool, parameters + mapOf(
             "snap_type" to compatible.name,
             "snap_step" to step,
-        ) + if (distanceTool && shared == null) mapOf("auto_size" to true) else emptyMap()
+        ) + if (distanceTool && shared == null) mapOf("auto_size" to true) else emptyMap(), client.state.value.unitScaleLength)
     }
 
     private fun rememberSnapType(type: SnapType) {

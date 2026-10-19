@@ -159,6 +159,8 @@ data class EditCatalogParameter(
     val step: Double = 0.01,
     val min: Double? = null,
     val max: Double? = null,
+    val primary: Boolean = false,
+    val help: String = "",
 )
 
 /** Gestos continuos del protocolo. El nombre en minúsculas es el que viaja por el cable. */

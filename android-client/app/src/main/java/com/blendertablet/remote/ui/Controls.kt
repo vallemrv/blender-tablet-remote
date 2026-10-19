@@ -59,6 +59,7 @@ fun CompactNumericField(
     textAlign: TextAlign = TextAlign.Center,
     placeholder: String? = null,
     textColor: Color = Ink.OnPanel,
+    fontSize: androidx.compose.ui.unit.TextUnit = 13.sp,
     onFocusChange: (Boolean) -> Unit = {},
     /** Tocar el campo selecciona todo su contenido: lo que se escribe sustituye al valor. */
     selectAllOnFocus: Boolean = false,
@@ -69,7 +70,7 @@ fun CompactNumericField(
             value = value,
             onValueChange = onValueChange,
             singleLine = true,
-            textStyle = TextStyle(color = textColor, fontSize = 13.sp, textAlign = textAlign),
+            textStyle = TextStyle(color = textColor, fontSize = fontSize, textAlign = textAlign),
             cursorBrush = SolidColor(Ink.Accent),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { onDone() }),
@@ -95,7 +96,7 @@ fun CompactNumericField(
         value = field,
         onValueChange = { next -> field = next; if (next.text != value) onValueChange(next.text) },
         singleLine = true,
-        textStyle = TextStyle(color = textColor, fontSize = 13.sp, textAlign = textAlign),
+        textStyle = TextStyle(color = textColor, fontSize = fontSize, textAlign = textAlign),
         cursorBrush = SolidColor(Ink.Accent),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { onDone() }),
@@ -369,11 +370,12 @@ fun SingleLineTray(
     onConfirm: (() -> Unit)? = null,
     confirmEnabled: Boolean = true,
     modifier: Modifier = Modifier,
+    help: String = "",
     content: @Composable RowScope.() -> Unit,
 ) {
     FloatingPanel(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            TrayTitle(title)
+            HoverHelp(title, help) { TrayTitle(title) }
             Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
                 content = content)
