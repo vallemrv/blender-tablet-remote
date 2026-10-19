@@ -23,8 +23,8 @@ fun toolTrayContents(session: ToolSession, selection: SelectionMode = SelectionM
                 (if (directed && (session.parameters["constraint"] ?: "FREE") != "FREE") listOf("orientation") else emptyList()) + "snap")
         }
         EditTool.INSET -> ToolTrayContents(listOf("thickness", "more"), listOf("depth", "boundary", "snap"))
-        EditTool.BRIDGE_EDGE_LOOPS -> ToolTrayContents(listOf("twist_offset", "more"), listOf("merge") +
-            (if (session.flag("merge")) listOf("merge_factor") else emptyList()) + "snap")
+        EditTool.BRIDGE_EDGE_LOOPS -> ToolTrayContents(listOf(if (session.flag("merge")) "merge_factor" else "twist_offset", "more"), listOf("merge") +
+            (if (session.flag("merge")) listOf("twist_offset") else emptyList()) + "snap")
         EditTool.SUBDIVIDE -> ToolTrayContents(listOf("cuts", "more"), listOf("snap"))
         EditTool.KNIFE -> ToolTrayContents(listOf("undo_point", "new_cut", "close_cut", "more"), listOf("snap"))
         EditTool.BISECT -> ToolTrayContents(listOf("clear_inner", "clear_outer", "more"), listOf("fill", "snap"))

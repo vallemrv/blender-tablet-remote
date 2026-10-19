@@ -332,6 +332,8 @@ object StateParser {
                     step = item.optDouble("step", 0.01),
                     min = item.optDouble("min").takeIf { it.isFinite() },
                     max = item.optDouble("max").takeIf { it.isFinite() },
+                    primary = item.optBoolean("primary", false),
+                    help = item.optString("help"),
                 )
             } }
 

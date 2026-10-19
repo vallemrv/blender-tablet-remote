@@ -26,6 +26,21 @@ SWEEP_CONTROLS = [
 ]
 
 
+for spec in REVOLVE_CONTROLS:
+    spec['primary'] = spec['id'] in {'angle', 'steps', 'axis'}
+    spec['help'] = {
+        'angle': 'Cuánto gira el perfil alrededor del eje.',
+        'steps': 'Número de segmentos que forman la vuelta.',
+        'axis': 'Eje del mundo alrededor del que gira el perfil.',
+        'merge': 'Une los extremos al completar una vuelta.',
+    }.get(spec['id'], 'Posición del centro de giro en este eje del mundo.')
+    if spec['id'] == 'angle': spec['unit'] = 'angle'
+for spec in SWEEP_CONTROLS:
+    spec['primary'] = spec['id'] in {'width', 'depth'}
+    spec['help'] = {'width': 'Anchura del perfil rectangular que recorre el contorno.',
+                    'depth': 'Fondo del perfil rectangular.', 'caps': 'Cierra los dos extremos del barrido.'}[spec['id']]
+
+
 def sweep(obj, params):
     width, depth = get_float(params, "width", .05), get_float(params, "depth", .1)
     if not all(math.isfinite(n) and n > 0 for n in (width, depth)):

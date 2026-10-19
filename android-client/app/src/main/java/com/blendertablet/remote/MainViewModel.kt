@@ -241,6 +241,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // configura el de control y el vídeo se engancha solo (§63).
         viewModelScope.launch {
             client.toolSession.collect { session ->
+                if (session.armed && !session.active) toolPreferences.save(session.tool, session.parameters, client.state.value.unitScaleLength)
                 if (session.active) local.update { it.copy(loopCutAwaitingTap = false) }
                 if (session.tool != EditTool.KNIFE) {
                     if (_knifeScreenPoints.value.isNotEmpty()) _knifeScreenPoints.value = emptyList()
@@ -1119,7 +1120,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         local.update { it.copy(activeTool = ActiveTool.SELECT, referencePicking = false, shapeTool = ShapeTool.NONE) }
         facePickRole = null
         lastFacePointer = null
-        client.toolBegin(EditTool.ALIGN, objectName?.let { mapOf("object" to it) } ?: emptyMap())
+        client.toolBegin(EditTool.ALIGN, toolPreferences.restore(EditTool.ALIGN,
+            objectName?.let { mapOf("object" to it) } ?: emptyMap(), client.state.value.unitScaleLength))
     }
 
     fun setToolParameter(key: String, value: Any?) {

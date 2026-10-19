@@ -301,6 +301,15 @@ nuevas superficies y la adaptación gradual de las existentes.
   solo si hay varios cortes. El campo acepta % o mm/cm/m y cuentas sin selector
   de unidad ni Aplicar. Suavidad cero oculta Perfil; Invertir solo aparece con
   Seguir la arista. No salir de la cara reemplaza el antiguo Fijar.
+- Bisel muestra Ancho y chips de Segmentos 1–3; Perfil solo con varios segmentos,
+  y Esquinas/Snap en Más. Extruir muestra Distancia y eje; orientación solo con
+  un eje restringido. Inset muestra Grosor y lleva Profundidad/Conservar borde
+  abierto a Más. Bridge muestra Desfase, o Posición de fusión cuando Fusionar está
+  activo (entonces Desfase pasa a Más); el arrastre ajusta ese mismo valor.
+- Los esquemas de herramientas publican `primary` y `help`; hasta tres parámetros
+  principales comparten fila con Más, el resto va al panel común. Los campos de
+  esquema y los fijos usan el mismo editor: vacío permanece local, las respuestas
+  no borran el borrador y las medidas con unidades/cuentas siguen siendo exactas.
 - Se recuerdan valores confirmados por herramienta/variante, convirtiendo las
   longitudes a metros al guardar preferencias. No se recuerdan IDs, referencias,
   caras elegidas ni la posición de Loop Cut: un nuevo corte empieza centrado.

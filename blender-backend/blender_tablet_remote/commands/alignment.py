@@ -27,6 +27,12 @@ def controls(params):
     if params["mode"] == "CONTACT":
         result.append({"id": "gap", "label": "Separación", "type": "float",
                        "unit": "length", "step": 0.001, "min": 0.0})
+    for spec in result:
+        spec['primary'] = spec['id'] in {'pick_role', 'mode'}
+        spec['help'] = {'pick_role': 'Elige si el próximo toque fija la cara de origen o la de destino.',
+                        'mode': 'Junta las caras, orienta sus normales o copia la rotación.',
+                        'twist': 'Gira la pieza sobre la normal de la cara.',
+                        'gap': 'Deja esta distancia entre las dos caras.'}[spec['id']]
     return result
 
 

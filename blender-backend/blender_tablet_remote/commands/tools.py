@@ -22,6 +22,7 @@ SUPPORTED = {"EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_
 # todavía) porque su primer dato lo da un toque/arrastre en el viewport, no la
 # selección ya hecha. El resto empieza ACTIVE de inmediato, como siempre.
 VIEWPORT_ARMED = {"LOOP_CUT", "BISECT"}
+EXACT_PRIMARY = {"EXTRUDE": "offset", "BEVEL": "offset", "INSET": "thickness", "BRIDGE_EDGE_LOOPS": "merge_factor"}
 
 SNAP_THRESHOLD = 0.045
 
@@ -183,7 +184,7 @@ class ToolSession:
         bm.to_mesh(backup)
         self.active, self.session_id, self.owner_id = True, str(uuid.uuid4()), owner
         self.tool, self.params, self.obj, self.backup = tool, dict(params), obj, backup
-        self.scalar_value_exact = tool in {"EXTRUDE", "BEVEL"} and "offset" in params
+        self.scalar_value_exact = EXACT_PRIMARY.get(tool) in params
         if tool == "LOOP_CUT":
             self.original_backup = backup
         self.points = []
@@ -285,7 +286,7 @@ class ToolSession:
                 raise CommandError(f"Knife cut failed: {exc}", code="topology_incompatible") from exc
             return
         payload = dict(self.params)
-        if (self.tool in {"EXTRUDE", "BEVEL"} and self.scalar_value_exact) or (self.tool == "LOOP_CUT" and self.loop_value_exact):
+        if (self.tool in {"EXTRUDE", "BEVEL", "INSET", "BRIDGE_EDGE_LOOPS"} and self.scalar_value_exact) or (self.tool == "LOOP_CUT" and self.loop_value_exact):
             payload["snap_type"] = "NONE"
         if str(payload.get("snap_type", "NONE")).upper() in {"VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER", "CURSOR"}:
             payload["snap_type"] = "NONE"  # aún no hay candidato o ya se resuelve abajo
@@ -389,7 +390,8 @@ class ToolSession:
             if self.armed_tool == "EXTRUDE" and self.armed_params.get("variant") == "CURSOR":
                 result.update(input="REPEAT_TAP", can_confirm=False,
                               instruction="Toca para extruir · cada toque crea un tramo · Deshacer retira el último",
-                              controls=[{"id": "rotate_source", "label": "Girar origen", "type": "bool", "default": True}])
+                              controls=[{"id": "rotate_source", "label": "Girar origen", "type": "bool", "default": True,
+                                         "primary": True, "help": "Orienta el tramo de origen hacia el siguiente toque."}])
             return result
         return {"active": False, "armed": False, "phase": "IDLE"}
 
@@ -515,7 +517,7 @@ def parameter(payload):
             raise
         return tool_session.status()
     tool_session.params.update(params)
-    if tool_session.tool in {"EXTRUDE", "BEVEL"} and "offset" in params:
+    if EXACT_PRIMARY.get(tool_session.tool) in params:
         tool_session.snap_candidate = None  # El valor paramétrico sustituye al destino sondeado.
         tool_session.scalar_value_exact = True
     if str(tool_session.params.get("snap_type", "NONE")).upper() not in {"VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER", "CURSOR"}:
@@ -939,18 +941,20 @@ def nudge(payload):
         raise BadPayload("'delta' must be a number")
     primary = {"EXTRUDE": "offset", "BEVEL": "offset", "INSET": "thickness",
                "SUBDIVIDE": "cuts", "LOOP_CUT": "factor",
-               "BRIDGE_EDGE_LOOPS": "twist_offset"}[tool_session.tool]
+               "BRIDGE_EDGE_LOOPS": "merge_factor" if tool_session.params.get("merge") else "twist_offset"}[tool_session.tool]
     current = tool_session.params.get(primary, 0 if primary != "cuts" else 1)
     nxt = max(1, round(current + delta)) if primary == "cuts" else current + delta
     if primary == "twist_offset":
         nxt = round(nxt)
+    if primary == "merge_factor":
+        nxt = max(0.0, min(1.0, nxt))
     if primary == "factor":
         # Sin clamp el corte puede salirse del borde (extrapolación), así que el
         # arrastre llega más lejos; con clamp se queda en el borde.
         limit = 1.999 if not tool_session.params.get("clamp", True) else 0.999
         nxt = max(-limit, min(limit, nxt))
     tool_session.params[primary] = nxt
-    if tool_session.tool in {"EXTRUDE", "BEVEL"}:
+    if tool_session.tool in {"EXTRUDE", "BEVEL", "INSET", "BRIDGE_EDGE_LOOPS"}:
         tool_session.scalar_value_exact = False
     if primary == 'factor':
         tool_session.loop_value_exact = False

@@ -84,8 +84,8 @@ private fun specsFor(tool: EditTool): List<ParamSpec> = when (tool) {
         ParamSpec("smoothness", "Suavidad", 0.01, false, TransformMode.SCALE),
     )
     EditTool.BRIDGE_EDGE_LOOPS -> listOf(
-        ParamSpec("twist_offset", "Desfase", 1.0, true, TransformMode.SCALE),
-        ParamSpec("merge_factor", "Fusión", 0.01, false, TransformMode.SCALE),
+        ParamSpec("twist_offset", "Desfase", 1.0, true, TransformMode.SCALE, min = -100000.0),
+        ParamSpec("merge_factor", "Posición de fusión", 0.01, false, TransformMode.SCALE, min = 0.0, max = 1.0),
     )
     EditTool.ALIGN -> emptyList()
     EditTool.REVOLVE, EditTool.SWEEP -> emptyList()
@@ -94,19 +94,7 @@ private fun specsFor(tool: EditTool): List<ParamSpec> = when (tool) {
 }
 
 private fun defaultValue(spec: ParamSpec): Double =
-    if (spec.isInt) maxOf(1.0, spec.default) else spec.default
-
-/** El valor que el backend acepta: entero mínimo 1 y, si lo hay, dentro del rango. */
-internal fun clampParam(value: Double, isInt: Boolean, min: Double?, max: Double?): Double {
-    var result = if (isInt) maxOf(1.0, value.roundToInt().toDouble()) else value
-    min?.let { result = maxOf(it, result) }
-    max?.let { result = minOf(it, result) }
-    return result
-}
-
-internal fun stepParam(
-    value: Double, step: Double, direction: Int, isInt: Boolean, min: Double?, max: Double?,
-): Double = clampParam(value + step * direction, isInt, min, max)
+    if (spec.isInt) maxOf(spec.min ?: 1.0, spec.default) else spec.default
 
 /** One parameter group per slot; the same inventory drives rendering and its limit test. */
 @Composable
@@ -176,7 +164,7 @@ private fun ToolControl(id: String, session: ToolSession, scale: Double, unit: L
             stepSize = if (spec.mode == TransformMode.MOVE) session.snapStep else null,
             lengthUnit = if (spec.mode == TransformMode.MOVE) unit else null,
             quickValues = when {
-                session.tool == EditTool.LOOP_CUT && id == "cuts" -> listOf(1,2,3,4)
+                session.tool in setOf(EditTool.LOOP_CUT, EditTool.SUBDIVIDE) && id == "cuts" -> listOf(1,2,3,4)
                 session.tool == EditTool.BEVEL && id == "segments" -> listOf(1,2,3)
                 else -> emptyList()
             },
@@ -301,67 +289,13 @@ private fun ParamStepper(
     unitScaleLength: Double,
     stepSize: Double? = null,
     lengthUnit: LengthUnit? = null,
-    millimeterDecimals: Int? = null,
     quickValues: List<Int> = emptyList(),
     onCommit: (Double) -> Unit,
 ) {
-    // null muestra el valor remoto; "" es un borrado intencional durante la edición.
-    var text by remember(spec.key, lengthUnit, unitScaleLength) { mutableStateOf<String?>(null) }
-    var pendingValue by remember(spec.key, lengthUnit, unitScaleLength) { mutableStateOf<Double?>(null) }
-    LaunchedEffect(value) {
-        if (pendingValue?.let { kotlin.math.abs(it - value) < 1e-9 } == true) pendingValue = null
-    }
-    val shownValue = pendingValue ?: value
-    val formatted = if (lengthUnit != null) {
-        val display = moveValueForDisplay(shownValue, lengthUnit.transformStepUnit(), unitScaleLength)
-        val decimals = if (lengthUnit == LengthUnit.MILLIMETERS) millimeterDecimals else null
-        "${formatToolDistance(display, detailDecimalPlaces(display, decimals))} ${lengthUnit.short}"
-    } else format(shownValue, spec.isInt)
-
-    fun readDraft(): Double? {
-        val input = text ?: return shownValue
-        val wire = com.blendertablet.remote.model.parseToolValue(input, shownValue, spec.mode, lengthUnit, unitScaleLength) ?: return null
-        return clampParam(wire, spec.isInt, spec.min, spec.max)
-    }
-    fun commit() {
-        if (text == null) return
-        val next = readDraft() ?: return
-        pendingValue = next
-        onCommit(next)
-        text = null
-    }
-    fun adjust(direction: Int) {
-        val current = readDraft() ?: return
-        val next = stepParam(current, stepSize ?: spec.step, direction, spec.isInt, spec.min, spec.max)
-        pendingValue = next
-        text = null
-        onCommit(next)
-    }
-
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(spec.label, color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.padding(end = 4.dp))
-        QuickToolValues(quickValues, shownValue) { pendingValue = it; text = null; onCommit(it) }
-        StepperButton("−") {
-            adjust(-1)
-        }
-        CompactNumericField(
-            value = text ?: formatted,
-            onValueChange = { text = it },
-            onDone = { commit() },
-            modifier = Modifier.width(90.dp), fontSize = 16.sp, selectAllOnFocus = true,
-        )
-        StepperButton("+") {
-            adjust(1)
-        }
-
-    }
+    ToolNumericInput(spec.label, value, stepSize ?: spec.step, spec.mode, unitScaleLength, lengthUnit,
+        integer = spec.isInt, min = spec.min ?: if (spec.isInt) 1.0 else null, max = spec.max,
+        quickValues = quickValues, onCommit = onCommit)
 }
-
-private fun format(value: Double, isInt: Boolean): String =
-    if (isInt) value.roundToInt().toString() else {
-        val rounded = (value * 1000).roundToInt() / 1000.0
-        if (rounded == 0.0) "0" else rounded.toString()
-    }
 
 /** Extruir lleva su variante en el rótulo; el resto, el nombre de la herramienta. */
 internal fun trayTitle(tool: EditTool, variantLabel: String): String =

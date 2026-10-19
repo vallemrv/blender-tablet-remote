@@ -13,7 +13,7 @@ class ProfileToolsStateTest {
                 "parameters":{"steps":32,"width":50},
                 "controls":[
                     {"id":"steps","label":"Segmentos","type":"int","min":1,"max":256,"step":1},
-                    {"id":"width","label":"Ancho","type":"float","unit":"length"}
+                    {"id":"width","label":"Ancho","type":"float","unit":"length","primary":true,"help":"Anchura del perfil"}
                 ]
             }"""))
             assertEquals(tool, state.tool)
@@ -21,6 +21,8 @@ class ProfileToolsStateTest {
             assertEquals("int", state.controls[0].type)
             assertEquals(256.0, state.controls[0].max!!, 0.0)
             assertEquals("length", state.controls[1].unit)
+            assertTrue(state.controls[1].primary)
+            assertEquals("Anchura del perfil",state.controls[1].help)
             assertEquals(50.0, state.double("width")!!, 0.0)
         }
     }

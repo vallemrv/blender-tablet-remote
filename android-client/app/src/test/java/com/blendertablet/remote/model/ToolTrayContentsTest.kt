@@ -55,6 +55,17 @@ class ToolTrayContentsTest {
         assertNull(parseToolValue("",10.0,TransformMode.MOVE,LengthUnit.CENTIMETERS,.001))
     }
 
+    @Test fun insetBridgeAndSubdivideKeepOnlyEffectiveParametersInTheirMainRow() {
+        assertEquals(listOf("thickness","more"),toolTrayContents(ToolSession(tool=EditTool.INSET)).visible)
+        val joined=toolTrayContents(ToolSession(tool=EditTool.BRIDGE_EDGE_LOOPS))
+        assertEquals(listOf("twist_offset","more"),joined.visible)
+        assertFalse("merge_factor" in joined.advanced)
+        val merged=toolTrayContents(ToolSession(tool=EditTool.BRIDGE_EDGE_LOOPS,parameters=mapOf("merge" to true)))
+        assertEquals(listOf("merge_factor","more"),merged.visible)
+        assertTrue("twist_offset" in merged.advanced)
+        assertEquals(listOf("cuts","more"),toolTrayContents(ToolSession(tool=EditTool.SUBDIVIDE)).visible)
+    }
+
     @Test fun savedLengthsFollowPhysicalSizeAndNeverRestoreLoopLocationOrGeometryIds() {
         val stored=reusableToolValues(EditTool.BEVEL,mapOf("offset" to 5.0,"snap_step" to 1.0,"segments" to 3,"edge" to 55),.001,true)
         assertEquals(.005,stored["offset"])

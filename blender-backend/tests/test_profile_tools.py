@@ -32,6 +32,21 @@ class ProfileToolsTests(unittest.TestCase):
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action='SELECT')
 
+    def test_bridge_fusion_is_the_visible_drag_value_and_keeps_typed_precision(self):
+        bpy.ops.object.mode_set(mode='OBJECT')
+        data=bpy.data.meshes.new('Two loops')
+        data.from_pydata([(x,y,z) for z in (0,1) for x,y in ((0,0),(1,0),(1,1),(0,1))],
+                         [(base+i,base+(i+1)%4) for base in (0,4) for i in range(4)],[])
+        self.obj.data=data
+        bpy.ops.object.mode_set(mode='EDIT');bpy.ops.mesh.select_all(action='SELECT')
+        tools.begin({'tool':'BRIDGE_EDGE_LOOPS','parameters':{'merge':True,'merge_factor':.25,'twist_offset':0}})
+        state=tools.nudge({'delta':.1})
+        self.assertAlmostEqual(state['parameters']['merge_factor'],.35)
+        self.assertEqual(state['parameters']['twist_offset'],0)
+        state=tools.parameter({'parameters':{'snap_type':'INCREMENT','snap_step':.1,'merge_factor':.335}})
+        self.assertAlmostEqual(state['parameters']['merge_factor'],.335)
+        self.assertEqual(len(bmesh.from_edit_mesh(self.obj.data).verts),4)
+
     def tearDown(self):
         sessions.cancel_all()
 

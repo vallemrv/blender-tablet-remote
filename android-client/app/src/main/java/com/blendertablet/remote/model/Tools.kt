@@ -133,7 +133,7 @@ data class ToolSession(
             EditTool.INSET -> "thickness"
             EditTool.SUBDIVIDE -> "cuts"
             EditTool.LOOP_CUT -> "factor"
-            EditTool.BRIDGE_EDGE_LOOPS -> "twist_offset"
+            EditTool.BRIDGE_EDGE_LOOPS -> if (flag("merge")) "merge_factor" else "twist_offset"
             EditTool.KNIFE, EditTool.BISECT, EditTool.ALIGN, EditTool.REVOLVE, EditTool.SWEEP -> ""
         }
 

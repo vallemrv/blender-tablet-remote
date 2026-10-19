@@ -308,6 +308,14 @@ class EditToolsTests(unittest.TestCase):
         self.assertEqual(state['parameters']['segments'],3)
         self.assertEqual(state['snap_type'],'INCREMENT')
 
+    def test_inset_typed_thickness_is_exact_with_increment(self):
+        self.begin('INSET', thickness=.035, snap_type='INCREMENT', snap_step=.1)
+        self.assertAlmostEqual(tools.tool_session.status()['parameters']['thickness'],.035)
+        tools.parameter({'parameters':{'thickness':.055}})
+        state=tools.parameter({'parameters':{'depth':.02}})
+        self.assertAlmostEqual(state['parameters']['thickness'],.055)
+        self.assertEqual(state['snap_type'],'INCREMENT')
+
     def test_increment_accumulates_small_samples_and_reports_visual_value(self):
         for tool, primary in [('EXTRUDE','offset'),('INSET','thickness'),('BEVEL','offset')]:
             with self.subTest(tool=tool):

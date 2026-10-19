@@ -2613,3 +2613,20 @@ un estado local inactivo y solicitan un snapshot nuevo.
 más vértices elegidos en Vertex/Edge. `mesh.looptools_circle {}` requiere tres.
 Ambos se anuncian condicionalmente en `edit_catalog` y registran un undo propio.
 Android los agrupa en radial → Malla → LoopTools.
+
+
+### Bandejas compactas de herramientas
+
+Los controles de `tool.status.controls` pueden anunciar `primary:bool` y
+`help:string`. Android muestra como máximo tres controles principales por esquema
+(más el acceso a Más); si un servidor anterior no indica ninguno usa el primero.
+El panel Más contiene el resto, con la explicación publicada. Los controles
+numéricos comparten editor de expresiones y unidades, sin selector de unidad.
+El inventario `toolTrayContents` limita a cinco grupos la fila de cada herramienta.
+
+La posición de Loop Cut se muestra como porcentaje desde el centro (`0 %` es
+`factor:0`); introducir una longitud se convierte por `slide_range` métrico.
+`tool.parameter` conserva números exactos para Extruir/Bisel/Inset y posición de
+fusión de Bridge incluso con snap. El nudge usa el snap; en Bridge fusionado mueve
+`merge_factor` y, sin fusión, `twist_offset`. `primary` no cambia la geometría ni
+la semántica del contrato de confirmación/cancelación.

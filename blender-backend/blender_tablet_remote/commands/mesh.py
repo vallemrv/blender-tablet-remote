@@ -961,6 +961,7 @@ def bridge_edge_loops(payload: dict) -> dict:
     merge_factor = _apply_scalar_snap(get_float(payload, "merge_factor", 0.0), payload)
     if not 0.0 <= merge_factor <= 1.0:
         raise BadPayload("'merge_factor' must be between 0 and 1")
+    source_vertices = {vert for edge in edges for vert in edge.verts}
     try:
         result = bmesh.ops.bridge_loops(
             bm,
@@ -974,10 +975,12 @@ def bridge_edge_loops(payload: dict) -> dict:
     except (ValueError, RuntimeError) as exc:
         raise CommandError("Selected loops cannot be bridged", code="topology_incompatible") from exc
     faces = result.get("faces", [])
-    if not faces:
+    # Fusionar suelda los contornos: no crea caras y es un resultado válido.
+    geometry = [v for v in source_vertices if v.is_valid] if merge else faces
+    if not geometry:
         raise CommandError("Selected loops cannot be bridged", code="topology_incompatible")
     _deselect_all(bm)
-    _select_geom(bm, faces)
+    _select_geom(bm, geometry)
     flush_bmesh(obj, bm)
     _undo(payload, "Remote bridge edge loops")
     return {"loops": [len(loop) for loop in components], "faces": len(faces),

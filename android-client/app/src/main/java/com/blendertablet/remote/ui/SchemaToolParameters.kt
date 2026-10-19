@@ -32,7 +32,7 @@ fun SchemaToolParameters(
     onParameter: (String, Any?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp),
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically) {
         for (spec in specs) key(spec.id) {
             if (spec.type == "bool") {
@@ -51,42 +51,14 @@ fun SchemaToolParameters(
                     }
                 }
             } else if (spec.type == "float" || spec.type == "int") {
-                val value = (parameters[spec.id] as? Number)?.toDouble() ?: 0.0
+                val value = (parameters[spec.id] as? Number)?.toDouble() ?: (spec.default as? Number)?.toDouble() ?: 0.0
                 val length = spec.unit == "length"
-                val metresPerUnit = when (lengthUnit) {
-                    LengthUnit.MILLIMETERS -> 0.001
-                    LengthUnit.CENTIMETERS -> 0.01
-                    LengthUnit.METERS -> 1.0
-                }
-                val conversion = if (length) unitScaleLength / metresPerUnit else 1.0
-                var draft by remember(value, conversion) { mutableStateOf<String?>(null) }
-                fun set(wire: Double) {
-                    if (!wire.isFinite()) return
-                    val bounded = wire.coerceIn(spec.min ?: -Double.MAX_VALUE, spec.max ?: Double.MAX_VALUE)
-                    onParameter(spec.id, if (spec.type == "int") round(bounded).toInt() else bounded)
-                    draft = null
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(spec.label, color = Ink.Muted, fontSize = 11.sp)
-                    // En longitudes, cada botón recorre una unidad visible del preset.
-                    val step = if (length) 1.0 / conversion else spec.step
-                    StepperButton("−") { set(value - step) }
-                    CompactNumericField(
-                        value = draft ?: String.format(Locale.ROOT, "%.3f", value * conversion).trimEnd('0').trimEnd('.'),
-                        onValueChange = { draft = it },
-                        onDone = {
-                            val text = draft.orEmpty()
-                            val shown = value * conversion
-                            val scalar = NumericExpression.evaluate(text, shown)
-                            val parsed = if (scalar != null) scalar / conversion else if (length)
-                                ValueParser.parse(text, TransformMode.MOVE, shown)?.div(unitScaleLength) else null
-                            parsed?.let(::set)
-                        },
-                        modifier = Modifier.width(64.dp),
-                    )
-                    StepperButton("+") { set(value + step) }
-                    if (length) Text(lengthUnit.short, color = Ink.Muted, fontSize = 11.sp)
-                }
+                val metres = when(lengthUnit) { LengthUnit.MILLIMETERS -> .001; LengthUnit.CENTIMETERS -> .01; else -> 1.0 }
+                ToolNumericInput(spec.label, value, if (length) spec.step.takeIf { it > 0 } ?: metres / unitScaleLength else spec.step,
+                    if (length) TransformMode.MOVE else if (spec.unit == "angle") TransformMode.ROTATE else TransformMode.SCALE,
+                    unitScaleLength, if (length) lengthUnit else null, integer = spec.type == "int", min = spec.min, max = spec.max,
+                    quickValues = if (spec.type == "int" && spec.id == "steps") listOf(8,16,32) else emptyList(),
+                    onCommit = { onParameter(spec.id, if(spec.type == "int") it.toInt() else it) })
             }
         }
     }
