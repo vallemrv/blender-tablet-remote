@@ -1123,12 +1123,10 @@ def begin(payload: dict) -> dict:
         except (TypeError, ValueError):
             raise BadPayload("center_position must contain three finite coordinates")
 
-    # Una sesión abierta se descarta: empezar a mover con algo a medias sería
-    # acumular dos transformaciones sin que el usuario lo pidiera.
-    from .sessions import cancel_tool
+    # Cambiar herramienta conserva el resultado visible y su propio paso de undo.
+    from .sessions import finish_for_switch, cancel_tool
+    finish_for_switch(payload.get("_client_id"))
     cancel_tool(restore=True)
-    if session.active:
-        session.restore_safely()
 
     step = _parse_step(payload)
     if step is None and payload.get("mode") == "ROTATE" and "step_degrees" in payload:

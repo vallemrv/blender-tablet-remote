@@ -305,6 +305,7 @@ interface RemoteBlenderClient {
     fun transformSelect(u: Double, v: Double, threshold: Double, mode: SelectionOp)
     fun transformFlatten(axis: String)
     fun transformConfirm()
+    fun finishInteraction()
     fun transformCancel()
 
     fun editSettings(parameters: Map<String, Any?>)

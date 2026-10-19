@@ -456,7 +456,8 @@ def begin(payload):
     params = dict(params)
     if "edge" in payload and "edge" not in params:
         params["edge"] = payload["edge"]
-    from .sessions import cancel_transform
+    from .sessions import finish_for_switch, cancel_transform
+    finish_for_switch(payload.get("_client_id"))
     cancel_transform(restore=True)
     tool_session.begin(tool, payload.get("_client_id"), params)
     return tool_session.status()

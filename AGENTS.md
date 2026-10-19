@@ -1563,3 +1563,11 @@ no quedan archivos o referencias temporales.
 - En vistas planas del manipulador se oculta el eje perpendicular (Z en XY, Y en
   XZ y X en YZ), incluidas flecha, escala y anillo de rotación. El mismo layout
   gobierna dibujo y picking; orbitar fuera del plano recupera las asas aplicables.
+
+- Cambiar de herramienta, seleccionar o cambiar modo confirma la preview estable
+  de `transform.*`/`tool.*` y la siguiente operación parte de ese resultado.
+  `interaction.finish` es idempotente y valida propietario; los inicios también
+  confirman en servidor si la respuesta anterior aún no ha llegado. Transformar
+  sin cambios y herramientas solo armadas no crean undo. Cuchillo/Bisect/Alinear
+  incompletos se cierran sin crear geometría. ×, desconexión y segundo plano
+  conservan su cancelación explícita. Cada operación confirmada conserva su undo.

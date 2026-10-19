@@ -376,7 +376,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     /** Volver a Seleccionar cierra cualquier sesión (transformación o herramienta). */
     fun selectTool() {
-        closeSessions()
+        closeSessions(commit = true)
         local.update { it.copy(activeTool = ActiveTool.SELECT, shapeTool = ShapeTool.NONE) }
     }
     /**
@@ -389,7 +389,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         cancelMaterialStroke()
         cancelSculptStroke()
         if (!client.state.value.features.cad.available) return
-        closeSessions()
+        closeSessions(commit = true)
         local.update { it.copy(activeTool = ActiveTool.SELECT, shapeTool = ShapeTool.NONE,
             referencePicking = false, cadTool = null, shortestPathActive = false) }
         client.cadCommand("mode.set", mapOf("mode" to "CAD"))
@@ -588,7 +588,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (phase == GesturePhase.END || phase == GesturePhase.CANCEL) materialLightId = null
     }
     fun enterMaterials() {
-        cancelSculptStroke(); cancelCadStroke(); closeSessions(); cancelMaterialStroke()
+        cancelSculptStroke(); cancelCadStroke(); closeSessions(commit = true); cancelMaterialStroke()
         local.update { it.copy(activeTool = ActiveTool.SELECT, shapeTool = ShapeTool.NONE, cadTool = null) }
         client.materialCommand("mode.set", mapOf("mode" to "MATERIAL"))
     }
@@ -648,7 +648,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         cancelSculptStroke()
         cancelCadStroke()
         local.update { it.copy(cadTool = null) }
-        closeSessions()
+        closeSessions(commit = true)
         local.update { it.copy(
             shapeTool = ShapeTool.NONE,
             activeTool = ActiveTool.SELECT,
@@ -659,7 +659,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setSelectionMode(mode: SelectionMode) {
         val f2 = client.toolSession.value.armed && client.toolSession.value.tool == EditTool.F2
-        closeSessions()
+        closeSessions(commit = true)
         local.update { it.copy(shapeTool = ShapeTool.NONE, activeTool = if (f2) ActiveTool.SELECT else it.activeTool) }
         client.setSelectionMode(mode)
         if (f2 && mode != SelectionMode.FACE) {
@@ -669,16 +669,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun closeTransformForToolChange() {
-        val wasTweak = local.value.activeTool == ActiveTool.TWEAK
-        val cancelled = cancelTweakGesture()
-        // END ya enviado puede seguir figurando como MOVE hasta recibir su respuesta.
-        // El cierre de Tweak es su propio END/CANCEL, identificado por sesión.
-        if (!wasTweak && !cancelled && client.connection.value == ConnectionStatus.CONNECTED) client.transformCancel()
+        cancelTweakGesture()
+        val tool = client.toolSession.value
+        if (tool.active) toolPreferences.save(tool.tool, tool.parameters, client.state.value.unitScaleLength)
+        if (client.connection.value == ConnectionStatus.CONNECTED) client.finishInteraction()
     }
 
-    private fun closeSessions() {
-        closeTransformForToolChange()
-        if (client.connection.value == ConnectionStatus.CONNECTED) client.toolCancel()
+    private fun closeSessions(commit: Boolean = false) {
+        if (commit) closeTransformForToolChange()
+        else {
+            val wasTweak = local.value.activeTool == ActiveTool.TWEAK
+            val cancelled = cancelTweakGesture()
+            if (client.connection.value == ConnectionStatus.CONNECTED) {
+                if (!wasTweak && !cancelled) client.transformCancel()
+                client.toolCancel()
+            }
+        }
         local.update { it.copy(loopCutAwaitingTap = false) }
     }
     /**
@@ -740,8 +746,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val edit = client.state.value.mode == BlenderMode.EDIT
         val rememberedLinked = if (edit) local.value.duplicateLinked else linked
         cancelTweakGesture()
-        client.toolCancel()
-        client.transformCancel()
+        closeTransformForToolChange()
         duplicatePreferences.save(mode, rememberedLinked)
         local.update { it.copy(duplicateLinked = rememberedLinked, duplicateMode = mode,
             activeTool = ActiveTool.SELECT, shapeTool = ShapeTool.NONE, loopCutAwaitingTap = false) }
@@ -1151,7 +1156,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Herramientas paramétricas de Edit Mode. */
     fun beginEditTool(tool: EditTool) {
-        closeSessions()
+        closeSessions(commit = true)
         local.update { it.copy(activeTool = ActiveTool.valueOf(tool.name), loopCutAwaitingTap = tool == EditTool.LOOP_CUT) }
         client.toolBegin(tool, toolDefaultParameters(tool))
     }
@@ -1429,8 +1434,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             cancelTweakGesture()
             local.update { it.copy(activeTool = ActiveTool.SELECT) }
         }
-        // Una transformación y una herramienta paramétrica no conviven: cerrar la otra.
-        if (client.connection.value == ConnectionStatus.CONNECTED) client.toolCancel()
+        closeTransformForToolChange()
         local.update { it.copy(loopCutAwaitingTap = false) }
         if (mode == TransformMode.SCALE) {
             val unit = client.state.value.sceneScale.lengthUnit.transformStepUnit()
@@ -1476,7 +1480,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun activateTweak() {
         closeTransformForToolChange()
-        if (client.toolSession.value.active || client.toolSession.value.armed) client.toolCancel()
         local.update { it.copy(activeTool = ActiveTool.TWEAK, loopCutAwaitingTap = false,
             shapeTool = ShapeTool.NONE, referencePicking = false) }
     }

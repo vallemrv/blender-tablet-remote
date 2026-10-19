@@ -2724,3 +2724,9 @@ colección y crea un undo sin alterar flags propios de los descendientes. Sus fi
 publican `hidden`/`locked`; los objetos publican `collection_locked`. `SELECT` en
 `outliner.action` alterna la selección conservando los demás objetos. `MOVE_OBJECTS`
 y `CREATE.object_ids` admiten toda la selección, también desde el destino existente.
+
+`interaction.finish {}` confirma la preview estable de transformación o herramienta
+del propietario, o cierra sin undo una interacción vacía/solo armada. Devuelve
+snapshot de escena. `transform.begin`, `tool.begin` y los cambios de modo usan
+ese mismo cierre antes de abrir la nueva intención. `*.cancel` sigue restaurando
+el baseline; cierres de gestos pendientes, desconexión y guardado no confirman.

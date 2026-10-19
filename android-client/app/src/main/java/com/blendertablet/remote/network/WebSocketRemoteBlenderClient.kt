@@ -412,10 +412,10 @@ class WebSocketRemoteBlenderClient(
     }
 
     private fun trackedSessionCommand(name: String?) = name != null &&
-        (name.startsWith("tool.") || name.startsWith("transform.") || name.startsWith("mode."))
+        (name == "interaction.finish" || name.startsWith("tool.") || name.startsWith("transform.") || name.startsWith("mode."))
 
     private fun sendCommand(name: String, payload: JSONObject = JSONObject()): Boolean {
-        if (name in setOf("tool.begin", "transform.begin", "tool.cancel", "tool.confirm", "transform.cancel", "transform.confirm",
+        if (name in setOf("interaction.finish", "tool.begin", "transform.begin", "tool.cancel", "tool.confirm", "transform.cancel", "transform.confirm",
                 "mode.set", "mode.object", "mode.edit", "mode.sculpt", "history.undo", "history.redo", "file.new", "file.open")) {
             _errors.value = null
             retireInteraction()
@@ -827,6 +827,7 @@ class WebSocketRemoteBlenderClient(
         pendingTransformSnap = null
         command("transform.value", JSONObject().put("flatten_axis", axis))
     }
+    override fun finishInteraction() = command("interaction.finish")
     override fun transformCancel() = command("transform.cancel")
 
     override fun toolBegin(tool: EditTool, parameters: Map<String, Any?>) =
@@ -1246,6 +1247,11 @@ class WebSocketRemoteBlenderClient(
                     // Sondeo de loop cut: igual de silencioso si no hay nada bajo
                     // el dedo — la bandeja sigue mostrando el hint de "toca la malla".
                     command == "mesh.loop_probe" -> _loopProbe.value = StateParser.loopProbe(result)
+                    command == "interaction.finish" -> {
+                        _transformSession.value = TransformSession()
+                        _toolSession.value = ToolSession()
+                        result?.let(::updateState)
+                    }
                     command == "transform.confirm" || command == "transform.cancel" -> {
                         _transformSession.value = TransformSession()
                         requestState()
