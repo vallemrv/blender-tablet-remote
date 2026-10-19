@@ -349,7 +349,10 @@ nuevas superficies y la adaptación gradual de las existentes.
   y ajustar al 85 %, no solo el origen del Empty. Incluye aspecto de píxel y matriz
   con padres; la referencia activa también sirve de respaldo sin selección.
 - Object muestra una bandeja inferior de propiedades del activo cuando no hay
-  herramientas ni sesiones: Posición XYZ, Rotación XYZ en grados, Tamaño y Visibilidad.
+  herramientas ni sesiones: Posición XYZ, Rotación XYZ en grados y Tamaño.
+  Al principio de la bandeja, un ojo oculta/muestra el objeto y un icono distinto
+  alterna Mostrar delante. No hay sección Visibilidad ni campos Visible en vista
+  o Visible en render; las propiedades específicas de Imagen conservan su sección.
   Una única lista desplegable cambia de sección, sin pestañas mezcladas con campos.
   La sección elegida se recuerda por identidad de objeto fuera del ciclo de vida
   de la bandeja: navegar, ocultar controles, snapshots sin propiedades y cambiar

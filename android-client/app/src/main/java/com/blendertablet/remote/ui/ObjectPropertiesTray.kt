@@ -50,7 +50,8 @@ fun ObjectPropertiesTray(
     var lastToken by remember(properties?.id, unit) { mutableStateOf<String?>(null) }
     var focused by remember(properties?.id, unit) { mutableStateOf<Set<String>>(emptySet()) }
     val fields = properties?.fields.orEmpty()
-    val groups = fields.map { it.group }.distinct()
+    val sectionFields = fields.filterNot { it.id in setOf("visible", "render", "in_front") }
+    val groups = sectionFields.map { it.group }.distinct()
     val selectedGroup = selectedSection?.takeIf { it in groups } ?: groups.firstOrNull()
 
     LaunchedEffect(result, lastToken) {
@@ -75,6 +76,16 @@ fun ObjectPropertiesTray(
         title = "Objeto",
         modifier = modifier,
     ) {
+        fields.firstOrNull { it.id == "visible" }?.let { field ->
+            val visible = (drafts[field.id] ?: properties?.values?.get(field.id)) == true
+            IconAction(AppIcons.visibility(visible), if (visible) "Ocultar objeto" else "Mostrar objeto",
+                enabled = !field.readOnly) { edit(field, !visible) }
+        }
+        fields.firstOrNull { it.id == "in_front" }?.let { field ->
+            val inFront = (drafts[field.id] ?: properties?.values?.get(field.id)) == true
+            IconAction(AppIcons.InFront, "Mostrar delante", selected = inFront,
+                enabled = !field.readOnly) { edit(field, !inFront) }
+        }
         Box {
             var objectMenu by remember { mutableStateOf(false) }
             IconAction(AppIcons.material("OBJECTS"), "Elegir objeto o imagen",
@@ -99,7 +110,7 @@ fun ObjectPropertiesTray(
                     onClick = { properties?.let { onSelectSection(it.id, name) }; sectionMenu = false }) }
             }
         }
-        fields.filter { it.group == selectedGroup }.forEach { field ->
+        sectionFields.filter { it.group == selectedGroup }.forEach { field ->
             PropertyControl(field, drafts[field.id] ?: properties?.values?.get(field.id),
                 field.id in drafts, unit, !field.readOnly, stepMeters,
                 onFocus = { active ->

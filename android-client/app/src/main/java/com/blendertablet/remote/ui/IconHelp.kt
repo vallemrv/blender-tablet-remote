@@ -72,6 +72,7 @@ internal object IconHelp {
         "ALIGN" to "Elige una cara de origen y otra de destino para colocar u orientar el objeto fuente.",
         "PLACE" to "Abre las opciones para alinear caras o cambiar el origen del objeto.",
         "DUPLICATE" to "Crea una copia independiente de la selección.",
+        "IN_FRONT" to "Muestra el objeto por delante de otros en la vista 3D, sin moverlo ni cambiar el render. Pulsa de nuevo para desactivarlo.",
         "DUPLICATE_LINKED" to "Crea otro objeto que comparte la misma malla: editar esa malla afecta a sus copias enlazadas.",
         "APPLY" to "Incorpora las transformaciones elegidas a los datos del objeto conservando su aspecto actual.",
         "ORIGIN_CURSOR" to "Lleva el origen del objeto al cursor 3D sin desplazar su geometría.",

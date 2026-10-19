@@ -62,6 +62,7 @@ object AppIcons {
     val Reference: ImageVector get() = StudioIcons["REFERENCE"]
     val More: ImageVector get() = StudioIcons["MORE"]
     val Collection: ImageVector get() = StudioIcons["COLLECTION"]
+    val InFront: ImageVector get() = StudioIcons["IN_FRONT"]
 
     fun disclosure(open: Boolean): ImageVector = StudioIcons[if (open) "EXPAND" else "RIGHT"]
     fun drawer(open: Boolean): ImageVector = StudioIcons[if (open) "EXPAND" else "COLLAPSE"]

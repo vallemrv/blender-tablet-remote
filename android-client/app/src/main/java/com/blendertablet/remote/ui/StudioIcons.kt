@@ -152,6 +152,7 @@ internal object StudioIcons {
         "EXPAND" to Glyph("Desplegar", "Controles", "M4,8 L12,16 L20,8"),
         "COLLAPSE" to Glyph("Plegar", "Controles", "M4,16 L12,8 L20,16"),
         "VISIBLE" to Glyph("Mostrar", "Controles", "M2,12 Q12,-2 22,12 Q12,26 2,12 Z M15,12 A3,3 0,1 1,9,12 A3,3 0,1 1,15,12"),
+        "IN_FRONT" to Glyph("Mostrar delante", "Controles", "M3,8 L16,8 L16,21 L3,21 Z M8,5 L8,3 L21,3 L21,16 L19,16 M7,16 L12,11 M8,11 L12,11 L12,15"),
         "HIDDEN" to Glyph("Ocultar", "Controles", "M3,3 L21,21 M8,6 Q16,3 22,12 L18,17 M14,19 Q7,21 2,12 L6,7 M10,10 L14,14"),
         "CHAIN" to Glyph("Mantener proporciones", "Controles", "M10,15 L7,18 A4,4 0,0 1,2,12 L6,8 A4,4 0,0 1,12,9 M14,9 L17,6 A4,4 0,0 1,22,12 L18,16 A4,4 0,0 1,12,15 M8,14 L16,10"),
         "UNCHAIN" to Glyph("Ejes independientes", "Controles", "M8,17 L6,19 A4,4 0,0 1,1,13 L5,9 M16,7 L18,5 A4,4 0,0 1,23,11 L19,15 M10,3 L10,7 M14,17 L14,21 M3,3 L21,21"),
