@@ -681,8 +681,15 @@ class CadRuntime:
                 camera.location = Vector(world(sketch,(lo[0]+hi[0])/2,(lo[1]+hi[1])/2))/scale
                 camera.distance = max(.15, max(hi[i]-lo[i] for i in (0,1))*2)/scale
             else:
-                camera.location = Vector(world(sketch,0,0))/scale
-                camera.distance = .2/scale
+                from ..commands.units import current_scale
+                if found:
+                    from .plane_display import plane_gizmo
+                    gizmo=plane_gizmo({'plane_frame':basis},found[3])
+                    camera.perspective = self.sketch_projection
+                    camera.look_at(sum(gizmo['quad'],Vector())/4,gizmo['quad'],found[3])
+                else:
+                    camera.location = Vector(world(sketch,0,0))/scale
+                    camera.distance = current_scale()['primitive_size']*2/scale
             camera.perspective = self.sketch_projection
         camera.axis_view = None
         camera._synced = True

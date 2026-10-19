@@ -2156,6 +2156,28 @@ def _plane_preview(session):
     session.update(preview=doc,candidate=plane['id'],plane_frame=frame,sketch_id=sketch_id,shift_axes=_shift_axes(session,frame))
 
 
+def _show_placed_plane(session):
+    """A new preview outside the current view gets framed, without moving its datum."""
+    from ..bpy_utils import find_view3d
+    from ..camera import camera
+    from ..cad.plane_display import plane_gizmo
+    from mathutils import Vector
+    found=find_view3d()
+    if found is None: return
+    rv3d=found[3]; camera.sync_from_region(rv3d)
+    gizmo=plane_gizmo(session,rv3d)
+    center=sum(gizmo['quad'],Vector())/4
+    projection=camera.perspective_matrix(rv3d)
+    def visible(point):
+        clip=projection@Vector((*point,1.))
+        return clip.w>0 and abs(clip.x)<clip.w*.9 and abs(clip.y)<clip.w*.9 and abs(clip.z)<clip.w
+    if not visible(center) or not visible(gizmo['origin']):
+        points=gizmo['quad']+[gizmo['origin']]+[handle[1] for handle in gizmo['handles'].values()]
+        low=Vector(tuple(min(p[i] for p in points) for i in range(3)))
+        high=Vector(tuple(max(p[i] for p in points) for i in range(3)))
+        camera.look_at((low+high)*.5,points,rv3d)
+
+
 def _shift_axes(session, frame):
     """World direction each Mover value takes the plane, also under tilt or a face base."""
     import numpy as np
@@ -2175,13 +2197,13 @@ def _grab_handle(session, u, v):
     """Drawn arrow under the pen (X/Y slide, N separates); elsewhere the pen separates."""
     from ..bpy_utils import find_view3d
     from ..camera import camera
-    from ..streaming.cad_selection import plane_gizmo
+    from ..cad.plane_display import plane_gizmo
     found=find_view3d()
     if found is None: return 'N'
     rv3d=found[3]; camera.sync_from_region(rv3d)
     aspect=found[2].width/max(found[2].height,1)
     best=('N',.05)
-    for key,(start,tip,_,_) in plane_gizmo(session)['handles'].items():
+    for key,(start,tip,_,_) in plane_gizmo(session,rv3d)['handles'].items():
         a,b=camera.project(start,rv3d),camera.project(tip,rv3d)
         if a is None or b is None: continue
         dx,dy=(b[0]-a[0])*aspect,b[1]-a[1]
@@ -2248,6 +2270,7 @@ def plane_begin(payload):
         if runtime.active_sketch_id:runtime.solid_view()
         runtime.active_body_id=splitting
     _plane_preview(session)
+    _show_placed_plane(session)
     if splitting:yield from _split_rebuild(session)
     return runtime.status()
 

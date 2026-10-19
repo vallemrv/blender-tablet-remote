@@ -1092,6 +1092,11 @@ no quedan archivos o referencias temporales.
   la arrastra 1:1 (rayo contra la recta normal), con Incremento por pasos enteros.
   GPUOffScreen dibuja la preview (lámina translúcida del tamaño del resultado, borde,
   ejes y normal); el documento no cambia hasta ✓, que crea plano y croquis en un undo.
+  Lámina y flechas usan el preset, el tamaño del resultado y un mínimo relativo
+  al zoom, con conversión por `scale_length`; no tienen un tamaño fijo en cm.
+  Vídeo y sondeo comparten `cad/plane_display.py`. Al iniciar, un plano fuera de
+  vista se encuadra sin mover su marco ni `rv3d`; si ya se ve conserva la cámara.
+  Abrir un boceto vacío encuadra esa misma extensión en vez de usar 20 cm fijos.
   Las flechas son tiradores: el lápiz agarra al bajar la roja/verde (Mover por su
   dirección real, también inclinado) o la azul/fuera de ellas (Separación); la activa
   se dibuja amarilla. La bandeja muestra solo Separación; «Más opciones ▴» abre encima
