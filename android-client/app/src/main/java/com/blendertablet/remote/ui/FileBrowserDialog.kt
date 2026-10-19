@@ -30,6 +30,9 @@ enum class FileBrowserMode { OPEN, SAVE }
 fun FileBrowserDialog(
     mode: FileBrowserMode,
     files: RemoteFiles,
+    canCreateFolder: Boolean,
+    onCreateFolder: (folder: String, name: String) -> Unit,
+    onClearFolderError: () -> Unit,
     initialName: String,
     onBrowse: (String) -> Unit,
     onSetDefault: (String) -> Unit,
@@ -38,10 +41,23 @@ fun FileBrowserDialog(
     onSave: (folder: String, name: String) -> Unit,
 ) {
     var name by remember(initialName) { mutableStateOf(initialName) }
+    var newFolderOpen by remember(files.path) { mutableStateOf(false) }
+    var folderName by remember(files.path) { mutableStateOf("") }
+    val dismiss = { if (!files.creatingFolder) onDismiss() }
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = dismiss,
         containerColor = Ink.PanelSolid,
-        title = { Text(if (mode == FileBrowserMode.OPEN) "Abrir archivo" else "Guardar como", fontSize = 16.sp) },
+        title = {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text(if (mode == FileBrowserMode.OPEN) "Abrir archivo" else "Guardar como", fontSize = 16.sp)
+                if (mode == FileBrowserMode.SAVE && canCreateFolder) {
+                    IconAction(AppIcons.NewFolder, "Nueva carpeta", enabled = files.path.isNotBlank() && !files.loading && !files.creatingFolder) {
+                        onClearFolderError(); folderName = ""; newFolderOpen = true
+                    }
+                }
+            }
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (files.locations.isNotEmpty()) {
@@ -100,8 +116,31 @@ fun FileBrowserDialog(
                 }
             }
         },
-        dismissButton = { PillButton("Cancelar", onClick = onDismiss) },
+        dismissButton = { PillButton("Cancelar", enabled = !files.creatingFolder, onClick = dismiss) },
     )
+    if (newFolderOpen) {
+        val cleanName = folderName.trim()
+        val valid = cleanName.isNotEmpty() && cleanName !in setOf(".", "..") &&
+            cleanName.none { it in "/\\:\u0000" }
+        AlertDialog(
+            onDismissRequest = { if (!files.creatingFolder) newFolderOpen = false },
+            title = { Text("Nueva carpeta") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(folderName, { folderName = it; onClearFolderError() },
+                        label = { Text("Nombre de la carpeta") }, singleLine = true,
+                        enabled = !files.creatingFolder, modifier = Modifier.fillMaxWidth())
+                    files.folderError?.let { Text(it, color = Ink.Warn) }
+                    if (cleanName.isNotEmpty() && !valid) Text("Escribe solo el nombre, sin rutas ni separadores.", color = Ink.Warn)
+                }
+            },
+            confirmButton = {
+                PillButton(if (files.creatingFolder) "Creando…" else "Crear", selected = true,
+                    enabled = valid && !files.creatingFolder) { onCreateFolder(files.path, cleanName) }
+            },
+            dismissButton = { PillButton("Cancelar", enabled = !files.creatingFolder) { newFolderOpen = false } },
+        )
+    }
 }
 
 @Composable

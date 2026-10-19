@@ -64,6 +64,7 @@ object AppIcons {
     val ModeCad: ImageVector get() = StudioIcons["CAD_MODE"]
     val Reference: ImageVector get() = StudioIcons["REFERENCE"]
     val More: ImageVector get() = StudioIcons["MORE"]
+    val NewFolder: ImageVector get() = StudioIcons["NEW_FOLDER"]
     val Collection: ImageVector get() = StudioIcons["COLLECTION"]
     val InFront: ImageVector get() = StudioIcons["IN_FRONT"]
 

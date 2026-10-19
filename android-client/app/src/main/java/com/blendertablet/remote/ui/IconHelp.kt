@@ -167,6 +167,7 @@ internal object IconHelp {
         "SHORTCUTS" to "Muestra los atajos de edición disponibles para la selección actual.",
         "DEBUG" to "Muestra información técnica de conexión y vídeo para diagnosticar problemas.",
         "MORE" to "Abre las acciones disponibles para este elemento.",
+        "NEW_FOLDER" to "Crea una carpeta dentro de la ubicación actual para guardar tu archivo.",
         "COLLECTION" to "Organiza este objeto en otra colección sin cambiar su posición ni su geometría.",
         "LOCK" to "El objeto está protegido contra la selección. Toca para desbloquearlo.",
         "UNLOCK" to "Bloquea la selección del objeto para evitar moverlo o editarlo por accidente.",

@@ -110,6 +110,7 @@ data class ServerFeatures(
     val objectProperties: Boolean = false,
     val outliner: Boolean = false,
     val outlinerCollections: Boolean = false,
+    val fileMkdir: Boolean = false,
 )
 
 data class EditSettings(
@@ -462,6 +463,8 @@ data class RemoteFiles(
     val entries: List<RemoteFileEntry> = emptyList(),
     val locations: List<RemoteLocation> = emptyList(),
     val loading: Boolean = false,
+    val creatingFolder: Boolean = false,
+    val folderError: String? = null,
 )
 
 /** Transformación del objeto activo, para el panel numérico. */

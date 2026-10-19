@@ -700,6 +700,9 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             FileBrowserDialog(
                 mode = mode,
                 files = remoteFiles,
+                canCreateFolder = state.blender.features.fileMkdir,
+                onCreateFolder = vm::createFolder,
+                onClearFolderError = vm::clearFolderError,
                 initialName = state.file.name.takeIf { state.file.saved } ?: "sin-titulo.blend",
                 onBrowse = vm::browseFiles,
                 onSetDefault = vm::setDefaultFolder,

@@ -217,6 +217,7 @@ object StateParser {
             objectProperties = f.optJSONObject("object_properties")?.optInt("version") == 1,
             outliner = f.optJSONObject("outliner")?.optInt("version") == 1,
             outlinerCollections = f.optJSONObject("outliner")?.optBoolean("collections") == true,
+            fileMkdir = f.optJSONObject("files")?.optBoolean("mkdir") == true,
         )
     }
 

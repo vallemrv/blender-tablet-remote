@@ -354,6 +354,32 @@ def browse(payload: dict) -> dict:
             "default_folder": _load_default_folder(), "entries": entries}
 
 
+@command("file.mkdir")
+def make_directory(payload: dict) -> dict:
+    """Crea una única carpeta dentro del destino visible y devuelve su listado."""
+    folder = _resolve_path(payload.get("folder"))
+    raw_name = payload.get("name")
+    if not isinstance(raw_name, str) or not raw_name.strip():
+        raise BadPayload("Escribe un nombre para la carpeta")
+    name = raw_name.strip()
+    if name in {".", ".."} or any(char in name for char in ("/", "\\", "\x00", ":")):
+        raise BadPayload("El nombre de carpeta no puede contener rutas ni separadores")
+    path = os.path.join(folder, name)
+    try:
+        os.mkdir(path)
+    except FileExistsError:
+        raise CommandError("Ya existe un archivo o carpeta con ese nombre", code="already_exists")
+    except FileNotFoundError:
+        raise CommandError("La carpeta de destino ya no existe", code="not_found")
+    except NotADirectoryError:
+        raise CommandError("El destino no es una carpeta", code="not_directory")
+    except PermissionError:
+        raise CommandError("No tienes permiso para crear carpetas aquí", code="access_denied")
+    except OSError as exc:
+        raise CommandError(f"No se pudo crear la carpeta: {exc.strerror}", code="io_error")
+    return browse({"path": path})
+
+
 @command("file.default_folder")
 def default_folder(payload: dict) -> dict:
     path = _resolve_path(payload.get("path"))

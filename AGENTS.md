@@ -115,6 +115,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Las referencias RNA inválidas nunca deben detener el pump ni el broadcast.
 - El explorador identifica cada fila por nombre y ruta: varios enlaces simbólicos
   pueden compartir un destino canónico sin ser la misma entrada de la lista.
+  Guardar como ofrece Nueva carpeta (icono carpeta +); crea un solo hijo del destino
+  visible, entra en él y conserva el nombre del archivo. Rechaza rutas y colisiones,
+  muestra errores dentro del diálogo y no repite solicitudes pendientes. Respuestas
+  de exploraciones anteriores no sustituyen la carpeta recién creada.
 - Knife acumula puntos interiores y divide una cara una sola vez en dos n-gons. No se
   sustituye por triangulación punto a punto. Sondea el BMesh vivo y admite n-gons
   cóncavos de cortes previos; cada segmento recorre la superficie y nunca el volumen.

@@ -88,6 +88,7 @@ class WebSocketRemoteBlenderClient(
     private val _duplicates = MutableSharedFlow<DuplicateRequests.Placement>(extraBufferCapacity = 1)
     private val _retryAttempt = MutableStateFlow(0)
     private val _file = MutableStateFlow(FileInfo())
+    private val browserRequests = SessionRequests()
     private val _remoteFiles = MutableStateFlow(RemoteFiles())
     private val _transformSession = MutableStateFlow(TransformSession())
     private val _toolSession = MutableStateFlow(ToolSession())
@@ -219,6 +220,9 @@ class WebSocketRemoteBlenderClient(
         socket = null
         clearSculptTransport()
         pending.clear()
+        browserRequests.retire()
+        if (_remoteFiles.value.creatingFolder) _remoteFiles.value = _remoteFiles.value.copy(
+            creatingFolder = false, folderError = "Se perdió la conexión; revisa la carpeta antes de reintentar")
         retireInteraction()
         objectPropertyRequests.clear()
         synchronized(objectPropertiesLock) { liveObjectProperties.clear() }
@@ -276,6 +280,9 @@ class WebSocketRemoteBlenderClient(
         socket?.cancel()
         clearSculptTransport()
         pending.clear()
+        browserRequests.retire()
+        if (_remoteFiles.value.creatingFolder) _remoteFiles.value = _remoteFiles.value.copy(
+            creatingFolder = false, folderError = "Se perdió la conexión; revisa la carpeta antes de reintentar")
         retireInteraction()
         objectPropertyRequests.clear()
         synchronized(objectPropertiesLock) { liveObjectProperties.clear() }
@@ -467,6 +474,7 @@ class WebSocketRemoteBlenderClient(
         // Registrar antes de enviar evita una carrera con sockets/fakes muy rápidos:
         // la respuesta nunca puede adelantarse a su entrada en `pending`.
         pending[id] = name
+        if (name == "file.browse" || name == "file.mkdir") browserRequests.sent(id)
         duplicateRequests.sent(payload, id)
         if (trackedSessionCommand(name)) sessionRequests.sent(id)
         if (name == "object.properties") objectPropertyRequests[id] = payload.optString("request_token")
@@ -670,8 +678,19 @@ class WebSocketRemoteBlenderClient(
         command("file.locations")
     }
     override fun fileBrowse(path: String?) {
-        _remoteFiles.value = _remoteFiles.value.copy(loading = true)
+        if (_remoteFiles.value.creatingFolder) return
+        browserRequests.retire()
+        _remoteFiles.value = _remoteFiles.value.copy(loading = true, folderError = null)
         command("file.browse", JSONObject().apply { path?.let { put("path", it) } })
+    }
+    override fun clearFolderError() { _remoteFiles.value = _remoteFiles.value.copy(folderError = null) }
+    override fun fileCreateFolder(folder: String, name: String) {
+        if (_remoteFiles.value.creatingFolder || !_state.value.features.fileMkdir) return
+        browserRequests.retire()
+        _remoteFiles.value = _remoteFiles.value.copy(creatingFolder = true, folderError = null)
+        if (!sendCommand("file.mkdir", JSONObject().put("folder", folder).put("name", name))) {
+            _remoteFiles.value = _remoteFiles.value.copy(creatingFolder = false, folderError = "No se pudo enviar; comprueba la conexión")
+        }
     }
     override fun fileDefaultFolder(path: String) =
         command("file.default_folder", JSONObject().put("path", path))
@@ -1011,6 +1030,7 @@ class WebSocketRemoteBlenderClient(
                 val command = pending.remove(id)
                 val propertyToken = objectPropertyRequests.remove(id)
                 val sent = sentAtNs.remove(id)
+                if ((command == "file.browse" || command == "file.mkdir") && !browserRequests.accept(id)) return
                 if (trackedSessionCommand(command) && !sessionRequests.accept(id)) return
                 if (command == "selection.pick" || command == "selection.shortest_path") pickInFlight.set(false)
                 if (sent != null && (command == "selection.paint" || command == "selection.pick" || command == "selection.shortest_path" || command?.startsWith("transform.") == true)) {
@@ -1048,7 +1068,13 @@ class WebSocketRemoteBlenderClient(
                         // Un sondeo fallido no es un error que enseñar: significa que
                         // bajo el dedo no había nada, y el menú radial ya sabe qué
                         // ofrecer en ese caso. Lo mismo el sondeo de loop cut.
-                        if (command == "snap.query") _touchProbe.value = TouchProbe(hit = false)
+                        if (command == "file.mkdir") _remoteFiles.value = _remoteFiles.value.copy(
+                            creatingFolder = false, folderError = message.optString("error", "No se pudo crear la carpeta"))
+                        else if (command == "file.browse") {
+                            _remoteFiles.value = _remoteFiles.value.copy(loading = false)
+                            _errors.value = message.optString("error", "No se pudo abrir la carpeta")
+                        }
+                        else if (command == "snap.query") _touchProbe.value = TouchProbe(hit = false)
                         else if (command == "mesh.loop_probe") _loopProbe.value = LoopProbe(hit = false)
                         else if (command == "tool.snap_candidate") flushToolSnap()
                         else if (command == "tool.knife_drag") flushKnifeDrag()
@@ -1158,7 +1184,10 @@ class WebSocketRemoteBlenderClient(
                         }
                     }
                     command == "file.locations" -> updateFileLocations(result)
-                    command == "file.browse" -> updateFileBrowser(result)
+                    command == "file.browse" || command == "file.mkdir" -> {
+                        updateFileBrowser(result)
+                        if (command == "file.mkdir") _remoteFiles.value = _remoteFiles.value.copy(creatingFolder = false, folderError = null)
+                    }
                     command == "file.default_folder" -> {
                         updateFileLocations(result)
                         fileBrowse(result?.optString("default_folder")?.takeIf { it.isNotBlank() })
@@ -1341,7 +1370,6 @@ class WebSocketRemoteBlenderClient(
         _remoteFiles.value = _remoteFiles.value.copy(
             defaultFolder = parsed.defaultFolder,
             locations = parsed.locations,
-            loading = false,
         )
     }
 

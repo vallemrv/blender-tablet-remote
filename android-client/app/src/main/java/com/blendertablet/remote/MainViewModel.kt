@@ -1411,6 +1411,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun browseFiles(path: String) = client.fileBrowse(path)
     fun setDefaultFolder(path: String) = client.fileDefaultFolder(path)
+    fun createFolder(folder: String, name: String) = client.fileCreateFolder(folder, name)
+    fun clearFolderError() = client.clearFolderError()
 
     /**
      * Abre una transformación modal. Se mantiene abierta aunque se levante el dedo:

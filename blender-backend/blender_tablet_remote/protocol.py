@@ -543,6 +543,6 @@ FEATURES = {
                             "geometric_tools": ["EXTRUDE"], "locked_candidate": True}},
     "edit_catalog": EDIT_CATALOG,
     "edit_toolbar": EDIT_TOOLBAR,
-    "files": {"version": 1, "browse": True, "default_folder": True,
+    "files": {"version": 1, "browse": True, "mkdir": True, "default_folder": True,
               "relative_paths": True},
 }

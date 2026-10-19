@@ -2701,3 +2701,11 @@ recuerda la elección; los puntos explícitos se limitan a la identidad de la es
 `INDIVIDUAL` también se admite en `transform.reference_candidate.preset`. En Objeto
 usa cada origen; en Edición conserva la semántica nativa de centros individuales.
 En ese modo el snap admite `NONE`/`INCREMENT`, sin fuente/destino geométricos comunes.
+
+### Nueva carpeta en Guardar como
+
+La capacidad `files.mkdir` habilita `file.mkdir {folder, name}`. `folder` es el token
+de la ubicación actual; `name` es un único nombre, sin separadores, NUL, dos puntos
+ni `.`/`..`. Crea exclusivamente ese hijo (no crea padres ni sobrescribe). Devuelve
+el mismo esquema de `file.browse` para entrar en la carpeta creada. Errores:
+`already_exists`, `not_found`, `not_directory`, `access_denied`, `io_error`.

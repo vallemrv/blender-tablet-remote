@@ -268,6 +268,8 @@ interface RemoteBlenderClient {
     fun fileLocations()
     fun fileBrowse(path: String? = null)
     fun fileDefaultFolder(path: String)
+    fun fileCreateFolder(folder: String, name: String)
+    fun clearFolderError()
 
     /**
      * Transformación modal: se abre, se ajusta cuantas veces haga falta y **solo
