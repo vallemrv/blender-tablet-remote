@@ -65,6 +65,28 @@ class LoopCutTests(unittest.TestCase):
             tools.loop_pick({'u':.5,'v':.5,'add':True})
         self.assertEqual(tools.tool_session.params['factor'], 0.0)
 
+    def test_selected_edge_does_not_start_cut_and_cancel_is_idempotent(self):
+        bm=bmesh.from_edit_mesh(bpy.context.object.data)
+        bm.edges.ensure_lookup_table(); bm.edges[self.edge].select_set(True)
+        baseline=self.coords()
+        state=tools.begin({'tool':'LOOP_CUT','parameters':{}})
+        self.assertTrue(state['armed']);self.assertFalse(state['active'])
+        self.assertEqual(self.coords(),baseline)
+        self.assertFalse(any(v.select for v in bm.verts))
+        self.assertFalse(any(e.select for e in bm.edges))
+        tools.cancel({});tools.cancel({})
+        self.assertFalse(tools.tool_session.armed_tool)
+
+    def test_exact_position_buttons_are_not_rounded_by_increment_snap(self):
+        self.begin()
+        tools.parameter({'parameters':{'snap_type':'INCREMENT','snap_step':.1}})
+        for factor in (.02,.04,.02,0):
+            state=tools.parameter({'parameters':{'factor':factor}})
+            self.assertAlmostEqual(state['parameters']['factor'],factor)
+        for distance in (.0001,.0002,.0001,0):
+            state=tools.parameter({'parameters':{'slide_distance':distance}})
+            self.assertAlmostEqual(state['slide_distance'],distance)
+
     def test_metric_offset_scale_and_no_accumulation(self):
         self.begin()
         for distance in (.005, .01, -.005, 0.0):
@@ -108,6 +130,23 @@ class LoopCutTests(unittest.TestCase):
         self.assertAlmostEqual(result['slide_distance'], .002 + .1*state['slide_range'])
         tools.cancel({})
         self.assertEqual(self.coords(), before)
+
+    def test_looptools_space_distributes_chain_without_changing_topology(self):
+        try:bpy.ops.mesh.looptools_space.get_rna_type()
+        except (AttributeError, RuntimeError, KeyError):self.skipTest('Real LoopTools required')
+        bpy.ops.object.mode_set(mode='OBJECT')
+        obj=bpy.context.object
+        data=bpy.data.meshes.new('Uneven chain')
+        data.from_pydata([(0,0,0),(.2,0,0),(2,0,0),(3,0,0)],[(0,1),(1,2),(2,3)],[])
+        obj.data=data
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.context.tool_settings.mesh_select_mode=(True,False,False)
+        bpy.ops.mesh.select_all(action='SELECT')
+        mesh.looptools_space({})
+        bm=bmesh.from_edit_mesh(obj.data)
+        positions=sorted(v.co.x for v in bm.verts)
+        self.assertEqual(len(bm.edges),3)
+        for actual,expected in zip(positions,(0,1,2,3)):self.assertAlmostEqual(actual,expected,places=5)
 
     def test_circle_undo_retains_cuts_then_next_undo_removes_them(self):
         try:bpy.ops.mesh.looptools_circle.get_rna_type()

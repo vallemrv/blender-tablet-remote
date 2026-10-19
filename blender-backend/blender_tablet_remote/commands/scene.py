@@ -8,7 +8,7 @@ import bpy
 
 from .. import state
 from ..errors import CommandError
-from ..protocol import ENUMS, FEATURES, LOOPTOOLS_CIRCLE_ACTION, PROTOCOL_VERSION, UNITS
+from ..protocol import ENUMS, FEATURES, LOOPTOOLS_CIRCLE_ACTION, LOOPTOOLS_SPACE_ACTION, PROTOCOL_VERSION, UNITS
 from . import command, names
 
 
@@ -63,15 +63,14 @@ def capabilities(payload: dict) -> dict:
     from .. import VERSION
 
     features = deepcopy(FEATURES)
-    try:
-        bpy.ops.mesh.looptools_circle.get_rna_type()
-        circle_available = True
-    except (AttributeError, KeyError, RuntimeError):
-        circle_available = False
-    if circle_available:
+    for descriptor, name in ((LOOPTOOLS_CIRCLE_ACTION, "looptools_circle"), (LOOPTOOLS_SPACE_ACTION, "looptools_space")):
+        try:
+            getattr(bpy.ops.mesh, name).get_rna_type()
+        except (AttributeError, KeyError, RuntimeError):
+            continue
         catalog = features["edit_catalog"]["groups"]
         for mode in ("VERTEX", "EDGE"):
-            action = deepcopy(LOOPTOOLS_CIRCLE_ACTION)
+            action = deepcopy(descriptor)
             action["requirements"]["selection_modes"] = [mode]
             catalog[mode].insert(1, action)
 

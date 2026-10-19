@@ -94,7 +94,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val h264Stream = H264ViewportStream(viewModelScope) { fallbackToMjpeg() }
     val h264Size = h264Stream.size
     private var cadStroke = false
-    private var loopCutArmed = false
     private var facePickRole: String? = null
     private var lastFacePointer: Pair<Float, Float>? = null
     private var lastReferencePointer: Pair<Float, Float>? = null
@@ -159,6 +158,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
+            client.errors.collect { error ->
+                if (error != null && !client.toolSession.value.active && !client.toolSession.value.armed && !client.transformSession.value.active) {
+                    local.update { it.copy(activeTool = ActiveTool.SELECT, shapeTool = ShapeTool.NONE, loopCutAwaitingTap = false) }
+                }
+            }
+        }
+        viewModelScope.launch {
             combine(client.connection, client.state) { connection, state ->
                 connection == ConnectionStatus.CONNECTED && state.features.cad.available
             }.distinctUntilChanged().collect { ready ->
@@ -167,14 +173,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        viewModelScope.launch {
-            client.state.collect { state ->
-                if (loopCutArmed && state.mode == BlenderMode.EDIT && state.context.selectionCounts.edges > 0) {
-                    loopCutArmed = false
-                    client.toolBegin(EditTool.LOOP_CUT, toolDefaultParameters(EditTool.LOOP_CUT))
-                }
-            }
-        }
         // La copia nace encima del original y no se ve. Como el Shift+D de Blender, se
         // entrega agarrada al gesto de mover: así se ve nacer y se coloca de una vez.
         // Cancelar el Mover no deshace el duplicado, son pasos de undo distintos.
@@ -238,28 +236,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (ready) client.requestSceneScales()
             }
         }
-        // El toque elige el anillo; el corte comienza centrado. Un sondeo fallido
-        // simplemente deja el hint vivo para el próximo toque.
-        viewModelScope.launch {
-            client.loopProbe.collect { probe ->
-                if (probe != null && probe.hit && probe.edge >= 0) {
-                    val awaiting = local.value.loopCutAwaitingTap
-                    if (awaiting && !client.toolSession.value.active) {
-                        local.update { it.copy(loopCutAwaitingTap = false) }
-                        client.clearLoopProbe()
-                        client.toolBegin(
-                            EditTool.LOOP_CUT,
-                            toolDefaultParameters(EditTool.LOOP_CUT) +
-                                mapOf("edge" to probe.edge.toDouble(), "factor" to 0.0),
-                        )
-                    }
-                }
-            }
-        }
         // El puerto del vídeo lo anuncia el servidor en el "hello": el usuario solo
         // configura el de control y el vídeo se engancha solo (§63).
         viewModelScope.launch {
             client.toolSession.collect { session ->
+                if (session.active) local.update { it.copy(loopCutAwaitingTap = false) }
                 if (session.tool != EditTool.KNIFE) {
                     if (_knifeScreenPoints.value.isNotEmpty()) _knifeScreenPoints.value = emptyList()
                 } else {
@@ -338,10 +319,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun onBackground() {
         videoForeground = false
         cancelCadStroke(); cancelMaterialStroke(); cancelSculptStroke()
+        closeSessions()
+        local.update { it.copy(activeTool = ActiveTool.SELECT, shapeTool = ShapeTool.NONE, referencePicking = false) }
         h264Stream.pause(); stream.stop()
     }
 
     fun disconnect() {
+        closeSessions()
+        local.update { it.copy(activeTool = ActiveTool.SELECT, shapeTool = ShapeTool.NONE) }
         cancelMaterialStroke()
         cancelSculptStroke()
         h264Stream.stopTransport()
@@ -649,9 +634,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         closeSessions()
         local.update { it.copy(
             shapeTool = ShapeTool.NONE,
-            activeTool = if (mode == BlenderMode.SCULPT || client.state.value.mode == BlenderMode.SCULPT ||
-                (mode != BlenderMode.EDIT && it.activeTool == ActiveTool.TWEAK))
-                ActiveTool.SELECT else it.activeTool,
+            activeTool = ActiveTool.SELECT,
             shortestPathActive = if (mode == BlenderMode.EDIT) it.shortestPathActive else false,
         ) }
         client.setMode(mode)
@@ -668,13 +651,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val cancelled = cancelTweakGesture()
         // END ya enviado puede seguir figurando como MOVE hasta recibir su respuesta.
         // El cierre de Tweak es su propio END/CANCEL, identificado por sesión.
-        if (!wasTweak && !cancelled && client.transformSession.value.active) client.transformCancel()
+        if (!wasTweak && !cancelled && client.connection.value == ConnectionStatus.CONNECTED) client.transformCancel()
     }
 
     private fun closeSessions() {
         closeTransformForToolChange()
-        if (client.toolSession.value.active) client.toolCancel()
-        loopCutArmed = false
+        if (client.connection.value == ConnectionStatus.CONNECTED) client.toolCancel()
         local.update { it.copy(loopCutAwaitingTap = false) }
     }
     /**
@@ -811,10 +793,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     client.toolLoopPick(u.toDouble(), v.toDouble(), add = add)
                     return
                 }
-                if (local.value.loopCutAwaitingTap) {
-                    client.meshLoopProbe(u.toDouble(), v.toDouble())
+                if (client.toolSession.value.armed && client.toolSession.value.tool == EditTool.LOOP_CUT) {
+                    client.toolLoopPick(u.toDouble(), v.toDouble(), add = false)
                     return
                 }
+                if (local.value.loopCutAwaitingTap) return
             }
         }
         val session = client.transformSession.value
@@ -1125,20 +1108,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Herramientas paramétricas de Edit Mode. */
     fun beginEditTool(tool: EditTool) {
-        closeTransformForToolChange()
-        local.update { it.copy(activeTool = ActiveTool.valueOf(tool.name), loopCutAwaitingTap = false) }
-        if (tool == EditTool.LOOP_CUT && client.state.value.context.selectionCounts.edges == 0) {
-            if (client.state.value.features.loopCutPick) {
-                // Sin arista elegida, el PRÓXIMO TOQUE en la malla coloca el corte:
-                // el flujo Ctrl+R de la tablet. No hay que seleccionar nada antes.
-                local.update { it.copy(loopCutAwaitingTap = true) }
-            } else {
-                // Servidor sin colocación por toque: se mantiene el flujo histórico
-                // de seleccionar una arista y esperar el snapshot.
-                loopCutArmed = true
-                client.setSelectionMode(SelectionMode.EDGE)
-            }
-        } else client.toolBegin(tool, toolDefaultParameters(tool))
+        closeSessions()
+        local.update { it.copy(activeTool = ActiveTool.valueOf(tool.name), loopCutAwaitingTap = tool == EditTool.LOOP_CUT) }
+        client.toolBegin(tool, toolDefaultParameters(tool))
     }
 
     fun beginAlignment(objectName: String?) {
@@ -1225,17 +1197,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             client.toolBegin(tool, withGlobalSnap(tool, params))
             return
         }
-        if (action.id == "CONNECT_VERTICES") selectTool()
+        selectTool()
         client.editCatalogCommand(action.command, action.payload)
     }
     fun confirmTool() {
-        loopCutArmed = false
         local.update { it.copy(loopCutAwaitingTap = false) }
         client.toolConfirm()
     }
 
     fun cancelTool() {
-        loopCutArmed = false
         local.update { it.copy(loopCutAwaitingTap = false) }
         client.toolCancel()
     }
@@ -1408,8 +1378,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             local.update { it.copy(activeTool = ActiveTool.SELECT) }
         }
         // Una transformación y una herramienta paramétrica no conviven: cerrar la otra.
-        if (client.toolSession.value.active) client.toolCancel()
-        loopCutArmed = false
+        if (client.connection.value == ConnectionStatus.CONNECTED) client.toolCancel()
         local.update { it.copy(loopCutAwaitingTap = false) }
         if (mode == TransformMode.SCALE) {
             val unit = client.state.value.sceneScale.lengthUnit.transformStepUnit()
@@ -1452,7 +1421,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun activateTweak() {
         closeTransformForToolChange()
         if (client.toolSession.value.active || client.toolSession.value.armed) client.toolCancel()
-        loopCutArmed = false
         local.update { it.copy(activeTool = ActiveTool.TWEAK, loopCutAwaitingTap = false,
             shapeTool = ShapeTool.NONE, referencePicking = false) }
     }

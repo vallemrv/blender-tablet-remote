@@ -876,34 +876,34 @@ def split(payload: dict) -> dict:
 
 @command("mesh.looptools_circle", mutating=True)
 def looptools_circle(payload: dict) -> dict:
-    """Ejecuta Circle del add-on LoopTools; nunca lo sustituye por una copia local."""
+    return _looptools(payload, "circle", 3)
+
+
+@command("mesh.looptools_space", mutating=True)
+def looptools_space(payload: dict) -> dict:
+    return _looptools(payload, "space", 2)
+
+
+def _looptools(payload, operation, minimum):
     obj, bm = _bm_and_obj()
-    vert_mode, edge_mode, face_mode = _select_mode()
-    if face_mode or not (vert_mode or edge_mode):
-        raise CommandError("LoopTools Circle requires Vertex or Edge select mode",
-                           code="incompatible_selection")
-    selected_verts = [vert for vert in bm.verts if vert.select and not vert.hide]
-    if len(selected_verts) < 3:
-        raise CommandError("Select at least three vertices for LoopTools Circle",
-                           code="empty_selection")
+    if _select_mode()[2]:
+        raise CommandError("LoopTools necesita selección de vértices o aristas", code="incompatible_selection")
+    selected = [v for v in bm.verts if v.select and not v.hide]
+    if len(selected) < minimum:
+        raise CommandError(f"Selecciona al menos {minimum} vértices para LoopTools", code="empty_selection")
     try:
-        operator = bpy.ops.mesh.looptools_circle
+        operator = getattr(bpy.ops.mesh, "looptools_" + operation)
         operator.get_rna_type()
     except (AttributeError, KeyError, RuntimeError) as exc:
-        raise CommandError("LoopTools is not installed and enabled",
-                           code="dependency_unavailable") from exc
+        raise CommandError("LoopTools no está habilitado", code="dependency_unavailable") from exc
     try:
         result = operator('EXEC_DEFAULT', False)
     except RuntimeError as exc:
-        raise CommandError("LoopTools Circle cannot process this selection",
-                           code="topology_incompatible") from exc
+        raise CommandError("LoopTools no puede procesar esta selección", code="topology_incompatible") from exc
     if "FINISHED" not in result:
-        raise CommandError("LoopTools Circle did not finish",
-                           code="topology_incompatible")
-    # Desde el pump no hay un operador UI que cierre la acción remota.
-    # Desactivar su undo implícito y registrar exactamente el resultado confirmado.
-    _undo(payload, 'Remote LoopTools Circle')
-    return {"object": obj.name, "vertices": len(selected_verts)}
+        raise CommandError("LoopTools no completó la operación", code="topology_incompatible")
+    _undo(payload, 'Remote LoopTools ' + operation.title())
+    return {"object": obj.name, "vertices": len(selected)}
 
 
 @command("mesh.separate", mutating=True)

@@ -296,6 +296,11 @@ LOOPTOOLS_CIRCLE_ACTION = {
 }
 
 
+LOOPTOOLS_SPACE_ACTION = dict(LOOPTOOLS_CIRCLE_ACTION,
+    id="LOOPTOOLS_SPACE", label="Espaciar", command="mesh.looptools_space",
+    requirements={"mode": "EDIT", "selection_modes": ["VERTEX", "EDGE"], "selection": {"verts": {"min": 2}}})
+
+
 SELECTION_SIMILAR = {
     "VERTEX": [("VERT_NORMAL", "Misma normal"), ("VERT_FACES", "Mismo número de caras"),
                ("VERT_EDGES", "Mismo número de aristas"), ("VERT_GROUPS", "Mismo grupo de vértices")],
@@ -317,6 +322,9 @@ def _similar_action(mode, count):
 EDIT_CATALOG = {
     "version": 1,
     "conditional_actions": [
+        {"id": "LOOPTOOLS_SPACE", "label": "Espaciar", "command": "mesh.looptools_space",
+         "execution": "DISCRETE", "selection_modes": ["VERTEX", "EDGE"],
+         "availability": "OPERATOR_REGISTERED", "operator": "mesh.looptools_space"},
         {
             "id": LOOPTOOLS_CIRCLE_ACTION["id"],
             "label": LOOPTOOLS_CIRCLE_ACTION["label"],

@@ -515,7 +515,11 @@ private fun PositionStepper(session: ToolSession, onParameter: (String, Any?) ->
     val metersPerUnit = when (unit) { "mm" -> 0.001; "cm" -> 0.01; else -> 1.0 }
     val value = if (metric) session.slideDistance / metersPerUnit else (factor + 1.0) * 50.0
     // null muestra el valor remoto; vacío conserva el borrado mientras se escribe.
-    var text by remember(unit) { mutableStateOf<String?>(null) }
+    var text by remember(session.sessionId, session.loopCount, unit) { mutableStateOf<String?>(null) }
+    var pending by remember(session.sessionId, session.loopCount, unit) { mutableStateOf<Double?>(null) }
+    LaunchedEffect(value) { if (pending?.let { kotlin.math.abs(it - value) < 1e-9 } == true) pending = null }
+    val shown = pending ?: value
+    val step = if (metric) (session.slideRange / metersPerUnit / 100.0).coerceAtMost(1.0) else 1.0
     val limit = if (session.flag("clamp", true)) 1.0 else 2.0
     val minimum = if (metric) -limit * session.slideRange / metersPerUnit else (1.0 - limit) * 50.0
     val maximum = if (metric) limit * session.slideRange / metersPerUnit else (1.0 + limit) * 50.0
@@ -524,14 +528,15 @@ private fun PositionStepper(session: ToolSession, onParameter: (String, Any?) ->
         val bounded = number.coerceIn(minimum, maximum)
         if (metric) onParameter("slide_distance", bounded * metersPerUnit)
         else onParameter("factor", bounded / 50.0 - 1.0)
+        pending = bounded
         text = null
     }
-    fun commit() { text?.let { NumericExpression.evaluate(it, value) }?.let(::send) }
+    fun commit() { text?.let { NumericExpression.evaluate(it, shown) }?.let(::send) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(if (metric) "Desde centro" else "Posición", color = Ink.Faint, fontSize = 11.sp)
-        StepperButton("−") { send(value - 1.0) }
+        StepperButton("−") { send((text?.let { NumericExpression.evaluate(it, shown) } ?: shown) - step) }
         CompactNumericField(
-            value = text ?: format(value, false),
+            value = text ?: formatToolDistance(shown, detailDecimalPlaces(shown, 4)),
             onValueChange = { text = it }, onDone = { commit() },
             modifier = Modifier.width(72.dp),
         )
@@ -544,9 +549,9 @@ private fun PositionStepper(session: ToolSession, onParameter: (String, Any?) ->
                 }
             }
         }
-        StepperButton("+") { send(value + 1.0) }
+        StepperButton("+") { send((text?.let { NumericExpression.evaluate(it, shown) } ?: shown) + step) }
         PillButton("Aplicar", enabled = !text.isNullOrBlank()) { commit() }
-        PillButton("Centro") { onParameter("factor", 0.0); text = null }
+        PillButton("Centro") { onParameter("factor", 0.0); text = null; pending = if (metric) 0.0 else 50.0 }
     }
 }
 

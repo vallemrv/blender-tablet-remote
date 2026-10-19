@@ -1415,6 +1415,8 @@ def confirm(payload: dict) -> dict:
 @command("transform.cancel", mutating=True)
 def cancel(payload: dict) -> dict:
     """Devuelve todo a como estaba antes de `transform.begin`."""
+    if not session.active:
+        return dict(state.snapshot(include_view=False), active=False)
     session.require(payload.get("_client_id"))
     session.restore()
     session.reset()

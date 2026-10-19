@@ -250,6 +250,7 @@ object AppIcons {
         "RECALCULATE_NORMALS_OUTSIDE" -> StudioIcons["NORMALS"]
         "RECALCULATE_NORMALS_INSIDE" -> StudioIcons["NORMALS_INSIDE"]
         "FLIP_NORMALS" -> StudioIcons["NORMALS_FLIP"]
+        "LOOPTOOLS_SPACE" -> StudioIcons["SPACE_VERTICES"]
         "LOOPTOOLS_CIRCLE" -> StudioIcons["MAKE_CIRCLE"]
         else -> Fallback
     }

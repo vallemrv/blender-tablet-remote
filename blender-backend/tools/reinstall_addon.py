@@ -46,6 +46,10 @@ def main() -> None:
     for key, value in preserved.items():
         setattr(prefs, key, value)
     prefs.autostart = True
+    if "--enable-looptools" in sys.argv:
+        result = bpy.ops.preferences.addon_enable(module="bl_ext.blender_org.looptools")
+        if "FINISHED" not in result:
+            raise RuntimeError("No se pudo habilitar LoopTools")
     bpy.ops.wm.save_userpref()
     print(f"REINSTALLED module={MODULE} autostart={prefs.autostart} host={prefs.host} port={prefs.port}")
 

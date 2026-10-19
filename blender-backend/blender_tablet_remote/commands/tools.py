@@ -75,6 +75,7 @@ class ToolSession:
         self.line = None  # {"start": [u, v], "end": [u, v]} de la sesión Bisect
         self.snap_candidate = None
         self.extrude_value_exact = False
+        self.loop_value_exact = False
         self.alignment = None
         # Armado: familia/variante elegida, aún sin backup ni preview (B1/B3/B4).
         self.armed_tool = None
@@ -160,13 +161,13 @@ class ToolSession:
             self.arm(tool, owner, {"variant": "CURSOR", "rotate_source": params.get("rotate_source", True)})
             return
         if tool == "LOOP_CUT" and "edge" not in params:
-            seed = next((edge for edge in bm.edges if edge.select and not edge.hide), None)
-            if seed is None:
-                # Sin arista de partida, la familia queda armada: el primer
-                # `tool.loop_pick` sobre el viewport es quien la activa de verdad.
-                self.arm(tool, owner, params)
-                return
-            params = dict(params, edge=seed.index)
+            # Elegir la herramienta nunca interpreta la selección como un corte.
+            bm.select_history.clear()
+            for seq in (bm.verts, bm.edges, bm.faces):
+                for element in seq: element.select = False
+            bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
+            self.arm(tool, owner, params)
+            return
         if tool == "BISECT":
             # Bisect siempre arma: su geometría solo existe tras un arrastre de
             # línea completo (`tool.drag_line`), nunca al elegir la herramienta.
@@ -193,6 +194,7 @@ class ToolSession:
         try:
             self.preview()
         except Exception:
+            self.restore_safely()
             self.close()
             raise
 
@@ -282,7 +284,7 @@ class ToolSession:
                 raise CommandError(f"Knife cut failed: {exc}", code="topology_incompatible") from exc
             return
         payload = dict(self.params)
-        if self.tool == "EXTRUDE" and self.extrude_value_exact:
+        if (self.tool == "EXTRUDE" and self.extrude_value_exact) or (self.tool == "LOOP_CUT" and self.loop_value_exact):
             payload["snap_type"] = "NONE"
         if str(payload.get("snap_type", "NONE")).upper() in {"VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER", "CURSOR"}:
             payload["snap_type"] = "NONE"  # aún no hay candidato o ya se resuelve abajo
@@ -480,6 +482,9 @@ def parameter(payload):
         raise BadPayload("'parameters' must be an object")
     if tool_session.tool == 'LOOP_CUT':
         old = dict(tool_session.params)
+        old_exact = tool_session.loop_value_exact
+        if 'factor' in params or 'slide_distance' in params:
+            tool_session.loop_value_exact = True
         if 'factor' in params or params.get('even') is False:
             tool_session.params.pop('slide_distance', None)
         tool_session.params.update(params)
@@ -487,6 +492,7 @@ def parameter(payload):
             tool_session.preview()
         except Exception:
             tool_session.params = old
+            tool_session.loop_value_exact = old_exact
             tool_session.preview()
             raise
         return tool_session.status()
@@ -945,6 +951,8 @@ def nudge(payload):
     tool_session.params[primary] = nxt
     if tool_session.tool == "EXTRUDE":
         tool_session.extrude_value_exact = False
+    if primary == 'factor':
+        tool_session.loop_value_exact = False
     if primary == 'factor' and 'slide_distance' in tool_session.params:
         tool_session.params['slide_distance'] = nxt * tool_session.result['slide_range']
     tool_session.preview()
@@ -1004,7 +1012,7 @@ def cancel(payload):
         tool_session.require_armed_owner(owner)
         tool_session.disarm()
         return {"active": False, "armed": False, "phase": "CANCELLED"}
-    raise CommandError("No tool in progress", code="no_session")
+    return {"active": False, "armed": False, "phase": "CANCELLED"}
 
 
 @command("tool.status")

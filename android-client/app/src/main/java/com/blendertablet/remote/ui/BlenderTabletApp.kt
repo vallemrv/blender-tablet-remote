@@ -727,8 +727,12 @@ private val RADIAL_TOP_LEVEL_CATALOG_IDS =
     setOf("SELECT_LOOP", "SELECT_RING", "SELECT_LINKED", "SELECT_SIMILAR", "DELETE", "HIDE")
 
 /** Convierte el contrato opaco en filas, sin repartir nombres wire por la UI. */
-private fun editCatalogActions(actions: List<EditCatalogAction>, vm: MainViewModel): List<QuickAction> =
-    actions.map { action ->
+private fun editCatalogActions(actions: List<EditCatalogAction>, vm: MainViewModel): List<QuickAction> {
+    val loopTools = actions.filter { it.id.startsWith("LOOPTOOLS_") }
+    val ordinary = actions.filterNot { it.id.startsWith("LOOPTOOLS_") }
+    val group = if (loopTools.isEmpty()) emptyList() else listOf(QuickAction("LoopTools", AppIcons.editCatalog("LOOPTOOLS_CIRCLE"),
+        children = loopTools.map { action -> QuickAction(action.label, AppIcons.editCatalog(action.id), enabled = action.enabled) { vm.editCatalogAction(action) } }))
+    return group + ordinary.map { action ->
         val variants = action.variants.filter { it.enabled }
         if (variants.isEmpty()) {
             QuickAction(action.label, AppIcons.editCatalog(action.id), enabled = action.enabled) {
@@ -750,6 +754,8 @@ private fun editCatalogActions(actions: List<EditCatalogAction>, vm: MainViewMod
             )
         }
     }
+
+}
 
 /** Acción que descarta el archivo abierto y por tanto necesita confirmación. */
 private sealed class PendingDiscard(

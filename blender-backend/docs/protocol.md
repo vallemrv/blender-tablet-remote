@@ -2594,3 +2594,22 @@ se envía como `type`. El backend rechaza criterios de otro submodo, selección
 vacía y sesiones activas. Conserva geometría y ocultos; un cambio de selección
 crea un undo. Android lo ofrece únicamente en el rail de selección, junto a
 Loop/Ring/Enlazado. Camino más corto usa un icono, sin abreviatura visible.
+
+
+### Cierre de herramientas y primer Corte de loop
+
+`tool.begin {tool:"LOOP_CUT",parameters:{...}}` sin `edge` deselecciona y devuelve
+`armed:true, active:false`; el primer `tool.loop_pick` válido crea la preview
+centrada. Android utiliza ese flujo sin sondeos de selección diferidos. Los
+clientes que ya conocen una arista pueden seguir enviando `edge` explícito.
+`tool.parameter` con `factor` o `slide_distance` conserva el número exacto aunque
+el gesto tenga snap por incremento. `tool.nudge` continúa aplicando ese snap.
+`tool.cancel` y `transform.cancel` sin sesión son cierres idempotentes.
+Android invalida respuestas, nudges y sondeos pendientes al cerrar/cambiar
+herramienta, cambiar modo y pasar a segundo plano; errores de sesión vuelven a
+un estado local inactivo y solicitan un snapshot nuevo.
+
+`mesh.looptools_space {}` usa Espaciado del add-on LoopTools nativo, con dos o
+más vértices elegidos en Vertex/Edge. `mesh.looptools_circle {}` requiere tres.
+Ambos se anuncian condicionalmente en `edit_catalog` y registran un undo propio.
+Android los agrupa en radial → Malla → LoopTools.

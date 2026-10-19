@@ -139,6 +139,7 @@ class WebSocketRemoteBlenderClient(
     private var attempt = 0
     private val generation = AtomicInteger(0)
     private val pending = ConcurrentHashMap<String, String>()
+    private val sessionRequests = SessionRequests()
     private val objectPropertyRequests = ConcurrentHashMap<String, String>()
     private val liveObjectProperties = com.blendertablet.remote.model.LiveObjectProperties()
     private val objectPropertiesLock = Any()
@@ -216,6 +217,7 @@ class WebSocketRemoteBlenderClient(
         socket = null
         clearSculptTransport()
         pending.clear()
+        retireInteraction()
         objectPropertyRequests.clear()
         synchronized(objectPropertiesLock) { liveObjectProperties.clear() }
         sentAtNs.clear()
@@ -272,6 +274,7 @@ class WebSocketRemoteBlenderClient(
         socket?.cancel()
         clearSculptTransport()
         pending.clear()
+        retireInteraction()
         objectPropertyRequests.clear()
         synchronized(objectPropertiesLock) { liveObjectProperties.clear() }
         sentAtNs.clear()
@@ -387,7 +390,29 @@ class WebSocketRemoteBlenderClient(
         }
     }
 
+    private fun retireInteraction() {
+        sessionRequests.retire()
+        pendingNudge = 0.0; nudgeInFlight = false
+        pendingToolSnap = null; toolSnapInFlight.set(false)
+        pendingKnifeDrag = null; knifeDragInFlight.set(false)
+        pendingTransformSnap = null; transformSnapInFlight.set(false)
+        _toolSession.value = ToolSession()
+        _transformSession.value = TransformSession()
+        _loopProbe.value = null
+    }
+
+    private fun trackedSessionCommand(name: String?) = name != null &&
+        (name.startsWith("tool.") || name.startsWith("transform.") || name.startsWith("mode."))
+
     private fun sendCommand(name: String, payload: JSONObject = JSONObject()): Boolean {
+        if (name in setOf("tool.begin", "transform.begin", "tool.cancel", "tool.confirm", "transform.cancel", "transform.confirm",
+                "mode.set", "mode.object", "mode.edit", "mode.sculpt", "history.undo", "history.redo", "file.new", "file.open")) {
+            _errors.value = null
+            retireInteraction()
+        } else if (name in TOOL_COMMANDS && name != "tool.status" && !_toolSession.value.active && !_toolSession.value.armed) {
+            return true
+        }
+
         if (name in setOf("history.undo", "history.redo", "mode.set", "file.new", "file.open", "file.save", "file.save_as",
                 "object.select", "selection.pick", "outliner.action", "outliner.move", "outliner.collection", "transform.begin", "tool.begin")) {
             synchronized(objectPropertiesLock) {
@@ -436,6 +461,7 @@ class WebSocketRemoteBlenderClient(
         // Registrar antes de enviar evita una carrera con sockets/fakes muy rápidos:
         // la respuesta nunca puede adelantarse a su entrada en `pending`.
         pending[id] = name
+        if (trackedSessionCommand(name)) sessionRequests.sent(id)
         if (name == "object.properties") objectPropertyRequests[id] = payload.optString("request_token")
         if (CadDepthCommandQueue.waitsForResponse(name)) cadInFlightRequest = id
         sentAtNs[id] = System.nanoTime()
@@ -963,6 +989,7 @@ class WebSocketRemoteBlenderClient(
                 val command = pending.remove(id)
                 val propertyToken = objectPropertyRequests.remove(id)
                 val sent = sentAtNs.remove(id)
+                if (trackedSessionCommand(command) && !sessionRequests.accept(id)) return
                 if (command == "selection.pick" || command == "selection.shortest_path") pickInFlight.set(false)
                 if (sent != null && (command == "selection.paint" || command == "selection.pick" || command == "selection.shortest_path" || command?.startsWith("transform.") == true)) {
                     Log.d(LATENCY_TAG, "response command=$command ok=${message.optBoolean("ok", false)} rtt=${(System.nanoTime() - sent) / 1_000_000}ms")
@@ -990,6 +1017,11 @@ class WebSocketRemoteBlenderClient(
                 }
                 when {
                     !message.optBoolean("ok", false) -> {
+                        if (trackedSessionCommand(command) && (command == "tool.begin" || command == "transform.begin" ||
+                            message.optString("code") in setOf("no_session", "session_invalidated", "wrong_mode"))) {
+                            retireInteraction()
+                            requestState()
+                        }
                         // Un sondeo fallido no es un error que enseñar: significa que
                         // bajo el dedo no había nada, y el menú radial ya sabe qué
                         // ofrecer en ese caso. Lo mismo el sondeo de loop cut.
@@ -1201,12 +1233,20 @@ class WebSocketRemoteBlenderClient(
                         _errors.value = payload?.optString("message") ?: "Error remoto"
                     // Marcador en vivo del arrastre. Llega a 10 Hz y NO debe pedir el
                     // estado completo: sería un viaje por cada fotograma del gesto.
-                    message.optString("event") == "transform.session" ->
-                        acceptTransformSession(StateParser.session(payload))
+                    message.optString("event") == "transform.session" -> {
+                        val incoming = StateParser.session(payload)
+                        val current = _transformSession.value
+                        if (current.active && (!incoming.active || incoming.sessionId == current.sessionId))
+                            _transformSession.value = incoming
+                    }
                     message.optString("event") == "cad.state" ->
                         _state.value = _state.value.copy(cad = CadParser.state(payload))
-                    message.optString("event") == "tool.session" ->
-                        _toolSession.value = StateParser.toolSession(payload)
+                    message.optString("event") == "tool.session" -> {
+                        val incoming = StateParser.toolSession(payload)
+                        val current = _toolSession.value
+                        if (current.active && current.tool == EditTool.ALIGN &&
+                            (!incoming.active || incoming.sessionId == current.sessionId)) _toolSession.value = incoming
+                    }
                     message.optString("event") == "versioning.changed" -> payload?.let {
                         updateVersioning(it)
                     }

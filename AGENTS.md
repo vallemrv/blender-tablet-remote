@@ -98,6 +98,18 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   corte comienza sin desplazamiento. La bandeja permite porcentaje o mm/cm/m desde
   el centro, además de volver a Centro. Las medidas físicas incluyen la escala del
   objeto y de escena; los cortes múltiples conservan su espaciado al desplazarse.
+- Activar Corte de loop deselecciona la malla y solo arma la herramienta. El
+  primer corte exige un toque válido en el visor; nunca usa una selección previa.
+  Los botones −/+ de Posición acumulan el valor local pendiente. La escritura y
+  los botones envían posición exacta incluso con Incremento; el arrastre conserva
+  el snap y el paso métrico fino se adapta al recorrido del corte.
+- Al cambiar herramienta/modo, cancelar o pasar a segundo plano, Android retira
+  las respuestas y colas de la interacción anterior. Cierra también herramientas
+  armadas y aperturas todavía en vuelo. Los cierres sin sesión son idempotentes;
+  un inicio fallido vuelve a Seleccionar y no mantiene entradas de una preview.
+- LoopTools nativo ofrece Círculo y Espaciar en radial → Malla → LoopTools,
+  solo con vértices/aristas y cuando el add-on está habilitado. Cada operación
+  registra un undo explícito; Círculo conserva los cortes previos al deshacer.
 - El campo de posición de Loop Cut permite un borrador vacío en % y mm/cm/m;
   las actualizaciones remotas no lo rellenan mientras se escribe. Vacío no envía valor.
 - Las referencias RNA inválidas nunca deben detener el pump ni el broadcast.
