@@ -190,6 +190,13 @@ def pick(payload: dict) -> dict:
         hit, location, _normal, face_index, obj, _matrix = bpy.context.scene.ray_cast(
             depsgraph, origin, direction
         )
+        if active is None or active.mode == "OBJECT":
+            from .reference import pick_image
+            image_hit = pick_image(origin, direction, rv3d, _area,
+                                   location if hit else None)
+            if image_hit is not None:
+                obj, location = image_hit
+                hit, face_index = True, -1
         if hit and obj.hide_select:
             return _with_state({"hit": False})
 
@@ -212,7 +219,7 @@ def pick(payload: dict) -> dict:
     # y poder elegir solo el frente sería frustrante.
     from .view import is_xray_wireframe
 
-    if is_xray_wireframe() and mode in ("SET", "ADD", "TOGGLE") and obj.select_get():
+    if obj.type != "EMPTY" and is_xray_wireframe() and mode in ("SET", "ADD", "TOGGLE") and obj.select_get():
         origin, location, obj = _cycle_behind(depsgraph, origin, direction, location, obj)
 
     if mode == "SET":

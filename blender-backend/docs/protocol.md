@@ -347,6 +347,11 @@ estén dentro del umbral táctil normalizado (`threshold`, 0.035 por defecto). D
 el rayo solo considera la jaula del objeto editado, de modo que otro objeto detrás
 cuenta como vacío, y un vacío con `TOGGLE` también deselecciona todo: Android envía
 `TOGGLE` en el toque sin modificador para acumular sin Mayús.
+En Object también sondea el rectángulo visible de las referencias nativas (Empty
+IMAGE), con aspecto de imagen/píxel, offset y transformación. Respeta ocultación,
+bloqueo, perspectiva/ortográfica, lados visibles, vista alineada y profundidad
+FRONT/DEFAULT/BACK frente a las mallas. Usa la cámara de la tablet, sin geometría
+auxiliar; no añade referencias al sondeo de Edit ni cambia el formato de respuesta.
 
 `reference.add` (`reference_images`) copia una imagen del tablero de la tablet a la
 escena: `format` png/jpg, `data` en base64 (≤ 6 MB decodificados), `name` y `opacity`

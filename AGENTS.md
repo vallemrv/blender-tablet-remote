@@ -338,6 +338,10 @@ nuevas superficies y la adaptación gradual de las existentes.
   Imagen de referencia nativa: Empty de imagen empaquetado en el `.blend`, frente a la
   cámara de la tablet y con la opacidad del panel, en un undo. El tablero local sigue
   existiendo; la copia en la escena se coloca después como cualquier objeto.
+  En Object se selecciona tocando el rectángulo de la imagen en el vídeo: incluye
+  aspecto, offset y transformación nativos, visibilidad, lados y profundidad
+  Delante/Predeterminada/Detrás. Respeta ocultación y bloqueo; no crea una malla
+  auxiliar ni participa en el picking de Edit.
 - Object muestra una bandeja inferior de propiedades del activo cuando no hay
   herramientas ni sesiones: Posición XYZ, Rotación XYZ en grados, Tamaño y Visibilidad.
   Una única lista desplegable cambia de sección, sin pestañas mezcladas con campos. El esquema viene
