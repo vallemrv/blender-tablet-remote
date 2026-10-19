@@ -71,6 +71,38 @@ class CollectionTests(unittest.TestCase):
                                         object_ids=[self.identity(self.first)]))
         self.undo.assert_called_once()
 
+    def test_collection_visibility_and_lock_preserve_child_flags(self):
+        parent, pid = self.create('Grupo')
+        child, cid = self.create('Dentro', pid, objects=(self.first, self.second))
+        self.second.hide_select = True
+        self.undo.reset_mock()
+        outliner.collection_action(dict(action='LOCK', collection_id=pid, value=True))
+        self.assertNotIn(self.first, bpy.context.selectable_objects)
+        self.assertFalse(self.first.hide_select)
+        self.assertTrue(self.second.hide_select)
+        with self.assertRaises(CommandError):
+            outliner.action(dict(action='SELECT', object_id=self.identity(self.first)))
+        outliner.collection_action(dict(action='LOCK', collection_id=pid, value=False))
+        self.assertIn(self.first, bpy.context.selectable_objects)
+        self.assertTrue(self.second.hide_select)
+        outliner.collection_action(dict(action='VISIBLE', collection_id=pid, value=False))
+        self.assertFalse(self.first.visible_get())
+        self.assertFalse(child.hide_viewport)
+        outliner.collection_action(dict(action='VISIBLE', collection_id=pid, value=True))
+        self.assertTrue(self.first.visible_get())
+        self.assertEqual(self.undo.call_count, 4)
+
+    def test_outliner_selection_toggles_and_moves_whole_group_to_existing_collection(self):
+        for obj in bpy.context.view_layer.objects: obj.select_set(False)
+        for obj in (self.first,self.second):outliner.action(dict(action='SELECT',object_id=self.identity(obj)))
+        self.assertTrue(self.first.select_get());self.assertTrue(self.second.select_get())
+        target,tid=self.create('Destino')
+        ids=[self.identity(obj) for obj in bpy.context.selected_objects]
+        outliner.collection_action(dict(action='MOVE_OBJECTS',collection_id=tid,object_ids=ids))
+        self.assertEqual(set(target.objects),{self.first,self.second})
+        outliner.action(dict(action='SELECT',object_id=self.identity(self.first)))
+        self.assertFalse(self.first.select_get());self.assertTrue(self.second.select_get())
+
     def test_invalid_name_stale_object_and_stale_parent_leave_no_collection(self):
         before = len(bpy.data.collections)
         for payload in [dict(action='CREATE', name=' '),

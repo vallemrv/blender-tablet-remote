@@ -11,6 +11,7 @@ from ..errors import BadPayload, CommandError
 def describe():
     layer = bpy.context.view_layer
     result = []
+    selectable = set(bpy.context.selectable_objects)
     for obj in bpy.context.scene.objects:
         in_layer = obj.name in layer.objects
         hidden = bool(obj.hide_viewport or (in_layer and obj.hide_get()))
@@ -18,7 +19,7 @@ def describe():
         result.append(dict(id=_identity(obj), name=obj.name, type=obj.type,
                            selected=bool(in_layer and obj.select_get()),
                            active=layer.objects.active == obj, hidden=hidden, visible=visible,
-                           locked=obj.hide_select, in_view_layer=in_layer,
+                           locked=obj.hide_select, collection_locked=bool(visible and not obj.hide_select and obj not in selectable), in_view_layer=in_layer,
                            parent=obj.parent.name if obj.parent else None,
                            collections=[c.name for c in obj.users_collection],
                            collection_ids=[_identity(c) for c in obj.users_collection],
@@ -56,7 +57,8 @@ def _scene_collections():
         full_path = f'/ {label}' if path == "/" else (f'{path} / {label}' if path else label)
         row = dict(id=key, name=label, path=full_path, root=root,
                    parents=[] if parent is None else [parent], count=len(collection.objects),
-                   editable=collection.library is None)
+                   editable=collection.library is None, hidden=bool(collection.hide_viewport),
+                   locked=bool(collection.hide_select))
         found[key] = (collection, row)
         for child in sorted(collection.children, key=lambda c: c.name.casefold()):
             visit(child, key, full_path)
@@ -70,7 +72,7 @@ def describe_collections():
 
 
 def _select(obj):
-    if obj.hide_select:
+    if obj.hide_select or (obj.visible_get() and obj not in bpy.context.selectable_objects):
         raise CommandError('Desbloquea primero este objeto', code='object_locked')
     if obj.name not in bpy.context.view_layer.objects or not obj.visible_get():
         raise CommandError('Muestra primero este objeto y su colección', code='object_hidden')
@@ -93,7 +95,7 @@ def listing(payload):
 def collection_action(payload):
     _require_object_context()
     action = payload.get('action')
-    if action not in {'CREATE', 'MOVE_OBJECTS', 'RENAME'}:
+    if action not in {'CREATE', 'MOVE_OBJECTS', 'RENAME', 'VISIBLE', 'LOCK'}:
         raise BadPayload('Acción de colección desconocida')
     collections = _scene_collections()
     key = payload.get('parent_id' if action == 'CREATE' else 'collection_id')
@@ -113,6 +115,25 @@ def collection_action(payload):
         if container.name != name.strip():
             container.name = name.strip()
             undo_push('Remote rename collection')
+        return _result()
+    if action in {'VISIBLE', 'LOCK'}:
+        if destination[1]['root']:
+            raise BadPayload('La raíz no se puede ocultar ni bloquear')
+        value = payload.get('value')
+        if type(value) is not bool:
+            raise BadPayload('Se requiere verdadero o falso')
+        attribute = 'hide_viewport' if action == 'VISIBLE' else 'hide_select'
+        desired = not value if action == 'VISIBLE' else value
+        if getattr(container, attribute) != desired:
+            setattr(container, attribute, desired)
+            bpy.context.view_layer.update()
+            selectable = set(bpy.context.selectable_objects)
+            layer = bpy.context.view_layer
+            for obj in layer.objects:
+                if obj.select_get() and obj not in selectable: obj.select_set(False)
+            if layer.objects.active is not None and layer.objects.active not in selectable:
+                layer.objects.active = next((obj for obj in layer.objects if obj.select_get() and obj in selectable), None)
+            undo_push('Remote collection ' + action.lower())
         return _result()
     ids = payload.get('object_ids', [])
     if not isinstance(ids, list) or any(not isinstance(i, str) for i in ids):
@@ -175,7 +196,13 @@ def action(payload):
     obj = _target(payload)
     kind = payload.get('action')
     if kind == 'SELECT':
-        _select(obj)
+        if obj not in bpy.context.selectable_objects:
+            raise CommandError('Muestra y desbloquea el objeto y su colección', code='object_locked')
+        obj.select_set(not obj.select_get())
+        layer = bpy.context.view_layer
+        if obj.select_get(): layer.objects.active = obj
+        elif layer.objects.active == obj:
+            layer.objects.active = next((o for o in layer.objects if o.select_get()), None)
         return _result()
     if obj.library is not None and obj.override_library is None:
         raise CommandError('El objeto enlazado es de solo lectura', code='read_only')

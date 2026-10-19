@@ -49,7 +49,8 @@ fun OutlinerMenu(
     var query by remember { mutableStateOf("") }
     var rename by remember { mutableStateOf<OutlinerObject?>(null) }
     var createCollection by remember { mutableStateOf(false) }
-    var moveToCollection by remember { mutableStateOf<OutlinerObject?>(null) }
+    var moveToCollection by remember { mutableStateOf<List<String>?>(null) }
+    var createTargets by remember { mutableStateOf(emptyList<String>()) }
     var renameCollection by remember { mutableStateOf<OutlinerCollection?>(null) }
     var collapsed by remember { mutableStateOf(emptySet<String>()) }
     val width = (LocalConfiguration.current.screenWidthDp - 32).coerceIn(280, 560).dp
@@ -65,7 +66,11 @@ fun OutlinerMenu(
                 }
                 if (collectionsAvailable) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     PillButton("+ Nueva colección", enabled = editable && collections.any { it.editable }) {
-                        createCollection = true; open = false
+                        createTargets = objects.filter { it.selected }.map { it.id }; createCollection = true; open = false
+                    }
+                    val selection = objects.filter { it.selected }.map { it.id }
+                    PillButton("Mover selección (${selection.size})", enabled = editable && selection.isNotEmpty()) {
+                        moveToCollection = selection; open = false
                     }
                 }
                 BasicTextField(query, { query = it }, singleLine = true,
@@ -83,12 +88,18 @@ fun OutlinerMenu(
                             toggleEnabled = query.isBlank(),
                             onRename = if (editable && collection.editable && !collection.root) ({
                                 renameCollection = collection; open = false
+                            }) else null,
+                            onVisibility = if (editable && collection.editable && !collection.root) ({
+                                onCollection("VISIBLE", mapOf("collection_id" to collection.id, "value" to collection.hidden))
+                            }) else null,
+                            onLock = if (editable && collection.editable && !collection.root) ({
+                                onCollection("LOCK", mapOf("collection_id" to collection.id, "value" to !collection.locked))
                             }) else null)
                     }
                     entry.obj?.let { obj ->
-                        Row(Modifier.fillMaxWidth().padding(start = (entry.depth.coerceAtMost(6) * 14).dp).background(if (obj.active) Ink.Accent.copy(alpha = .16f) else Color.Transparent,
+                        Row(Modifier.fillMaxWidth().padding(start = (entry.depth.coerceAtMost(6) * 14).dp).background(if (obj.selected) Ink.Accent.copy(alpha = if (obj.active) .22f else .12f) else Color.Transparent,
                             RoundedCornerShape(8.dp)).padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            HoverHelp(obj.name, "Selecciona este objeto y muestra sus propiedades.",
+                            HoverHelp(obj.name, "Tocar añade a la selección; volver a tocar lo quita.",
                                 modifier = Modifier.weight(1f), enabled = editable && obj.canSelect) {
                                 Column(Modifier.fillMaxWidth().heightIn(min = 44.dp)
                                     .then(if (editable && obj.canSelect) Modifier.clickableNoRipple {
@@ -99,6 +110,7 @@ fun OutlinerMenu(
                                     val status = when {
                                         !obj.inViewLayer -> "Fuera de la capa de vista"
                                         !obj.visible && !obj.hidden -> "Oculto por colección o aislamiento"
+                                        obj.collectionLocked -> "Bloqueado por colección"
                                         obj.locked -> "Selección bloqueada"
                                         obj.hidden -> "Oculto"
                                         else -> obj.parent?.let { "↳ $it" } ?: ""
@@ -112,15 +124,15 @@ fun OutlinerMenu(
                             IconAction(AppIcons.action(ActionId.RENAME), "Renombrar ${obj.name}", enabled = editable && obj.editable) {
                                 rename = obj; open = false
                             }
-                            if (collectionsAvailable) IconAction(AppIcons.Collection, "Mover ${obj.name} a colección", enabled = editable && obj.editable) {
-                                moveToCollection = obj; open = false
+                            if (collectionsAvailable) IconAction(AppIcons.Collection, if (obj.selected) "Mover toda la selección a colección" else "Mover ${obj.name} a colección", enabled = editable && obj.editable) {
+                                moveToCollection = if (obj.selected) objects.filter { it.selected }.map { it.id } else listOf(obj.id); open = false
                             }
                             IconAction(AppIcons.visibility(obj.visible), if (obj.hidden) "Mostrar ${obj.name}" else "Ocultar ${obj.name}",
                                 enabled = editable && obj.editable && obj.inViewLayer && (obj.hidden || obj.visible)) {
                                 onAction(obj.id, "VISIBLE", obj.hidden, null)
                             }
                             IconAction(AppIcons.selectionLock(obj.locked), if (obj.locked) "Desbloquear ${obj.name}" else "Bloquear ${obj.name}",
-                                selected = obj.locked, enabled = editable && obj.editable) {
+                                selected = obj.locked || obj.collectionLocked, enabled = editable && obj.editable && !obj.collectionLocked) {
                                 onAction(obj.id, "LOCK", !obj.locked, null)
                             }
                         }
@@ -142,7 +154,7 @@ fun OutlinerMenu(
         })
     }
     if (createCollection) NewCollectionDialog(
-        collections, objects.filter { it.selected }.map { it.id }, editable,
+        collections, createTargets, editable,
         onDismiss = { createCollection = false; open = true },
         onCreate = { name, parent, ids ->
             onCollection("CREATE", mapOf("name" to name, "parent_id" to parent, "object_ids" to ids))
@@ -150,11 +162,14 @@ fun OutlinerMenu(
         })
     moveToCollection?.let { target ->
         AlertDialog(onDismissRequest = { moveToCollection = null; open = true }, containerColor = Ink.PanelSolid,
-            title = { Text("Mover ${target.name} a colección", color = Ink.OnPanel, fontSize = 16.sp) },
+            title = { Text("Mover ${target.size} objetos a colección", color = Ink.OnPanel, fontSize = 16.sp) },
             text = {
                 Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    PillButton("+ Nueva colección", enabled = editable) {
+                        createTargets = target; moveToCollection = null; createCollection = true
+                    }
                     CollectionPicker(collections, editable) { collection ->
-                        onCollection("MOVE_OBJECTS", mapOf("collection_id" to collection.id, "object_ids" to listOf(target.id)))
+                        onCollection("MOVE_OBJECTS", mapOf("collection_id" to collection.id, "object_ids" to target))
                         collapsed = emptySet(); query = ""; moveToCollection = null; open = true
                     }
                 }
@@ -170,7 +185,7 @@ private fun NewCollectionDialog(collections: List<OutlinerCollection>, selected:
                                 onCreate: (String, String, List<String>) -> Unit) {
     var name by remember { mutableStateOf("Colección") }
     var parentId by remember { mutableStateOf(collections.firstOrNull { it.root }?.id) }
-    var includeSelection by remember { mutableStateOf(false) }
+    var includeSelection by remember { mutableStateOf(selected.isNotEmpty()) }
     var parentMenu by remember { mutableStateOf(false) }
     val parent = collections.firstOrNull { it.id == parentId }
     AlertDialog(onDismissRequest = onDismiss, containerColor = Ink.PanelSolid,
@@ -200,6 +215,7 @@ private fun CollectionRow(
     onToggle: () -> Unit, toggleEnabled: Boolean = true,
     onChoose: (() -> Unit)? = null, chooseEnabled: Boolean = true,
     onRename: (() -> Unit)? = null,
+    onVisibility: (() -> Unit)? = null, onLock: (() -> Unit)? = null,
 ) {
     Row(Modifier.fillMaxWidth().padding(start = (depth.coerceAtMost(6) * 14).dp),
         verticalAlignment = Alignment.CenterVertically) {
@@ -216,6 +232,10 @@ private fun CollectionRow(
             }
         }
         if (onRename != null) IconAction(AppIcons.action(ActionId.RENAME), "Renombrar ${collection.treeName}", onClick = onRename)
+        if (onVisibility != null) IconAction(AppIcons.visibility(!collection.hidden),
+            "${if (collection.hidden) "Mostrar" else "Ocultar"} colección ${collection.treeName}", onClick = onVisibility)
+        if (onLock != null) IconAction(AppIcons.selectionLock(collection.locked),
+            "${if (collection.locked) "Desbloquear" else "Bloquear"} colección ${collection.treeName}", selected = collection.locked, onClick = onLock)
     }
 }
 

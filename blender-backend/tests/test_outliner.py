@@ -83,10 +83,12 @@ class OutlinerTests(unittest.TestCase):
 
     def test_pick_and_box_ignore_locked_objects(self):
         self.action(self.first, 'LOCK', value=True)
+        self.second.select_set(False)
         self.action(self.second, 'SELECT')
         with patch.object(selection, 'find_view3d', return_value=(None, None, None, SimpleNamespace())), \
              patch.object(selection.camera, 'sync_from_region'), \
-             patch.object(selection.camera, 'ray', return_value=(Vector((0, 0, 10)), Vector((0, 0, -1)))):
+             patch.object(selection.camera, 'ray', return_value=(Vector((0, 0, 10)), Vector((0, 0, -1)))), \
+             patch.object(selection, '_object_hit', return_value=(self.first, Vector(), 0)):
             self.assertFalse(selection.pick({'u': .5, 'v': .5, 'mode': 'SET'})['hit'])
             self.assertEqual(bpy.context.view_layer.objects.active, self.second)
         with patch.object(selection, 'find_view3d', return_value=(None, None, None, SimpleNamespace())), \

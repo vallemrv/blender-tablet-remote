@@ -201,7 +201,7 @@ def pick(payload: dict) -> dict:
         result = _object_hit(u,v,origin,direction,rv3d,_region,_area,depsgraph,_touch_threshold(payload))
         hit = result is not None
         obj,location,face_index = result if hit else (None,None,-1)
-        if hit and obj.hide_select:
+        if hit and obj not in bpy.context.selectable_objects:
             return _with_state({"hit": False})
 
     if not hit:
@@ -567,7 +567,7 @@ def _cycle_behind(depsgraph, origin, direction, location, obj):
         )
         if not hit or candidate is None:
             break
-        if not candidate.hide_select and not candidate.select_get():
+        if candidate in bpy.context.selectable_objects and not candidate.select_get():
             return origin, Vector(location), candidate
     return origin, Vector(location), obj
 
@@ -803,8 +803,9 @@ def _object_shape_select(payload: dict, contains) -> dict:
         for o in view_layer.objects:
             o.select_set(False)
     affected = 0
+    selectable = set(bpy.context.selectable_objects)
     for o in view_layer.objects:
-        if o.hide_select or not o.visible_get():
+        if o not in selectable or not o.visible_get():
             continue
         projected = camera.project(o.matrix_world.translation, rv3d)
         if projected is not None and contains(projected[0], projected[1]):
@@ -1055,8 +1056,8 @@ def linked(payload: dict) -> dict:
 def invert(payload: dict) -> dict:
     obj = bpy.context.view_layer.objects.active
     if obj is None or obj.mode == 'OBJECT':
-        for item in bpy.context.view_layer.objects:
-            if item.visible_get() and not item.hide_select:item.select_set(not item.select_get())
+        for item in bpy.context.selectable_objects:
+            item.select_set(not item.select_get())
         return _with_state({})
     obj = active_object()
     if obj.type == 'CURVE' and obj.mode == 'EDIT':

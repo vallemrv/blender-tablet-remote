@@ -127,7 +127,7 @@ def _paint(s,payload):
                 if not (0<=u<=1 and 0<=v<=1):continue
                 origin,direction=camera.ray(u,v,rv3d)
                 hit=_object_hit(u,v,origin,direction,rv3d,region,area,graph,radius)
-                if hit and not hit[0].hide_select and hit[0].session_uid in baseline:
+                if hit and hit[0] in bpy.context.selectable_objects and hit[0].session_uid in baseline:
                     s['touched'].add(hit[0].session_uid)
         for obj,value in s['baseline']:
             if obj.session_uid in s['touched']:obj.select_set(not value)

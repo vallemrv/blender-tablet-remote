@@ -2717,3 +2717,10 @@ en la propiedad `btr_reference_board_id` del `.blend`. A diferencia de `scene_id
 no cambia al reiniciar Blender ni al reabrir el archivo. Nueva escena recibe otro
 UUID. Android usa este identificador para almacenar sus copias locales de imágenes;
 las fotos no viajan en el estado ni se incluyen en el `.blend` salvo «Enviar a Blender».
+
+`outliner.collection` admite `VISIBLE` (`value`: visible) y `LOCK` (`value`: bloqueado),
+con `collection_id`, sobre colecciones no raíz. Modifica la restricción nativa de
+colección y crea un undo sin alterar flags propios de los descendientes. Sus filas
+publican `hidden`/`locked`; los objetos publican `collection_locked`. `SELECT` en
+`outliner.action` alterna la selección conservando los demás objetos. `MOVE_OBJECTS`
+y `CREATE.object_ids` admiten toda la selección, también desde el destino existente.

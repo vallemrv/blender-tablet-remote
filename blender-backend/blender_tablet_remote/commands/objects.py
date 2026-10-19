@@ -11,7 +11,7 @@ from . import command
 
 
 def _select(obj, value: bool) -> None:
-    if value and obj.hide_select:
+    if value and obj not in bpy.context.selectable_objects:
         return
     try:
         obj.select_set(value)
@@ -36,7 +36,7 @@ def select(payload: dict) -> dict:
     if mode != 'REMOVE':
         for name in names:
             target = bpy.data.objects.get(name)
-            if target is not None and target.hide_select:
+            if target is not None and target.visible_get() and target not in bpy.context.selectable_objects:
                 raise CommandError('Desbloquea primero este objeto', code='object_locked')
 
     view_layer = bpy.context.view_layer
@@ -97,7 +97,7 @@ def set_active(payload: dict) -> dict:
     obj = bpy.data.objects.get(name) if name else None
     if obj is None:
         raise CommandError(f"Object not found: {name}", code="not_found")
-    if obj.hide_select:
+    if obj.visible_get() and obj not in bpy.context.selectable_objects:
         raise CommandError('Desbloquea primero este objeto', code='object_locked')
     bpy.context.view_layer.objects.active = obj
     return {"active_object": obj.name}
@@ -388,7 +388,7 @@ def reveal(payload: dict) -> dict:
     revealed = []
     for obj in targets:
         _hide_set(obj, False)
-        if select and not obj.hide_select:
+        if select and obj in bpy.context.selectable_objects:
             try:
                 obj.select_set(True)
             except RuntimeError:

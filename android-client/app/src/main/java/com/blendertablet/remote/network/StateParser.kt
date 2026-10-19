@@ -139,13 +139,13 @@ object StateParser {
                 o.optBoolean("selected"), o.optBoolean("active"), o.optBoolean("hidden"), o.optBoolean("visible"),
                 o.optBoolean("locked"), o.optBoolean("in_view_layer"), o.optBoolean("editable"),
                 o.optString("parent").takeUnless { it.isBlank() || it == "null" }, strings(o.optJSONArray("collections")),
-                collectionIds = strings(o.optJSONArray("collection_ids")))
+                collectionIds = strings(o.optJSONArray("collection_ids")), collectionLocked = o.optBoolean("collection_locked"))
         }
 
     fun outlinerCollections(array: JSONArray?): List<OutlinerCollection> = if (array == null) emptyList() else
         (0 until array.length()).map { array.getJSONObject(it) }.map { c ->
             OutlinerCollection(c.getString("id"), c.getString("name"), c.optString("path", c.getString("name")),
-                strings(c.optJSONArray("parents")), c.optBoolean("root"), c.optBoolean("editable"), c.optInt("count"))
+                strings(c.optJSONArray("parents")), c.optBoolean("root"), c.optBoolean("editable"), c.optInt("count"), c.optBoolean("hidden"), c.optBoolean("locked"))
         }
 
     fun modifiers(array: JSONArray?): List<ModifierState> = if (array == null) emptyList() else

@@ -33,12 +33,14 @@ data class OutlinerObject(
     val locked: Boolean, val inViewLayer: Boolean, val editable: Boolean,
     val parent: String? = null, val collections: List<String> = emptyList(),
     val collectionIds: List<String> = emptyList(),
+    val collectionLocked: Boolean = false,
 ) {
-    val canSelect: Boolean get() = visible && !locked && inViewLayer
+    val canSelect: Boolean get() = visible && !locked && !collectionLocked && inViewLayer
 }
 data class OutlinerCollection(
     val id: String, val name: String, val path: String, val parents: List<String>,
     val root: Boolean, val editable: Boolean, val count: Int,
+    val hidden: Boolean = false, val locked: Boolean = false,
 )
 
 data class ObjectChoiceFilter(val type: String? = null, val excludeSelf: Boolean = false)

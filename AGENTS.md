@@ -1553,3 +1553,9 @@ no quedan archivos o referencias temporales.
   historiales binarios no se mezclan automáticamente. Los recursos externos se
   incluyen solo si Blender puede empaquetarlos y el usuario lo marca. El alcance,
   formato de clonación y requisitos están en `docs/valletrack-integration.md`.
+
+- Outliner alterna selección al tocar objetos y ofrece Mover selección hacia una
+  colección existente o nueva. Nueva colección incluye la selección inicialmente.
+  Cada colección no raíz ofrece Renombrar, Mostrar/Ocultar y Bloquear selección.
+  Usa las restricciones nativas de colección, respeta los estados propios de sus
+  descendientes y la selección del visor consulta `context.selectable_objects`.
