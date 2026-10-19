@@ -744,6 +744,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * el toque fija el destino. En Edit también permite continuar en otra selección
      * confirmando el paso anterior.
      */
+    private val effectiveSelectionOp: SelectionOp
+        get() = if (client.state.value.mode == BlenderMode.EDIT) SelectionOp.TOGGLE else local.value.selectionOp
+
     fun pick(u: Float, v: Float, stylus: Boolean = false) {
         if (client.state.value.material.active) {
             if (client.state.value.material.interaction == "SELECT")
@@ -784,7 +787,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         if (choosingTransformSelection()) {
-            client.transformSelect(u.toDouble(), v.toDouble(), if (stylus) 0.028 else 0.055, local.value.selectionOp)
+            client.transformSelect(u.toDouble(), v.toDouble(), if (stylus) 0.028 else 0.055, effectiveSelectionOp)
             return
         }
         if (local.value.referencePicking && client.transformSession.value.active) {
@@ -832,7 +835,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (session.active) {
             if (client.state.value.mode == BlenderMode.EDIT && client.state.value.features.transformStepSelection &&
                 local.value.activeTool != ActiveTool.TWEAK) {
-                client.transformSelect(u.toDouble(), v.toDouble(), if (stylus) 0.028 else 0.055, local.value.selectionOp)
+                client.transformSelect(u.toDouble(), v.toDouble(), if (stylus) 0.028 else 0.055, effectiveSelectionOp)
             }
             return
         }
@@ -843,7 +846,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             client.shortestPath(u.toDouble(), v.toDouble(), threshold)
         } else {
             val blender = uiState.value.blender
-            val plainEdit = blender.mode == BlenderMode.EDIT && local.value.selectionOp == SelectionOp.SET
+            val plainEdit = blender.mode == BlenderMode.EDIT
             // Doble toque en el mismo sitio: el loop de lo tocado (Alt+clic de Blender);
             // en Vértices, la pieza enlazada. El ADD previo lo deja como semilla activa.
             val previous = lastEditTap
@@ -858,7 +861,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             lastEditTap = if (plainEdit && blender.activeObjectType == "MESH") Triple(u, v, now) else null
             // En Edit el toque sin modificador acumula: añade o quita lo tocado, sin Mayús.
-            client.pick(u.toDouble(), v.toDouble(), threshold, local.value.selectionOp)
+            client.pick(u.toDouble(), v.toDouble(), threshold, effectiveSelectionOp)
         }
     }
     fun requestState() = client.requestState()
@@ -998,7 +1001,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         // Mayús+arrastre extiende, no alterna: es el Shift de la caja de Blender, que
         // suma lo barrido en vez de invertir cada elemento que toca.
-        val op = local.value.selectionOp
+        val op = effectiveSelectionOp
         when (shape) {
             ShapeTool.BOX -> client.boxSelect(u0.toDouble(), v0.toDouble(), u1.toDouble(), v1.toDouble(), op)
             ShapeTool.CIRCLE -> client.circleSelect(
@@ -1079,11 +1082,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleModifier(name: String, viewport: Boolean? = null, render: Boolean? = null, editMode: Boolean? = null) = client.modifierToggle(name, viewport, render, editMode)
     fun applyModifier(name: String) = client.modifierApply(name)
     fun selectLoop() {
-        val op = local.value.selectionOp
+        val op = effectiveSelectionOp
         client.selectLoop(op)
     }
     fun selectRing() {
-        val op = local.value.selectionOp.let { if (it == SelectionOp.TOGGLE) SelectionOp.ADD else it }
+        val op = effectiveSelectionOp.let { if (it == SelectionOp.TOGGLE) SelectionOp.ADD else it }
         client.selectRing(op)
     }
 

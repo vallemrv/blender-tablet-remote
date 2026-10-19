@@ -244,9 +244,11 @@ nuevas superficies y la adaptación gradual de las existentes.
   mostrar un resumen corto o llevar el detalle a la ayuda. El scroll conserva el
   tamaño de los controles y los paneles vecinos reservan solo la altura real.
 
-- El toque sustituye la selección en Objeto, Edición, Materiales y CAD. «＋ Añadir»
-  en el rail derecho alterna pertenencia; «Camino» en Edición arma el siguiente
-  toque de camino más corto, independiente de Añadir. Caja, Círculo, Pintar,
+- En Edición la selección múltiple está siempre activa, sin botón «＋ Añadir»:
+  tocar añade o quita el elemento; también se conserva al seleccionar durante
+  una transformación. El doble toque sigue eligiendo loop/enlazado y «Camino»
+  arma el siguiente toque de camino más corto. En Objeto, Materiales y CAD el
+  toque sustituye y «＋ Añadir» en el rail derecho alterna pertenencia. Caja, Círculo, Pintar,
   Todo/Ninguno, Invertir, Loop/Ring/Enlazado y Crecer/Decrecer solo viven ahí.
   Seleccionar también se activa desde ese rail; el radial nunca selecciona.
 - El radial concentra Ocultar, Aislar, Duplicar, Renombrar y Borrar según contexto;

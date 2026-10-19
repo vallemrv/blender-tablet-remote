@@ -2562,8 +2562,10 @@ independiente del Git del directorio donde vive el archivo de trabajo.
 
 ### Coherencia de superficies y selección (octubre 2026)
 
-El toque normal reemplaza; `additive:true` alterna pertenencia. Android comparte
-«＋ Añadir» entre Objeto, Edición, Materiales y CAD; «Camino» es independiente.
+En Edición Android envía siempre `TOGGLE` al seleccionar: el toque añade o quita
+sin conmutador «＋ Añadir», también durante una transformación. En Objeto,
+Materiales y CAD el toque normal reemplaza y «＋ Añadir» activa la alternancia
+(`additive:true` en los workspaces). «Camino» es independiente.
 `cad.select_all` acepta también `INVERT` y `selection.box` / `selection.circle` seleccionan por
 región en el contexto CAD. Pintar conserva un baseline y alterna cada referencia
 una vez por trazo; cancelar lo restaura. Las restricciones geométricas se crean

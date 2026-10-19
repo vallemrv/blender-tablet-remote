@@ -183,5 +183,6 @@ fun SelectionIntentControls(state: AppUiState, vm: MainViewModel) {
     IconAction(AppIcons.SelectTool, "Seleccionar", selected = state.shapeTool == ShapeTool.NONE &&
         (!state.blender.material.active || state.blender.material.interaction == "SELECT") && state.activeTool == ActiveTool.SELECT,
         onClick = vm::activateSelection)
-    PillButton("＋ Añadir", selected = state.selectionOp == SelectionOp.TOGGLE, onClick = vm::toggleSelectionAdd)
+    if (state.blender.mode != BlenderMode.EDIT)
+        PillButton("＋ Añadir", selected = state.selectionOp == SelectionOp.TOGGLE, onClick = vm::toggleSelectionAdd)
 }
