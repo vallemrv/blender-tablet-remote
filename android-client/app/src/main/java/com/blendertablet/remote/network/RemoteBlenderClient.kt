@@ -57,11 +57,10 @@ interface RemoteBlenderClient {
     val notices: StateFlow<String?>
 
     /**
-     * El servidor acaba de confirmar un duplicado que creó geometría u objetos. Es un
-     * hecho, no una decisión: qué hacer después (encadenar un Mover) lo elige la capa
-     * que conoce las preferencias del usuario, no esta.
+     * Duplicado confirmado: intención elegida al solicitarlo. Se retira si cambia
+     * la interacción antes de recibir o consumir la respuesta.
      */
-    val duplicates: Flow<Unit>
+    val duplicates: Flow<TransformMode>
 
     /** Reintentos encadenados sin éxito; vuelve a 0 en cuanto la conexión se abre. */
     val retryAttempt: StateFlow<Int>
@@ -128,8 +127,7 @@ interface RemoteBlenderClient {
     fun clearProbe()
 
     fun delete()
-    fun duplicate()
-    fun duplicateLinked()
+    fun duplicate(mode: TransformMode, linked: Boolean = false)
     /**
      * Renombra [target], o el objeto activo si no se dice cuál. El menú radial manda
      * siempre el que hay bajo el dedo: puede no ser el activo.

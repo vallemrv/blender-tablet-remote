@@ -622,8 +622,9 @@ data class AppUiState(
     val loopCutAwaitingTap: Boolean = false,
     /** Última variante usada por familia de `edit_toolbar` (id de familia -> id de variante). */
     val toolbarVariant: Map<String, String> = emptyMap(),
-    /** Variante discreta recordada por la familia Duplicar del rail (Object Mode). */
+    /** Últimas opciones de Duplicar del radial. En Edit no hay copia enlazada. */
     val duplicateLinked: Boolean = false,
+    val duplicateMode: TransformMode = TransformMode.MOVE,
     /** Modo y snap del gesto de Tweak, elegidos antes de arrastrar. */
     val tweak: TweakSettings = TweakSettings(),
     /** Catálogo de escalas que anuncia el servidor, para el menú Escena. */

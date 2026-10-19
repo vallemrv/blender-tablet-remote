@@ -130,6 +130,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     // también los overlays del servidor, y esa parte no es local.
     val chromeVisible = state.controlsVisible
     var newSceneOpen by remember { mutableStateOf(false) }
+    var duplicateOpen by remember(state.connection, state.blender.mode, state.blender.sceneScale.sceneId, state.blender.activeObject, state.blender.selectedObjects) { mutableStateOf(false) }
     var fileBrowserMode by remember { mutableStateOf<FileBrowserMode?>(null) }
     // Guarda a QUIÉN se renombra: el sondeo se borra al cerrar el anillo.
     var drawingMeshTarget by remember { mutableStateOf<com.blendertablet.remote.model.CadDrawingMeshTarget?>(null) }
@@ -195,6 +196,13 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
         onDebug = vm::toggleDebug,
         onCapture = vm::captureScene,
         onVersions = { versionsOpen = true },
+    )
+
+    if (duplicateOpen) DuplicateDialog(
+        edit = state.blender.mode == BlenderMode.EDIT,
+        initialMode = state.duplicateMode, initialLinked = state.duplicateLinked,
+        onDismiss = { duplicateOpen = false },
+        onDuplicate = { mode, linked -> duplicateOpen = false; vm.duplicate(mode, linked) },
     )
 
     if (newSceneOpen) NewSceneDialog(
@@ -676,7 +684,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     QuickAction("Aislar", AppIcons.localView(if (state.blender.material.active) state.blender.material.isolate else state.localViewActive)) { vm.toggleLocalView() },
                     QuickAction("Borrar", AppIcons.Delete, enabled = state.blender.activeObject != null) { vm.delete() },
                 )
-                else quickActions(touchContext, vm, meshToolsChildren) {
+                else quickActions(touchContext, vm, meshToolsChildren, onDuplicate = { duplicateOpen = true }) {
                     renameTarget = touchContext.objectName ?: state.blender.activeObject
                 }
             QuickMenu(
@@ -1176,6 +1184,7 @@ private fun quickActions(
     vm: MainViewModel,
     /** Catálogo de vértice/arista/cara ya filtrado y sin duplicar el anillo (F1/F4). */
     meshToolsChildren: List<QuickAction>,
+    onDuplicate: () -> Unit,
     onRename: () -> Unit,
 ): List<QuickAction> = RadialMenu.actionsFor(context)
     // Sin catálogo del servidor (edit_catalog no disponible) no hay nada que abrir.
@@ -1237,21 +1246,10 @@ private fun quickActions(
             AppIcons.localView(context.localView),
         ) { vm.toggleLocalView(context.objectName.takeIf { context.hit && !context.objectSelected }) }
         ActionId.HIDE_GEOMETRY -> QuickAction(label, AppIcons.action(id)) { vm.hideSelection() }
-        ActionId.DUPLICATE -> if (context.mode == BlenderMode.EDIT) {
-            QuickAction("Duplicar selección", AppIcons.Duplicate) { vm.runDuplicateVariant(false) }
-        } else {
-            val linked = vm.uiState.value.duplicateLinked
-            QuickAction(
-                if (linked) "Duplicar enlazado" else "Duplicar",
-                if (linked) AppIcons.DuplicateLinked else AppIcons.Duplicate,
-                opensChildrenOnClick = false,
-                onClick = { vm.runDuplicateVariant(linked) },
-                children = listOf(
-                    QuickAction("Duplicar", AppIcons.Duplicate) { vm.runDuplicateVariant(false) },
-                    QuickAction("Duplicar enlazado", AppIcons.DuplicateLinked) { vm.runDuplicateVariant(true) },
-                ),
-            )
-        }
+        ActionId.DUPLICATE -> QuickAction(
+            if (context.mode == BlenderMode.EDIT) "Duplicar selección" else "Duplicar",
+            AppIcons.Duplicate, onClick = onDuplicate,
+        )
         ActionId.RENAME -> QuickAction(label, AppIcons.action(id), onClick = onRename)
         ActionId.DISSOLVE -> QuickAction(label, AppIcons.action(id)) {
             vm.meshDissolve(deleteWhat(context.selectionMode))

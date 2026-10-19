@@ -81,7 +81,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val client: RemoteBlenderClient = WebSocketRemoteBlenderClient(viewModelScope, sessionKey)
     private val snapPreferences = SnapPreferences(application)
     private val toolPreferences = com.blendertablet.remote.data.ToolPreferences(application)
+    private val duplicatePreferences = com.blendertablet.remote.data.DuplicatePreferences(application)
     private val local = MutableStateFlow(AppUiState(
+        duplicateLinked = duplicatePreferences.linked,
+        duplicateMode = duplicatePreferences.mode,
         snapType = snapPreferences.current.type,
         snapStep = snapPreferences.current.step,
         distanceStepMeters = snapPreferences.current.distanceStepMeters,
@@ -175,10 +178,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         // La copia nace encima del original y no se ve. Como el Shift+D de Blender, se
-        // entrega agarrada al gesto de mover: así se ve nacer y se coloca de una vez.
-        // Cancelar el Mover no deshace el duplicado, son pasos de undo distintos.
+        // entrega con Mover o Rotar según la intención elegida al duplicar.
+        // Cancelar la transformación no deshace el duplicado: son pasos distintos.
         viewModelScope.launch {
-            client.duplicates.collect { transformBegin(TransformMode.MOVE) }
+            client.duplicates.collect { mode -> transformBegin(mode) }
         }
         // Los overlays los apaga el ojo, pero viven en el servidor: si la conexión
         // se cae con la interfaz oculta, Blender se queda sin rejilla y el estado
@@ -719,10 +722,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         } else client.delete()
     }
-    fun duplicate() = client.duplicate()
-    fun runDuplicateVariant(linked: Boolean) {
-        local.update { it.copy(duplicateLinked = linked) }
-        if (linked) client.duplicateLinked() else client.duplicate()
+    fun duplicate(mode: TransformMode, linked: Boolean) {
+        if (client.connection.value != ConnectionStatus.CONNECTED || client.state.value.cad.workspace ||
+            client.state.value.mode !in setOf(BlenderMode.OBJECT, BlenderMode.EDIT)) return
+        val edit = client.state.value.mode == BlenderMode.EDIT
+        val rememberedLinked = if (edit) local.value.duplicateLinked else linked
+        cancelTweakGesture()
+        client.toolCancel()
+        client.transformCancel()
+        duplicatePreferences.save(mode, rememberedLinked)
+        local.update { it.copy(duplicateLinked = rememberedLinked, duplicateMode = mode,
+            activeTool = ActiveTool.SELECT, shapeTool = ShapeTool.NONE, loopCutAwaitingTap = false) }
+        client.duplicate(mode, linked && !edit)
     }
     fun frameSelected() {
         if (client.state.value.cad.workspace) cadCommand("cad.view.frame") else client.frameSelected()

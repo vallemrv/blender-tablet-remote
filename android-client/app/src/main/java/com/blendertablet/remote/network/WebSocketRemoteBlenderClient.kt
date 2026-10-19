@@ -35,6 +35,7 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -83,7 +84,8 @@ class WebSocketRemoteBlenderClient(
     }
     private val _notices = MutableStateFlow<String?>(null)
     // Un duplicado es un instante, no un estado: quien llegue tarde no debe encontrárselo.
-    private val _duplicates = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val duplicateRequests = DuplicateRequests()
+    private val _duplicates = MutableSharedFlow<DuplicateRequests.Placement>(extraBufferCapacity = 1)
     private val _retryAttempt = MutableStateFlow(0)
     private val _file = MutableStateFlow(FileInfo())
     private val _remoteFiles = MutableStateFlow(RemoteFiles())
@@ -97,7 +99,7 @@ class WebSocketRemoteBlenderClient(
     override val state: StateFlow<BlenderState> = _state.asStateFlow()
     override val errors: StateFlow<String?> = _errors.asStateFlow()
     override val notices: StateFlow<String?> = _notices.asStateFlow()
-    override val duplicates: Flow<Unit> = _duplicates.asSharedFlow()
+    override val duplicates: Flow<TransformMode> = _duplicates.asSharedFlow().mapNotNull { duplicateRequests.consume(it) }
     override val retryAttempt: StateFlow<Int> = _retryAttempt.asStateFlow()
     override val file: StateFlow<FileInfo> = _file.asStateFlow()
     override val remoteFiles: StateFlow<RemoteFiles> = _remoteFiles.asStateFlow()
@@ -392,6 +394,7 @@ class WebSocketRemoteBlenderClient(
 
     private fun retireInteraction() {
         sessionRequests.retire()
+        duplicateRequests.retire()
         pendingNudge = 0.0; nudgeInFlight = false
         pendingToolSnap = null; toolSnapInFlight.set(false)
         pendingKnifeDrag = null; knifeDragInFlight.set(false)
@@ -421,6 +424,9 @@ class WebSocketRemoteBlenderClient(
                         com.blendertablet.remote.model.ObjectPropertiesResult(token, false))
                 }
             }
+        }
+        if (name in setOf("file.save", "file.save_as", "object.select", "selection.pick", "selection.all", "object.select_all", "object.delete")) {
+            duplicateRequests.retire()
         }
         return synchronized(sculptTransportLock) {
             if (name in setOf("cad.session.cancel", "history.undo", "history.redo", "mode.set", "file.new", "file.open", "file.save", "file.save_as")) {
@@ -461,6 +467,7 @@ class WebSocketRemoteBlenderClient(
         // Registrar antes de enviar evita una carrera con sockets/fakes muy rápidos:
         // la respuesta nunca puede adelantarse a su entrada en `pending`.
         pending[id] = name
+        duplicateRequests.sent(payload, id)
         if (trackedSessionCommand(name)) sessionRequests.sent(id)
         if (name == "object.properties") objectPropertyRequests[id] = payload.optString("request_token")
         if (CadDepthCommandQueue.waitsForResponse(name)) cadInFlightRequest = id
@@ -473,6 +480,7 @@ class WebSocketRemoteBlenderClient(
             true
         } else {
             pending.remove(id)
+            duplicateRequests.finish(id, false)
             objectPropertyRequests.remove(id)?.let { token ->
                 _state.value = _state.value.copy(objectPropertiesResult = com.blendertablet.remote.model.ObjectPropertiesResult(token, false))
             }
@@ -545,8 +553,15 @@ class WebSocketRemoteBlenderClient(
         JSONObject().put("u", u).put("v", v).put("threshold", threshold).put("extend", extend),
     )
     override fun delete() = command("object.delete")
-    override fun duplicate() = command(duplicateCommand(state.value.mode))
-    override fun duplicateLinked() = command("object.duplicate", JSONObject().put("linked", true))
+    override fun duplicate(mode: TransformMode, linked: Boolean) {
+        require(mode == TransformMode.MOVE || mode == TransformMode.ROTATE)
+        retireInteraction()
+        val payload = JSONObject().apply {
+            if (state.value.mode != BlenderMode.EDIT) put("linked", linked)
+        }
+        duplicateRequests.register(payload, mode)
+        if (!sendCommand(duplicateCommand(state.value.mode), payload)) duplicateRequests.retire()
+    }
     override fun rename(newName: String, target: String?) = command(
         "object.rename",
         JSONObject().put("new_name", newName).apply { target?.let { put("name", it) } },
@@ -1010,11 +1025,12 @@ class WebSocketRemoteBlenderClient(
                 if (command != null && message.optBoolean("ok", false)) {
                     duplicateNotice(command, result)?.let {
                         _notices.value = it
-                        // Solo cuando el servidor confirma que creó algo: armar el Mover
-                        // antes de eso agarraría el original, no la copia.
-                        _duplicates.tryEmit(Unit)
+                        // Nunca transformar el original ni reactivar una interacción retirada.
+                        duplicateRequests.finish(id, true)?.let { placement -> _duplicates.tryEmit(placement) }
                     }
                 }
+                // Descarta también respuestas fallidas o duplicados sin geometría nueva.
+                duplicateRequests.finish(id, false)
                 when {
                     !message.optBoolean("ok", false) -> {
                         if (trackedSessionCommand(command) && (command == "tool.begin" || command == "transform.begin" ||

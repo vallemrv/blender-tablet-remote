@@ -365,8 +365,12 @@ nuevas superficies y la adaptación gradual de las existentes.
   arrastre y cancelar restaura también los vecinos; confirmar crea un solo undo.
   GG conserva el deslizamiento de la selección por aristas y no aplica proporcional;
   la bandeja muestra «Proporcional (sin GG)» deshabilitado mientras GG está activo.
-- Duplicar vive en el radial. En Object conserva normal/enlazado y en Edit duplica la
-  selección efectiva.
+- Duplicar vive en el radial. Abre un selector Mover/Rotar y, en Objeto, copia
+  enlazada. Recuerda ambas opciones entre aperturas de la app; Edición duplica la
+  selección efectiva sin alterar la preferencia enlazada de Objeto. Solo inicia
+  la transformación elegida tras confirmar el servidor que creó la copia. Cambiar
+  de interacción retira las respuestas pendientes, incluso en las colas de transporte.
+  Cancelar la transformación conserva la copia; duplicar y colocar tienen undo propio.
 - En Object, el radial agrupa Alinear caras y las acciones de origen bajo Colocar,
   conservando el límite de ocho sectores y el acceso a Borrar. Con un objeto
   seleccionado también ofrece Colocar y Aplicar (Posición/Rotación/Escala/Todas)
