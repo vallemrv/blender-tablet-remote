@@ -241,7 +241,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // configura el de control y el vídeo se engancha solo (§63).
         viewModelScope.launch {
             client.toolSession.collect { session ->
-                if (session.armed && !session.active) toolPreferences.save(session.tool, session.parameters, client.state.value.unitScaleLength)
+                if (session.armed && !session.active && session.tool != EditTool.F2) toolPreferences.save(session.tool, session.parameters, client.state.value.unitScaleLength)
                 if (session.active) local.update { it.copy(loopCutAwaitingTap = false) }
                 if (session.tool != EditTool.KNIFE) {
                     if (_knifeScreenPoints.value.isNotEmpty()) _knifeScreenPoints.value = emptyList()
@@ -643,9 +643,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setSelectionMode(mode: SelectionMode) {
+        val f2 = client.toolSession.value.armed && client.toolSession.value.tool == EditTool.F2
         closeSessions()
-        local.update { it.copy(shapeTool = ShapeTool.NONE) }
+        local.update { it.copy(shapeTool = ShapeTool.NONE, activeTool = if (f2) ActiveTool.SELECT else it.activeTool) }
         client.setSelectionMode(mode)
+        if (f2 && mode != SelectionMode.FACE) {
+            local.update { it.copy(activeTool = ActiveTool.F2) }
+            client.toolBegin(EditTool.F2, emptyMap())
+        }
     }
 
     private fun closeTransformForToolChange() {
@@ -1049,9 +1054,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         client.setObjectProperties(id, revision, values, token)
     fun toggleModifier(name: String, viewport: Boolean? = null, render: Boolean? = null, editMode: Boolean? = null) = client.modifierToggle(name, viewport, render, editMode)
     fun applyModifier(name: String) = client.modifierApply(name)
-    fun completeFace(u: Float, v: Float) {
-        selectTool()
-        client.editCatalogCommand("mesh.f2", mapOf("u" to u, "v" to v))
+    private var f2GestureId: String? = null
+    fun f2Gesture(phase: GesturePhase, u: Float, v: Float) {
+        val session = client.toolSession.value
+        if (phase == GesturePhase.BEGIN) f2GestureId = java.util.UUID.randomUUID().toString()
+        val id = f2GestureId ?: return
+        if (session.armed && session.tool == EditTool.F2) client.editCatalogCommand("tool.f2_gesture",
+            mapOf("phase" to phase.name, "gesture_id" to id, "u" to u, "v" to v))
+        if (phase == GesturePhase.END || phase == GesturePhase.CANCEL) f2GestureId = null
     }
 
     fun selectSimilar(action: EditCatalogAction, criterion: String) {
@@ -1219,7 +1229,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun cancelTool() {
-        local.update { it.copy(loopCutAwaitingTap = false) }
+        local.update { it.copy(loopCutAwaitingTap = false, activeTool = if (it.activeTool == ActiveTool.F2) ActiveTool.SELECT else it.activeTool) }
         client.toolCancel()
     }
 
@@ -1265,6 +1275,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
         EditTool.SUBDIVIDE -> mapOf("cuts" to 1.0)
         EditTool.REVOLVE, EditTool.SWEEP -> emptyMap()
+        EditTool.F2 -> emptyMap()
         EditTool.LOOP_CUT -> mapOf("cuts" to 1.0, "smoothness" to 0.0, "factor" to 0.0, "snap_type" to "NONE")
         EditTool.BRIDGE_EDGE_LOOPS -> mapOf("twist_offset" to 0.0, "merge_factor" to 0.0, "snap_type" to "NONE")
         EditTool.ALIGN -> emptyMap()
@@ -1328,6 +1339,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * parámetro, igual que ya hacía el catálogo contextual.
      */
     fun activateToolbarFamily(family: EditToolbarFamily, variantId: String? = null) {
+        if (family.id == "F2" && client.toolSession.value.armed && client.toolSession.value.tool == EditTool.F2) {
+            selectTool(); return
+        }
         val available = family.variants.filter { it.availableIn(client.state.value.selectionMode) }
         if (variantId != null && available.none { it.id == variantId }) return
         val remembered = local.value.toolbarVariant[family.id]
@@ -1339,7 +1353,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val toolWire = (variant.payload["tool"] as? String) ?: (family.payload["tool"] as? String) ?: family.id
         val tool = EditTool.fromWire(toolWire) ?: return
         when (tool) {
-            EditTool.LOOP_CUT, EditTool.KNIFE -> beginEditTool(tool)
+            EditTool.LOOP_CUT, EditTool.KNIFE, EditTool.F2 -> beginEditTool(tool)
             EditTool.BISECT -> {
                 closeTransformForToolChange()
                 local.update { it.copy(activeTool = ActiveTool.BISECT, loopCutAwaitingTap = false) }

@@ -125,7 +125,6 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
 
     CaptureSceneDelivery(vm)
 
-    var quickMenuPoint by remember { mutableStateOf<Pair<Float, Float>?>(null) }
     var quickMenuAt by remember { mutableStateOf<Pair<Float, Float>?>(null) }
     // El ojo vive en el estado del ViewModel, no aquí: apagar los controles apaga
     // también los overlays del servidor, y esa parte no es local.
@@ -284,6 +283,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             onToolPointer = vm::toolPointer,
             onDragStart = vm::dragStart,
             onKnifeDrag = vm::knifeDrag,
+            onF2Gesture = vm::f2Gesture,
             onTweakDrag = vm::tweakGesture,
             onCadGesture = vm::cadGesture,
             onSculptStroke = vm::sculptStroke,
@@ -330,13 +330,14 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             tweakActive = !state.blender.cad.workspace && state.activeTool == ActiveTool.TWEAK &&
                 state.blender.mode == BlenderMode.EDIT,
             longPressEnabled = (!cad.sessionActive || (cad.operation == "DRAG" && state.cadTool == null)) && toolSession.input != "REPEAT_TAP" && viewportLongPressEnabled(session.active, toolSession.active),
+            f2Enabled = toolSession.armed && toolSession.tool == EditTool.F2,
             repeatTap = toolSession.armed && toolSession.input == "REPEAT_TAP",
             independentTaps = materialActive || state.blender.mode == BlenderMode.EDIT || state.blender.cad.workspace,
             // Los marcadores de transformación ya forman parte del fotograma.
             snapCandidate = if (state.blender.cad.workspace) null else toolSession.snapCandidate,
             cancelPickOnNavigation = toolSession.input == "FACE_PAIR",
             proportionalCircle = if (state.blender.cad.workspace) null else session.proportionalCircle,
-            navigationOrbitEnabled = (materialActive || sculptActive || cadNavigationOrbit || navigationOrbitVisible(
+            navigationOrbitEnabled = ((toolSession.armed && toolSession.tool == EditTool.F2) || materialActive || sculptActive || cadNavigationOrbit || navigationOrbitVisible(
                 session.active,
                 toolSession.active,
                 state.activeTool,
@@ -349,7 +350,6 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 // se pregunta qué hay debajo: esperar a la respuesta para dibujarlo
                 // se notaría como un tirón.
                 quickMenuAt = x to y
-                quickMenuPoint = u to v
                 if (!state.blender.cad.workspace && !materialActive && !sculptActive) vm.probeTouch(u, v) else vm.clearProbe()
             },
         )
@@ -665,13 +665,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                             }
                         }.toSet() else emptySet()
                 val catalogActions = state.blender.features.editCatalog.actionsFor(state.blender.selectionMode)
-                    .filter { it.id !in excluded }.map { action ->
-                        if (action.id != "F2_COMPLETE") action else {
-                            val count = state.blender.context.selectionCounts
-                            action.copy(enabled = action.enabled && (count.verts == 1 || count.verts == 2 && count.edges == 1))
-                        }
-                    }
-                editCatalogActions(catalogActions, vm, quickMenuPoint)
+                    .filter { it.id !in excluded }
+                editCatalogActions(catalogActions, vm)
             } else {
                 emptyList()
             }
@@ -749,7 +744,7 @@ private val RADIAL_TOP_LEVEL_CATALOG_IDS =
     setOf("SELECT_LOOP", "SELECT_RING", "SELECT_LINKED", "SELECT_SIMILAR", "DELETE", "HIDE")
 
 /** Convierte el contrato opaco en filas, sin repartir nombres wire por la UI. */
-private fun editCatalogActions(actions: List<EditCatalogAction>, vm: MainViewModel, point: Pair<Float,Float>?): List<QuickAction> {
+private fun editCatalogActions(actions: List<EditCatalogAction>, vm: MainViewModel): List<QuickAction> {
     val loopTools = actions.filter { it.id.startsWith("LOOPTOOLS_") }
     val ordinary = actions.filterNot { it.id.startsWith("LOOPTOOLS_") }
     val group = if (loopTools.isEmpty()) emptyList() else listOf(QuickAction("LoopTools", AppIcons.editCatalog("LOOPTOOLS_CIRCLE"),
@@ -758,8 +753,7 @@ private fun editCatalogActions(actions: List<EditCatalogAction>, vm: MainViewMod
         val variants = action.variants.filter { it.enabled }
         if (variants.isEmpty()) {
             QuickAction(action.label, AppIcons.editCatalog(action.id), enabled = action.enabled) {
-                if (action.id == "F2_COMPLETE" && point != null) vm.completeFace(point.first, point.second)
-                else vm.editCatalogAction(action)
+                vm.editCatalogAction(action)
             }
         } else {
             // Tap conserva la primera variante contractual (REGION); el long-click
@@ -801,6 +795,7 @@ class ViewportInput(
     val onToolPointer: (Float, Float) -> Unit,
     val onDragStart: (Float, Float) -> Unit,
     val onKnifeDrag: (GesturePhase, Float, Float) -> Unit,
+    val onF2Gesture: (GesturePhase, Float, Float) -> Unit,
     val onTweakDrag: (GesturePhase, Float, Float, Float, Float) -> Unit,
     val onCadGesture: (GesturePhase, Float, Float) -> Unit,
     val onSculptStroke: (GesturePhase, List<com.blendertablet.remote.model.SculptPoint>, Boolean, Boolean) -> Unit,
@@ -845,6 +840,7 @@ private fun ViewportLayer(
     tweakActive: Boolean,
     longPressEnabled: Boolean,
     repeatTap: Boolean,
+    f2Enabled: Boolean,
     independentTaps: Boolean,
     knifePoints: List<List<Pair<Float, Float>>>,
     snapCandidate: com.blendertablet.remote.model.SnapCandidate?,
@@ -876,6 +872,7 @@ private fun ViewportLayer(
                     onViewGesture = input.onViewGestureLive,
                     onTap = input.onTap,
                     onDoubleTap = input.onDoubleTap,
+                    f2Enabled = f2Enabled, onF2Gesture = input.onF2Gesture,
                     repeatTap = repeatTap,
                     independentTaps = independentTaps,
                     sculptEnabled = sculptEnabled,
@@ -920,6 +917,7 @@ private fun ViewportLayer(
                 onViewGesture = input.onViewGesturePlain,
                 onTap = input.onTap,
                 onDoubleTap = input.onDoubleTap,
+                f2Enabled = f2Enabled, onF2Gesture = input.onF2Gesture,
                 repeatTap = repeatTap,
                 independentTaps = independentTaps,
                 sculptEnabled = sculptEnabled,
@@ -979,6 +977,7 @@ private fun ViewportLayer(
                 onViewGesture = input.onViewGestureLive,
                 onTap = input.onTap,
                 onDoubleTap = input.onDoubleTap,
+                f2Enabled = f2Enabled, onF2Gesture = input.onF2Gesture,
                 repeatTap = repeatTap,
                 independentTaps = independentTaps,
                 sculptEnabled = sculptEnabled,
@@ -1102,6 +1101,7 @@ private fun RailContent(
                 EditTool.SUBDIVIDE -> counts.selectionCounts.edges > 0
                 EditTool.REVOLVE -> counts.selectionCounts.verts > 0
                 EditTool.SWEEP -> counts.selectionCounts.edges > 0
+                EditTool.F2 -> true
                 EditTool.LOOP_CUT -> true // sin arista queda armada y el próximo tap la elige
                 EditTool.BRIDGE_EDGE_LOOPS -> counts.selectionCounts.edges >= 6
                 EditTool.KNIFE -> true // no exige selección previa

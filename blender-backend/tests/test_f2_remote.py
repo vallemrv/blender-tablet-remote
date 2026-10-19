@@ -7,7 +7,7 @@ import bpy
 import bmesh
 from mathutils import Vector, Quaternion
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from blender_tablet_remote.commands import mesh, history, sessions
+from blender_tablet_remote.commands import tools, f2, history, sessions, snap
 from blender_tablet_remote.camera import camera
 from blender_tablet_remote.bpy_utils import find_view3d, undo_push
 from blender_tablet_remote.errors import CommandError
@@ -33,10 +33,15 @@ class RemoteF2Tests(unittest.TestCase):
         if selected_edge is not None:
             bpy.context.scene.tool_settings.mesh_select_mode=(False,True,False);bm.edges[selected_edge].select_set(True)
         bmesh.update_edit_mesh(data)
+        tools.begin(dict(tool='F2',parameters={},_client_id='tablet'))
         return obj
-    def run_f2(self,point):
+    def gesture(self,phase,point,identifier='touch'):
         u,v=camera.project(Vector(point),self.rv)
-        return mesh.f2_complete(dict(u=u,v=v))
+        return tools.f2_gesture(dict(phase=phase,u=u,v=v,gesture_id=identifier,_client_id='tablet'))
+    def run_f2(self,point):
+        self.gesture('BEGIN',point)
+        return self.gesture('END',point)
+    def tearDown(self):sessions.cancel_all()
     def test_vertex_completes_quad_without_pc_transform_modal(self):
         obj=self.shape([(0,0,0),(1,0,0),(0,1,0)],[(0,1),(0,2)],selected_vertex=0)
         matrix=obj.matrix_world.copy()
@@ -56,7 +61,80 @@ class RemoteF2Tests(unittest.TestCase):
         with patch('blender_tablet_remote.bpy_utils.undo_push') as push:
             with self.assertRaises(CommandError):self.run_f2((1,1,0))
         self.assertEqual((len(bmesh.from_edit_mesh(obj.data).verts),len(bmesh.from_edit_mesh(obj.data).faces)),(2,0));push.assert_not_called()
-        self.assertFalse(any(m.name.startswith('.remote_f2_backup') for m in bpy.data.meshes))
+        self.assertFalse(any(m.name.startswith('.remote_f2_') for m in bpy.data.meshes))
+    def test_tap_selects_or_deselects_without_creating_a_face(self):
+        obj=self.shape([(0,0,0),(1,0,0),(0,1,0)],[(0,1),(0,2)])
+        with patch('blender_tablet_remote.bpy_utils.undo_push') as push:
+            self.run_f2((0,0,0))
+            bm=bmesh.from_edit_mesh(obj.data);self.assertEqual(sum(v.select for v in bm.verts),1)
+            self.assertEqual(len(bm.faces),0)
+            self.run_f2((0,0,0));self.assertEqual(sum(v.select for v in bmesh.from_edit_mesh(obj.data).verts),0)
+            push.assert_not_called()
+        self.assertEqual(tools.tool_session.armed_tool,'F2')
+    def test_end_uses_last_preview_without_query_and_duplicate_end_is_harmless(self):
+        obj=self.shape([(0,0,0),(1,0,0),(0,1,0)],[(0,1),(0,2)],selected_vertex=0)
+        with patch('blender_tablet_remote.bpy_utils.undo_push') as push:
+            self.gesture('BEGIN',(1,1,0))
+            self.assertEqual(len(bmesh.from_edit_mesh(obj.data).faces),1);push.assert_not_called()
+            with patch.object(snap,'query_edit_surface_candidate',side_effect=AssertionError('END raycast')):
+                self.gesture('END',(10,10,0));self.gesture('END',(10,10,0))
+            push.assert_called_once()
+        self.assertEqual(len(bmesh.from_edit_mesh(obj.data).faces),1)
+        self.assertEqual(tools.tool_session.armed_tool,'F2')
+    def test_cancel_discards_preview_and_keeps_original_selection(self):
+        obj=self.shape([(0,0,0),(1,0,0),(0,1,0)],[(0,1),(0,2)],selected_vertex=0)
+        with patch('blender_tablet_remote.bpy_utils.undo_push') as push:
+            self.gesture('BEGIN',(1,1,0));self.gesture('CANCEL',(1,1,0))
+            bm=bmesh.from_edit_mesh(obj.data)
+            self.assertEqual((len(bm.verts),len(bm.faces),sum(v.select for v in bm.verts)),(3,0,1))
+            push.assert_not_called()
+        self.assertEqual(tools.tool_session.armed_tool,'F2')
+    def test_multiple_vertices_fill_without_creating_new_vertices(self):
+        obj=self.shape([(0,0,0),(1,0,0),(1,1,0),(0,1,0)],[(0,1),(1,2),(2,3),(3,0)])
+        bpy.ops.mesh.select_all(action='SELECT')
+        self.run_f2((.5,.5,0))
+        bm=bmesh.from_edit_mesh(obj.data);self.assertEqual((len(bm.verts),len(bm.faces)),(4,1))
+    def test_switch_and_disconnect_restore_pending_face(self):
+        obj=self.shape([(0,0,0),(1,0,0),(0,1,0)],[(0,1),(0,2)],selected_vertex=0)
+        self.gesture('BEGIN',(1,1,0))
+        tools.begin(dict(tool='KNIFE',parameters={},_client_id='tablet'))
+        self.assertEqual(len(bmesh.from_edit_mesh(obj.data).faces),0)
+        with self.assertRaises(CommandError):self.gesture('END',(1,1,0))
+        tools.cancel(dict(_client_id='tablet'))
+        tools.begin(dict(tool='F2',parameters={},_client_id='tablet'))
+        self.gesture('BEGIN',(1,1,0))
+        tools.tool_session.owner_disconnected('tablet')
+        self.assertEqual(len(bmesh.from_edit_mesh(obj.data).faces),0)
+        self.assertIsNone(f2._pending)
+
+    def test_save_discards_pending_preview_without_committing_it(self):
+        from blender_tablet_remote.cad import lifecycle
+        import tempfile
+        obj=self.shape([(0,0,0),(1,0,0),(0,1,0)],[(0,1),(0,2)],selected_vertex=0)
+        lifecycle.register_handlers()
+        try:
+            self.gesture('BEGIN',(1,1,0))
+            with tempfile.TemporaryDirectory() as folder:
+                bpy.ops.wm.save_as_mainfile(filepath=str(Path(folder)/'f2.blend'))
+            self.assertEqual(len(bmesh.from_edit_mesh(obj.data).faces),0)
+            self.assertIsNone(f2._pending)
+            self.gesture('END',(1,1,0))
+            self.assertEqual(len(bmesh.from_edit_mesh(obj.data).faces),0)
+        finally:lifecycle.unregister_handlers()
+    def test_foreign_owner_cannot_commit_a_pending_face(self):
+        self.shape([(0,0,0),(1,0,0),(0,1,0)],[(0,1),(0,2)],selected_vertex=0)
+        self.gesture('BEGIN',(1,1,0))
+        with self.assertRaises(CommandError):tools.f2_gesture(dict(phase='END',gesture_id='touch',_client_id='other'))
+        self.assertIsNotNone(f2._pending)
+        self.gesture('CANCEL',(1,1,0))
+
+    def test_collinear_corner_does_not_commit_a_zero_area_face(self):
+        obj=self.shape([(0,0,0),(1,0,0),(-1,0,0)],[(0,1),(0,2)],selected_vertex=0)
+        with patch('blender_tablet_remote.bpy_utils.undo_push') as push:
+            with self.assertRaises(CommandError):self.run_f2((0,1,0))
+            push.assert_not_called()
+        bm=bmesh.from_edit_mesh(obj.data);self.assertEqual((len(bm.verts),len(bm.faces)),(3,0))
+
     def test_single_undo_and_redo_restore_face(self):
         obj=self.shape([(0,0,0),(1,0,0),(0,1,0)],[(0,1),(0,2)],selected_vertex=0)
         name=obj.name;undo_push('Before F2')

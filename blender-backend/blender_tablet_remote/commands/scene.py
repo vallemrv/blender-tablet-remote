@@ -8,7 +8,7 @@ import bpy
 
 from .. import state
 from ..errors import CommandError
-from ..protocol import ENUMS, FEATURES, LOOPTOOLS_CIRCLE_ACTION, LOOPTOOLS_SPACE_ACTION, F2_COMPLETE_ACTION, PROTOCOL_VERSION, UNITS
+from ..protocol import ENUMS, FEATURES, LOOPTOOLS_CIRCLE_ACTION, LOOPTOOLS_SPACE_ACTION, F2_TOOLBAR, PROTOCOL_VERSION, UNITS
 from . import command, names
 
 
@@ -63,7 +63,7 @@ def capabilities(payload: dict) -> dict:
     from .. import VERSION
 
     features = deepcopy(FEATURES)
-    for descriptor, name in ((LOOPTOOLS_CIRCLE_ACTION, "looptools_circle"), (LOOPTOOLS_SPACE_ACTION, "looptools_space"), (F2_COMPLETE_ACTION, "f2")):
+    for descriptor, name in ((LOOPTOOLS_CIRCLE_ACTION, "looptools_circle"), (LOOPTOOLS_SPACE_ACTION, "looptools_space")):
         try:
             getattr(bpy.ops.mesh, name).get_rna_type()
         except (AttributeError, KeyError, RuntimeError):
@@ -73,6 +73,13 @@ def capabilities(payload: dict) -> dict:
             action = deepcopy(descriptor)
             action["requirements"]["selection_modes"] = [mode]
             catalog[mode].insert(1, action)
+
+    try:
+        bpy.ops.mesh.f2.get_rna_type()
+        features['edit_toolbar']['families'].append(deepcopy(F2_TOOLBAR))
+        features['edit_tools']['tools'].append('F2')
+    except (AttributeError,KeyError,RuntimeError):
+        pass
 
     return {
         "addon_version": ".".join(str(n) for n in VERSION),

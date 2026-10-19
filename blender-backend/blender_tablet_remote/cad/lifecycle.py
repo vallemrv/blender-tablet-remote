@@ -8,6 +8,8 @@ from .runtime import runtime
 def save_pre(*_):
     from ..commands.selection_paint import cancel
     cancel()
+    from ..commands import f2
+    f2.cancel()
     runtime.suspend_save()
 
 
@@ -20,6 +22,8 @@ def save_post(*_):
 def load_pre(*_):
     from ..commands.selection_paint import cancel
     cancel()
+    from ..commands import f2
+    f2.cancel()
     from ..commands import reconnect
     reconnect.clear()
     runtime.leave()
@@ -34,6 +38,8 @@ def load_post(*_):
 def undo_pre(*_):
     from ..commands.selection_paint import cancel
     cancel()
+    from ..commands import f2
+    f2.cancel()
     runtime.cancel()
 
 

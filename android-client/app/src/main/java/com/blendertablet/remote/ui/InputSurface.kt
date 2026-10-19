@@ -62,6 +62,8 @@ fun InputSurface(
     onTap: (Float, Float, Boolean) -> Unit,
     onDoubleTap: () -> Unit,
     repeatTap: Boolean = false,
+    f2Enabled: Boolean = false,
+    onF2Gesture: (GesturePhase, Float, Float) -> Unit = { _,_,_ -> },
     independentTaps: Boolean = false,
     sculptEnabled: Boolean = false,
     sculptStylusOnly: Boolean = true,
@@ -108,6 +110,8 @@ fun InputSurface(
                 view.lightDrag.onGesture = onLightGesture
                 view.lightCursorEnabled = lightCursorEnabled
                 view.onLongPress = onLongPress
+                view.f2Touch.dispatch = onF2Gesture
+                view.f2Enabled = f2Enabled
                 view.repeatTap = repeatTap
                 view.independentTaps = independentTaps
                 view.shapeTool = shapeTool
@@ -227,6 +231,12 @@ private class GestureView(
      * servidor qué hay debajo.
      */
     var onLongPress: (px: Float, py: Float, u: Float, v: Float) -> Unit = { _, _, _, _ -> }
+    val f2Touch = F2TouchGesture()
+    var f2Enabled = false
+        set(value) {
+            if (!value && f2Touch.active) { suppressSingleAfterTweak = true; f2Touch.cancel() }
+            field = value
+        }
     private val tapExtrusion = TapExtrusionGesture()
     var independentTaps: Boolean = false
     var repeatTap: Boolean = false
@@ -413,6 +423,11 @@ private class GestureView(
                     invalidate()
                     return true
                 }
+                if (f2Enabled) {
+                    lastDispatchAt = event.eventTime
+                    f2Touch.begin(nx(event.x),ny(event.y))
+                    return true
+                }
                 if (repeatTap) {
                     tapExtrusion.begin(nx(event.x), ny(event.y))
                     return true
@@ -470,6 +485,7 @@ private class GestureView(
 
             MotionEvent.ACTION_POINTER_DOWN -> if (event.pointerCount >= 2) {
                 removeCallbacks(longPressRunnable)
+                if (f2Touch.active) { f2Touch.cancel(); suppressSingleAfterTweak = true }
                 if (repeatTap) {
                     tapExtrusion.cancel()
                     suppressSingleAfterTweak = true
@@ -511,6 +527,11 @@ private class GestureView(
             // tres dedos para la captura de pantalla y nunca llega completo.
             MotionEvent.ACTION_MOVE ->
                 if (event.pointerCount >= 2) handlePair(event)
+                else if (f2Touch.active) {
+                    if (event.eventTime - lastDispatchAt >= KNIFE_DISPATCH_MS) {
+                        f2Touch.move(nx(event.x),ny(event.y));lastDispatchAt = event.eventTime
+                    }
+                }
                 else if (tapExtrusion.active) {
                     tapExtrusion.move(nx(event.x), ny(event.y))
                 }
@@ -551,6 +572,11 @@ private class GestureView(
 
             MotionEvent.ACTION_UP -> {
                 removeCallbacks(longPressRunnable)
+                if (f2Touch.active) {
+                    f2Touch.end()
+                    parent?.requestDisallowInterceptTouchEvent(false)
+                    return true
+                }
                 if (tapExtrusion.active) {
                     tapExtrusion.end()?.let { (u, v) -> onTap(u, v, isStylus(downToolType)) }
                     parent?.requestDisallowInterceptTouchEvent(false)
@@ -595,6 +621,7 @@ private class GestureView(
             }
 
             MotionEvent.ACTION_CANCEL -> {
+                f2Touch.cancel()
                 if (shapeDrawing && shapeTool == ShapeTool.PAINT) dispatchSelectionPaint(GesturePhase.CANCEL)
                 removeCallbacks(longPressRunnable)
                 tapExtrusion.cancel()
@@ -861,6 +888,7 @@ private class GestureView(
     }
 
     override fun onDetachedFromWindow() {
+        f2Touch.cancel()
         lightDrag.cancel()
         onLightPointer(null)
         cancelSculpt()

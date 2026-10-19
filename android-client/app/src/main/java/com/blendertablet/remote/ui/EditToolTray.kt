@@ -89,6 +89,7 @@ private fun specsFor(tool: EditTool): List<ParamSpec> = when (tool) {
     )
     EditTool.ALIGN -> emptyList()
     EditTool.REVOLVE, EditTool.SWEEP -> emptyList()
+    EditTool.F2 -> emptyList()
     EditTool.KNIFE -> emptyList()
     EditTool.BISECT -> emptyList()
 }
@@ -111,8 +112,8 @@ fun EditToolTray(
         else session.instruction.ifBlank { if (session.tool == EditTool.EXTRUDE) "Arrastra para extruir · escribe una medida, por ejemplo 5mm"
             else "Arrastra sobre la malla y toca el número para afinar" }
     if (!session.active && session.controls.isEmpty()) {
-        SingleLineTray(session.tool.label, onCancel = onCancel, modifier = modifier) {
-            Text("Toca una arista para colocar el primer corte", color = Ink.Muted, fontSize = 12.sp, maxLines = 1)
+        SingleLineTray(session.tool.label, onCancel = onCancel, modifier = modifier, help = instruction) {
+            Text(if (session.tool == EditTool.F2) session.instruction else "Toca una arista para colocar el primer corte", color = Ink.Muted, fontSize = 12.sp, maxLines = 1)
         }
         return
     }

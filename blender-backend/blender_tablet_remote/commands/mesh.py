@@ -874,12 +874,6 @@ def split(payload: dict) -> dict:
     return {"object": obj.name, "created_objects": []}
 
 
-@command("mesh.f2", mutating=True)
-def f2_complete(payload: dict) -> dict:
-    from .f2 import complete
-    return complete(payload)
-
-
 @command("mesh.looptools_circle", mutating=True)
 def looptools_circle(payload: dict) -> dict:
     return _looptools(payload, "circle", 3)

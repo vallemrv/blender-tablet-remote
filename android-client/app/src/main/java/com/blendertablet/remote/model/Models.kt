@@ -9,7 +9,7 @@ enum class BlenderMode { OBJECT, EDIT, SCULPT }
 enum class SelectionMode { VERTEX, EDGE, FACE }
 /** Atajos de la página Edit; su adaptador wire vive en MainViewModel. */
 enum class EditFooterAction { MAKE_EDGE_FACE, CONNECT_VERTICES, KNIFE, SEPARATE, SPLIT, NORMALS, NORMALS_OUTSIDE, NORMALS_INSIDE, NORMALS_FLIP }
-enum class ActiveTool { SELECT, TWEAK, MOVE, ROTATE, SCALE, EXTRUDE, BEVEL, INSET, SUBDIVIDE, LOOP_CUT, BRIDGE_EDGE_LOOPS, KNIFE, BISECT, REVOLVE, SWEEP }
+enum class ActiveTool { SELECT, TWEAK, MOVE, ROTATE, SCALE, EXTRUDE, BEVEL, INSET, SUBDIVIDE, LOOP_CUT, BRIDGE_EDGE_LOOPS, KNIFE, BISECT, REVOLVE, SWEEP, F2 }
 
 /**
  * Operación de selección que aplican el tap, la caja y el círculo. Mayús/Ctrl/Alt

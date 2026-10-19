@@ -2665,16 +2665,26 @@ JSON del boceto, restricciones y trabajo diferido; no evalúa ni convierte sóli
 Sale del workspace, selecciona la copia y registra un undo. Devuelve estado CAD,
 `mesh_object` y snapshot explícito `state` para actualizar Objeto en Android.
 
-### Completar cara con F2
+### F2 como herramienta táctil continua
 
-`mesh.f2 {u,v}` usa una selección Edit de un vértice o dos vértices unidos por una
-arista. `F2_COMPLETE` se anuncia en el catálogo cuando `mesh.f2` nativo está
-registrado. `u,v` es la pulsación larga normalizada del vídeo. Se ejecutan las
-funciones nativas del add-on con una proyección independiente de la tablet;
-no se inicia su autograb ni una transformación modal del PC. Conserva rv3d,
-restaura el baseline ante fallo y registra un undo cuando crea una cara.
-Los vecinos ocultos se rechazan antes de ejecutar el add-on. La acción F normal
-para rellenar selecciones mayores sigue en el pie de atajos, sin duplicarse.
+Si el add-on está habilitado, `edit_toolbar` anuncia la familia `F2`, disponible
+con selección Vertex/Edge. `tool.begin {tool:"F2"}` arma sin modificar geometría
+ni selección y devuelve `input:"F2_DRAW", armed:true, active:false`.
+
+`tool.f2_gesture {phase:"BEGIN|UPDATE|END|CANCEL", gesture_id, u, v}` controla cada
+toque. BEGIN/UPDATE reconstruyen desde un baseline privado: los candidatos
+visibles de vértice/arista usan la política común de snap y alternan selección;
+fuera de ellos se prepara la cara con los helpers nativos de F2 o con
+`mesh.edge_face_add` para tres o más vértices. END no hace raycast: confirma el
+último candidato estable, con un undo solo si creó una cara. Repetir END o un ID
+antiguo no crea nada. El resultado incluye un snapshot explícito `state`.
+
+CANCEL, desarmar, cambiar herramienta, desconectar y guardar restauran el
+baseline pendiente. F2 conserva las caras ya confirmadas. Un error mantiene
+la geometría y permite otro toque; no abre un modal del PC ni escribe en rv3d.
+El navegador azul y los dos dedos navegan sin crear caras. La acción discreta
+`mesh.f2` del protocolo remoto se ha retirado; `bpy.ops.mesh.f2` sigue siendo el
+operador nativo cuya disponibilidad habilita esta herramienta.
 
 `REVOLVE` conserva su identificador wire y motor `bmesh.ops.spin`; Android lo
 presenta como «Spin · Revolución», con ángulo/pasos/eje y centro desde el cursor.

@@ -129,7 +129,7 @@ class WebSocketRemoteBlenderClient(
             "tool.loop_pick", "tool.loop_pop", "tool.knife_drag", "tool.knife_point", "tool.knife_pop",
             "tool.knife_new_stroke", "tool.knife_close",
             "tool.drag_line", "tool.snap_candidate", "tool.face_pick",
-            "tool.extrude_cursor",
+            "tool.extrude_cursor", "tool.f2_gesture",
         )
     }
 
@@ -1172,6 +1172,7 @@ class WebSocketRemoteBlenderClient(
                     }
                     command in TOOL_COMMANDS -> {
                         _toolSession.value = StateParser.toolSession(result)
+                        if (command == "tool.f2_gesture") result?.optJSONObject("state")?.let(::updateState)
                         if (command == "tool.snap_candidate") {
                             toolSnapInFlight.set(false)
                             flushToolSnap()

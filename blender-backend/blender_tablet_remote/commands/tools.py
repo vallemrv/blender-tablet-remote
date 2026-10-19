@@ -16,7 +16,7 @@ from . import knife as knife_commands
 from . import mesh as mesh_commands
 from . import profile_tools
 
-SUPPORTED = {"EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE", "BISECT", "ALIGN", "REVOLVE", "SWEEP"}
+SUPPORTED = {"EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE", "BISECT", "ALIGN", "REVOLVE", "SWEEP", "F2"}
 
 # Herramientas cuya sesión puede quedar ARMED (elegidas pero sin backup ni preview
 # todavía) porque su primer dato lo da un toque/arrastre en el viewport, no la
@@ -88,6 +88,9 @@ class ToolSession:
         self.armed_tool, self.armed_owner, self.armed_params = tool, owner, dict(params)
 
     def disarm(self):
+        if self.armed_tool == 'F2':
+            from . import f2
+            f2.cancel()
         self.armed_tool, self.armed_owner, self.armed_params = None, None, {}
 
     def begin(self, tool, owner, params):
@@ -158,6 +161,14 @@ class ToolSession:
             unit_scale = max(bpy.context.scene.unit_settings.scale_length, 1e-12)
             for spec in profile_tools.SWEEP_CONTROLS:
                 params.setdefault(spec["id"], spec["default"] / unit_scale if spec.get("unit") == "length" else spec["default"])
+        if tool == 'F2':
+            if bpy.context.scene.tool_settings.mesh_select_mode[2]:
+                raise CommandError('F2 usa selección de vértices o aristas',code='incompatible_selection')
+            try: bpy.ops.mesh.f2.get_rna_type()
+            except (AttributeError,KeyError,RuntimeError) as exc:
+                raise CommandError('El add-on F2 no está habilitado',code='dependency_unavailable') from exc
+            self.arm(tool, owner, {})
+            return
         if tool == "EXTRUDE" and params.get("variant") == "CURSOR":
             self.arm(tool, owner, {"variant": "CURSOR", "rotate_source": params.get("rotate_source", True)})
             return
@@ -324,6 +335,7 @@ class ToolSession:
             self.params['even'] = self.result['even']
 
     def close(self):
+        self.disarm()
         backups = {mesh for mesh in [self.backup, self.original_backup] if mesh is not None}
         backups.update(base for base, _params in self.loop_history)
         self.reset()
@@ -387,6 +399,9 @@ class ToolSession:
         if self.armed_tool:
             result = {"active": False, "armed": True, "phase": "ARMED", "tool": self.armed_tool,
                       "owner": self.armed_owner, "parameters": self.armed_params}
+            if self.armed_tool == 'F2':
+                result.update(input='F2_DRAW',can_confirm=False,
+                    instruction='Toca vértices o aristas para seleccionar · toca fuera para crear una cara')
             if self.armed_tool == "EXTRUDE" and self.armed_params.get("variant") == "CURSOR":
                 result.update(input="REPEAT_TAP", can_confirm=False,
                               instruction="Toca para extruir · cada toque crea un tramo · Deshacer retira el último",
@@ -404,6 +419,14 @@ class ToolSession:
 
 
 tool_session = ToolSession()
+
+
+@command("tool.f2_gesture", mutating=True)
+def f2_gesture(payload):
+    if tool_session.armed_tool != 'F2':
+        raise CommandError('Activa F2 primero',code='no_session')
+    from . import f2
+    return f2.gesture(payload, tool_session)
 
 
 @command("tool.extrude_cursor", mutating=True)

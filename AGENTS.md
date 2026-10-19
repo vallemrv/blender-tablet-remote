@@ -159,11 +159,14 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   e identidad validan el diálogo. No evalúa sólidos ni finaliza un croquis pendiente.
 - En Edición, radial → Malla ofrece Spin · Revolución con la operación nativa
   existente: ángulo, pasos y eje, y centro inicial en el cursor 3D (editable en Más).
-- Completar cara · F2 vive en radial → Malla para un vértice o una arista del borde,
-  solo cuando el add-on nativo está habilitado. El punto de la pulsación larga y
-  la proyección de la tablet eligen el lado. Usa las funciones del add-on sin su
-  autograb/modal del PC; no escribe en rv3d. Un fallo restaura la malla y el éxito
-  crea un undo. La selección inválida y los vecinos ocultos se rechazan antes.
+- F2 es una herramienta continua del rail izquierdo de Edición, disponible con
+  el add-on nativo. Tocar vértices/aristas alterna selección sin crear caras;
+  tocar fuera prepara la cara con F2 (o relleno nativo con tres o más vértices).
+  UP confirma el último candidato, sin sondear otra vez, y crea un undo por cara.
+  F2 sigue armado al terminar. Repetir su botón o × lo desactiva. Dos dedos,
+  navegador azul, cambio de herramienta, desconexión y guardado cancelan el gesto
+  pendiente y restauran su baseline. IDs de gesto y propietario bloquean cierres
+  atrasados o ajenos. No inicia autograb ni modifica rv3d; ya no vive en el radial.
 - CAD es un workspace; Blender permanece en Object. Sus longitudes son metros y
   se convierten a unidades Blender al materializar. IDs y revisión pertenecen al
   documento; la malla evaluada no es la fuente ni admite Edit sin conversión explícita.
@@ -212,9 +215,14 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   documento de encargo con varios puntos y pide hacerlo todo, se implementan todos en la
   misma entrega, sin pedir aceptación entre puntos. En ese caso no aplican «una
   incidencia activa» ni «no rediseñar asuntos adyacentes» para lo que el documento
-  describe; sí un commit por punto, tests en verde y un único APK al final. Encargo
-  vigente: `~/proyectos/tareas-ui-bandejas-blender.md` (bandejas de herramientas);
-  `tareas-ui-coherencia-blender.md` ya está entregado.
+  describe; sí un commit por punto, tests en verde y un único APK al final.
+- Estado de encargos (2026-10-20): no hay ningún encargo por lotes vigente. Entregados:
+  `~/proyectos/tareas-codex-cad-impresion3d.md` (las 6 herramientas CAD),
+  `~/proyectos/tareas-ui-coherencia-blender.md` (A–E, 19-10) y
+  `~/proyectos/tareas-ui-bandejas-blender.md` (0.1.7). Pendiente del usuario: probar en la
+  tablet la interfaz unificada y las bandejas. Al recibir un encargo nuevo, anotarlo aquí
+  y moverlo a entregados al cerrarlo. La ficha de la wiki es
+  `~/wiki-proyectos/proyectos/blender-remoto.md`.
 - Cada cambio debe ser pequeño y centrado en el comportamiento comunicado.
 - No se aprovecha una reparación para rediseñar o corregir asuntos adyacentes.
 - Cuando el usuario comunica un fallo distinto después de recibir una entrega, la

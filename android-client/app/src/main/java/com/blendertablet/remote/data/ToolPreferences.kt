@@ -28,6 +28,7 @@ internal fun reusableToolValues(tool: EditTool, source: Map<String, Any?>, scale
         EditTool.INSET -> setOf("thickness", "depth", "boundary")
         EditTool.BRIDGE_EDGE_LOOPS -> setOf("twist_offset", "merge", "merge_factor")
         EditTool.SUBDIVIDE -> setOf("cuts", "smoothness")
+        EditTool.F2 -> emptySet()
         EditTool.KNIFE -> setOf("snap", "snap_mode")
         EditTool.BISECT -> setOf("fill", "clear_inner", "clear_outer", "snap")
         EditTool.REVOLVE -> setOf("angle", "steps", "axis", "merge")

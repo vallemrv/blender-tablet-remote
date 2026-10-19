@@ -5,7 +5,7 @@ PROTOCOL_VERSION = "2.0"
 ENUMS = {
     "mode": ["OBJECT", "EDIT", "CAD", "SCULPT", "MATERIAL"],
     "selection_mode": ["VERTEX", "EDGE", "FACE"],
-    "tool": ["SELECT", "MOVE", "ROTATE", "SCALE", "EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE", "BISECT", "REVOLVE", "SWEEP"],
+    "tool": ["SELECT", "MOVE", "ROTATE", "SCALE", "EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE", "BISECT", "REVOLVE", "SWEEP", "F2"],
     "modifier_type": ["SUBSURF", "MULTIRES", "ARRAY", "BEVEL", "SOLIDIFY", "BOOLEAN", "MIRROR", "SIMPLE_DEFORM", "LATTICE"],
     "subdivision_type": ["CATMULL_CLARK", "SIMPLE"],
     "boolean_operation": ["DIFFERENCE", "UNION", "INTERSECT"],
@@ -301,11 +301,9 @@ LOOPTOOLS_SPACE_ACTION = dict(LOOPTOOLS_CIRCLE_ACTION,
     requirements={"mode": "EDIT", "selection_modes": ["VERTEX", "EDGE"], "selection": {"verts": {"min": 2}}})
 
 
-F2_COMPLETE_ACTION = {
-    "id": "F2_COMPLETE", "label": "Completar cara · F2", "command": "mesh.f2", "enabled": True,
-    "execution": "DISCRETE", "requirements": {"mode": "EDIT", "selection_modes": ["VERTEX", "EDGE"],
-        "selection": {"verts": {"min": 1, "max": 2}}}, "variants": [], "parameters": [],
-}
+F2_TOOLBAR = _toolbar_family("F2", "Completar caras · F2", "F2", input="F2_DRAW",
+    requirements={"selection_modes": ["VERTEX", "EDGE"]},
+    variants=[_toolbar_variant("F2", "Completar caras", input="F2_DRAW", requirements={"selection_modes": ["VERTEX", "EDGE"]})])
 
 
 SELECTION_SIMILAR = {
@@ -329,8 +327,6 @@ def _similar_action(mode, count):
 EDIT_CATALOG = {
     "version": 1,
     "conditional_actions": [
-        {"id": "F2_COMPLETE", "label": "Completar cara · F2", "command": "mesh.f2", "execution": "DISCRETE",
-         "selection_modes": ["VERTEX", "EDGE"], "availability": "OPERATOR_REGISTERED", "operator": "mesh.f2"},
         {"id": "LOOPTOOLS_SPACE", "label": "Espaciar", "command": "mesh.looptools_space",
          "execution": "DISCRETE", "selection_modes": ["VERTEX", "EDGE"],
          "availability": "OPERATOR_REGISTERED", "operator": "mesh.looptools_space"},
