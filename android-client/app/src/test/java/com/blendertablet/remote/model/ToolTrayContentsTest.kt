@@ -42,6 +42,19 @@ class ToolTrayContentsTest {
         assertTrue("profile" in many.advanced);assertFalse("miter_outer" in many.advanced)
     }
 
+    @Test fun extrudeKeepsOnlyDistanceAndAxisAndParsesTypedUnitsAtAnySceneScale() {
+        val free=toolTrayContents(ToolSession(tool=EditTool.EXTRUDE))
+        assertEquals(listOf("offset","constraint","more"),free.visible)
+        assertFalse("orientation" in free.advanced)
+        assertTrue("orientation" in toolTrayContents(ToolSession(tool=EditTool.EXTRUDE,parameters=mapOf("constraint" to "X"))).advanced)
+        assertFalse("constraint" in toolTrayContents(ToolSession(tool=EditTool.EXTRUDE,parameters=mapOf("variant" to "INDIVIDUAL"))).visible)
+        assertEquals(5.0,parseToolValue("5mm",10.0,TransformMode.MOVE,LengthUnit.CENTIMETERS,.001)!!,1e-9)
+        assertEquals(11.0,parseToolValue("+1mm",10.0,TransformMode.MOVE,LengthUnit.CENTIMETERS,.001)!!,1e-9)
+        assertEquals(20.0,parseToolValue("2",10.0,TransformMode.MOVE,LengthUnit.CENTIMETERS,.001)!!,1e-9)
+        assertEquals(.25,parseToolValue("25%",.5,TransformMode.SCALE,null,1.0)!!,1e-9)
+        assertNull(parseToolValue("",10.0,TransformMode.MOVE,LengthUnit.CENTIMETERS,.001))
+    }
+
     @Test fun savedLengthsFollowPhysicalSizeAndNeverRestoreLoopLocationOrGeometryIds() {
         val stored=reusableToolValues(EditTool.BEVEL,mapOf("offset" to 5.0,"snap_step" to 1.0,"segments" to 3,"edge" to 55),.001,true)
         assertEquals(.005,stored["offset"])

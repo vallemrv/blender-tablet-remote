@@ -42,3 +42,17 @@ fun parseLoopPosition(text: String, currentFactor: Double, rangeMeters: Double):
     } else NumericExpression.evaluate(input.removeSuffix("%"), currentFactor * 100)?.div(100)
     return result?.takeIf { it.isFinite() }
 }
+
+/** Relative expressions use the unit typed, even when it differs from the displayed preset. */
+fun parseToolValue(input: String, current: Double, mode: TransformMode, lengthUnit: LengthUnit?, scale: Double): Double? {
+    val text = input.trim().lowercase()
+    if (text.isBlank()) return null
+    if (mode == TransformMode.MOVE) {
+        val explicit = text.endsWith("m")
+        val unit = if (explicit) when { text.endsWith("mm") -> "mm"; text.endsWith("cm") -> "cm"; else -> "m" }
+            else lengthUnit?.short ?: "m"
+        val meters = when (unit) { "mm" -> .001; "cm" -> .01; else -> 1.0 }
+        return ValueParser.parseMove(if (explicit) text else text + unit, current * scale / meters)?.div(scale.coerceAtLeast(1e-12))
+    }
+    return ValueParser.parse(text, mode, if (text.endsWith("%")) current * 100 else current)
+}

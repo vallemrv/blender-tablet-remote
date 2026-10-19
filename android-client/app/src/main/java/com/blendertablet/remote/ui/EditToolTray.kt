@@ -120,7 +120,8 @@ fun EditToolTray(
     if (session.tool in setOf(EditTool.KNIFE, EditTool.BISECT)) return
     val instruction = if (session.tool == EditTool.LOOP_CUT)
         "Arrastra para desplazar · toca otra arista para añadir otro corte"
-        else session.instruction.ifBlank { "Arrastra sobre la malla y toca el número para afinar" }
+        else session.instruction.ifBlank { if (session.tool == EditTool.EXTRUDE) "Arrastra para extruir · escribe una medida, por ejemplo 5mm"
+            else "Arrastra sobre la malla y toca el número para afinar" }
     if (!session.active && session.controls.isEmpty()) {
         SingleLineTray(session.tool.label, onCancel = onCancel, modifier = modifier) {
             Text("Toca una arista para colocar el primer corte", color = Ink.Muted, fontSize = 12.sp, maxLines = 1)
@@ -301,7 +302,6 @@ private fun ParamStepper(
     stepSize: Double? = null,
     lengthUnit: LengthUnit? = null,
     millimeterDecimals: Int? = null,
-    showReset: Boolean = false,
     quickValues: List<Int> = emptyList(),
     onCommit: (Double) -> Unit,
 ) {
@@ -320,13 +320,7 @@ private fun ParamStepper(
 
     fun readDraft(): Double? {
         val input = text ?: return shownValue
-        val display = if (lengthUnit != null)
-            moveValueForDisplay(shownValue, lengthUnit.transformStepUnit(), unitScaleLength) else shownValue
-        val trimmed = input.trim()
-        val withUnit = if (lengthUnit != null && trimmed.lastOrNull()?.isLetter() != true)
-            "$trimmed ${lengthUnit.short}" else input
-        val parsed = ValueParser.parse(withUnit, spec.mode, display) ?: return null
-        val wire = if (spec.mode == TransformMode.MOVE) parsed / unitScaleLength else parsed
+        val wire = com.blendertablet.remote.model.parseToolValue(input, shownValue, spec.mode, lengthUnit, unitScaleLength) ?: return null
         return clampParam(wire, spec.isInt, spec.min, spec.max)
     }
     fun commit() {
@@ -359,11 +353,7 @@ private fun ParamStepper(
         StepperButton("+") {
             adjust(1)
         }
-        if (showReset) PillButton("Reset 0") {
-            text = null
-            pendingValue = if (value == 0.0) null else 0.0
-            onCommit(0.0)
-        }
+
     }
 }
 
