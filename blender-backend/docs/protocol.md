@@ -2692,8 +2692,12 @@ presenta como «Spin · Revolución», con ángulo/pasos/eje y centro desde el c
 ### Centro recordado de transformación
 
 `transform.begin` acepta `center_mode`: `SELECTION` (punto medio, por defecto),
-`CURSOR`, `OBJECT_ORIGIN` o `PICKED`. Este último exige `center_position: [x,y,z]`
+`CURSOR`, `OBJECT_ORIGIN`, `INDIVIDUAL` o `PICKED`. Este último exige `center_position: [x,y,z]`
 con tres coordenadas mundiales finitas en unidades Blender. Solo Rotar y Escalar
 usan el centro. Cursor y origen se resuelven desde el estado actual al comenzar;
 `transform.select` conserva esta intención al continuar con otra selección. Android
 recuerda la elección; los puntos explícitos se limitan a la identidad de la escena.
+
+`INDIVIDUAL` también se admite en `transform.reference_candidate.preset`. En Objeto
+usa cada origen; en Edición conserva la semántica nativa de centros individuales.
+En ese modo el snap admite `NONE`/`INCREMENT`, sin fuente/destino geométricos comunes.

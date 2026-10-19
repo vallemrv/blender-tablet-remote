@@ -1448,7 +1448,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             local.value.constraint
         }
-        val snapType = snapTypeFor(mode)
+        val center = centerPreferences.forScene(client.state.value.sceneScale.sceneId)
+        val snapType = snapTypeFor(mode).let {
+            if (mode != TransformMode.MOVE && center.mode == "INDIVIDUAL" && it.geometric) SnapType.NONE else it
+        }
         if (mode != TransformMode.MOVE && snapType.geometric) {
             lastReferencePointer = null
             local.update { it.copy(referencePicking = true, referenceRole = "SOURCE") }

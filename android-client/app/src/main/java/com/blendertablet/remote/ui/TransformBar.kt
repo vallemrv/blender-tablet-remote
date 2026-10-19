@@ -19,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -193,16 +194,21 @@ fun TransformBar(
                         onPick = { onReference("CENTER") },
                         onPreset = onCenterPreset,
                     )
-                    PillButton(
-                        if (referencePicking && referencePickingRole == "SOURCE") "Fuente · señala"
-                        else if (session.sourceLocked) "Fuente · fijada" else "Fuente",
-                        selected = (referencePicking && referencePickingRole == "SOURCE") || session.sourceLocked,
-                    ) { onReference("SOURCE") }
-                    SnapPicker(session.mode, snapType, onSnapType)
-                    PillButton(
-                        "Propio",
-                        selected = session.snapToSelection,
-                    ) { onSnapToSelection(!session.snapToSelection) }
+                    if (session.centerMode != "INDIVIDUAL") {
+                        PillButton(
+                            if (referencePicking && referencePickingRole == "SOURCE") "Fuente · señala"
+                            else if (session.sourceLocked) "Fuente · fijada" else "Fuente",
+                            selected = (referencePicking && referencePickingRole == "SOURCE") || session.sourceLocked,
+                        ) { onReference("SOURCE") }
+                        PillButton(
+                            "Propio",
+                            selected = session.snapToSelection,
+                        ) { onSnapToSelection(!session.snapToSelection) }
+                    }
+                    SnapControl(
+                        if (session.centerMode == "INDIVIDUAL") listOf(SnapType.NONE, SnapType.INCREMENT)
+                        else SnapType.forMode(session.mode), snapType, onSnapType,
+                    )
                     Divider()
                     OrientationPicker(availableOrientations, orientation, onOrientation)
                 }
@@ -512,25 +518,35 @@ private fun CenterReferencePicker(
         session.centerMode == "OBJECT_ORIGIN" -> "REL · origen"
         session.centerMode == "CURSOR" -> "REL · cursor"
         session.centerMode == "PICKED" -> "REL · punto"
-        else -> "REL · selección"
+        session.centerMode == "INDIVIDUAL" -> "REL · individuales"
+        else -> "REL · punto medio"
     }
     Box {
-        PillButton(label, selected = picking || session.centerLocked) { expanded = true }
+        PillButton(label, selected = picking || session.centerMode != "SELECTION") { expanded = true }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(
                 text = { Text("Punto medio de la selección") },
+                trailingIcon = { if (session.centerMode == "SELECTION") Icon(AppIcons.Confirm, "Seleccionado", tint = Ink.Accent) },
                 onClick = { expanded = false; onPreset("SELECTION") },
             )
             DropdownMenuItem(
+                text = { Text("Orígenes individuales") },
+                trailingIcon = { if (session.centerMode == "INDIVIDUAL") Icon(AppIcons.Confirm, "Seleccionado", tint = Ink.Accent) },
+                onClick = { expanded = false; onPreset("INDIVIDUAL") },
+            )
+            DropdownMenuItem(
                 text = { Text("Señalar punto") },
+                trailingIcon = { if (session.centerMode == "PICKED") Icon(AppIcons.Confirm, "Seleccionado", tint = Ink.Accent) },
                 onClick = { expanded = false; onPick() },
             )
             DropdownMenuItem(
                 text = { Text("Origen del objeto") },
+                trailingIcon = { if (session.centerMode == "OBJECT_ORIGIN") Icon(AppIcons.Confirm, "Seleccionado", tint = Ink.Accent) },
                 onClick = { expanded = false; onPreset("OBJECT_ORIGIN") },
             )
             DropdownMenuItem(
                 text = { Text("Cursor 3D") },
+                trailingIcon = { if (session.centerMode == "CURSOR") Icon(AppIcons.Confirm, "Seleccionado", tint = Ink.Accent) },
                 onClick = { expanded = false; onPreset("CURSOR") },
             )
         }
@@ -549,15 +565,6 @@ private fun OrientationPicker(
             PillButton(orientation.label, selected = orientation == selected) { onSelect(orientation) }
         }
     }
-}
-
-/**
- * Tipo de snap. El desplegable solo contiene los válidos para el modo: los
- * geométricos forman fuente→destino en MOVE y centro→fuente→destino en ROTATE/SCALE.
- */
-@Composable
-private fun SnapPicker(mode: TransformMode, selected: SnapType, onSelect: (SnapType) -> Unit) {
-    SnapControl(SnapType.forMode(mode), selected, onSelect)
 }
 
 /** Cuánto avanza cada incremento: milímetros, centímetros, metros, grados o factor. */

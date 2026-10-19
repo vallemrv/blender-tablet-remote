@@ -150,7 +150,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   Punto medio usa la selección vigente. Un punto señalado conserva coordenadas
   mundiales y solo se reutiliza en la misma escena. Cambiar la selección durante
   una transformación Edit conserva también esa intención. Mover y los cierres de
-  sesión nunca sobrescriben el centro elegido.
+  sesión nunca sobrescriben el centro elegido. Orígenes individuales rota/escala
+  cada objeto alrededor de su origen; en Edición usa los operadores nativos para
+  los centros de vértices, aristas, caras y curvas. Cada preview restaura primero
+  su baseline completo, sin undo intermedio ni cambios persistentes en el pivote
+  del PC. Individuales ofrece Libre/Incremento y no una fuente geométrica común.
 - La cámara remota no escribe en `rv3d`.
 - El zoom ortográfico conserva la profundidad alrededor del pivote: acercarse no
   recorta la cara delantera al atravesar la posición nominal de la cámara. El doble

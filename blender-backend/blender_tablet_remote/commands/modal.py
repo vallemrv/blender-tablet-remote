@@ -26,7 +26,7 @@ from mathutils import Matrix, Vector
 from mathutils.kdtree import KDTree
 
 from .. import state
-from ..bpy_utils import require_rv3d, selected_objects, undo_push
+from ..bpy_utils import require_rv3d, selected_objects, undo_push, view3d_override
 from ..camera import camera
 from ..errors import BadPayload, CommandError
 from . import command
@@ -156,6 +156,8 @@ class _Session:
         self.reference_position = None
         self.center_position = None
         self.center_mode = "SELECTION"
+        self.individual_edit_coords = None
+        self.individual_curve_radii = None
         self.source_position = None
         self.reference_role = None
         self.step = DEFAULT_STEP["MOVE"]
@@ -297,6 +299,26 @@ class _Session:
             self.center_position = bpy.context.view_layer.objects.active.matrix_world.translation.copy()
         elif mode == "PICKED":
             self.center_position = Vector(position)
+        elif mode == "INDIVIDUAL":
+            self.center_position = None
+            self.source_position = None
+            self.reference_position = None
+            self.snap_candidate = None
+            self.snap_locked = False
+            if self.snap_type not in {"NONE", "INCREMENT"}:
+                self.snap_type = "NONE"
+                self.snap = False
+            # El operador nativo resuelve islas, caras compartidas y tiradores.
+            # Su respaldo completo permite cancelar incluso edición proporcional.
+            if self.edit_object is not None and self.individual_edit_coords is None:
+                self.restore()
+                bm = bmesh.from_edit_mesh(self.edit_object.data)
+                bm.verts.ensure_lookup_table()
+                self.individual_edit_coords = {v.index: v.co.copy() for v in bm.verts}
+            if self.curve_edit is not None and self.individual_curve_radii is None:
+                self.individual_curve_radii = [
+                    [p.radius for p in (s.bezier_points if s.type == 'BEZIER' else s.points)]
+                    for s in self.curve_edit.obj.data.splines]
         else:
             raise BadPayload("Unknown center mode")
         self.center_mode = mode
@@ -734,6 +756,11 @@ class _Session:
     def apply(self) -> None:
         """Reconstruye desde las matrices originales. Idempotente a propósito."""
         values = self._effective()
+        if self.center_mode == "INDIVIDUAL" and self.mode != "MOVE" and (self.edit_object is not None or self.curve_edit is not None):
+            self._apply_individual_edit(values)
+            return
+        if self.individual_edit_coords is not None or self.individual_curve_radii is not None:
+            self.restore()
         if self.curve_edit is not None:
             self.curve_edit.apply(lambda point:self._transform_point(point,values))
             return
@@ -741,26 +768,55 @@ class _Session:
             self._apply_edit(values)
             return
         for obj, original in self.originals:
+            center = original.translation if self.center_mode == "INDIVIDUAL" else self.center_base()
             if self.mode == "MOVE":
                 obj.matrix_world = Matrix.Translation(self.orientation_basis @ values) @ original
             elif self.mode == "ROTATE":
                 angle = self._rotation_angle(values)
                 rotation = Matrix.Rotation(angle, 4, self.rotation_axis)
                 obj.matrix_world = (
-                    Matrix.Translation(self.center_base())
+                    Matrix.Translation(center)
                     @ rotation
-                    @ Matrix.Translation(-self.center_base())
+                    @ Matrix.Translation(-center)
                     @ original
                 )
             else:
                 oriented_scale = self.orientation_basis @ Matrix.Diagonal(values) @ self.orientation_basis.inverted()
                 scale = oriented_scale.to_4x4()
                 obj.matrix_world = (
-                    Matrix.Translation(self.center_base())
+                    Matrix.Translation(center)
                     @ scale
-                    @ Matrix.Translation(-self.center_base())
+                    @ Matrix.Translation(-center)
                     @ original
                 )
+
+    def _apply_individual_edit(self, values):
+        self.restore()
+        settings = bpy.context.scene.tool_settings
+        pivot = settings.transform_pivot_point
+        try:
+            settings.transform_pivot_point = 'INDIVIDUAL_ORIGINS'
+            options = dict(orient_type='GLOBAL', orient_matrix_type='GLOBAL',
+                           constraint_axis=(False, False, False), mirror=False, snap=False,
+                           use_proportional_edit=self.proportional,
+                           proportional_edit_falloff=self.proportional_falloff,
+                           proportional_size=self.proportional_radius,
+                           use_proportional_connected=False, use_proportional_projected=False)
+            with view3d_override():
+                if self.mode == 'ROTATE':
+                    basis = self.rotation_axis.to_track_quat('Z', 'Y').to_matrix()
+                    result = bpy.ops.transform.rotate('EXEC_DEFAULT', False,
+                        value=self._rotation_angle(values), orient_axis='Z', orient_matrix=basis, **options)
+                else:
+                    result = bpy.ops.transform.resize('EXEC_DEFAULT', False,
+                        value=values, orient_matrix=self.orientation_basis, **options)
+            if 'FINISHED' not in result:
+                raise CommandError('No se pudo transformar con orígenes individuales', code='transform_failed')
+        except Exception:
+            self.restore()
+            raise
+        finally:
+            settings.transform_pivot_point = pivot
 
     def _apply_edit(self, values: Vector) -> None:
         """Aplica el delta sobre las coords originales, en local y sin matrices por vértice.
@@ -822,11 +878,15 @@ class _Session:
     def restore(self) -> None:
         if self.curve_edit is not None:
             self.curve_edit.restore()
+            if self.individual_curve_radii is not None:
+                for spline, radii in zip(self.curve_edit.obj.data.splines, self.individual_curve_radii):
+                    for point, radius in zip(spline.bezier_points if spline.type == 'BEZIER' else spline.points, radii):
+                        point.radius = radius
             return
         if self.edit_object is not None and self.edit_object.name in bpy.data.objects and self.edit_object.mode == "EDIT":
             bm = bmesh.from_edit_mesh(self.edit_object.data)
             bm.verts.ensure_lookup_table()
-            for index, co in self.edit_coords.items():
+            for index, co in (self.individual_edit_coords if self.individual_edit_coords is not None else self.edit_coords).items():
                 if index < len(bm.verts):
                     bm.verts[index].co = co
             bmesh.update_edit_mesh(self.edit_object.data, loop_triangles=False, destructive=False)
@@ -1050,7 +1110,7 @@ def begin(payload: dict) -> dict:
 
     scale_step_unit = _parse_scale_step_unit(payload)
     center_mode = str(payload.get("center_mode", "SELECTION")).upper()
-    if center_mode not in {"SELECTION", "CURSOR", "OBJECT_ORIGIN", "PICKED"}:
+    if center_mode not in {"SELECTION", "CURSOR", "OBJECT_ORIGIN", "PICKED", "INDIVIDUAL"}:
         raise BadPayload("Unknown center mode")
     center_position = payload.get("center_position")
     if center_mode == "PICKED":
@@ -1116,6 +1176,8 @@ def set_orientation(payload: dict) -> dict:
 def set_snap(payload: dict) -> dict:
     """Activa el cuadrado a incrementos y/o cambia el tamaño del incremento."""
     session.require(payload.get("_client_id"))
+    if session.center_mode == "INDIVIDUAL" and str(payload.get("snap_type", session.snap_type)).upper() not in {"NONE", "INCREMENT"}:
+        raise BadPayload("Orígenes individuales admite snap por incremento")
     if "snap" in payload:
         session.snap = bool(payload["snap"])
     if "snap_type" in payload:
@@ -1140,6 +1202,8 @@ def set_snap(payload: dict) -> dict:
 def set_snap_candidate(payload: dict) -> dict:
     """Busca y bloquea el candidato geométrico que se previsualiza bajo el dedo."""
     session.require(payload.get("_client_id"))
+    if session.center_mode == "INDIVIDUAL":
+        raise CommandError("Orígenes individuales no usa una fuente común", code="wrong_reference_role")
     if session.mode in {"ROTATE", "SCALE"} and session.source_position is None:
         raise CommandError("Pick a source before the target", code="missing_source")
     from .snap import query_candidate
@@ -1174,14 +1238,16 @@ def set_reference_candidate(payload: dict) -> dict:
     role = str(payload.get("role", default_role)).upper()
     if role not in {"CENTER", "SOURCE"}:
         raise BadPayload("'role' must be CENTER or SOURCE")
+    if session.center_mode == "INDIVIDUAL" and role == "SOURCE":
+        raise CommandError("Orígenes individuales no usa una fuente común", code="wrong_reference_role")
     if session.mode == "MOVE" and role == "CENTER":
         raise CommandError("MOVE uses a source reference", code="wrong_reference_role")
     preset = str(payload.get("preset", "")).upper()
     if preset:
         if role != "CENTER" or session.mode not in {"ROTATE", "SCALE"}:
             raise CommandError("Center presets require ROTATE or SCALE", code="wrong_reference_role")
-        if preset not in {"SELECTION", "OBJECT_ORIGIN", "CURSOR"}:
-            raise BadPayload("'preset' must be SELECTION, OBJECT_ORIGIN or CURSOR")
+        if preset not in {"SELECTION", "OBJECT_ORIGIN", "CURSOR", "INDIVIDUAL"}:
+            raise BadPayload("'preset' must be SELECTION, OBJECT_ORIGIN, CURSOR or INDIVIDUAL")
         session.set_center(preset)
         session.apply()
         return session.status()
