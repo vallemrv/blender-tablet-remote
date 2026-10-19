@@ -2641,3 +2641,40 @@ sin él, cada elemento elegido llega al cursor. Selección vacía devuelve
 `empty_selection`. Se cierran previews antes de mover y se registra un undo.
 `snap.cursor_to_selected` admite asimismo la selección de curvas en Edit.
 Android ofrece estas acciones en Escena → Cursor 3D / Snap selección.
+
+
+### Copiar el dibujo CAD como malla editable
+
+Capacidad `cad.sketch_mesh:true`. Comando `cad.sketch.to_mesh`:
+`{sketch_id, entity_ids?:[ids], profile_ids?:[ids], vertices_per_circle?:64,
+  document_id?, revision?}`. Figuras/perfiles son alternativas, del mismo boceto;
+sin lista copia todas las entidades salvo construcción. Los perfiles públicos
+incluyen `entity_ids` con sus entidades originales, también en cadenas cerradas.
+La selección por un punto/arista de una figura copia la figura completa.
+
+Produce un objeto Mesh independiente con vértices y aristas, nunca caras. Los
+círculos usan 3–4096 vértices; los arcos el número proporcional de segmentos,
+con extremos exactos. Las líneas y los polígonos conservan sus puntos. Los arcos
+de las ranuras también siguen esa resolución. No crea intersecciones implícitas.
+Conserva plano y dimensiones físicas mediante `scale_length` y la matriz del
+plano. Unifica muestras coincidentes a precisión de 1e-12 m. Limita la copia a
+200000 muestras para proteger el hilo principal.
+
+Rechaza previews activas, IDs/revisión obsoletos y selecciones vacías. Conserva el
+JSON del boceto, restricciones y trabajo diferido; no evalúa ni convierte sólidos.
+Sale del workspace, selecciona la copia y registra un undo. Devuelve estado CAD,
+`mesh_object` y snapshot explícito `state` para actualizar Objeto en Android.
+
+### Completar cara con F2
+
+`mesh.f2 {u,v}` usa una selección Edit de un vértice o dos vértices unidos por una
+arista. `F2_COMPLETE` se anuncia en el catálogo cuando `mesh.f2` nativo está
+registrado. `u,v` es la pulsación larga normalizada del vídeo. Se ejecutan las
+funciones nativas del add-on con una proyección independiente de la tablet;
+no se inicia su autograb ni una transformación modal del PC. Conserva rv3d,
+restaura el baseline ante fallo y registra un undo cuando crea una cara.
+Los vecinos ocultos se rechazan antes de ejecutar el add-on. La acción F normal
+para rellenar selecciones mayores sigue en el pie de atajos, sin duplicarse.
+
+`REVOLVE` conserva su identificador wire y motor `bmesh.ops.spin`; Android lo
+presenta como «Spin · Revolución», con ángulo/pasos/eje y centro desde el cursor.

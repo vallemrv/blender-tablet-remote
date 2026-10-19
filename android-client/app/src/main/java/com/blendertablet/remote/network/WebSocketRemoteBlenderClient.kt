@@ -1047,6 +1047,7 @@ class WebSocketRemoteBlenderClient(
                     }
                     command != null && command.startsWith("cad.") -> result?.let {
                         _state.value = _state.value.copy(cad = CadParser.state(it))
+                        it.optJSONObject("state")?.let(::updateState)
                     }
                     command == "mode.set" || (_state.value.mode == BlenderMode.SCULPT &&
                         command in setOf("mode.object", "mode.edit")) -> {

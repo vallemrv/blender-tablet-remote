@@ -18,13 +18,14 @@ data class CadCapabilities(
     val entityTrim: Boolean = false,
     val selectedCut: Boolean = false,
     val profileMultiselect: Boolean = false,
+    val sketchMesh: Boolean = false,
 ) { val available get() = version == 2 && planes.isNotEmpty() }
 data class CadEntity(val id: String, val type: String, val values: Map<String, Double>, val construction: Boolean = false,
     val dimensions: List<CadMeasure> = emptyList(), val isFillet: Boolean = false, val isSquare: Boolean = false, val reference: Boolean = false)
 data class CadMeasure(val field: String, val label: String, val constraintType: String,
     val valueFactor: Double, val refs: List<CadSelection>, val constraintIds: List<String>, val lockable: Boolean = true)
 data class CadDimensionOption(val value: Double, val constraintId: String?)
-data class CadProfile(val id: String, val entityId: String, val label: String)
+data class CadProfile(val id: String, val entityId: String, val label: String, val entityIds: List<String> = emptyList())
 data class CadSketch(val id: String, val name: String, val plane: String,
     val entities: List<CadEntity>, val profiles: List<CadProfile>,
     val constraints: List<CadConstraint> = emptyList(), val visible: Boolean = true, val bodyId: String = "", val planeId: String? = null, val planeLabel: String = plane)
@@ -135,4 +136,26 @@ data class CadState(
     val selectionSketch get() = activeSketch ?: selectedSketch ?: sketches.singleOrNull {
         (activeBodyId == null || it.bodyId == activeBodyId) && it.profiles.isNotEmpty()
     }
+}
+
+
+/** Snapshot of the drawing selection, held while the resolution dialog is open. */
+data class CadDrawingMeshTarget(val sketchId: String, val name: String, val documentId: String?,
+    val revision: Long, val entityIds: List<String>?, val curved: Boolean, val count: Int)
+
+fun cadDrawingMeshTarget(cad: CadState): CadDrawingMeshTarget? {
+    if (!cad.workspace || cad.sessionActive || cad.selectionKind in setOf("CONSTRAINT", "SURFACE", "FEATURE")) return null
+    val sketch = cad.activeSketch ?: cad.selectedSketch ?: return null
+    val ids = when (cad.selectionKind) {
+        "ENTITY" -> cad.selection.map { it.id }.ifEmpty { listOfNotNull(cad.selectionId) }.filter { it != "ORIGIN" }.distinct()
+        "PROFILE" -> {
+            val selected = cad.selection.map { it.id }.ifEmpty { listOfNotNull(cad.selectionId) }.toSet()
+            sketch.profiles.filter { it.id in selected }.flatMap { it.entityIds.ifEmpty { listOf(it.entityId) } }.distinct()
+        }
+        else -> null
+    }
+    val entities = sketch.entities.filter { if (ids == null) !it.construction else it.id in ids }
+    if (entities.isEmpty()) return null
+    return CadDrawingMeshTarget(sketch.id, sketch.name, cad.documentId, cad.revision, ids,
+        entities.any { it.type in setOf("CIRCLE", "ARC", "SLOT") }, entities.size)
 }

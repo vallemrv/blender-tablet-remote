@@ -1049,6 +1049,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         client.setObjectProperties(id, revision, values, token)
     fun toggleModifier(name: String, viewport: Boolean? = null, render: Boolean? = null, editMode: Boolean? = null) = client.modifierToggle(name, viewport, render, editMode)
     fun applyModifier(name: String) = client.modifierApply(name)
+    fun completeFace(u: Float, v: Float) {
+        selectTool()
+        client.editCatalogCommand("mesh.f2", mapOf("u" to u, "v" to v))
+    }
+
     fun selectSimilar(action: EditCatalogAction, criterion: String) {
         if (!action.enabled || action.command == null || action.variants.none { it.id == criterion && it.enabled }) return
         selectTool()

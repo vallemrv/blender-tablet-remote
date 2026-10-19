@@ -29,7 +29,7 @@ object CadParser {
         strings(j.optJSONArray("features")).filter { it in listOf("EXTRUDE", "CUT", "LOFT", "HELIX", "REVOLVE", "SWEEP", "MIRROR", "SHELL", "HOLE", "PATTERN", "COMBINE", "SPLIT") },
         strings(j.optJSONArray("constraints")).filter { it in listOf("COINCIDENT", "POINT_ON_LINE", "HORIZONTAL", "VERTICAL", "PARALLEL", "PERPENDICULAR", "TANGENT", "EQUAL", "DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "ANGLE", "FIX", "MIDPOINT", "SYMMETRIC", "SYMMETRIC_LINE") },
         j.optBoolean("sketch_editing"), strings(j.optJSONArray("offset_entities")), j.optBoolean("feature_mirror"),
-        j.optBoolean("edge_plane"), j.optBoolean("plane_purge"), j.optBoolean("section_view"), j.optBoolean("midpoint_points"), j.optBoolean("reference_profile"), j.optBoolean("entity_trim"), j.optBoolean("selected_cut"), j.optBoolean("profile_multiselect"))
+        j.optBoolean("edge_plane"), j.optBoolean("plane_purge"), j.optBoolean("section_view"), j.optBoolean("midpoint_points"), j.optBoolean("reference_profile"), j.optBoolean("entity_trim"), j.optBoolean("selected_cut"), j.optBoolean("profile_multiselect"), j.optBoolean("sketch_mesh"))
     fun state(j: JSONObject?): CadState {
         if (j == null || j.optInt("version") != 1) return CadState()
         val document = j.optJSONObject("document")
@@ -54,7 +54,7 @@ object CadParser {
                             objects(entity.optJSONArray("dimensions")).map { d -> CadMeasure(d.optString("field"),d.optString("label"),d.optString("constraint_type"),
                                 d.optDouble("value_factor",1.0), objects(d.optJSONArray("refs")).map { CadSelection(it.optString("id"),it.optString("part","BODY")) },
                                 strings(d.optJSONArray("constraint_ids")), d.optBoolean("lockable", true)) }, entity.optBoolean("is_fillet"),entity.optBoolean("is_square"),entity.optBoolean("reference"))
-                    }, objects(sketch.optJSONArray("profiles")).map { CadProfile(it.optString("id"), it.optString("entity_id"), it.optString("label", "Perfil")) },
+                    }, objects(sketch.optJSONArray("profiles")).map { CadProfile(it.optString("id"), it.optString("entity_id"), it.optString("label", "Perfil"), strings(it.optJSONArray("entity_ids"))) },
                     objects(sketch.optJSONArray("constraints")).map { c -> CadConstraint(c.optString("id"), c.optString("type"),
                         c.optDouble("value").takeIf { it.isFinite() }, objects(c.optJSONArray("refs")).map { it.optString("id") },
                         objects(c.optJSONArray("refs")).map { CadSelection(it.optString("id"),it.optString("part","BODY")) }) },

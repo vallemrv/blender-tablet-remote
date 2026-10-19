@@ -125,6 +125,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
 
     CaptureSceneDelivery(vm)
 
+    var quickMenuPoint by remember { mutableStateOf<Pair<Float, Float>?>(null) }
     var quickMenuAt by remember { mutableStateOf<Pair<Float, Float>?>(null) }
     // El ojo vive en el estado del ViewModel, no aquí: apagar los controles apaga
     // también los overlays del servidor, y esa parte no es local.
@@ -132,6 +133,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     var newSceneOpen by remember { mutableStateOf(false) }
     var fileBrowserMode by remember { mutableStateOf<FileBrowserMode?>(null) }
     // Guarda a QUIÉN se renombra: el sondeo se borra al cerrar el anillo.
+    var drawingMeshTarget by remember { mutableStateOf<com.blendertablet.remote.model.CadDrawingMeshTarget?>(null) }
     var renameSketchTarget by remember { mutableStateOf<com.blendertablet.remote.model.CadSketch?>(null) }
     var renameTarget by remember { mutableStateOf<String?>(null) }
     // Acción pendiente de confirmar porque descarta cambios sin guardar.
@@ -204,6 +206,17 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             guardDiscard(PendingDiscard.New { vm.fileNew(preset) })
         },
     )
+
+    drawingMeshTarget?.let { target -> DrawingMeshDialog(target,
+        current = state.blender.cad.workspace && state.blender.cad.documentId == target.documentId && state.blender.cad.revision == target.revision && !state.blender.cad.sessionActive,
+        onDismiss = { drawingMeshTarget = null }, onCreate = { resolution ->
+            drawingMeshTarget = null
+            vm.cadCommand("cad.sketch.to_mesh", buildMap {
+                put("sketch_id", target.sketchId); put("document_id", target.documentId); put("revision", target.revision)
+                put("vertices_per_circle", resolution)
+                target.entityIds?.let { put("entity_ids", it) }
+            })
+        }) }
 
     renameSketchTarget?.let { sketch -> RenameDialog(sketch.name, title = "Renombrar boceto",
         onDismiss = { renameSketchTarget = null }, onRename = { name ->
@@ -336,6 +349,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 // se pregunta qué hay debajo: esperar a la respuesta para dibujarlo
                 // se notaría como un tirón.
                 quickMenuAt = x to y
+                quickMenuPoint = u to v
                 if (!state.blender.cad.workspace && !materialActive && !sculptActive) vm.probeTouch(u, v) else vm.clearProbe()
             },
         )
@@ -651,12 +665,17 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                             }
                         }.toSet() else emptySet()
                 val catalogActions = state.blender.features.editCatalog.actionsFor(state.blender.selectionMode)
-                    .filter { it.id !in excluded }
-                editCatalogActions(catalogActions, vm)
+                    .filter { it.id !in excluded }.map { action ->
+                        if (action.id != "F2_COMPLETE") action else {
+                            val count = state.blender.context.selectionCounts
+                            action.copy(enabled = action.enabled && (count.verts == 1 || count.verts == 2 && count.edges == 1))
+                        }
+                    }
+                editCatalogActions(catalogActions, vm, quickMenuPoint)
             } else {
                 emptyList()
             }
-            val actions = if (state.blender.cad.workspace) cadRadialActions(state, vm) { renameSketchTarget = it }
+            val actions = if (state.blender.cad.workspace) cadRadialActions(state, vm, { renameSketchTarget = it }, { drawingMeshTarget = it })
                 else if (state.blender.material.active || state.blender.mode == BlenderMode.SCULPT) listOf(
                     QuickAction("Ocultar", AppIcons.visibility(false), enabled = state.blender.activeObject != null) { vm.hideObject() },
                     QuickAction("Aislar", AppIcons.localView(if (state.blender.material.active) state.blender.material.isolate else state.localViewActive)) { vm.toggleLocalView() },
@@ -730,7 +749,7 @@ private val RADIAL_TOP_LEVEL_CATALOG_IDS =
     setOf("SELECT_LOOP", "SELECT_RING", "SELECT_LINKED", "SELECT_SIMILAR", "DELETE", "HIDE")
 
 /** Convierte el contrato opaco en filas, sin repartir nombres wire por la UI. */
-private fun editCatalogActions(actions: List<EditCatalogAction>, vm: MainViewModel): List<QuickAction> {
+private fun editCatalogActions(actions: List<EditCatalogAction>, vm: MainViewModel, point: Pair<Float,Float>?): List<QuickAction> {
     val loopTools = actions.filter { it.id.startsWith("LOOPTOOLS_") }
     val ordinary = actions.filterNot { it.id.startsWith("LOOPTOOLS_") }
     val group = if (loopTools.isEmpty()) emptyList() else listOf(QuickAction("LoopTools", AppIcons.editCatalog("LOOPTOOLS_CIRCLE"),
@@ -739,7 +758,8 @@ private fun editCatalogActions(actions: List<EditCatalogAction>, vm: MainViewMod
         val variants = action.variants.filter { it.enabled }
         if (variants.isEmpty()) {
             QuickAction(action.label, AppIcons.editCatalog(action.id), enabled = action.enabled) {
-                vm.editCatalogAction(action)
+                if (action.id == "F2_COMPLETE" && point != null) vm.completeFace(point.first, point.second)
+                else vm.editCatalogAction(action)
             }
         } else {
             // Tap conserva la primera variante contractual (REGION); el long-click
@@ -1119,10 +1139,14 @@ private fun deleteWhat(mode: SelectionMode): String = when (mode) {
  * lista de [ActionId] es dato, no interfaz.
  */
 private fun cadRadialActions(state: AppUiState, vm: MainViewModel,
-                             onRename: (com.blendertablet.remote.model.CadSketch) -> Unit): List<QuickAction> {
+                             onRename: (com.blendertablet.remote.model.CadSketch) -> Unit,
+                             onDrawingMesh: (com.blendertablet.remote.model.CadDrawingMeshTarget) -> Unit): List<QuickAction> {
     val cad = state.blender.cad
     val enabled = !cad.sessionActive
     return buildList {
+        if (state.blender.features.cad.sketchMesh) com.blendertablet.remote.model.cadDrawingMeshTarget(cad)?.let { target ->
+            add(QuickAction("Crear malla del dibujo", AppIcons.cad("CONVERT"), enabled = enabled) { onDrawingMesh(target) })
+        }
         add(QuickAction("Aislar", AppIcons.localView(!cad.showScene), enabled = enabled) { vm.toggleLocalView() })
         if (cad.activeSketchId == null && cad.selectedFeature != null) {
             val feature = cad.selectedFeature!!

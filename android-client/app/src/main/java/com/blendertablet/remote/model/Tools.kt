@@ -12,7 +12,7 @@ enum class EditTool(val wire: String, val label: String, val requirement: String
     BEVEL("BEVEL", "Bisel", "necesita selección"),
     INSET("INSET", "Inset", "necesita caras"),
     SUBDIVIDE("SUBDIVIDE", "Subdividir", "necesita aristas"),
-    REVOLVE("REVOLVE", "Revolución", "necesita un perfil seleccionado"),
+    REVOLVE("REVOLVE", "Spin · Revolución", "necesita un perfil seleccionado"),
     SWEEP("SWEEP", "Barrido / Marco", "necesita un contorno de aristas"),
     LOOP_CUT("LOOP_CUT", "Loop Cut", "necesita una arista"),
     BRIDGE_EDGE_LOOPS("BRIDGE_EDGE_LOOPS", "Bridge Edge Loops", "necesita dos loops de aristas"),

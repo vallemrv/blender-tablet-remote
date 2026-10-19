@@ -1389,6 +1389,68 @@ def feature_delete(payload):
     return runtime.status()
 
 
+@command('cad.sketch.to_mesh')
+def sketch_to_mesh(payload):
+    """Copy selected drawing entities to an independent edge-only Blender mesh."""
+    runtime.require_workspace()
+    if runtime.session:
+        raise CommandError('Confirma o cancela antes de crear la malla', code='session_active')
+    doc = runtime.doc()
+    if payload.get('document_id', doc['id']) != doc['id'] or payload.get('revision', doc['revision']) != doc['revision']:
+        raise CommandError('El boceto ha cambiado; vuelve a seleccionar las figuras', code='cad_revision_conflict')
+    sketch = model.find(doc, 'sketches', payload.get('sketch_id'))
+    _require_reachable(doc, sketch['id'])
+    identifiers = payload.get('entity_ids')
+    profile_ids = payload.get('profile_ids')
+    if identifiers is not None and profile_ids is not None:
+        raise BadPayload('Elige figuras o perfiles, no ambos')
+    if profile_ids is not None:
+        if not isinstance(profile_ids,list) or not profile_ids or any(not isinstance(i,str) for i in profile_ids):
+            raise BadPayload('Selecciona perfiles del boceto')
+        identifiers = []
+        for identifier in profile_ids:
+            source, profile = model.profile(doc, identifier)
+            if source['id'] != sketch['id']: raise BadPayload('Los perfiles deben pertenecer al mismo boceto')
+            identifiers.extend([e['id'] for e in sketch['entities'] if not e.get('construction')]
+                               if profile['type']=='SKETCH' else profile.get('members',[profile['id']]))
+        identifiers = list(dict.fromkeys(identifiers))
+    if identifiers is not None:
+        if not isinstance(identifiers,list) or not identifiers or any(not isinstance(i,str) for i in identifiers):
+            raise BadPayload('Selecciona al menos una figura')
+        entities = [model.find(sketch,'entities',identifier) for identifier in dict.fromkeys(identifiers)]
+    else:
+        entities = [e for e in sketch['entities'] if not e.get('construction',False)]
+    if not entities: raise BadPayload('El boceto no tiene dibujos para convertir')
+    from ..cad.sketch_mesh import wire_geometry
+    from mathutils import Matrix, Vector
+    vertices, edges = wire_geometry(entities, payload.get('vertices_per_circle',64))
+    scale = max(float(bpy.context.scene.unit_settings.scale_length),1e-12)
+    frame = model.frame(sketch)
+    matrix = Matrix((frame['x'],frame['y'],frame['normal'])).transposed().to_4x4()
+    matrix.translation = Vector(frame['origin']) / scale
+    mesh = bpy.data.meshes.new(sketch['name'] + ' · dibujo')
+    obj = None
+    try:
+        mesh.from_pydata([tuple(c/scale for c in p) for p in vertices], edges, [])
+        mesh.update()
+        obj = bpy.data.objects.new(sketch['name'] + ' · malla', mesh)
+        obj.matrix_world = matrix
+        bpy.context.scene.collection.objects.link(obj)
+    except Exception:
+        if obj is not None: bpy.data.objects.remove(obj,do_unlink=True)
+        if mesh.users == 0: bpy.data.meshes.remove(mesh)
+        raise
+    # Keep even a deferred sketch intact; copying its drawing does not evaluate its solids.
+    runtime.leave()
+    for other in bpy.context.view_layer.objects: other.select_set(False)
+    obj.select_set(True); bpy.context.view_layer.objects.active = obj
+    runtime.selection = None
+    bpy.context.view_layer.update()
+    undo_push('CAD crear malla del dibujo')
+    from .. import state
+    return dict(runtime.status(), mesh_object=obj.name, state=state.snapshot(include_view=False))
+
+
 @command('cad.convert')
 def convert(payload):
     runtime.require_workspace()

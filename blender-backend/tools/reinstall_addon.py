@@ -50,6 +50,10 @@ def main() -> None:
         result = bpy.ops.preferences.addon_enable(module="bl_ext.blender_org.looptools")
         if "FINISHED" not in result:
             raise RuntimeError("No se pudo habilitar LoopTools")
+    if "--enable-f2" in sys.argv:
+        result = bpy.ops.preferences.addon_enable(module="bl_ext.blender_org.f2")
+        if "FINISHED" not in result:
+            raise RuntimeError("No se pudo habilitar F2")
     bpy.ops.wm.save_userpref()
     print(f"REINSTALLED module={MODULE} autostart={prefs.autostart} host={prefs.host} port={prefs.port}")
 

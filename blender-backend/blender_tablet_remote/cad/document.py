@@ -363,7 +363,7 @@ def profile(doc, identifier, entity_ids=None):
 
 
 def profiles(sketch):
-    return [dict(id='profile_' + e['id'], entity_id=e['id'],
+    return [dict(id='profile_' + e['id'], entity_id=e['id'], entity_ids=e.get('members',[e['id']]),
                  label={'RECTANGLE':'Rectángulo','CIRCLE':'Círculo','NGON':'Polígono regular','SLOT':'Ranura','GEAR':'Engranaje','POLYGON':'Contorno cerrado'}[e['type']])
             for e in closed_entities(sketch)]
 

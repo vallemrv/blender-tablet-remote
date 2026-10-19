@@ -301,6 +301,13 @@ LOOPTOOLS_SPACE_ACTION = dict(LOOPTOOLS_CIRCLE_ACTION,
     requirements={"mode": "EDIT", "selection_modes": ["VERTEX", "EDGE"], "selection": {"verts": {"min": 2}}})
 
 
+F2_COMPLETE_ACTION = {
+    "id": "F2_COMPLETE", "label": "Completar cara · F2", "command": "mesh.f2", "enabled": True,
+    "execution": "DISCRETE", "requirements": {"mode": "EDIT", "selection_modes": ["VERTEX", "EDGE"],
+        "selection": {"verts": {"min": 1, "max": 2}}}, "variants": [], "parameters": [],
+}
+
+
 SELECTION_SIMILAR = {
     "VERTEX": [("VERT_NORMAL", "Misma normal"), ("VERT_FACES", "Mismo número de caras"),
                ("VERT_EDGES", "Mismo número de aristas"), ("VERT_GROUPS", "Mismo grupo de vértices")],
@@ -322,6 +329,8 @@ def _similar_action(mode, count):
 EDIT_CATALOG = {
     "version": 1,
     "conditional_actions": [
+        {"id": "F2_COMPLETE", "label": "Completar cara · F2", "command": "mesh.f2", "execution": "DISCRETE",
+         "selection_modes": ["VERTEX", "EDGE"], "availability": "OPERATOR_REGISTERED", "operator": "mesh.f2"},
         {"id": "LOOPTOOLS_SPACE", "label": "Espaciar", "command": "mesh.looptools_space",
          "execution": "DISCRETE", "selection_modes": ["VERTEX", "EDGE"],
          "availability": "OPERATOR_REGISTERED", "operator": "mesh.looptools_space"},
@@ -421,7 +430,7 @@ EDIT_CATALOG = {
 }
 
 for _mode, _actions in EDIT_CATALOG["groups"].items():
-    _actions.append(_edit_action("REVOLVE", "Revolución", command="tool.begin", execution="SESSION",
+    _actions.append(_edit_action("REVOLVE", "Spin · Revolución", command="tool.begin", execution="SESSION",
                                  payload={"tool": "REVOLVE"}, selection=_selection(_mode, verts={"min": 1})))
     if _mode in {"VERTEX", "EDGE"}:
         _actions.append(_edit_action("SWEEP", "Barrido / Marco", command="tool.begin", execution="SESSION",
@@ -436,7 +445,7 @@ FEATURES = {
             "constraints": ["COINCIDENT", "POINT_ON_LINE", "HORIZONTAL", "VERTICAL", "PARALLEL", "COLLINEAR", "PERPENDICULAR",
                             "TANGENT", "EQUAL", "DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "ANGLE", "FIX", "MIDPOINT",
                             "SYMMETRIC", "SYMMETRIC_LINE"],
-            "sketch_failure_recovery": True, "deferred_sketch_editing": True, "selected_cut": True, "profile_multiselect": True, "sketch_editing": True, "solid_selection": True, "face_sketch": True, "project_reference": True, "history_order": True, "editable_dimensions": True, "fillet_remove": True, "smart_cursor": True, "selection_delete": True, "fillet": True, "fillet_arc_line": True, "construction": True, "datum_planes": True, "edge_plane": True, "plane_purge": True, "section_view": True,
+            "sketch_failure_recovery": True, "deferred_sketch_editing": True, "selected_cut": True, "profile_multiselect": True, "sketch_mesh": True, "sketch_editing": True, "solid_selection": True, "face_sketch": True, "project_reference": True, "history_order": True, "editable_dimensions": True, "fillet_remove": True, "smart_cursor": True, "selection_delete": True, "fillet": True, "fillet_arc_line": True, "construction": True, "datum_planes": True, "edge_plane": True, "plane_purge": True, "section_view": True,
             "bodies": True, "origin": True, "mesh_copy": True,
             "length_unit": "METERS", "kernel": "OCCT", "kernel_required": True,
             "document_version": 1, "owned_sessions": True, "persistent": True},

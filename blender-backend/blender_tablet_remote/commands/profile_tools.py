@@ -12,7 +12,7 @@ from ..errors import BadPayload, CommandError
 
 REVOLVE_CONTROLS = [
     {"id": "angle", "label": "Ángulo °", "type": "float", "default": 360, "min": -360, "max": 360, "step": 15},
-    {"id": "steps", "label": "Segmentos", "type": "int", "default": 32, "min": 1, "max": 256, "step": 1},
+    {"id": "steps", "label": "Pasos", "type": "int", "default": 32, "min": 1, "max": 256, "step": 1},
     {"id": "axis", "label": "Eje global", "type": "enum", "default": "Z", "values": ["X", "Y", "Z"]},
     *[{"id": f"center_{axis}", "label": f"Centro {axis.upper()}", "type": "float", "unit": "length", "default": 0}
       for axis in "xyz"],

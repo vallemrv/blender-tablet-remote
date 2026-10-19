@@ -150,6 +150,20 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   recorta la cara delantera al atravesar la posición nominal de la cámara. El doble
   toque en Object y el botón Encuadrar encuadran los límites del objeto al 85 % de la vista según orientación y
   proyección reales, también si el PC está en ortográfica.
+- CAD → radial → Crear malla del dibujo copia las figuras seleccionadas del mismo
+  boceto, o el boceto sin construcción si no hay selección, como un objeto de
+  vértices/aristas sin caras. Círculos y arcos permiten resolución (64 por vuelta,
+  3–4096); líneas, rectángulos y polígonos conservan sus puntos. La UI oculta
+  resolución si no hay curvas. Conserva plano, medidas y JSON CAD; sale a Objeto
+  con la copia seleccionada, sin etiquetas paramétricas, y crea un undo. Revisión
+  e identidad validan el diálogo. No evalúa sólidos ni finaliza un croquis pendiente.
+- En Edición, radial → Malla ofrece Spin · Revolución con la operación nativa
+  existente: ángulo, pasos y eje, y centro inicial en el cursor 3D (editable en Más).
+- Completar cara · F2 vive en radial → Malla para un vértice o una arista del borde,
+  solo cuando el add-on nativo está habilitado. El punto de la pulsación larga y
+  la proyección de la tablet eligen el lado. Usa las funciones del add-on sin su
+  autograb/modal del PC; no escribe en rv3d. Un fallo restaura la malla y el éxito
+  crea un undo. La selección inválida y los vecinos ocultos se rechazan antes.
 - CAD es un workspace; Blender permanece en Object. Sus longitudes son metros y
   se convierten a unidades Blender al materializar. IDs y revisión pertenecen al
   documento; la malla evaluada no es la fuente ni admite Edit sin conversión explícita.
