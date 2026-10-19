@@ -21,6 +21,19 @@ class ToolTrayContentsTest {
         assertEquals(17,toolTrayContents(schema).advanced.size)
     }
 
+    @Test fun loopPositionAcceptsExactUnitsAndExpressionsFromItsCentre() {
+        assertEquals(.25,parseLoopPosition("25%",0.0,.02)!!,1e-9)
+        assertEquals(.25,parseLoopPosition("5mm",0.0,.02)!!,1e-9)
+        assertEquals(.5,parseLoopPosition("(2+3)*2mm",0.0,.02)!!,1e-9)
+        assertEquals(.30,parseLoopPosition("+1mm",.25,.02)!!,1e-9)
+        assertEquals(-.5,parseLoopPosition("-1cm",0.0,.02)!!,1e-9)
+        assertNull(parseLoopPosition("",0.0,.02));assertNull(parseLoopPosition("5mm",0.0,0.0))
+        val simple=toolTrayContents(ToolSession(tool=EditTool.LOOP_CUT))
+        assertFalse("falloff" in simple.advanced);assertFalse("flip" in simple.advanced)
+        val curved=toolTrayContents(ToolSession(tool=EditTool.LOOP_CUT,parameters=mapOf("smoothness" to .5,"even" to true)))
+        assertTrue("falloff" in curved.advanced);assertTrue("flip" in curved.advanced)
+    }
+
     @Test fun savedLengthsFollowPhysicalSizeAndNeverRestoreLoopLocationOrGeometryIds() {
         val stored=reusableToolValues(EditTool.BEVEL,mapOf("offset" to 5.0,"snap_step" to 1.0,"segments" to 3,"edge" to 55),.001,true)
         assertEquals(.005,stored["offset"])

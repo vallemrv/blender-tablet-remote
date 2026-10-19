@@ -174,6 +174,7 @@ private fun ToolControl(id: String, session: ToolSession, scale: Double, unit: L
         ParamStepper(spec, session.double(id) ?: defaultValue(spec), scale,
             stepSize = if (spec.mode == TransformMode.MOVE) session.snapStep else null,
             lengthUnit = if (spec.mode == TransformMode.MOVE) unit else null,
+            quickValues = if (session.tool == EditTool.LOOP_CUT && id == "cuts") listOf(1,2,3,4) else emptyList(),
             onCommit = { change(id, it) })
         return
     }
@@ -258,53 +259,32 @@ fun BisectTray(session: ToolSession, onParameter: (String, Any?) -> Unit, onConf
     }
 }
 
-/** 50 % es el centro; las unidades métricas expresan desplazamiento desde él. */
+/** Offset from the centre, accepting percentages or physical lengths in the same field. */
 @Composable
 private fun PositionStepper(session: ToolSession, onParameter: (String, Any?) -> Unit) {
-    var unit by remember { mutableStateOf("%") }
-    var menu by remember { mutableStateOf(false) }
     val factor = session.double("factor") ?: 0.0
-    val metric = unit != "%" && session.slideRange > 0.0
-    val metersPerUnit = when (unit) { "mm" -> 0.001; "cm" -> 0.01; else -> 1.0 }
-    val value = if (metric) session.slideDistance / metersPerUnit else (factor + 1.0) * 50.0
-    // null muestra el valor remoto; vacío conserva el borrado mientras se escribe.
-    var text by remember(session.sessionId, session.loopCount, unit) { mutableStateOf<String?>(null) }
-    var pending by remember(session.sessionId, session.loopCount, unit) { mutableStateOf<Double?>(null) }
-    LaunchedEffect(value) { if (pending?.let { kotlin.math.abs(it - value) < 1e-9 } == true) pending = null }
-    val shown = pending ?: value
-    val step = if (metric) (session.slideRange / metersPerUnit / 100.0).coerceAtMost(1.0) else 1.0
+    var draft by remember(session.sessionId, session.loopCount) { mutableStateOf<String?>(null) }
+    var pending by remember(session.sessionId, session.loopCount) { mutableStateOf<Double?>(null) }
+    LaunchedEffect(factor) { if (pending?.let { kotlin.math.abs(it - factor) < 1e-9 } == true) pending = null }
+    val shown = pending ?: factor
     val limit = if (session.flag("clamp", true)) 1.0 else 2.0
-    val minimum = if (metric) -limit * session.slideRange / metersPerUnit else (1.0 - limit) * 50.0
-    val maximum = if (metric) limit * session.slideRange / metersPerUnit else (1.0 + limit) * 50.0
-    fun send(number: Double) {
-        if (!number.isFinite()) return
-        val bounded = number.coerceIn(minimum, maximum)
-        if (metric) onParameter("slide_distance", bounded * metersPerUnit)
-        else onParameter("factor", bounded / 50.0 - 1.0)
-        pending = bounded
-        text = null
+    fun read() = draft?.let { com.blendertablet.remote.model.parseLoopPosition(it, shown, session.slideRange) } ?: shown.takeIf { draft == null }
+    fun send(value: Double) {
+        if (!value.isFinite()) return
+        val bounded = value.coerceIn(-limit, limit)
+        pending = bounded; draft = null
+        onParameter("factor", bounded)
     }
-    fun commit() { text?.let { NumericExpression.evaluate(it, shown) }?.let(::send) }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(if (metric) "Desde centro" else "Posición", color = Ink.Faint, fontSize = 11.sp)
-        StepperButton("−") { send((text?.let { NumericExpression.evaluate(it, shown) } ?: shown) - step) }
-        CompactNumericField(
-            value = text ?: formatToolDistance(shown, detailDecimalPlaces(shown, 4)),
-            onValueChange = { text = it }, onDone = { commit() },
-            modifier = Modifier.width(72.dp),
-        )
-        Box {
-            PillButton(unit) { menu = true }
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                val units = if (session.slideRange > 0.0) listOf("%", "mm", "cm", "m") else listOf("%")
-                units.forEach { option ->
-                    DropdownMenuItem(text = { Text(option) }, onClick = { unit = option; menu = false; text = null })
-                }
-            }
+        HoverHelp("Posición desde el centro", "0 % es el centro. Escribe un porcentaje o una distancia, por ejemplo 5mm.") {
+            Text("Posición", color = Ink.Faint, fontSize = 11.sp)
         }
-        StepperButton("+") { send((text?.let { NumericExpression.evaluate(it, shown) } ?: shown) + step) }
-        PillButton("Aplicar", enabled = !text.isNullOrBlank()) { commit() }
-        PillButton("Centro") { onParameter("factor", 0.0); text = null; pending = if (metric) 0.0 else 50.0 }
+        StepperButton("−") { read()?.let { send(it - .01) } }
+        CompactNumericField(value = draft ?: "${formatToolDistance(shown * 100, 3)} %",
+            onValueChange = { draft = it }, onDone = { read()?.let(::send) },
+            modifier = Modifier.width(90.dp), fontSize = 16.sp, selectAllOnFocus = true)
+        StepperButton("+") { read()?.let { send(it + .01) } }
+        PillButton("Centro") { send(0.0) }
     }
 }
 
@@ -318,6 +298,7 @@ private fun ParamStepper(
     lengthUnit: LengthUnit? = null,
     millimeterDecimals: Int? = null,
     showReset: Boolean = false,
+    quickValues: List<Int> = emptyList(),
     onCommit: (Double) -> Unit,
 ) {
     // null muestra el valor remoto; "" es un borrado intencional durante la edición.
@@ -347,22 +328,21 @@ private fun ParamStepper(
     fun commit() {
         if (text == null) return
         val next = readDraft() ?: return
-        if (stepSize != null) pendingValue = next
+        pendingValue = next
         onCommit(next)
         text = null
     }
     fun adjust(direction: Int) {
-        val current = if (stepSize != null) readDraft() ?: return else value
+        val current = readDraft() ?: return
         val next = stepParam(current, stepSize ?: spec.step, direction, spec.isInt, spec.min, spec.max)
-        if (stepSize != null) {
-            pendingValue = next
-            text = null
-        }
+        pendingValue = next
+        text = null
         onCommit(next)
     }
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(spec.label, color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.padding(end = 4.dp))
+        QuickToolValues(quickValues, shownValue) { pendingValue = it; text = null; onCommit(it) }
         StepperButton("−") {
             adjust(-1)
         }
@@ -370,7 +350,7 @@ private fun ParamStepper(
             value = text ?: formatted,
             onValueChange = { text = it },
             onDone = { commit() },
-            modifier = Modifier.width(64.dp),
+            modifier = Modifier.width(90.dp), fontSize = 16.sp, selectAllOnFocus = true,
         )
         StepperButton("+") {
             adjust(1)

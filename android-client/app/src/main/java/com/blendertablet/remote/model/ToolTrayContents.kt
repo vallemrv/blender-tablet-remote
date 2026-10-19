@@ -37,7 +37,8 @@ fun parseLoopPosition(text: String, currentFactor: Double, rangeMeters: Double):
     val input = text.trim().lowercase()
     val result = if (input.endsWith("m")) {
         if (rangeMeters <= 0) return null
-        ValueParser.parseMove(input)?.div(rangeMeters)
+        val unit = if (input.endsWith("mm")) .001 else if (input.endsWith("cm")) .01 else 1.0
+        ValueParser.parseMove(input, currentFactor * rangeMeters / unit)?.div(rangeMeters)
     } else NumericExpression.evaluate(input.removeSuffix("%"), currentFactor * 100)?.div(100)
     return result?.takeIf { it.isFinite() }
 }

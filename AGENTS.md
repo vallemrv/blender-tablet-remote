@@ -297,6 +297,10 @@ nuevas superficies y la adaptación gradual de las existentes.
   un grupo), sin contar título y salidas. `toolTrayContents` es el inventario que
   dibuja la fila y valida el test; no existe una lista paralela para probarla.
   Snap vive en el mismo Más, y cada opción avanzada lleva una frase de ayuda.
+  Loop Cut ofrece chips 1–4, posición desde el centro (0 %), Centro y quitar último
+  solo si hay varios cortes. El campo acepta % o mm/cm/m y cuentas sin selector
+  de unidad ni Aplicar. Suavidad cero oculta Perfil; Invertir solo aparece con
+  Seguir la arista. No salir de la cara reemplaza el antiguo Fijar.
 - Se recuerdan valores confirmados por herramienta/variante, convirtiendo las
   longitudes a metros al guardar preferencias. No se recuerdan IDs, referencias,
   caras elegidas ni la posición de Loop Cut: un nuevo corte empieza centrado.
