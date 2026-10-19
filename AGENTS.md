@@ -330,8 +330,11 @@ nuevas superficies y la adaptación gradual de las existentes.
   HERRAMIENTA/EDITAR, PINCEL, MODO/TRAZO y CROQUIS/OPERACIONES. Referencias se
   abre desde un icono a la derecha, bajo los modos, con los márgenes del inspector.
   Su ajuste local se llama Restablecer, sin confundirse con Encuadrar la escena.
-  El tablero se dibuja antes de los inspectores para que sus controles prevalezcan;
-  el acceso cerrado no aparece sobre una pila CAD o panel de modificadores abierto.
+  El tablero abierto es la última capa del workspace, por encima de rails,
+  inspectores, menús y avisos; sus zonas transparentes también capturan sus gestos.
+  Se arrastra por la cabecera a toda el área útil, limitado solo por el tamaño real
+  de la ventana y la pantalla. El acceso cerrado no aparece sobre una pila CAD o
+  panel de modificadores abierto.
 - Todos los modos usan iconos y nombres españoles: Objeto, Edición, Materiales,
   Escultura y CAD al final. Dentro de CAD se conserva el selector completo;
   los modos incompatibles con la pieza paramétrica permanecen deshabilitados.
@@ -463,9 +466,16 @@ nuevas superficies y la adaptación gradual de las existentes.
   historial: nunca ejecuta undo dentro de los handlers de guardado/carga.
   La tablet impide rehacer previews canceladas; el redo directo del PC es nativo.
 - Referencias es un tablero local con varias imágenes, zoom, desplazamiento y
-  opacidad. La imagen va en una ventana sin fondo entre los controles: bajar la
-  opacidad deja ver el modelo detrás. Importa copias privadas acotadas y conserva los originales; sus gestos
-  quedan en el panel. No son planos 3D ni contenido del `.blend`.
+  opacidad. A opacidad completa tapa los controles que queden debajo, incluidos
+  los márgenes de la imagen; bajar la opacidad deja ver el modelo detrás. Importa copias privadas acotadas y conserva los originales; sus gestos
+  quedan en el panel. Cada escena tiene un tablero independiente: `scene_scale.reference_board_id`
+  es un UUID persistido en `btr_reference_board_id` dentro del `.blend`, pero las
+  fotos son copias locales de la tablet. Nueva escena empieza vacía y abrir una escena
+  guardada recupera su tablero. Las imágenes globales de versiones previas solo se
+  trasladan mediante Más → Recuperar imágenes anteriores. Añadir y Quitar siempre
+  están visibles, sin scroll horizontal; quitar no borra el original ni la copia
+  enviada a Blender. Un selector/importación abierto conserva el tablero de destino
+  aunque se cambie de escena antes de terminar.
   Se abre desde el icono Referencias del borde derecho; cerrado no ocupa la vista.
   «A Blender» copia además la imagen elegida a la escena (`reference.add`) como
   Imagen de referencia nativa: Empty de imagen empaquetado en el `.blend`, frente a la

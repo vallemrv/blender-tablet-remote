@@ -8,8 +8,6 @@ import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
-import org.json.JSONArray
-import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
@@ -22,36 +20,36 @@ class ReferenceImages(context: Context) {
     private val directory = File(context.filesDir, "references").apply { mkdirs() }
     private val preferences = context.getSharedPreferences("reference_images", Context.MODE_PRIVATE)
 
-    fun list(): List<ReferenceImage> = runCatching {
-        val array = JSONArray(preferences.getString("images", "[]"))
-        (0 until array.length()).mapNotNull { index ->
-            val item = array.getJSONObject(index)
-            val id = item.getString("id")
-            if (!id.matches(Regex("[a-f0-9-]{36}"))) return@mapNotNull null
-            val file = File(directory, "$id.png")
-            if (file.isFile) ReferenceImage(id, item.getString("name"), file.path) else null
-        }
-    }.getOrDefault(emptyList())
+    private fun index() = ReferenceBoardIndex(preferences.getString("boards", "{}") ?: "{}",
+        preferences.getString("images", "[]") ?: "[]")
 
-    /** A finished import can outlive its Activity; reconcile the currently visible board. */
-    fun observe(onChanged: (List<ReferenceImage>) -> Unit): () -> Unit {
+    private fun images(records: List<ReferenceRecord>): List<ReferenceImage> = records.mapNotNull { item ->
+        val file = File(directory, "${item.id}.png")
+        if (file.isFile) ReferenceImage(item.id, item.name, file.path) else null
+    }
+    fun list(board: String): List<ReferenceImage> = images(index().list(board))
+    fun previous(): List<ReferenceImage> = images(index().previous())
+
+    /** Una importación terminada actualiza solo el tablero al que pertenecía al iniciarse. */
+    fun observe(onChanged: () -> Unit): () -> Unit {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == "images") onChanged(list())
+            if (key == "boards" || key == "images") onChanged()
         }
         preferences.registerOnSharedPreferenceChangeListener(listener)
-        onChanged(list())
+        onChanged()
         return { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
     }
-
-    private fun save(images: List<ReferenceImage>) {
-        val array = JSONArray()
-        images.forEach { array.put(JSONObject().put("id", it.id).put("name", it.name)) }
-        check(preferences.edit().putString("images", array.toString()).commit()) {
-            "No se pudo guardar la lista de referencias"
+    private fun save(index: ReferenceBoardIndex) {
+        check(preferences.edit().putString("boards", index.boardsJson()).putString("images", index.legacyJson()).commit()) {
+            "No se pudo guardar el tablero de referencias"
         }
     }
+    fun recover(board: String, image: ReferenceImage) = synchronized(metadataLock) {
+        val index = index(); index.recover(board, image.id); save(index)
+    }
 
-    fun import(uri: Uri): ReferenceImage {
+    fun import(uri: Uri, board: String): ReferenceImage {
+        require(board.isNotBlank()) { "Espera a recibir la escena" }
         val id = UUID.randomUUID().toString()
         val source = File(directory, "$id.import")
         val destination = File(directory, "$id.png")
@@ -79,7 +77,7 @@ class ReferenceImages(context: Context) {
                     decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
                 }
             } else {
-                val options = BitmapFactory.Options()
+                val options = BitmapFactory.Options().apply { inSampleSize = 1 }
                 while (maxOf(bounds.outWidth, bounds.outHeight) / options.inSampleSize > 2048) options.inSampleSize *= 2
                 BitmapFactory.decodeFile(source.path, options) ?: error("No se puede decodificar la imagen")
             }
@@ -92,7 +90,9 @@ class ReferenceImages(context: Context) {
                 }
             }.getOrNull()?.take(100) ?: "Referencia"
             val image = ReferenceImage(id, name, destination.path)
-            synchronized(metadataLock) { save(list() + image) }
+            synchronized(metadataLock) {
+                val index = index(); index.add(board, ReferenceRecord(image.id, image.name)); save(index)
+            }
             return image
         } catch (error: Exception) {
             destination.delete()
@@ -100,8 +100,10 @@ class ReferenceImages(context: Context) {
         } finally { source.delete() }
     }
 
-    fun remove(image: ReferenceImage) {
-        synchronized(metadataLock) { save(list().filterNot { it.id == image.id }) }
-        File(directory, "${image.id}.png").delete()
+    fun remove(board: String, image: ReferenceImage) {
+        synchronized(metadataLock) {
+            val index = index(); index.remove(board, image.id); save(index)
+            if (!index.contains(image.id)) File(directory, "${image.id}.png").delete()
+        }
     }
 }

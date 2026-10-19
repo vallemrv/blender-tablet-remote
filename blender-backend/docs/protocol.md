@@ -2709,3 +2709,11 @@ de la ubicación actual; `name` es un único nombre, sin separadores, NUL, dos p
 ni `.`/`..`. Crea exclusivamente ese hijo (no crea padres ni sobrescribe). Devuelve
 el mismo esquema de `file.browse` para entrar en la carpeta creada. Errores:
 `already_exists`, `not_found`, `not_directory`, `access_denied`, `io_error`.
+
+### Identidad del tablero local de referencias
+
+`scene_scale.reference_board_id` contiene un UUID estable de la escena, persistido
+en la propiedad `btr_reference_board_id` del `.blend`. A diferencia de `scene_id`,
+no cambia al reiniciar Blender ni al reabrir el archivo. Nueva escena recibe otro
+UUID. Android usa este identificador para almacenar sus copias locales de imágenes;
+las fotos no viajan en el estado ni se incluyen en el `.blend` salvo «Enviar a Blender».

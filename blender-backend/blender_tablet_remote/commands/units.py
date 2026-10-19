@@ -19,6 +19,7 @@ from . import command
 
 # El preset pertenece a la escena y se guarda dentro del .blend.
 SCENE_SCALE_KEY = 'btr_scene_scale'
+REFERENCE_BOARD_KEY = 'btr_reference_board_id'
 _EPOCH = uuid.uuid4().hex
 
 
@@ -39,6 +40,18 @@ def _preset_for_scene() -> str:
     )
 
 
+def reference_board_id() -> str:
+    """Identidad estable del tablero local, guardada con la escena, sin guardar fotos."""
+    scene = bpy.context.scene
+    value = scene.get(REFERENCE_BOARD_KEY)
+    try:
+        return str(uuid.UUID(value))
+    except (ValueError, TypeError, AttributeError):
+        value = str(uuid.uuid4())
+        scene[REFERENCE_BOARD_KEY] = value
+        return value
+
+
 def current_scale() -> dict:
     """Preset activo, con lo que la tablet necesita para pintar sus controles."""
     current = _preset_for_scene()
@@ -46,6 +59,7 @@ def current_scale() -> dict:
     return dict(
         preset,
         scene_id=f'{_EPOCH}:{bpy.context.scene.session_uid}',
+        reference_board_id=reference_board_id(),
         length_unit=_length_unit(),
         scale_length=float(bpy.context.scene.unit_settings.scale_length),
         unit_system=str(bpy.context.scene.unit_settings.system),

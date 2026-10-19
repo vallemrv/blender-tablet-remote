@@ -545,6 +545,7 @@ data class SceneScale(
     val proportionalRadius: Double = 0.5,
     val proportionalRadiusStep: Double = 0.05,
     val sceneId: String = "",
+    val referenceBoardId: String = "",
 )
 
 data class InputDebug(

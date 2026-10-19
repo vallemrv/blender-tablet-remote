@@ -32,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -397,15 +398,6 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     .padding(top = 142.dp, end = Metrics.EdgeMargin + Metrics.HelperRailInset + 56.dp)) {
                     IconAction(AppIcons.Reference, "Imágenes de referencia") { referencesOpen = true }
                 }
-                if (referencesOpen) ReferencePanel(Modifier.align(Alignment.TopEnd)
-                    .padding(top = 142.dp, end = Metrics.EdgeMargin + Metrics.HelperRailInset,
-                        bottom = if (cad.workspace) cadTrayHeight + cadFooterHeight else trayInset + 74.dp),
-                    onSendToBlender = if (state.blender.features.referenceImages && state.connection == ConnectionStatus.CONNECTED) {
-                        { image, opacity -> vm.sendReferenceToBlender(image.path, image.name, opacity) }
-                    } else null,
-                    onDismiss = { referencesOpen = false })
-
-
                 MenuBar(
                     state = state,
                     fps = stats.fps,
@@ -747,6 +739,16 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 },
             )
         }
+        // Última capa del workspace: por encima de rails, inspectores, menús y avisos.
+        if (referencesOpen && chromeVisible) ReferencePanel(
+            modifier = Modifier.zIndex(100f),
+            boardId = state.blender.sceneScale.referenceBoardId,
+            onSendToBlender = if (state.blender.features.referenceImages && state.connection == ConnectionStatus.CONNECTED) {
+                { image, opacity -> vm.sendReferenceToBlender(image.path, image.name, opacity) }
+            } else null,
+            onDismiss = { referencesOpen = false },
+        )
+
     }
 }
 
