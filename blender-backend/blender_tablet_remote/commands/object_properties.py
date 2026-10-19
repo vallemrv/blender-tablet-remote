@@ -63,8 +63,10 @@ def describe(obj):
         for i, axis in enumerate('XYZ'):
             field(f'dimension_{axis.lower()}', axis, 'Tamaño', obj.dimensions[i] * scale,
                   unit='length', min=0.)
-            # Un eje sin extensión no puede recuperar volumen cambiando dimensions.
-            fields[-1]['read_only'] |= obj.lock_scale[i] or abs(obj.dimensions[i]) < 1e-12
+            # Escala cero conserva la geometría: Blender puede recuperar dimensions.
+            # Solo un eje plano en la geometría local carece de extensión recuperable.
+            local_span = max(c[i] for c in obj.bound_box) - min(c[i] for c in obj.bound_box)
+            fields[-1]['read_only'] |= obj.lock_scale[i] or local_span <= 0.
     elif obj.type == 'EMPTY':
         limits = obj.bl_rna.properties['empty_display_size']
         field('display_size', 'Tamaño', 'Tamaño',

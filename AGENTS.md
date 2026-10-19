@@ -363,8 +363,11 @@ nuevas superficies y la adaptación gradual de las existentes.
   repetir «de imagen» ni los factores Escala X/Y/Z; además ofrece
   opacidad, ortográfica/perspectiva, solo vista alineada, profundidad y lados visibles.
   El selector de objetos permite recuperar referencias sin tocarlas en la vista.
-  Los cambios se aplican inmediatamente, sin Cancelar/Confirmar. Los números vacíos
-  o incompletos permanecen locales; los snapshots no interrumpen lo que se escribe.
+  Los cambios se aplican inmediatamente, sin Cancelar/Confirmar.
+  Tamaño a cero por escala no bloquea el campo: se puede escribir otra medida para
+  recuperarlo, también tras guardar/cargar. Solo un eje bloqueado o sin extensión
+  en la geometría local es de solo lectura; no se inventa grosor para una malla plana.
+  Los números vacíos o incompletos permanecen locales; los snapshots no interrumpen lo que se escribe.
   Una petición en vuelo y una cola que conserva los últimos valores evitan saltos
   y pérdidas al pulsar deprisa. Cada envío usa la revisión recién confirmada;
   deshacer o cambiar de contexto retira los valores aún no enviados. Cada lote
@@ -516,7 +519,8 @@ nuevas superficies y la adaptación gradual de las existentes.
   su eje; con cadena conserva proporciones. El gesto métrico usa el eje restringido
   o la dimensión mayor de los ejes activos. Los valores escritos y Reset son exactos.
 - Escalar admite `0` exacto en % y mm/cm/m para aplanar, también con snap activo.
-  Escribir cero en un eje o pulsar X=0/Y=0/Z=0 aplana solo ese eje: una única petición
+  Escribir y confirmar cero en el campo de un eje aplana solo ese eje, incluso con
+  la cadena activa. No hay botones X=0/Y=0/Z=0: una única petición
   conserva los valores visibles de los demás y retira cualquier restricción incompatible.
   La cadena sigue siendo proporcional para valores distintos de cero; Reset recupera el baseline.
 - El selector y los pasos de snap viven en `ui/SnapControl.kt`; las bandejas declaran

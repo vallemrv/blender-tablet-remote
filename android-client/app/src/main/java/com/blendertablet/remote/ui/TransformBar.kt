@@ -323,9 +323,6 @@ private fun ParametricAxisInputs(
             description = if (scaleLinked) "Dimensiones vinculadas" else "Dimensiones independientes",
             selected = scaleLinked,
         ) { scaleLinked = !scaleLinked }
-        Axis.entries.forEach { axis ->
-            PillButton("${axis.name}=0") { onFlatten?.invoke(axis.name) }
-        }
     }
     val referenceDistance = session.referenceDistance ?: 0.0
     val step = when (session.mode) {

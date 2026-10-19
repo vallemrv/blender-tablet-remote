@@ -696,7 +696,8 @@ Los valores y dimensiones SCALE admiten cero exacto para aplanar, incluso con sn
 `transform.value` también acepta `flatten_axis: X|Y|Z` exclusivamente en SCALE.
 En una única petición toma los factores visibles actuales, fija a cero el eje indicado,
 retira la restricción de ejes y aplica el valor exacto; mantiene la sesión y los otros
-factores. Android usa este comando tanto al escribir cero como desde X=0/Y=0/Z=0,
+factores. Android usa este comando al escribir y confirmar cero en el campo de un eje;
+no ofrece botones X=0/Y=0/Z=0 separados,
 independientemente de la cadena. Reset sigue enviando `[1,1,1]` sobre el baseline.
 
 Snap incremental y rejilla en la sesión modal:

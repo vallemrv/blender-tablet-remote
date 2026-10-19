@@ -58,6 +58,44 @@ class ObjectPropertiesTests(unittest.TestCase):
         self.assertAlmostEqual(self.obj.dimensions.z, 8., places=5)
         self.undo.assert_called_once()
 
+    def test_zero_dimension_stays_editable_and_recovers_without_changing_geometry(self):
+        vertices = [tuple(v.co) for v in self.obj.data.vertices]
+        for axis in 'xyz':
+            key = 'dimension_' + axis
+            baseline = tuple(self.obj.dimensions)
+            self.apply({key: 0.})
+            fields = {f['id']: f for f in props.describe(self.obj)['fields']}
+            self.assertFalse(fields[key]['read_only'])
+            self.assertEqual(self.obj.dimensions['xyz'.index(axis)], 0.)
+            self.apply({key: .007})
+            self.assertAlmostEqual(self.obj.dimensions['xyz'.index(axis)], 7., places=5)
+            for index in range(3):
+                if index != 'xyz'.index(axis):
+                    self.assertAlmostEqual(self.obj.dimensions[index], baseline[index], places=5)
+            self.assertEqual([tuple(v.co) for v in self.obj.data.vertices], vertices)
+        self.assertEqual(self.undo.call_count, 6)
+
+    def test_all_zero_dimensions_can_be_recovered_after_saving_and_loading(self):
+        self.apply({f'dimension_{axis}': 0. for axis in 'xyz'})
+        with tempfile.TemporaryDirectory() as folder:
+            path = str(Path(folder) / 'zero-size.blend')
+            bpy.ops.wm.save_as_mainfile(filepath=path)
+            bpy.ops.wm.open_mainfile(filepath=path)
+            self.apply({'dimension_x': .003, 'dimension_y': .004, 'dimension_z': .005})
+            for actual, expected in zip(bpy.context.object.dimensions, (3., 4., 5.)):
+                self.assertAlmostEqual(actual, expected, places=5)
+
+    def test_genuinely_flat_geometry_and_locked_axis_remain_read_only(self):
+        for vertex in self.obj.data.vertices:
+            vertex.co.z = 0.
+        self.obj.data.update()
+        self.obj.lock_scale[0] = True
+        bpy.context.view_layer.update()
+        fields = {f['id']: f for f in props.describe(self.obj)['fields']}
+        self.assertTrue(fields['dimension_z']['read_only'])
+        self.assertTrue(fields['dimension_x']['read_only'])
+        self.assertFalse(fields['dimension_y']['read_only'])
+
     def test_image_native_properties_and_persistence(self):
         obj = self.image()
         self.apply({'display_size': .04, 'opacity': .35, 'orthographic': True, 'perspective': False,
