@@ -154,7 +154,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   Punto medio usa la selección vigente. Un punto señalado conserva coordenadas
   mundiales y solo se reutiliza en la misma escena. Cambiar la selección durante
   una transformación Edit conserva también esa intención. Mover y los cierres de
-  sesión nunca sobrescriben el centro elegido. Orígenes individuales rota/escala
+  sesión nunca sobrescriben el centro elegido, tampoco si se confirma antes del ACK.
+  Señalar punto mantiene el centro anterior hasta fijar otro candidato válido.
+  Orígenes individuales rota/escala
   cada objeto alrededor de su origen; en Edición usa los operadores nativos para
   los centros de vértices, aristas, caras y curvas. Cada preview restaura primero
   su baseline completo, sin undo intermedio ni cambios persistentes en el pivote

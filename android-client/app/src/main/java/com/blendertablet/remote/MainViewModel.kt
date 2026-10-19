@@ -102,6 +102,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var facePickRole: String? = null
     private var lastFacePointer: Pair<Float, Float>? = null
     private var lastReferencePointer: Pair<Float, Float>? = null
+    private var pendingCenterPreset: String? = null
     /** Punto donde bajó el dedo del arrastre en curso: BEGIN del manipulador. */
     private var dragStartPoint: Pair<Float, Float>? = null
     /** El arrastre de un dedo pertenece al manipulador (o a su órbita si no tocó asa). */
@@ -180,8 +181,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             client.transformSession.collect { session ->
-                com.blendertablet.remote.model.TransformCenter.from(session, client.state.value.sceneScale.sceneId)
-                    ?.let(centerPreferences::save)
+                val center = com.blendertablet.remote.model.TransformCenter.from(session, client.state.value.sceneScale.sceneId)
+                if (center != null && (pendingCenterPreset == null || center.mode == pendingCenterPreset)) {
+                    pendingCenterPreset = null
+                    centerPreferences.save(center)
+                }
             }
         }
 
@@ -1618,7 +1622,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val session = client.transformSession.value
         if (!session.active) return
         val normalized = if (session.mode == TransformMode.MOVE) "SOURCE" else role
-        val roleAlreadyLocked = if (normalized == "CENTER") session.centerLocked else session.sourceLocked
+        if (normalized == "CENTER") {
+            // «Señalar punto» sustituye el centro solo al fijar un candidato válido.
+            lastReferencePointer = null
+            local.update { it.copy(referencePicking = true, referenceRole = "CENTER") }
+            return
+        }
+        val roleAlreadyLocked = session.sourceLocked
         if (roleAlreadyLocked && !local.value.referencePicking) {
             client.transformReferenceClear(normalized)
         } else {
@@ -1649,6 +1659,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setTransformCenterPreset(preset: String) {
         if (!client.transformSession.value.active) return
+        if (preset !in setOf("SELECTION", "CURSOR", "OBJECT_ORIGIN", "INDIVIDUAL")) return
+        // Elegir y confirmar enseguida no debe depender de que llegue el ACK.
+        pendingCenterPreset = preset
+        centerPreferences.save(com.blendertablet.remote.model.TransformCenter(preset))
         lastReferencePointer = null
         local.update { it.copy(referencePicking = false, referenceRole = "CENTER") }
         client.transformCenterPreset(preset)
