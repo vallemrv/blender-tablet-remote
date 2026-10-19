@@ -270,6 +270,9 @@ nuevas superficies y la adaptación gradual de las existentes.
   área/material/normal, etc.), anunciados por el backend; añade coincidencias,
   respeta ocultos y registra un undo solo si cambia la selección. Seleccionar
   también se activa desde ese rail; el radial nunca selecciona.
+  Pintar selección mantiene visible el navegador azul de órbita. Su zona captura
+  el gesto antes de comenzar el trazo, no cambia la selección y deja Pintar activo
+  para continuar desde la nueva perspectiva.
 - El radial concentra Ocultar, Aislar, Duplicar, Renombrar y Borrar según contexto;
   en CAD también Soldar. Outliner conserva su ojo. Las listas CAD seleccionan;
   las restricciones se ven y borran en la pila. El rail de boceto crea solo

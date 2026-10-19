@@ -327,6 +327,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 session.active,
                 toolSession.active,
                 state.activeTool,
+                state.shapeTool,
             )) && quickMenuAt == null && !modifiersOpen,
             navigationOrbitRightInsetDp = if (cadConstraintRail || helperRailVisible) Metrics.HelperRailInset.value else 0f,
             onShape = vm::shapeSelect,
@@ -1001,7 +1002,8 @@ internal fun navigationOrbitVisible(
     transformActive: Boolean,
     toolActive: Boolean,
     activeTool: ActiveTool,
-): Boolean = (transformActive || toolActive) && activeTool != ActiveTool.TWEAK
+    shapeTool: ShapeTool = ShapeTool.NONE,
+): Boolean = shapeTool == ShapeTool.PAINT || ((transformActive || toolActive) && activeTool != ActiveTool.TWEAK)
 
 @Composable
 private fun EmptyViewport() {
