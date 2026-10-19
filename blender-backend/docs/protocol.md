@@ -177,7 +177,7 @@ edición, no sobre el objeto.
 | `scene.list_objects` | — | `{objects: [{name, type, selected}]}` |
 | `scene.get_object` | `name` | info del objeto |
 | `scene.scale` | — | `{scale, presets[]}` — escala de trabajo activa y catálogo |
-| `scene.scale_set` | `preset`: `SMALL`\|`MEDIUM`\|`LARGE`, y/o `length_unit`: `MILLIMETERS`\|`CENTIMETERS`\|`METERS` | la escala resultante |
+| `scene.scale_set` | Retirado: la escala se elige en `file.new` | error `scene_scale_locked` |
 | `server.ping` | `echo` | `{pong: true, echo}` |
 | `server.capabilities` | — | versiones, lista de comandos y gestos |
 
@@ -190,7 +190,7 @@ los tres. Lo que cambia es cómo se mide, hasta dónde se ve y con qué paso se 
 |---|---|---|---|---|---|---|
 | `SMALL` | `MILLIMETERS` | 0.0005 | 5 | 0.001 | 0.01 | 0.01 / 0.001 |
 | `MEDIUM` | `CENTIMETERS` | 0.01 | 100 | 0.01 | 0.5 | 0.5 / 0.05 |
-| `LARGE` | `METERS` | 0.1 | 1000 | 0.1 | 2.0 | 5.0 / 0.5 |
+| `LARGE` | `METERS` | 0.1 | 1000 | 0.1 | 1.0 | 5.0 / 0.5 |
 
 El clipping es la razón de que esto exista. La proyección del vídeo hereda el **FOV** de
 la ventana del PC pero **no su rango de profundidad**: con el clip por defecto de Blender
@@ -220,9 +220,13 @@ cámaras, luces ni empties ajenos. La apertura conserva la proyección inicial d
 `scale_length` de la escena **no** se modifica: multiplica el tamaño del mundo y
 cambiaría el significado de la geometría existente. `length_unit` sí, porque solo decide
 cómo se escribe la medida. El preset viaja en `scene.get_state` como `scene_scale`. Al
-abrir un `.blend`, el preset inicial se deduce de su unidad real: milímetros selecciona
-`SMALL`, centímetros `MEDIUM` y metros `LARGE`. Una elección posterior del usuario se
-conserva durante esa sesión. `scene_scale.scale_length` contiene siempre el valor real
+crear una escena, `file.new` exige `preset:SMALL|MEDIUM|LARGE` y lo guarda en la
+propiedad de escena `btr_scene_scale` del `.blend`. No se puede cambiar con
+`scene.scale_set`: responde `scene_scale_locked` sin modificar nada. Abrir un archivo
+conserva ese preset; archivos anteriores sin propiedad se interpretan por su unidad
+real (mm/cm/m). `scene_scale.scene_id` identifica proceso y escena: Android adopta
+los pasos iniciales al cambiar de identidad y conserva ajustes al reconectar a la misma.
+CAD también inicia su paso desde el preset. `scene_scale.scale_length` contiene siempre el valor real
 del archivo para que el cliente actualice sus conversiones al cargar otra escena.
 
 En `tool.begin`, `parameters.auto_size:true` inicializa EXTRUDE/BEVEL/INSET según
@@ -1265,7 +1269,7 @@ exigen Object Mode y responden `wrong_mode` en Edit.
 | Comando | Payload |
 |---|---|
 | `file.info` | — |
-| `file.new` | `empty` (bool): escena vacía en vez del archivo de inicio |
+| `file.new` | `preset` obligatorio: `SMALL`\|`MEDIUM`\|`LARGE`; `empty` (bool): escena vacía en vez del cubo inicial ajustado al preset |
 | `file.open` | `path` |
 | `file.save` | — falla con `no_path` si nunca se ha guardado |
 | `file.save_as` | `folder`, `name`; por compatibilidad también `path` completo |

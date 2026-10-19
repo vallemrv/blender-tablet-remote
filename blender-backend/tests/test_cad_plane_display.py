@@ -91,8 +91,8 @@ class PlaneDisplayTests(unittest.TestCase):
              patch('blender_tablet_remote.commands.units.current_scale',return_value=SCENE_SCALES['LARGE']):
             runtime.focus(sketch)
         span=camera.screen_span(camera.projection_matrix(self.rv))[1]*bpy.context.scene.unit_settings.scale_length
-        self.assertGreater(span,2.)
-        self.assertLess(span,4.)
+        self.assertGreater(span,SCENE_SCALES["LARGE"]["primitive_size"])
+        self.assertLess(span,SCENE_SCALES["LARGE"]["primitive_size"]*2)
         self.assertEqual(sketch,baseline)
 
 

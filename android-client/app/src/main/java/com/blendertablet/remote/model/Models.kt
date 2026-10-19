@@ -538,6 +538,7 @@ data class SceneScale(
     val primitiveSize: Double = 0.5,
     val proportionalRadius: Double = 0.5,
     val proportionalRadiusStep: Double = 0.05,
+    val sceneId: String = "",
 )
 
 data class InputDebug(
@@ -604,7 +605,7 @@ data class AppUiState(
     /** Mayús alterna como el Shift+click de Blender; Alt resta. */
     val selectionOp: SelectionOp = SelectionOp.SET,
     /** El usuario quiere ver el manipulador sobre la selección (botón de la barra). */
-    val gizmoEnabled: Boolean = true,
+    val gizmoEnabled: Boolean = false,
     /** Un arrastre del manipulador en curso: su sesión interna no abre la barra. */
     val gizmoDragging: Boolean = false,
     /** Ctrl armado para que el siguiente toque seleccione el camino más corto. */

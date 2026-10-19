@@ -567,8 +567,6 @@ class WebSocketRemoteBlenderClient(
     override fun requestModifierOptions() = command("modifier.add_options")
     override fun listObjects() = command("scene.list_objects")
     override fun requestSceneScales() = command("scene.scale")
-    override fun setSceneScale(preset: String) =
-        command("scene.scale_set", JSONObject().put("preset", preset))
     override fun vertexGroupCommand(action: String, payload: Map<String, Any?>) {
         require(action in setOf("create", "rename", "delete", "edit"))
         command("vertex_group.$action", JSONObject(payload).put("object", _state.value.activeObject))
@@ -618,7 +616,7 @@ class WebSocketRemoteBlenderClient(
     override fun snap(action: SnapAction) = command(action.command)
 
     override fun fileInfo() = command("file.info")
-    override fun fileNew() = command("file.new")
+    override fun fileNew(preset: String) = command("file.new", JSONObject().put("preset", preset))
     override fun fileOpen(path: String) = command("file.open", JSONObject().put("path", path))
     override fun fileSave() = command("file.save")
     override fun fileSaveAs(path: String) = command("file.save_as", JSONObject().put("path", path))
@@ -1061,15 +1059,6 @@ class WebSocketRemoteBlenderClient(
                                     scale, _state.value.unitScaleLength),
                             )
                         }
-                    }
-                    // Responde con la escala ya aplicada: se pinta sin esperar al
-                    // siguiente snapshot, que puede tardar hasta 100 ms.
-                    command == "scene.scale_set" -> result?.let { scale ->
-                        _state.value = _state.value.copy(
-                            sceneScale = StateParser.sceneScale(scale),
-                            unitScaleLength = StateParser.sceneScaleLength(
-                                scale, _state.value.unitScaleLength),
-                        )
                     }
                     command != null && command.startsWith("vertex_group.") -> result?.let(::updateState)
                     command != null && command.startsWith("modifier.") -> result?.let { stack ->

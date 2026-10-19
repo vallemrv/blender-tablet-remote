@@ -10,16 +10,16 @@ from __future__ import annotations
 
 import bpy
 import math
+import uuid
 
 from ..camera import camera
 from ..errors import BadPayload, CommandError
 from ..protocol import DEFAULT_SCENE_SCALE, SCENE_SCALES
 from . import command
 
-# `None` significa que todavía no hubo una elección explícita en esta sesión. En ese
-# caso la unidad real del .blend decide qué preset se anuncia; así una escena en mm no
-# aparece falsamente como "Mediana" solo por ser el valor por defecto del add-on.
-_current: str | None = None
+# El preset pertenece a la escena y se guarda dentro del .blend.
+SCENE_SCALE_KEY = 'btr_scene_scale'
+_EPOCH = uuid.uuid4().hex
 
 
 def _length_unit() -> str:
@@ -29,6 +29,9 @@ def _length_unit() -> str:
 
 def _preset_for_scene() -> str:
     """Preset cuya unidad coincide con la que trae el archivo abierto."""
+    saved = bpy.context.scene.get(SCENE_SCALE_KEY)
+    if isinstance(saved, str) and saved in SCENE_SCALES:
+        return saved
     length_unit = _length_unit()
     return next(
         (name for name, scale in SCENE_SCALES.items() if scale["length_unit"] == length_unit),
@@ -38,10 +41,11 @@ def _preset_for_scene() -> str:
 
 def current_scale() -> dict:
     """Preset activo, con lo que la tablet necesita para pintar sus controles."""
-    current = _current or _preset_for_scene()
+    current = _preset_for_scene()
     preset = SCENE_SCALES[current]
     return dict(
         preset,
+        scene_id=f'{_EPOCH}:{bpy.context.scene.session_uid}',
         length_unit=_length_unit(),
         scale_length=float(bpy.context.scene.unit_settings.scale_length),
         unit_system=str(bpy.context.scene.unit_settings.system),
@@ -52,11 +56,10 @@ def current_scale() -> dict:
 
 def apply_scale(name: str) -> dict:
     """Aplica el preset a unidades, cámara y rejilla. Nunca toca la geometría."""
-    global _current
     scale = SCENE_SCALES.get(name)
     if scale is None:
         raise BadPayload(f"Unknown scene scale: {name}")
-    _current = name
+    bpy.context.scene[SCENE_SCALE_KEY] = name
 
     unit_settings = bpy.context.scene.unit_settings
     # METRIC es condición para que `length_unit` acepte milímetros o metros; con
@@ -71,6 +74,8 @@ def apply_scale(name: str) -> dict:
     _apply_grid(scale["grid_scale"])
     bpy.context.scene.tool_settings.proportional_size = (
         scale["proportional_radius"] / max(unit_settings.scale_length, 1e-12))
+    from ..cad.runtime import runtime
+    runtime.step = scale["snap_step"]
     return current_scale()
 
 
@@ -91,12 +96,12 @@ def _apply_grid(grid_scale: float) -> None:
 
 def reset() -> None:
     """Adopta la unidad del archivo nuevo sin modificarla ni tocar su geometría."""
-    global _current
-    _current = _preset_for_scene()
-    scale = SCENE_SCALES[_current]
+    scale = SCENE_SCALES[_preset_for_scene()]
     conversion = max(bpy.context.scene.unit_settings.scale_length, 1e-12)
     camera.set_clipping(scale["clip_start"] / conversion, scale["clip_end"] / conversion)
     _apply_grid(scale["grid_scale"])
+    from ..cad.runtime import runtime
+    runtime.step = scale["snap_step"]
 
 
 def detail_step(obj) -> float:
@@ -119,7 +124,7 @@ def detail_step(obj) -> float:
              obj.matrix_world.to_3x3().col[a].length * conversion
              for a in range(3)] if points else []
     useful = [s for s in spans if s > max(spans, default=0) * 1e-6 and s > 0]
-    preset_step = SCENE_SCALES[_current or _preset_for_scene()]['snap_step']
+    preset_step = SCENE_SCALES[_preset_for_scene()]['snap_step']
     target = min(min(useful) * .01, preset_step) if useful else preset_step
     target = max(target, 1e-15)
     magnitude = 10 ** math.floor(math.log10(target))
@@ -133,23 +138,8 @@ def get_scale(payload: dict) -> dict:
     return {"scale": current_scale(), "presets": [SCENE_SCALES[key] for key in SCENE_SCALES]}
 
 
-@command("scene.scale_set", mutating=True)
+@command("scene.scale_set")
 def set_scale(payload: dict) -> dict:
-    """Cambia de preset, o solo la unidad con la que se escriben las medidas."""
-    preset = payload.get("preset")
-    length_unit = payload.get("length_unit")
-    if preset is None and length_unit is None:
-        raise BadPayload("'preset' or 'length_unit' is required")
-
-    result = apply_scale(str(preset).upper()) if preset is not None else current_scale()
-    if length_unit is not None:
-        unit = str(length_unit).upper()
-        if unit not in {"MILLIMETERS", "CENTIMETERS", "METERS"}:
-            raise BadPayload("'length_unit' must be MILLIMETERS, CENTIMETERS or METERS")
-        try:
-            bpy.context.scene.unit_settings.system = "METRIC"
-            bpy.context.scene.unit_settings.length_unit = unit
-        except TypeError as exc:
-            raise CommandError(f"Blender rejected the unit: {exc}", code="invalid_unit") from exc
-        result = current_scale()
-    return result
+    """La escala de trabajo se elige al crear la escena, nunca sobre una existente."""
+    raise CommandError("La escala pertenece a esta escena. Crea una escena nueva para elegir otra.",
+                       code="scene_scale_locked")

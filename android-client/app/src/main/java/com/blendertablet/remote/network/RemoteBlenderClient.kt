@@ -155,9 +155,6 @@ interface RemoteBlenderClient {
     /** Catálogo de escalas de trabajo; llega a [sceneScalePresets]. */
     fun requestSceneScales()
 
-    /** Cambia unidad, profundidad y pasos como una sola escala de trabajo. */
-    fun setSceneScale(preset: String)
-
     /** Presets que anuncia el servidor; vacío si no los publica. */
     val sceneScalePresets: StateFlow<List<SceneScale>>
     fun vertexGroupCommand(action: String, payload: Map<String, Any?>)
@@ -262,7 +259,7 @@ interface RemoteBlenderClient {
     fun snap(action: SnapAction)
 
     fun fileInfo()
-    fun fileNew()
+    fun fileNew(preset: String)
     fun fileOpen(path: String)
 
     /** Falla con código `no_path` si el archivo no se ha guardado nunca. */

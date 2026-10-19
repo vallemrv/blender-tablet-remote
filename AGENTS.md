@@ -120,14 +120,17 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Mover sin snap sigue al dedo continuamente; con Incremento avanza en saltos táctiles
   perceptibles y no reutiliza la misma sensibilidad del movimiento libre.
 - Un preset de escala de trabajo nunca reescala geometría ni modifica `scale_length`.
-- La rejilla adopta el paso físico del preset al cambiarlo, cargar y arrancar.
+- La rejilla adopta el paso físico del preset al crear la escena, cargar y arrancar.
   Se aplica sobre `area.spaces.active.overlay` y la conversión nativa de
   `grid_scale_unit` evita dividir dos veces por `scale_length`. Durante GPUOffScreen
   su alcance usa el clipping y la distancia de la cámara de la tablet; restaura
   siempre `space.clip_end` del PC y nunca modifica `rv3d`.
 - Al crear primitivas, `primitive_size` expresa metros y se divide por el
   `scale_length` vigente antes de llamar a Blender. El cubo de Pequeña mide 10 mm,
-  también en archivos donde una unidad Blender equivale a un milímetro.
+  también en archivos donde una unidad Blender equivale a un milímetro. El cubo
+  de Mediana mide 50 cm y el de Grande 1 m. Nueva escena crea ese mismo cubo
+  desde cero, sin heredar geometría del archivo de inicio, y deja margen de vista
+  para ver la rejilla; Encuadrar/doble toque conserva el 85 %.
 - Al abrir una escena, el preset mostrado se deduce de su `length_unit`; nunca se
   anuncia Mediana por defecto si el `.blend` está en milímetros o metros.
 - La cámara remota no escribe en `rv3d`.
@@ -425,8 +428,13 @@ nuevas superficies y la adaptación gradual de las existentes.
   inferior de vistas/atajos, con un pequeño margen respecto a ambos y sin invadirlos.
 - El botón cerrado de modificadores se sitúa 10 dp debajo del selector de modos para
   no tapar el manejador de órbita.
-- Pequeña/Mediana/Grande son la única elección de escala visible y fijan respectivamente
-  `mm`/`cm`/`m`; no existe un selector de unidad independiente en Android.
+- Nueva escena exige elegir Pequeña/Mediana/Grande (`mm`/`cm`/`m`) antes de crearla.
+  El preset queda en `btr_scene_scale` dentro del `.blend`; no existe menú para cambiarlo
+  durante el trabajo y `scene.scale_set` lo rechaza. Archivos anteriores sin esa
+  propiedad se interpretan por `length_unit`. No limita las dimensiones de los objetos
+  ni modifica `scale_length`. La nueva escena recibe rejilla, clipping y pasos iniciales;
+  cambiar de escena reinicia los pasos Android y CAD al preset, identificando la escena
+  con `scene_scale.scene_id`. Reconectar a la misma escena conserva los ajustes manuales.
 - La cabecera muestra preset y unidad activos cuando Blender está conectado, por ejemplo
   `Conectado · Mediana · cm`.
 - Los comandos discretos viven en menús contextuales.
@@ -468,8 +476,8 @@ nuevas superficies y la adaptación gradual de las existentes.
   Tweak: abre la sesión `transform` de siempre y la confirma al soltar con un undo;
   sin asa el arrastre orbita y un toque sigue seleccionando. Sigue al dedo 1:1 y usa
   el snap Incremento y el paso común. Los anillos vistos de canto se ocultan. Android
-  lo activa con `gizmo.set` solo sin otra herramienta, forma ni sesión; el botón de
-  la barra lo apaga. Su sesión interna no abre la barra de transformación.
+  lo activa con `gizmo.set` solo sin otra herramienta, forma ni sesión. Los tiradores
+  empiezan desactivados al abrir la app y al crear/abrir otra escena; su botón los activa. Su sesión interna no abre la barra de transformación.
 - Mover usa un único `MovementControls` en Object y Edit sobre la misma sesión modal.
 - En Edit, Mover/Rotar/Escalar continúan por pasos al tocar otra selección. Un único
   `transform.select` sondea la preview viva, confirma el cambio anterior con un undo
@@ -531,7 +539,8 @@ nuevas superficies y la adaptación gradual de las existentes.
   sondeado. Knife usa el mismo desplegable de Snap.
 - Paso común: el último paso métrico que el usuario escribe en Mover, Escalar (mm/cm/m),
   Extruir/Bisel/Inset o Tweak libre se guarda en metros en la tablet y gobierna todos
-  ellos, también tras reiniciar o abrir otro `.blend`, hasta que lo cambie. Con él
+  ellos durante el trabajo en esa escena. Crear/abrir otra escena o iniciar una nueva
+  conexión tras reiniciar la app adopta el paso de su preset. Con él
   Extruir/Bisel/Inset no usan el paso automático por tamaño. Cambiar solo la unidad lo
   expresa en ella sin alterarlo. Porcentajes, SLIDE de Tweak y CAD conservan su paso.
 - En Bisel, Ancho se muestra en la unidad elegida; con Incremento/Rejilla sus

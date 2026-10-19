@@ -51,6 +51,7 @@ object StateParser {
     fun sceneScale(json: JSONObject?, fallback: SceneScale = SceneScale()): SceneScale {
         if (json == null) return fallback
         return SceneScale(
+            sceneId = json.optString("scene_id", fallback.sceneId),
             id = json.optString("id", fallback.id).ifBlank { fallback.id },
             label = json.optString("label", fallback.label).ifBlank { fallback.label },
             hint = json.optString("hint", fallback.hint),

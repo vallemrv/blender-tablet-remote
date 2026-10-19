@@ -62,7 +62,7 @@ SCENE_SCALES = {
     # Arquitectura, vehículos, terreno: metros.
     "LARGE": {"id": "LARGE", "label": "Grande", "hint": "Escenas de metros",
               "length_unit": "METERS", "clip_start": 0.1, "clip_end": 1000.0,
-              "snap_step": 0.1, "move_step": 0.1, "primitive_size": 2.0,
+              "snap_step": 0.1, "move_step": 0.1, "primitive_size": 1.0,
               "grid_scale": 1.0, "proportional_radius": 5.0,
               "proportional_radius_step": 0.5},
 }

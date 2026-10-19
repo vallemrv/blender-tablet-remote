@@ -68,3 +68,36 @@ fun RenameDialog(
         dismissButton = { PillButton("Cancelar", onClick = onDismiss) },
     )
 }
+
+
+@Composable
+fun NewSceneDialog(
+    presets: List<com.blendertablet.remote.model.SceneScale>,
+    onDismiss: () -> Unit,
+    onCreate: (String) -> Unit,
+) {
+    var selected by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Ink.PanelSolid,
+        title = { Text("Nueva escena", color = Ink.OnPanel, fontSize = 16.sp) },
+        text = {
+            Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                Text("Elige la escala de trabajo. Define las unidades, los pasos iniciales y la rejilla; queda asociada a esta escena.",
+                    color = Ink.Muted, fontSize = 13.sp)
+                presets.forEach { preset ->
+                    PillButton("${preset.label} · ${preset.lengthUnit.short}", selected = selected == preset.id) {
+                        selected = preset.id
+                    }
+                }
+                if (presets.isEmpty()) Text("Cargando escalas…", color = Ink.Muted, fontSize = 13.sp)
+            }
+        },
+        confirmButton = {
+            PillButton("Crear", selected = true, enabled = presets.any { it.id == selected }) {
+                selected?.let(onCreate)
+            }
+        },
+        dismissButton = { PillButton("Cancelar", onClick = onDismiss) },
+    )
+}

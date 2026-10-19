@@ -128,6 +128,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     // El ojo vive en el estado del ViewModel, no aquí: apagar los controles apaga
     // también los overlays del servidor, y esa parte no es local.
     val chromeVisible = state.controlsVisible
+    var newSceneOpen by remember { mutableStateOf(false) }
     var fileBrowserMode by remember { mutableStateOf<FileBrowserMode?>(null) }
     // Guarda a QUIÉN se renombra: el sondeo se borra al cerrar el anillo.
     var renameTarget by remember { mutableStateOf<String?>(null) }
@@ -164,7 +165,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
 
     val menuActions = MenuActions(
         onFileMenuOpened = vm::refreshFileMenu,
-        onNew = { guardDiscard(PendingDiscard.New(vm::fileNew)) },
+        onNew = { vm.requestSceneScales(); newSceneOpen = true },
         onBrowseOpen = {
             fileBrowserMode = FileBrowserMode.OPEN
             vm.openFileBrowser()
@@ -188,10 +189,18 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             modifiersOpen = !modifiersOpen
             if (modifiersOpen) vm.openModifiers()
         },
-        onSceneScale = vm::setSceneScale,
         onReferences = { referencesOpen = true },
         onCapture = vm::captureScene,
         onVersions = { versionsOpen = true },
+    )
+
+    if (newSceneOpen) NewSceneDialog(
+        presets = state.sceneScalePresets,
+        onDismiss = { newSceneOpen = false },
+        onCreate = { preset ->
+            newSceneOpen = false
+            guardDiscard(PendingDiscard.New { vm.fileNew(preset) })
+        },
     )
 
     val session by vm.transformSession.collectAsStateWithLifecycle()

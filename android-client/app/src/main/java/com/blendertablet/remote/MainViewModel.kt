@@ -201,6 +201,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (connected) client.gizmoSet(wanted)
             }
         }
+        // Cada escena arranca con sus propios pasos. Los ajustes manuales siguen
+        // vivos mientras su identidad no cambie, también al reconectar.
+        viewModelScope.launch {
+            client.state.map { it.sceneScale }.distinctUntilChanged { old, new -> old.sceneId == new.sceneId }
+                .collect { scale ->
+                    if (scale.sceneId.isNotEmpty()) {
+                        val unit = scale.lengthUnit.transformStepUnit()
+                        local.update { it.copy(moveStepUnit = unit, scaleUnit = unit, gizmoEnabled = false) }
+                        rememberSnapStep(scale.snapStep / client.state.value.unitScaleLength.coerceAtLeast(1e-12))
+                        rememberDistanceStep(scale.snapStep)
+                    }
+                }
+        }
         // Las unidades de Mover y Escalar siguen al preset real de la escena. Se observa
         // también al abrir otro .blend, no solo cuando el usuario toca el menú.
         viewModelScope.launch {
@@ -214,7 +227,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 applyScaleStep(shared?.let { it / stepUnit.meters } ?: local.value.scaleStepValue, stepUnit)
             }
         }
-        // El catálogo de escalas no viaja en el snapshot (es fijo) y el menú Escena
+        // El catálogo de escalas no viaja en el snapshot (es fijo) y Nueva escena
         // lo necesita: se pide una vez por conexión, cuando ya se sabe si el servidor
         // lo soporta. Mismo motivo que los overlays de arriba.
         viewModelScope.launch {
@@ -991,9 +1004,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun outlinerAction(id: String, action: String, value: Boolean? = null, name: String? = null) =
         client.outlinerAction(id, action, value, name)
     fun outlinerMove(id: String) = beginTransform(TransformMode.MOVE, id)
-    /** Preset de escala: unidades, profundidad de cámara, pasos y tamaño al añadir. */
-    fun setSceneScale(preset: String) = client.setSceneScale(preset = preset)
-
     fun vertexGroupCommand(action: String, payload: Map<String, Any?>) = client.vertexGroupCommand(action, payload)
     fun versioningCommand(action: String, payload: Map<String, Any?> = emptyMap()) = client.versioningCommand(action, payload)
     fun addModifier(type: String, parameters: Map<String, Any?> = emptyMap()) = client.modifierAdd(type, parameters)
@@ -1629,7 +1639,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun transformConfirm() = client.transformConfirm()
     fun transformCancel() = client.transformCancel()
 
-    fun fileNew() { cancelSculptStroke(); client.fileNew() }
+    fun requestSceneScales() = client.requestSceneScales()
+    fun fileNew(preset: String) { cancelSculptStroke(); client.fileNew(preset) }
     fun fileOpen(path: String) { cancelSculptStroke(); client.fileOpen(path) }
     fun fileSave() { cancelSculptStroke(); client.fileSave() }
     fun fileSaveAs(path: String) { cancelSculptStroke(); client.fileSaveAs(path) }

@@ -31,7 +31,7 @@ class PrimitiveScaleTests(unittest.TestCase):
         self.assertAlmostEqual(bpy.context.scene.unit_settings.scale_length, .001)
 
     def test_all_presets_keep_physical_size_across_scene_scales(self):
-        for preset, size in [('SMALL',.01),('MEDIUM',.5),('LARGE',2.0)]:
+        for preset, size in [('SMALL',.01),('MEDIUM',.5),('LARGE',1.0)]:
             units.apply_scale(preset)
             for scale in (.001,.01,1.0,10.0):
                 with self.subTest(preset=preset, scale=scale):

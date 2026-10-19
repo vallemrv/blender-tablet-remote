@@ -188,16 +188,34 @@ def info(payload: dict) -> dict:
 
 @command("file.new", mutating=True)
 def new(payload: dict) -> dict:
-    """`empty=True` da una escena vacía; por defecto se usa el archivo de inicio."""
+    """Nueva escena con preset obligatorio, validado antes de descartar la actual."""
+    from .units import apply_scale
+    from ..protocol import SCENE_SCALES
+    preset = payload.get("preset")
+    if not isinstance(preset, str) or preset not in SCENE_SCALES:
+        raise BadPayload("Elige Pequeña (mm), Mediana (cm) o Grande (m) para la nueva escena")
     from .sessions import cancel_cad
     cancel_cad()
     try:
         from ..cad.runtime import runtime
         runtime.leave()
-        bpy.ops.wm.read_homefile(use_empty=bool(payload.get("empty", False)))
+        bpy.ops.wm.read_homefile(use_empty=True)
     except RuntimeError as exc:
         raise CommandError(f"Cannot start a new file: {exc}")
+    apply_scale(preset)
     _reset_session()
+    if not payload.get("empty", False):
+        from .objects import _sized_kwargs
+        from .view import frame_selected
+        from ..camera import camera
+        # La plantilla aporta la configuración, nunca un cubo de tamaño heredado.
+        op = bpy.ops.mesh.primitive_cube_add
+        op(location=(0, 0, 0), **_sized_kwargs(op, {}))
+        bpy.context.view_layer.update()
+        frame_selected({})
+        # Al estrenar escena se ve también la rejilla alrededor del cubo.
+        # El encuadre explícito/doble toque conserva su ajuste habitual al 85 %.
+        camera.zoom(.5)
     return _info()
 
 

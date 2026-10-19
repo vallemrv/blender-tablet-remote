@@ -56,9 +56,6 @@ fun MenuBar(
             fileMenu(state, actions, close)
         }
         if (!state.blender.material.active && !state.blender.cad.workspace && state.blender.mode != BlenderMode.SCULPT) MenuAnchor("Objeto") { close -> objectMenu(state, actions, close) }
-        if (state.blender.features.sceneScale) {
-            MenuAnchor("Escena") { close -> sceneMenu(state, actions, close) }
-        }
         if (!state.blender.material.active && !state.blender.cad.workspace && state.blender.features.outliner) {
             OutlinerMenu(state.blender.outlinerObjects, state.connection == ConnectionStatus.CONNECTED,
                 objectActionsEnabled && state.blender.mode == BlenderMode.OBJECT,
@@ -97,7 +94,6 @@ data class MenuActions(
     val onOutlinerCollection: (String, Map<String, Any?>) -> Unit,
     val onApplyTransform: (Boolean, Boolean, Boolean) -> Unit,
     val onModifiers: () -> Unit,
-    val onSceneScale: (String) -> Unit,
     val onReferences: () -> Unit,
     val onCapture: () -> Unit,
     val onVersions: () -> Unit,
@@ -164,29 +160,6 @@ private fun objectMenu(state: AppUiState, actions: MenuActions, close: () -> Uni
                 }
             },
         )
-    }
-}
-
-// -------------------------------------------------------------------- Escena
-
-/**
- * Escala de trabajo: una sola elección ajusta unidad, profundidad, pasos y tamaño de
- * primitivas. La unidad no se ofrece por separado para impedir estados contradictorios.
- */
-internal fun sceneMenu(state: AppUiState, actions: MenuActions, close: () -> Unit): List<MenuNode> {
-    val scale = state.blender.sceneScale
-    val presets = state.sceneScalePresets.ifEmpty { listOf(scale) }
-    return buildList {
-        add(MenuHeading("Unidad de trabajo"))
-        presets.forEach { preset ->
-            add(
-                MenuLeaf("${preset.label} · ${preset.lengthUnit.short}", selected = preset.id == scale.id, hint = preset.hint) {
-                    close()
-                    actions.onSceneScale(preset.id)
-                },
-            )
-        }
-        add(MenuNote("Cambia las unidades; conserva el tamaño real. Extruir, Bisel e Inset ajustan su paso al tamaño de la selección."))
     }
 }
 
