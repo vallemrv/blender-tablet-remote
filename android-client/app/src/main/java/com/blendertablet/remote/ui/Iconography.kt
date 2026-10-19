@@ -138,7 +138,7 @@ object AppIcons {
         "ORIGIN" to "M12,2 L12,22 M2,12 L22,12 M16,12 A4,4 0,1 1,8,12 A4,4 0,1 1,16,12",
         "CONSTRUCTION" to "M2,18 L6,15 M9,12 L13,9 M16,6 L21,2 M2,2 L5,5 M8,8 L11,11 M14,14 L17,17 M20,20 L22,22",
         "WELD" to "M2,5 L9,10 M22,5 L15,10 M2,19 L9,14 M22,19 L15,14 M12,8 L16,12 L12,16 L8,12 Z",
-        "FIX" to "M5,10 L19,10 L19,21 L5,21 Z M8,10 L8,6 A4,4 0,0 1,16,6 L16,10 M12,14 L12,17",
+        "FIX" to "M8,3 L16,3 L15,8 L19,12 L13,12 L13,21 L11,21 L11,12 L5,12 L9,8 Z",
         "LOFT" to "M4,20 L20,20 L20,16 L4,16 Z M9,4 A3,3 0,1 1,15,4 A3,3 0,1 1,9,4 M4,16 L9,4 M20,16 L15,4",
         "HELIX" to "M12,2 L12,22 M6,5 L18,8 M6,10 L18,13 M6,15 L18,18 M6,5 L6,10 M18,8 L18,13 M6,10 L6,15 M18,13 L18,18",
         "CUT" to "M3,9 L3,20 L21,20 L21,9 M3,9 L8,9 L8,16 L16,16 L16,9 L21,9 M12,2 L12,12 M9,9 L12,12 L15,9",
@@ -187,6 +187,7 @@ object AppIcons {
     fun cad(intent: String): ImageVector = when (intent) {
         "VERTEX", "EDGE", "FACE", "SELECT_ALL", "DESELECT_ALL", "SELECT", "DELETE", "VISIBLE",
         "EXTRUDE", "REVOLVE", "SWEEP", "MIRROR", "SCENE" -> StudioIcons[intent]
+        "DIMENSION_LOCK" -> StudioIcons["LOCK"]
         "FINISH" -> Confirm
         "CANCEL" -> Cancel
         "MODEL" -> StudioIcons["STACK"]

@@ -115,7 +115,8 @@ class CadFeedbackTest {
                 {"id":"vertical","part":"BODY"},{"id":"side","part":"BODY"}]},
             "dimension_options":{"ANGLE":{"value":4.207751420066274,"constraint_id":null}}}"""))
         val rail = cadConstraintGroups(capabilities.constraints).flatten()
-        assertTrue("The advertised angle must be visible in the rail", "ANGLE" in rail)
+        assertFalse("Dimensions belong to the tray, not the geometric rail", "ANGLE" in rail)
+        assertTrue("ANGLE" in cadTrayDimensionTypes(cad, capabilities.constraints))
         assertTrue(cadConstraintEnabled(cad, "ANGLE"))
         assertEquals(4.207751420066274, cad.dimensionOptions.getValue("ANGLE").value, 1e-12)
     }
@@ -127,7 +128,7 @@ class CadFeedbackTest {
         assertTrue(cadConstraintEnabled(base.copy(selection = listOf(CadSelection("a"), CadSelection("b"))), "ANGLE"))
         assertFalse(cadConstraintEnabled(base.copy(selection = listOf(CadSelection("a"))), "ANGLE"))
         assertFalse(cadConstraintEnabled(base.copy(selection = listOf(CadSelection("a"), CadSelection("c"))), "ANGLE"))
-        assertTrue("ANGLE" in cadConstraintGroups(listOf("DISTANCE", "ANGLE")).last())
+        assertTrue(cadConstraintGroups(listOf("DISTANCE", "ANGLE")).isEmpty())
     }
 
     @Test fun trayValuesOfOneArcApplyToTheOtherSelectedArcsOnly() {

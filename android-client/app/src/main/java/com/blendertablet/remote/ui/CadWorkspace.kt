@@ -226,20 +226,17 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
         Modifier.align(Alignment.CenterEnd).padding(end = Metrics.EdgeMargin, top = 142.dp, bottom = 180.dp)
             .heightIn(max = availableHeight)
     ) {
+        RailLabel("RESTRICCIONES")
         cadConstraintGroups(capabilities.constraints).forEachIndexed { index, group ->
             if (index > 0) RailDivider()
             group.forEach { type ->
-                CadAction(type, cadLabel(type), enabled = connected && !cad.sessionActive && cadConstraintEnabled(cad, type),
-                    selected = pendingDimension == type) {
-                    if (type in listOf("DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "ANGLE")) {
-                        val existing = cad.dimensionOptions[type]?.constraintId?.let { id -> cad.activeSketch?.constraints?.firstOrNull { it.id == id } }
-                        if (existing != null) { editingConstraint = existing; pendingDimension = null }
-                        else { pendingDimension = type; editingConstraint = null }
-                    } else command("cad.constraint.add", "type" to type)
+                CadAction(type, cadLabel(type), enabled = connected && !cad.sessionActive && cadConstraintEnabled(cad, type)) {
+                    command("cad.constraint.add", "type" to type)
                 }
             }
         }
     }
+
     val contextualConstraints = cad.activeSketch?.constraints.orEmpty().filter { c ->
         (cad.selectionKind == "CONSTRAINT" && cad.selectionId == c.id) || cad.selection.any { selected ->
             c.refs.any { ref -> cadRefsTouch(selected, ref) } ||
@@ -644,12 +641,11 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                     minimum = if (angle) .01 else if (constraint.type in listOf("DISTANCE_X", "DISTANCE_Y")) 0.0 else .0000001,
                                     maximum = if (angle) 359.99 else 10000.0,
                                     onDone = ::acceptValues) { drafts["constraint"] = it }
-                                CadAction("DELETE", "Quitar cota · conserva el dibujo", enabled = connected && !cad.sessionActive) {
-                                    command("cad.constraint.delete", "constraint_id" to constraint.id,
-                                        "sketch_id" to cad.sketches.firstOrNull { sketch -> sketch.constraints.any { it.id == constraint.id } }?.id)
-                                    editingConstraint = null
-                                }
+
                             }
+                        }
+                        if (editing && editingConstraint == null && pendingDimension == null) {
+                            CadRelationalDimensions(cad, capabilities.constraints, unit, connected && !cad.sessionActive, vm)
                         }
                         pendingDimension?.let { type ->
                             val angle = type == "ANGLE"
@@ -703,7 +699,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                         minimum = if (degrees) -359.99 else if (measure != null) .0000001 else -10000.0,
                                         maximum = if (field == "sweep") 359.99 else 10000.0,
                                         onDone = ::acceptValues) { drafts[field] = it?.takeIf { value -> field != "sweep" || kotlin.math.abs(value) in .01..359.99 } }
-                                    if (measure != null && measure.lockable) CadAction("FIX", (if (bound) "Quitar cota: " else "Fijar medida: ") + label,
+                                    if (measure != null && measure.lockable) CadAction("DIMENSION_LOCK", (if (bound) "Quitar cota: " else "Fijar medida: ") + label,
                                         selected = bound, enabled = connected && !livePreview && drafts.isEmpty()) {
                                         if (bound) command("cad.constraint.delete", "constraint_id" to measure.constraintIds.first())
                                         else command("cad.constraint.add", "type" to measure.constraintType,
@@ -1136,10 +1132,47 @@ internal fun cadConstraintGroups(available: List<String>): List<List<String>> {
         listOf("COINCIDENT", "POINT_ON_LINE", "MIDPOINT", "FIX"),
         listOf("HORIZONTAL", "VERTICAL", "PARALLEL", "COLLINEAR", "PERPENDICULAR", "TANGENT"),
         listOf("EQUAL", "SYMMETRIC", "SYMMETRIC_LINE"),
-        listOf("DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "ANGLE"),
     )
-    val rest = available.filter { type -> groups.none { type in it } }
-    return (groups.map { group -> group.filter { it in available } } + listOf(rest)).filter { it.isNotEmpty() }
+    return groups.map { group -> group.filter { it in available } }.filter { it.isNotEmpty() }
+}
+
+internal val cadDimensionTypes = setOf("DISTANCE", "DISTANCE_X", "DISTANCE_Y", "RADIUS", "ANGLE")
+
+internal fun cadTrayDimensionTypes(cad: CadState, available: List<String>): List<String> =
+    if (cad.selection.size < 2) emptyList() else available.filter {
+        it in cadDimensionTypes && cadConstraintEnabled(cad, it) && it in cad.dimensionOptions
+    }
+
+@Composable
+private fun CadRelationalDimensions(cad: CadState, available: List<String>, unit: LengthUnit,
+                                    enabled: Boolean, vm: MainViewModel) {
+    val options = cadTrayDimensionTypes(cad, available)
+    if (options.isEmpty()) return
+    var chosen by remember(cad.selection) { mutableStateOf(options.first()) }
+    val type = chosen.takeIf { it in options } ?: options.first()
+    val option = cad.dimensionOptions.getValue(type)
+    var draft by remember(cad.selection, type) { mutableStateOf<Double?>(null) }
+    var menu by remember { mutableStateOf(false) }
+    Box {
+        PillButton("Cota: ${cadLabel(type)} ▾", enabled = enabled) { menu = true }
+        DropdownMenu(menu, { menu = false }) {
+            options.forEach { next -> DropdownMenuItem(text = { Text(cadLabel(next)) },
+                onClick = { chosen = next; menu = false }) }
+        }
+    }
+    val angle = type == "ANGLE"
+    CadDimension(cadLabel(type), draft ?: option.value, unit, "relation$type",
+        degrees = angle, step = if (angle) 1.0 else cad.step, minimum = 0.0,
+        maximum = if (angle) 180.0 else 10000.0, enabled = enabled,
+        onDone = { if (option.constraintId != null && draft != null)
+            vm.cadCommand("cad.constraint.set", mapOf("constraint_id" to option.constraintId, "value" to draft)) },
+        onNudge = { draft = it; if (option.constraintId != null)
+            vm.cadCommand("cad.constraint.set", mapOf("constraint_id" to option.constraintId, "value" to it)) }) { draft = it }
+    CadAction("DIMENSION_LOCK", if (option.constraintId == null) "Fijar cota" else "Quitar cota",
+        selected = option.constraintId != null, enabled = enabled) {
+        if (option.constraintId != null) vm.cadCommand("cad.constraint.delete", mapOf("constraint_id" to option.constraintId))
+        else vm.cadCommand("cad.constraint.add", mapOf("type" to type, "value" to (draft ?: option.value)))
+    }
 }
 
 /** Medidas derivadas del módulo: el círculo primitivo engrana y el paso es π·m. */
