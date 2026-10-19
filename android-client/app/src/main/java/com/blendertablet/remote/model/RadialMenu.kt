@@ -120,7 +120,7 @@ object RadialMenu {
 object EditSelectionBar {
     /** SELECT_ALL alterna con Deseleccionar según haya selección. */
     val actions = listOf(
-        ActionId.SELECT_ALL, ActionId.SELECT_INVERT, ActionId.SELECT_LOOP,
+        ActionId.SELECT_ALL, ActionId.SELECT_INVERT, ActionId.SELECT_LOOP, ActionId.SELECT_RING, ActionId.SELECT_SIMILAR,
         ActionId.SELECT_LINKED, ActionId.TOOL_BOX, ActionId.TOOL_CIRCLE, ActionId.TOOL_PAINT_SELECT,
     )
 
@@ -129,7 +129,7 @@ object EditSelectionBar {
         // arista más próxima, igual que Alt+click en Blender.
         ActionId.SELECT_LOOP, ActionId.SELECT_RING -> hasSelection && selectionMode != SelectionMode.VERTEX
         // Enlazado (la `L`) siembra con lo seleccionado: sin semilla no hay isla.
-        ActionId.SELECT_LINKED -> hasSelection
+        ActionId.SELECT_LINKED, ActionId.SELECT_SIMILAR -> hasSelection
         else -> true
     }
 }

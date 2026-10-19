@@ -296,6 +296,24 @@ LOOPTOOLS_CIRCLE_ACTION = {
 }
 
 
+SELECTION_SIMILAR = {
+    "VERTEX": [("VERT_NORMAL", "Misma normal"), ("VERT_FACES", "Mismo número de caras"),
+               ("VERT_EDGES", "Mismo número de aristas"), ("VERT_GROUPS", "Mismo grupo de vértices")],
+    "EDGE": [("EDGE_LENGTH", "Misma longitud"), ("EDGE_DIR", "Misma dirección"),
+             ("EDGE_FACES", "Mismo número de caras"), ("EDGE_FACE_ANGLE", "Mismo ángulo entre caras"),
+             ("EDGE_CREASE", "Mismo pliegue"), ("EDGE_SEAM", "Misma costura"), ("EDGE_SHARP", "Misma marca de filo")],
+    "FACE": [("FACE_MATERIAL", "Mismo material"), ("FACE_AREA", "Misma área"),
+             ("FACE_SIDES", "Mismo número de lados"), ("FACE_PERIMETER", "Mismo perímetro"),
+             ("FACE_NORMAL", "Misma normal"), ("FACE_COPLANAR", "Coplanarias"), ("FACE_SMOOTH", "Mismo sombreado")],
+}
+
+
+def _similar_action(mode, count):
+    return _edit_action("SELECT_SIMILAR", "Seleccionar similares", command="selection.similar",
+                        selection=_selection(mode, **{count: {"min": 1}}),
+                        variants=[dict(id=kind, label=label, enabled=True) for kind, label in SELECTION_SIMILAR[mode]])
+
+
 EDIT_CATALOG = {
     "version": 1,
     "conditional_actions": [
@@ -311,6 +329,7 @@ EDIT_CATALOG = {
     ],
     "groups": {
         "VERTEX": [
+            _similar_action("VERTEX", "verts"),
             _edit_action("SELECT_LINKED", "Seleccionar enlazado", command="selection.linked",
                          selection=_selection("VERTEX", verts={"min": 1})),
             _edit_action("MAKE_EDGE_FACE", "Crear arista/cara", command="mesh.make_edge_face",
@@ -336,6 +355,7 @@ EDIT_CATALOG = {
             _edit_action("REVEAL", "Mostrar oculto", command="selection.reveal", selection=_selection("VERTEX")),
         ],
         "EDGE": [
+            _similar_action("EDGE", "edges"),
             _edit_action("SELECT_LINKED", "Seleccionar enlazado", command="selection.linked",
                          selection=_selection("EDGE", edges={"min": 1})),
             _edit_action("SELECT_LOOP", "Seleccionar loop", command="selection.loop", selection=_selection("EDGE", edges={"min": 1})),
@@ -364,6 +384,7 @@ EDIT_CATALOG = {
             _edit_action("REVEAL", "Mostrar oculto", command="selection.reveal", selection=_selection("EDGE")),
         ],
         "FACE": [
+            _similar_action("FACE", "faces"),
             _edit_action("SELECT_LINKED", "Seleccionar enlazado", command="selection.linked",
                          selection=_selection("FACE", faces={"min": 1})),
             _edit_action("EXTRUDE", "Extruir", command="tool.begin", execution="SESSION", payload={"tool": "EXTRUDE"},

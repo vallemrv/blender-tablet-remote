@@ -6,6 +6,14 @@ import com.blendertablet.remote.model.ActiveTool
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -133,7 +141,8 @@ fun SelectionHelperRail(state: AppUiState, vm: MainViewModel, modifier: Modifier
         if (blender.mode == BlenderMode.EDIT && blender.activeObjectType == "MESH")
             IconAction(AppIcons.AutoMerge, "Auto Merge", selected = blender.editSettings.autoMerge, onClick = vm::toggleAutoMerge)
         if (blender.mode == BlenderMode.EDIT && blender.activeObjectType == "MESH")
-            PillButton("Camino", selected = state.shortestPathActive, onClick = vm::toggleShortestPath)
+            IconAction(AppIcons.editCatalog("SELECT_SHORTEST_PATH"), "Camino más corto",
+                selected = state.shortestPathActive, onClick = vm::toggleShortestPath)
         if (blender.mode == BlenderMode.EDIT && blender.activeObjectType == "MESH" && blender.features.selectionGrow) {
             IconAction(AppIcons.action(ActionId.SELECT_MORE), "Crecer selección", enabled = hasSelection, onClick = vm::selectMore)
             IconAction(AppIcons.action(ActionId.SELECT_LESS), "Decrecer selección", enabled = hasSelection, onClick = vm::selectLess)
@@ -146,12 +155,17 @@ fun SelectionHelperRail(state: AppUiState, vm: MainViewModel, modifier: Modifier
                          (it in setOf(ActionId.TOOL_BOX, ActionId.TOOL_CIRCLE, ActionId.TOOL_PAINT_SELECT) && blender.cad.surface.mode != "PROFILE"))
                     blender.mode == BlenderMode.OBJECT -> it in setOf(ActionId.SELECT_ALL, ActionId.SELECT_INVERT, ActionId.TOOL_BOX, ActionId.TOOL_CIRCLE, ActionId.TOOL_PAINT_SELECT)
                     blender.activeObjectType == "CURVE" -> it in setOf(ActionId.SELECT_ALL, ActionId.SELECT_INVERT, ActionId.TOOL_PAINT_SELECT)
-                    else -> EditSelectionBar.enabled(it, blender.selectionMode, hasSelection)
+                    else -> when (it) {
+                        ActionId.SELECT_LOOP, ActionId.SELECT_RING -> blender.selectionMode != SelectionMode.VERTEX
+                        ActionId.SELECT_SIMILAR -> blender.features.editCatalog.actionsFor(blender.selectionMode).any { action -> action.id == "SELECT_SIMILAR" }
+                        else -> true
+                    }
                 }
             }.forEach { id ->
                 // Un único botón alterna Seleccionar todo / Deseleccionar.
                 val shown = if (id == ActionId.SELECT_ALL && hasSelection) ActionId.DESELECT_ALL else id
-                IconAction(
+                if (shown == ActionId.SELECT_SIMILAR) SimilarSelectionButton(state, vm, hasSelection)
+                else IconAction(
                     AppIcons.action(shown), SurfaceCatalog.labelOf(shown),
                     selected = (shown == ActionId.TOOL_BOX && state.shapeTool == ShapeTool.BOX) ||
                         (shown == ActionId.TOOL_CIRCLE && state.shapeTool == ShapeTool.CIRCLE) ||
@@ -182,4 +196,21 @@ fun SelectionIntentControls(state: AppUiState, vm: MainViewModel) {
     IconAction(AppIcons.SelectTool, "Seleccionar", selected = state.shapeTool == ShapeTool.NONE &&
         (!state.blender.material.active || state.blender.material.interaction == "SELECT") && state.activeTool == ActiveTool.SELECT,
         onClick = vm::activateSelection)
+}
+
+@Composable
+private fun SimilarSelectionButton(state: AppUiState, vm: MainViewModel, hasSelection: Boolean) {
+    val blender = state.blender
+    val action = blender.features.editCatalog.actionsFor(blender.selectionMode).firstOrNull { it.id == "SELECT_SIMILAR" } ?: return
+    var open by remember(blender.selectionMode, blender.activeObject) { mutableStateOf(false) }
+    Box {
+        IconAction(AppIcons.action(ActionId.SELECT_SIMILAR), "Seleccionar similares",
+            enabled = hasSelection && action.enabled) { open = true }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            action.variants.forEach { variant ->
+                DropdownMenuItem(text = { Text(variant.label) }, enabled = hasSelection && action.enabled && variant.enabled,
+                    onClick = { open = false; vm.selectSimilar(action, variant.id) })
+            }
+        }
+    }
 }

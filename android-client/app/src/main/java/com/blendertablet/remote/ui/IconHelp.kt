@@ -51,6 +51,7 @@ internal object IconHelp {
         "FACE" to "Permite seleccionar y editar las superficies de la malla.",
         "GROW_SELECTION" to "Amplía la selección a los elementos vecinos de la malla.",
         "SHRINK_SELECTION" to "Reduce la selección retirando los elementos de su borde.",
+        "SIMILAR_SELECT" to "Añade elementos que comparten una propiedad con la selección. Elige longitud, dirección, área, material o conectividad según el submodo.",
         "SELECT_ALL" to "Selecciona todos los elementos disponibles en el contexto actual.",
         "DESELECT_ALL" to "Quita la selección de todos los elementos.",
         "INVERT" to "Selecciona lo que no estaba seleccionado y deselecciona lo que sí lo estaba.",

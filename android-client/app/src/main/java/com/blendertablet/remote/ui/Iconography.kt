@@ -220,6 +220,7 @@ object AppIcons {
         ActionId.SELECT_ADD_UNDER -> StudioIcons["SELECT_ADD_UNDER"]
         ActionId.SELECT_LOOP -> StudioIcons["LOOP_SELECT"]
         ActionId.SELECT_RING -> StudioIcons["RING_SELECT"]
+        ActionId.SELECT_SIMILAR -> StudioIcons["SIMILAR_SELECT"]
         ActionId.SELECT_LINKED -> StudioIcons["LINKED_SELECT"]
         ActionId.HIDE_OBJECT, ActionId.HIDE_GEOMETRY -> visibility(false)
         ActionId.SHADE_OBJECT -> StudioIcons["SHADE_SMOOTH"]

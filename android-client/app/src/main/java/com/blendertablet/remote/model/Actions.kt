@@ -93,6 +93,7 @@ enum class ActionId {
     SELECT_ADD_UNDER,
     SELECT_LOOP,
     SELECT_RING,
+    SELECT_SIMILAR,
     /** La `L` de Blender: extiende la selección a las islas conectadas. */
     SELECT_LINKED,
     HIDE_OBJECT,
@@ -202,6 +203,7 @@ object SurfaceCatalog {
         ActionEntry(ActionId.SELECT_ADD_UNDER, ActionSurface.RADIAL, "Añadir a la selección"),
         ActionEntry(ActionId.SELECT_LOOP, ActionSurface.SELECTION, "Loop"),
         ActionEntry(ActionId.SELECT_RING, ActionSurface.SELECTION, "Ring"),
+        ActionEntry(ActionId.SELECT_SIMILAR, ActionSurface.SELECTION, "Seleccionar similares"),
         ActionEntry(ActionId.SELECT_LINKED, ActionSurface.SELECTION, "Enlazado"),
         ActionEntry(ActionId.EDIT_MESH_TOOLS, ActionSurface.RADIAL, "Malla"),
         ActionEntry(ActionId.HIDE_OBJECT, ActionSurface.RADIAL, "Ocultar objeto"),

@@ -250,7 +250,12 @@ nuevas superficies y la adaptación gradual de las existentes.
   el paso visual estable y cierra la sesión, sin crear undo si no hubo movimiento.
   El doble toque de Edit conserva loop/enlazado; «Camino» arma el siguiente toque
   de camino más corto. Caja, Círculo, Pintar, Todo/Ninguno, Invertir,
-  Loop/Ring/Enlazado y Crecer/Decrecer solo viven en el rail derecho. Seleccionar
+  Loop/Ring/Enlazado, Similares y Crecer/Decrecer solo viven en el rail derecho.
+  Camino usa su icono de recorrido, sin pastilla de texto. Loop y Ring se ofrecen
+  en Aristas/Caras y permanecen visibles, deshabilitados si falta selección.
+  Similares abre criterios nativos por submodo (conectividad, longitud/dirección,
+  área/material/normal, etc.), anunciados por el backend; añade coincidencias,
+  respeta ocultos y registra un undo solo si cambia la selección. Seleccionar
   también se activa desde ese rail; el radial nunca selecciona.
 - El radial concentra Ocultar, Aislar, Duplicar, Renombrar y Borrar según contexto;
   en CAD también Soldar. Outliner conserva su ojo. Las listas CAD seleccionan;

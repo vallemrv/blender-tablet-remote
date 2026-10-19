@@ -724,7 +724,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
 
 /** IDs de `edit_catalog` que ya viven directamente en el anillo de nivel 1. */
 private val RADIAL_TOP_LEVEL_CATALOG_IDS =
-    setOf("SELECT_LOOP", "SELECT_RING", "SELECT_LINKED", "DELETE", "HIDE")
+    setOf("SELECT_LOOP", "SELECT_RING", "SELECT_LINKED", "SELECT_SIMILAR", "DELETE", "HIDE")
 
 /** Convierte el contrato opaco en filas, sin repartir nombres wire por la UI. */
 private fun editCatalogActions(actions: List<EditCatalogAction>, vm: MainViewModel): List<QuickAction> =

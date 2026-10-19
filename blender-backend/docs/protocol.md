@@ -2582,3 +2582,15 @@ del mismo boceto y valida sus dependencias antes de guardar. No modifica otros p
 la selección. CAD comienza mostrando la escena: `cad.settings {show_scene:false}`
 aísla la pieza activa y `true` restaura la visibilidad previa. La entrada en CAD
 por sí sola ya no aísla; la acción vive en el radial, como en los demás modos.
+
+
+### Seleccionar similares
+
+`selection.similar {type, threshold?:0.01}` añade a la selección de Edit los
+vértices, aristas o caras coincidentes con el criterio nativo de Blender.
+`threshold` está entre 0 y 1 y usa la tolerancia nativa de ese criterio.
+`edit_catalog.groups[modo]` anuncia `SELECT_SIMILAR` y sus variantes; cada ID
+se envía como `type`. El backend rechaza criterios de otro submodo, selección
+vacía y sesiones activas. Conserva geometría y ocultos; un cambio de selección
+crea un undo. Android lo ofrece únicamente en el rail de selección, junto a
+Loop/Ring/Enlazado. Camino más corto usa un icono, sin abreviatura visible.

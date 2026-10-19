@@ -972,6 +972,40 @@ def ring_select(payload: dict) -> dict:
     return _topology_select(payload, _edge_ring)
 
 
+@command("selection.similar", mutating=True)
+def similar(payload: dict) -> dict:
+    """Extend the current mesh selection using Blender's native similarity criteria."""
+    from ..protocol import SELECTION_SIMILAR
+    from ..bpy_utils import view3d_override, undo_push
+    from .modal import session
+    from .tools import tool_session
+    if session.active or tool_session.active:
+        raise CommandError("Termina la operación antes de seleccionar similares", code="session_active")
+    obj = active_object()
+    bm = edit_bmesh(obj)
+    mode = next((name for name, flags in MODE_FLAGS.items()
+                 if flags == tuple(bpy.context.scene.tool_settings.mesh_select_mode)), None)
+    kind = payload.get("type")
+    if kind not in {value for value, _ in SELECTION_SIMILAR.get(mode, [])}:
+        raise BadPayload("Criterio de similitud incompatible con el modo de selección")
+    threshold = get_float(payload, "threshold", .01)
+    if not 0 <= threshold <= 1:
+        raise BadPayload("La tolerancia debe estar entre 0 y 1")
+    elements = _active_elements(bm)
+    before = tuple(elem.select for elem in elements)
+    if not any(elem.select and not elem.hide for elem in elements):
+        raise CommandError("Selecciona un elemento como referencia", code="empty_selection")
+    with view3d_override():
+        result = bpy.ops.mesh.select_similar(type=kind, compare='EQUAL', threshold=threshold)
+    if 'FINISHED' not in result:
+        raise CommandError("No se pudo seleccionar por similitud", code="selection_failed")
+    bm = edit_bmesh(obj)
+    changed = before != tuple(elem.select for elem in _active_elements(bm))
+    if changed:
+        undo_push("Seleccionar similares")
+    return dict(sel_info({}), changed=changed)
+
+
 @command("selection.linked", mutating=True)
 def linked(payload: dict) -> dict:
     """Selecciona las islas conectadas a lo ya seleccionado (la `L` / `Ctrl+L`).

@@ -23,6 +23,7 @@ internal object StudioIcons {
         "APPLY_MODIFIER" to Glyph("Aplicar modificador", "Modificadores", "M3,4 L21,4 L21,8 L3,8 Z M7,12 L17,12 M12,8 L12,17 M8,14 L12,18 L16,14 M4,21 L20,21"),
         "GROW_SELECTION" to Glyph("Crecer selección", "Selección", "M8,8 L16,8 L16,16 L8,16 Z M3,3 L8,3 M3,3 L3,8 M16,3 L21,3 L21,8 M3,16 L3,21 L8,21 M16,21 L21,21 L21,16 M12,10 L12,14 M10,12 L14,12"),
         "SHRINK_SELECTION" to Glyph("Decrecer selección", "Selección", "M8,8 L16,8 L16,16 L8,16 Z M3,3 L8,3 M3,3 L3,8 M16,3 L21,3 L21,8 M3,16 L3,21 L8,21 M16,21 L21,21 L21,16 M10,12 L14,12"),
+        "SIMILAR_SELECT" to Glyph("Seleccionar similares", "Selección", "M3,3 L9,3 L9,9 L3,9 Z M15,15 L21,15 L21,21 L15,21 Z M13,5 L21,5 M13,8 L21,8 M3,16 L11,16 M3,19 L11,19"),
         "SELECT" to Glyph("Seleccionar", "Herramientas", "M5,3 L5,20 L10,15 L14,21 L17,19 L13,13 L21,13 Z"),
         "MOVE" to Glyph("Mover", "Herramientas", "M12,3 L12,21 M3,12 L21,12 M9,6 L12,3 L15,6 M9,18 L12,21 L15,18 M6,9 L3,12 L6,15 M18,9 L21,12 L18,15"),
         "ROTATE" to Glyph("Rotar", "Herramientas", "M19,7 A8,8 0,1 0,20,15 M19,3 L19,7 L15,7 M13.5,12 A1.5,1.5 0,1 1,10.5,12 A1.5,1.5 0,1 1,13.5,12"),
