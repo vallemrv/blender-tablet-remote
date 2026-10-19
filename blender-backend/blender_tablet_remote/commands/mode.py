@@ -102,13 +102,13 @@ def _finish_sketch_before_mode(target):
 @command("mode.object", mutating=False)
 def mode_object(payload: dict) -> dict:
     yield from _finish_sketch_before_mode("OBJECT")
-    return _set_mode("OBJECT")
+    return _set_mode("OBJECT", payload.get("_client_id"))
 
 
 @command("mode.edit", mutating=False)
 def mode_edit(payload: dict) -> dict:
     yield from _finish_sketch_before_mode("EDIT")
-    return _set_mode("EDIT")
+    return _set_mode("EDIT", payload.get("_client_id"))
 
 
 @command("mode.set", mutating=False)
@@ -125,4 +125,4 @@ def mode_toggle(payload: dict) -> dict:
     obj = active_object()
     target = "OBJECT" if obj.mode == "EDIT" else "EDIT"
     yield from _finish_sketch_before_mode(target)
-    return _set_mode(target)
+    return _set_mode(target, payload.get("_client_id"))

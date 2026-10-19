@@ -1239,7 +1239,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // Las sesiones existentes usan exactamente tool.begin {tool, parameters}.
         val tool = EditTool.fromWire(action.id)
         if (action.execution == "SESSION" && action.command == "tool.begin" && tool != null) {
-            closeTransformForToolChange()
+            if (tool != EditTool.EXTRUDE || variant == null) closeTransformForToolChange()
             local.update { it.copy(activeTool = ActiveTool.valueOf(tool.name), loopCutAwaitingTap = false) }
             val params = action.parameters.associate { it.id to it.default }.toMutableMap()
             if (variant != null) params["variant"] = variant
@@ -1388,7 +1388,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 client.toolBegin(tool, toolDefaultParameters(tool))
             }
             else -> {
-                closeTransformForToolChange()
+                if (tool != EditTool.EXTRUDE || variantId == null) closeTransformForToolChange()
                 local.update { it.copy(activeTool = ActiveTool.valueOf(tool.name), loopCutAwaitingTap = false) }
                 val params = (family.parameters + variant.parameters)
                     .associate { it.id to it.default }.toMutableMap<String, Any?>()

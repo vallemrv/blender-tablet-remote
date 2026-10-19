@@ -457,7 +457,16 @@ def begin(payload):
     if "edge" in payload and "edge" not in params:
         params["edge"] = payload["edge"]
     from .sessions import finish_for_switch, cancel_transform
-    finish_for_switch(payload.get("_client_id"))
+    current_tool = tool_session.tool if tool_session.active else tool_session.armed_tool
+    current_params = tool_session.params if tool_session.active else tool_session.armed_params
+    changing_variant = (tool == current_tool == 'EXTRUDE' and 'variant' in params
+                        and params['variant'] != current_params.get('variant', 'REGION'))
+    if not changing_variant:
+        finish_for_switch(payload.get("_client_id"))
+    elif tool_session.active:
+        tool_session.require(payload.get("_client_id"))
+    else:
+        tool_session.require_armed_owner(payload.get("_client_id"))
     cancel_transform(restore=True)
     tool_session.begin(tool, payload.get("_client_id"), params)
     return tool_session.status()
