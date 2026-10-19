@@ -72,6 +72,8 @@ internal object IconHelp {
         "ALIGN" to "Elige una cara de origen y otra de destino para colocar u orientar el objeto fuente.",
         "PLACE" to "Abre las opciones para alinear caras o cambiar el origen del objeto.",
         "PAINT_SELECT" to "Pinta para alternar la selección: cada elemento cambia una sola vez por trazo. Dos dedos cancelan el trazo y permiten navegar.",
+        "FINISH_SKETCH" to "Termina la edición del boceto y vuelve al sólido CAD.",
+        "APPLY_MODIFIER" to "Incorpora el resultado del modificador a la geometría y lo retira de la pila. Solo en Objeto.",
         "DUPLICATE" to "Crea una copia independiente de la selección.",
         "IN_FRONT" to "Muestra el objeto por delante de otros en la vista 3D, sin moverlo ni cambiar el render. Pulsa de nuevo para desactivarlo.",
         "DUPLICATE_LINKED" to "Crea otro objeto que comparte la misma malla: editar esa malla afecta a sus copias enlazadas.",

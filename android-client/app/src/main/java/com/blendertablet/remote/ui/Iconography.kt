@@ -24,6 +24,8 @@ import com.blendertablet.remote.model.SnapType
 object AppIcons {
     val gizmo: ImageVector get() = StudioIcons["GIZMO"]
     val Confirm: ImageVector get() = StudioIcons["CONFIRM"]
+    val FinishSketch: ImageVector get() = StudioIcons["FINISH_SKETCH"]
+    val ApplyModifier: ImageVector get() = StudioIcons["APPLY_MODIFIER"]
     val Cancel: ImageVector get() = StudioIcons["CANCEL"]
     val Checked: ImageVector get() = StudioIcons["CONFIRM"]
     val Undo: ImageVector get() = StudioIcons["UNDO"]

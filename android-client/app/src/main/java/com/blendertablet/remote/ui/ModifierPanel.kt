@@ -222,7 +222,7 @@ private fun ModifierCard(
 
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     Spacer(Modifier.weight(1f))
-                    IconAction(AppIcons.Confirm, "Aplicar (solo Object)", enabled = state.mode == BlenderMode.OBJECT, tint = Ink.Ok) { actions.apply(item.name) }
+                    IconAction(AppIcons.ApplyModifier, "Aplicar (solo Object)", enabled = state.mode == BlenderMode.OBJECT, tint = Ink.Ok) { actions.apply(item.name) }
                     IconAction(AppIcons.Delete, "Eliminar", tint = Ink.Bad) { actions.remove(item.name) }
                 }
             }

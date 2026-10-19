@@ -720,7 +720,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                         }
                         if (cad.sessionActive && cad.operation == "POLYGON") {
                             PillButton("Cerrar polígono", enabled = connected && cad.canClose) { vm.cadCommand("cad.polygon.close") }
-                            RoundAction(AppIcons.cad("CANCEL"), "Descartar polígono", Ink.Bad, { vm.cadCommand("cad.session.cancel") })
+                            TrayExits(onCancel = { vm.cadCommand("cad.session.cancel") })
                         }
                         if (planePreview) cad.plane?.let { plane ->
                             val id = cad.sessionId.orEmpty()
@@ -910,12 +910,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                     }
                 }
                 if (hasValues && !livePreview) {
-                    Spacer(Modifier.width(10.dp))
-                    RoundAction(AppIcons.cad("CANCEL"), if (depthPreview || finishPreview || shellPreview || dynamicPreview || planePreview) "Descartar preview" else "Descartar medidas", Ink.Bad, ::discardValues)
-                    Spacer(Modifier.width(4.dp))
-                    RoundAction(AppIcons.cad("FINISH"), if (planePreview) (if (cad.operation == "SPLIT") "Partir cuerpo" else if (cad.plane?.planeId != null) "Aplicar posición del plano" else "Crear el plano y su croquis")
-                        else if (depthPreview || finishPreview || shellPreview || dynamicPreview) "Confirmar ${cadLabel(cad.operation)}" else "Aplicar medidas",
-                        if (canAccept) Ink.Ok else Ink.Faint, { if (canAccept) acceptValues() })
+                    TrayExits(onCancel = ::discardValues, onConfirm = ::acceptValues, confirmEnabled = canAccept)
                 }
             }
         }
@@ -1021,7 +1016,7 @@ fun CadTopActions(state: AppUiState, vm: MainViewModel) {
             enabled = connected && !cad.sessionActive) { command("cad.view.roll", "degrees" to 90) }
         IconAction(AppIcons.cad("VIEW_ALIGN"), "Enderezar: de frente y sin girar",
             enabled = connected && !cad.sessionActive) { command("cad.view.align") }
-        IconAction(AppIcons.cad("FINISH"), "Finalizar boceto", enabled = connected && !cad.sessionActive) {
+        IconAction(AppIcons.FinishSketch, "Finalizar boceto", enabled = connected && !cad.sessionActive) {
             vm.cadTool(null); command("cad.sketch.finish")
         }
     } else {
