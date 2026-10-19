@@ -268,6 +268,13 @@ EDIT_TOOLBAR = {
             parameters=_TOOL_PARAMETERS["LOOP_CUT"],
         ),
         _toolbar_family(
+            "REVOLVE", "Spin · Revolución", "REVOLVE",
+            requirements={"selection": {"verts": {"min": 1}}},
+            variants=[_toolbar_variant("REVOLVE", "Spin · Revolución",
+                requirements={"selection_modes": ["VERTEX", "EDGE", "FACE"],
+                              "selection": {"verts": {"min": 1}}})],
+        ),
+        _toolbar_family(
             "CUT", "Cortar", "KNIFE", command="tool.begin", payload={},
             variants=[
                 _toolbar_variant("KNIFE", "Cuchillo", input="VIEWPORT_POINT_STROKES",

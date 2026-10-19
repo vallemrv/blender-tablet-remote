@@ -173,8 +173,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   resolución si no hay curvas. Conserva plano, medidas y JSON CAD; sale a Objeto
   con la copia seleccionada, sin etiquetas paramétricas, y crea un undo. Revisión
   e identidad validan el diálogo. No evalúa sólidos ni finaliza un croquis pendiente.
-- En Edición, radial → Malla ofrece Spin · Revolución con la operación nativa
-  existente: ángulo, pasos y eje, y centro inicial en el cursor 3D (editable en Más).
+- En Edición, el rail izquierdo EDITAR ofrece Spin · Revolución con la operación
+  nativa existente: ángulo, pasos, eje y centro inicial en el cursor 3D. Se anuncia
+  como familia REVOLVE de `edit_toolbar`, para vértices/aristas/caras; el filtro
+  común evita duplicarlo en radial → Malla. El rail no envía centros por defecto
+  que sustituyan el cursor 3D.
 - F2 es una herramienta continua del rail izquierdo de Edición, disponible con
   el add-on nativo. Tocar vértices/aristas alterna selección sin crear caras;
   tocar fuera prepara la cara con F2 (o relleno nativo con tres o más vértices).

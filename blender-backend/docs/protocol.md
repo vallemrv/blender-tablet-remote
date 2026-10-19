@@ -2730,3 +2730,8 @@ del propietario, o cierra sin undo una interacción vacía/solo armada. Devuelve
 snapshot de escena. `transform.begin`, `tool.begin` y los cambios de modo usan
 ese mismo cierre antes de abrir la nueva intención. `*.cancel` sigue restaurando
 el baseline; cierres de gestos pendientes, desconexión y guardado no confirman.
+
+Spin · Revolución también se anuncia como familia `REVOLVE` de `edit_toolbar`,
+con variante `REVOLVE`, comando `tool.begin` y selección mínima de un vértice.
+No envía coordenadas de centro por defecto; `tool.begin` toma el cursor 3D actual.
+El cliente elimina del radial las operaciones ya presentes en el rail.

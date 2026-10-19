@@ -53,6 +53,25 @@ class ProfileToolsTests(unittest.TestCase):
     def begin(self, **params):
         return tools.begin({'tool':'REVOLVE', 'parameters':dict(steps=8,**params)})
 
+    def test_spin_rail_entry_opens_native_tool_with_cursor_center(self):
+        from blender_tablet_remote.protocol import EDIT_TOOLBAR
+        family = next(item for item in EDIT_TOOLBAR['families'] if item['id'] == 'REVOLVE')
+        self.assertEqual(family['command'], 'tool.begin')
+        self.assertEqual(family['default_variant'], 'REVOLVE')
+        self.assertEqual(family['variants'][0]['requirements']['selection_modes'], ['VERTEX','EDGE','FACE'])
+        # El rail no debe enviar centros cero que pisen la ubicación del cursor.
+        self.assertEqual(family['parameters'], [])
+        bpy.context.scene.cursor.location = (0, 2, 3)
+        state = tools.begin(dict(family['payload'], parameters={}))
+        self.assertTrue(state['active'])
+        self.assertEqual(state['tool'], 'REVOLVE')
+        for axis,value in zip('xyz',(0,2,3)):
+            self.assertAlmostEqual(state['parameters']['center_'+axis], value)
+        self.assertEqual({spec['id'] for spec in state['controls']},
+                         {'angle','steps','axis','center_x','center_y','center_z','merge'})
+        tools.cancel({})
+        self.assertEqual(len(bmesh.from_edit_mesh(self.obj.data).verts), 2)
+
     def test_full_revolution_closes_seam_and_rebuilds_segments(self):
         state = self.begin()
         self.assertEqual(state['input'],'PARAMETERS')
