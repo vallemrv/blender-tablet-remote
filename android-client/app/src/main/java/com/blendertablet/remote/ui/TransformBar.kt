@@ -6,6 +6,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -116,106 +117,110 @@ fun TransformBar(
 ) {
     if (!session.active) return
     FloatingPanel(modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // Rótulo a la izquierda, como EditToolTray: el modo ya lo eligió el rail.
-            TrayTitle(session.mode.label)
-            Spacer(Modifier.width(10.dp))
-            Row(
-                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (canChangeSelection) {
-                    PillButton(if (selectionPicking) "Toca la selección" else "Otra selección", selected = selectionPicking,
-                        onClick = onChooseSelection)
-                }
-                if (proportionalAvailable) IconAction(AppIcons.Proportional, "Edición proporcional", selected = session.proportional, onClick = onProportional)
-                if (session.proportional) {
-                    key(session.sessionId) {
-                        ProportionalRadiusInput(session.proportionalRadius, unitScaleLength,
-                            proportionalUnit, proportionalRadiusStep, onProportionalRadiusValue)
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Rótulo a la izquierda, como EditToolTray: el modo ya lo eligió el rail.
+                TrayTitle(session.mode.label)
+                Spacer(Modifier.width(10.dp))
+                Row(
+                    modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (canChangeSelection) {
+                        PillButton(if (selectionPicking) "Toca la selección" else "Otra selección", selected = selectionPicking,
+                            onClick = onChooseSelection)
                     }
-                    PillButton("Perfil: ${falloffLabel(session.proportionalFalloff)}") {
-                        onProportionalFalloff()
-                    }
-                }
-                SnapCandidateHint(session)
-                Divider()
-                if (session.mode == TransformMode.MOVE) {
-                    MovementControls(
-                        session = session,
-                        unitScaleLength = unitScaleLength,
-                        moveStepValue = moveStepValue,
-                        moveStepUnit = moveStepUnit,
-                        constraint = constraint,
-                        snapType = snapType,
-                        orientation = orientation,
-                        referencePicking = referencePicking,
-                        availableOrientations = availableOrientations,
-                        onConstraint = onConstraint,
-                        onSnapType = onSnapType,
-                        onSnapToSelection = onSnapToSelection,
-                        onReference = onReference,
-                        onMoveStep = onMoveStep,
-                        onValue = onValue,
-                        onOrientation = onOrientation,
-                    )
-                } else {
-                    ParametricAxisInputs(
-                        session, unitScaleLength, moveStepValue, moveStepUnit,
-                        scaleStepValue, stepIndex, constraint, snapType,
-                        scaleUnit, onConstraint, onValue, onFlatten,
-                    )
-                    when (session.mode) {
-                        TransformMode.SCALE -> {
-                            ScaleUnitPicker(scaleUnit) { onScaleStep(scaleStepValue, it) }
-                            IconAction(AppIcons.Reset, "Restablecer escala a 100 %") {
-                                onValue(listOf(1.0, 1.0, 1.0), null, null)
-                            }
-                            if (snapType == SnapType.INCREMENT) {
-                                Divider()
-                                ScaleStepInput(scaleStepValue, scaleUnit) { onScaleStep(it, scaleUnit) }
-                            }
+                    if (proportionalAvailable) IconAction(AppIcons.Proportional, "Edición proporcional", selected = session.proportional, onClick = onProportional)
+                    if (session.proportional) {
+                        key(session.sessionId) {
+                            ProportionalRadiusInput(session.proportionalRadius, unitScaleLength,
+                                proportionalUnit, proportionalRadiusStep, onProportionalRadiusValue)
                         }
-                        TransformMode.ROTATE -> {
-                            IconAction(AppIcons.Reset, "Restablecer rotación a 0°") {
-                                onValue(listOf(0.0, 0.0, 0.0), null, null)
-                            }
-                            if (snapType == SnapType.INCREMENT) {
-                                StepPicker(session.mode, stepIndex, onStep)
-                            }
+                        PillButton("Perfil: ${falloffLabel(session.proportionalFalloff)}") {
+                            onProportionalFalloff()
                         }
-                        TransformMode.MOVE -> Unit
                     }
                     Divider()
-                    CenterReferencePicker(
-                        session = session,
-                        picking = referencePicking && referencePickingRole == "CENTER",
-                        onPick = { onReference("CENTER") },
-                        onPreset = onCenterPreset,
-                    )
-                    if (session.centerMode != "INDIVIDUAL") {
-                        PillButton(
-                            if (referencePicking && referencePickingRole == "SOURCE") "Fuente · señala"
-                            else if (session.sourceLocked) "Fuente · fijada" else "Fuente",
-                            selected = (referencePicking && referencePickingRole == "SOURCE") || session.sourceLocked,
-                        ) { onReference("SOURCE") }
-                        PillButton(
-                            "Propio",
-                            selected = session.snapToSelection,
-                        ) { onSnapToSelection(!session.snapToSelection) }
+                    if (session.mode == TransformMode.MOVE) {
+                        MovementControls(
+                            session = session,
+                            unitScaleLength = unitScaleLength,
+                            moveStepValue = moveStepValue,
+                            moveStepUnit = moveStepUnit,
+                            constraint = constraint,
+                            snapType = snapType,
+                            orientation = orientation,
+                            referencePicking = referencePicking,
+                            availableOrientations = availableOrientations,
+                            onConstraint = onConstraint,
+                            onSnapType = onSnapType,
+                            onSnapToSelection = onSnapToSelection,
+                            onReference = onReference,
+                            onMoveStep = onMoveStep,
+                            onValue = onValue,
+                            onOrientation = onOrientation,
+                        )
+                    } else {
+                        ParametricAxisInputs(
+                            session, unitScaleLength, moveStepValue, moveStepUnit,
+                            scaleStepValue, stepIndex, constraint, snapType,
+                            scaleUnit, onConstraint, onValue, onFlatten,
+                        )
+                        when (session.mode) {
+                            TransformMode.SCALE -> {
+                                ScaleUnitPicker(scaleUnit) { onScaleStep(scaleStepValue, it) }
+                                IconAction(AppIcons.Reset, "Restablecer escala a 100 %") {
+                                    onValue(listOf(1.0, 1.0, 1.0), null, null)
+                                }
+                                if (snapType == SnapType.INCREMENT) {
+                                    Divider()
+                                    ScaleStepInput(scaleStepValue, scaleUnit) { onScaleStep(it, scaleUnit) }
+                                }
+                            }
+                            TransformMode.ROTATE -> {
+                                IconAction(AppIcons.Reset, "Restablecer rotación a 0°") {
+                                    onValue(listOf(0.0, 0.0, 0.0), null, null)
+                                }
+                                if (snapType == SnapType.INCREMENT) {
+                                    StepPicker(session.mode, stepIndex, onStep)
+                                }
+                            }
+                            TransformMode.MOVE -> Unit
+                        }
+                        Divider()
+                        CenterReferencePicker(
+                            session = session,
+                            picking = referencePicking && referencePickingRole == "CENTER",
+                            onPick = { onReference("CENTER") },
+                            onPreset = onCenterPreset,
+                        )
+                        if (session.centerMode != "INDIVIDUAL") {
+                            PillButton(
+                                if (referencePicking && referencePickingRole == "SOURCE") "Fuente · señala"
+                                else if (session.sourceLocked) "Fuente · fijada" else "Fuente",
+                                selected = (referencePicking && referencePickingRole == "SOURCE") || session.sourceLocked,
+                            ) { onReference("SOURCE") }
+                            PillButton(
+                                "Propio",
+                                selected = session.snapToSelection,
+                            ) { onSnapToSelection(!session.snapToSelection) }
+                        }
+                        SnapControl(
+                            if (session.centerMode == "INDIVIDUAL") listOf(SnapType.NONE, SnapType.INCREMENT)
+                            else SnapType.forMode(session.mode), snapType, onSnapType,
+                        )
+                        Divider()
+                        OrientationPicker(availableOrientations, orientation, onOrientation)
                     }
-                    SnapControl(
-                        if (session.centerMode == "INDIVIDUAL") listOf(SnapType.NONE, SnapType.INCREMENT)
-                        else SnapType.forMode(session.mode), snapType, onSnapType,
-                    )
-                    Divider()
-                    OrientationPicker(availableOrientations, orientation, onOrientation)
                 }
+                // Confirmar y cancelar, fijos a la derecha: son las dos únicas salidas
+                // y no deben confundirse entre sí ni desplazarse con el scroll.
+                TrayExits(onCancel, onConfirm)
             }
-            // Confirmar y cancelar, fijos a la derecha: son las dos únicas salidas
-            // y no deben confundirse entre sí ni desplazarse con el scroll.
-            TrayExits(onCancel, onConfirm)
+            Text("Arrastra para ${session.mode.label.lowercase()} · toca un valor para afinar · cambiar herramienta aplica el resultado",
+                color = Ink.Muted, fontSize = 11.sp, maxLines = 2, modifier = Modifier.padding(horizontal = 4.dp))
+            SnapCandidateHint(session)
         }
     }
 }

@@ -291,9 +291,10 @@ nuevas superficies y la adaptación gradual de las existentes.
 - Los números editables ofrecen los mismos `−/+`, repetición mantenida, unidades
   y protección de borradores. Las propiedades inmediatas no muestran salidas;
   las operaciones con preview mantienen Cancelar/Confirmar fijos a la derecha.
-- Ningún texto auxiliar justifica aumentar la barra inferior a varias filas:
-  mostrar un resumen corto o llevar el detalle a la ayuda. El scroll conserva el
-  tamaño de los controles y los paneles vecinos reservan solo la altura real.
+- Por petición del usuario, las bandejas recuperan los parámetros directos en una
+  fila desplazable y sitúan la ayuda en una segunda fila bajo los controles. No se
+  intercala texto de instrucciones entre campos. Se conserva el tamaño táctil y
+  los paneles vecinos reservan la altura real de la bandeja.
 
 - La selección múltiple está siempre activa en Objeto, Edición, Materiales y CAD,
   sin conmutador «＋ Añadir»: tocar añade, tocar un elemento seleccionado lo quita
@@ -343,24 +344,18 @@ nuevas superficies y la adaptación gradual de las existentes.
   iconos propios distintos de Confirmar. Los controles de plano ampliados se
   desplazan horizontalmente en la misma fila.
 
-- Las bandejas de herramientas Edit usan `[Nombre][principal][1–2 frecuentes][⋯ Más][× ✓]`.
-  Un máximo de cinco grupos de parámetros (campo con sus −/+ y chips cuenta como
-  un grupo), sin contar título y salidas. `toolTrayContents` es el inventario que
-  dibuja la fila y valida el test; no existe una lista paralela para probarla.
-  Snap vive en el mismo Más, y cada opción avanzada lleva una frase de ayuda.
-  Loop Cut ofrece chips 1–4, posición desde el centro (0 %), Centro y quitar último
-  solo si hay varios cortes. El campo acepta % o mm/cm/m y cuentas sin selector
-  de unidad ni Aplicar. Suavidad cero oculta Perfil; Invertir solo aparece con
-  Seguir la arista. No salir de la cara reemplaza el antiguo Fijar.
-- Bisel muestra Ancho y chips de Segmentos 1–3; Perfil solo con varios segmentos,
-  y Esquinas/Snap en Más. Extruir muestra Distancia y eje; orientación solo con
-  un eje restringido. Inset muestra Grosor y lleva Profundidad/Conservar borde
-  abierto a Más. Bridge muestra Desfase, o Posición de fusión cuando Fusionar está
-  activo (entonces Desfase pasa a Más); el arrastre ajusta ese mismo valor.
-- Los esquemas de herramientas publican `primary` y `help`; hasta tres parámetros
-  principales comparten fila con Más, el resto va al panel común. Los campos de
-  esquema y los fijos usan el mismo editor: vacío permanece local, las respuestas
-  no borran el borrador y las medidas con unidades/cuentas siguen siendo exactas.
+- Las bandejas Edit muestran controles directos en una fila desplazable, sin
+  chips numéricos duplicados; Snap sigue en Más. Se retira el límite anterior de
+  cinco grupos a petición expresa del usuario. `toolTrayContents` es el inventario
+  que dibuja y prueba los controles, sin listas paralelas. Las ayudas aparecen
+  debajo de la fila, y cada opción de Más conserva su ayuda debajo de su control.
+  Se mantienen los editores exactos con unidades/cuentas y protección del borrador.
+- Loop Cut muestra cortes, posición desde el centro, Seguir la arista, No salir
+  de la cara y Suavidad; Perfil solo con Suavidad e Invertir solo con Seguir la
+  arista. Bisel muestra Perfil solo con varios segmentos. Extruir muestra orientación
+  solo con eje restringido. Inset y Bridge recuperan sus parámetros directos.
+- Las herramientas por esquema muestran todos sus campos directamente en la fila,
+  conservando ayuda, etiquetas y rangos anunciados por el backend.
 - Se recuerdan valores confirmados por herramienta/variante, convirtiendo las
   longitudes a metros al guardar preferencias. No se recuerdan IDs, referencias,
   caras elegidas ni la posición de Loop Cut: un nuevo corte empieza centrado.
@@ -1571,3 +1566,5 @@ no quedan archivos o referencias temporales.
   sin cambios y herramientas solo armadas no crean undo. Cuchillo/Bisect/Alinear
   incompletos se cierran sin crear geometría. ×, desconexión y segundo plano
   conservan su cancelación explícita. Cada operación confirmada conserva su undo.
+  Cambiar la variante de Extruir ajusta la misma operación desde su baseline;
+  no añade otra extrusión ni confirma una variante inválida.

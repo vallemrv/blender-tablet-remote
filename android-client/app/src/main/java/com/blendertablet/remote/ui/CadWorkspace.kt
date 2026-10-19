@@ -558,6 +558,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
         onCancel = if (hasValues && !livePreview) ::discardValues else null,
         onConfirm = if (hasValues && !livePreview) ::acceptValues else null,
         confirmEnabled = canAccept,
+        help = detail,
         modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { onTrayHeight(it.height) }.padding(Metrics.EdgeMargin),
     ) {
         HoverHelp(title = "Ayuda CAD", explanation = detail) {
@@ -568,7 +569,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 // Parámetros ampliados dentro de la misma fila desplazable.
                 val axes = cadPlaneAxes(plane.base.takeIf { it != "FACE" && plane.planeId == null })
                 val id = cad.sessionId.orEmpty()
-                    if (plane.base == "EDGE") Text("Inclinar sobre la arista gira el plano alrededor de ella", color = Ink.Accent, fontSize = 11.sp)
                     (0..1).forEach { i ->
                         CadDimension("Inclinar ${axes.rotation[i]}", plane.tilt[i], unit, id + "tilt$i", degrees = true, step = 5.0,
                             minimum = -180.0, maximum = 180.0, enabled = connected,

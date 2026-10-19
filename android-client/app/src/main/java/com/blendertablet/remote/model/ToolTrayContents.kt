@@ -1,35 +1,36 @@
 package com.blendertablet.remote.model
 
-/** The renderer and its tests consume the same parameter groups, including More. */
+/** Inventario único de controles directos, en una fila desplazable; Snap queda en Más. */
 data class ToolTrayContents(val visible: List<String>, val advanced: List<String>) {
-    init { require(visible.size <= 5); require(visible.toSet().size == visible.size) }
+    init { require(visible.toSet().size == visible.size) }
 }
 
 fun toolTrayContents(session: ToolSession, selection: SelectionMode = SelectionMode.EDGE): ToolTrayContents {
     if (session.controls.isNotEmpty()) {
-        val primary = session.controls.filter { it.primary }.ifEmpty { session.controls.take(1) }.take(3).map { it.id }
-        return ToolTrayContents(primary + "more", session.controls.map { it.id }.filterNot { it in primary })
+        return ToolTrayContents(session.controls.map { it.id }, emptyList())
     }
-    return when (session.tool) {
-        EditTool.LOOP_CUT -> ToolTrayContents(listOf("cuts", "position") + (if (session.loopCount > 1) listOf("remove_loop") else emptyList()) + "more",
-            listOf("even") + (if (session.flag("even")) listOf("flip") else emptyList()) + listOf("clamp", "smoothness") +
-                (if ((session.double("smoothness") ?: 0.0) != 0.0) listOf("falloff") else emptyList()) + "snap")
-        EditTool.BEVEL -> ToolTrayContents(listOf("offset", "segments", "more"),
+    val direct = when (session.tool) {
+        EditTool.LOOP_CUT -> listOf("cuts", "position") +
+            (if (session.loopCount > 1) listOf("remove_loop") else emptyList()) +
+            listOf("even") + (if (session.flag("even")) listOf("flip") else emptyList()) +
+            listOf("clamp", "smoothness") + (if ((session.double("smoothness") ?: 0.0) != 0.0) listOf("falloff") else emptyList())
+        EditTool.BEVEL -> listOf("offset", "segments") +
             (if ((session.double("segments") ?: 1.0) > 1) listOf("profile") else emptyList()) +
-                (if (selection != SelectionMode.VERTEX) listOf("miter_outer") else emptyList()) + "snap")
+            (if (selection != SelectionMode.VERTEX) listOf("miter_outer") else emptyList())
         EditTool.EXTRUDE -> {
             val directed = (session.parameters["variant"] ?: "REGION") in setOf("REGION", "MANIFOLD")
-            ToolTrayContents(listOf("offset") + (if (directed) listOf("constraint") else emptyList()) + "more",
-                (if (directed && (session.parameters["constraint"] ?: "FREE") != "FREE") listOf("orientation") else emptyList()) + "snap")
+            listOf("offset") + (if (directed) listOf("constraint") else emptyList()) +
+                (if (directed && (session.parameters["constraint"] ?: "FREE") != "FREE") listOf("orientation") else emptyList())
         }
-        EditTool.INSET -> ToolTrayContents(listOf("thickness", "more"), listOf("depth", "boundary", "snap"))
-        EditTool.BRIDGE_EDGE_LOOPS -> ToolTrayContents(listOf(if (session.flag("merge")) "merge_factor" else "twist_offset", "more"), listOf("merge") +
-            (if (session.flag("merge")) listOf("twist_offset") else emptyList()) + "snap")
-        EditTool.SUBDIVIDE -> ToolTrayContents(listOf("cuts", "more"), listOf("snap"))
-        EditTool.KNIFE -> ToolTrayContents(listOf("undo_point", "new_cut", "close_cut", "more"), listOf("snap"))
-        EditTool.BISECT -> ToolTrayContents(listOf("clear_inner", "clear_outer", "more"), listOf("fill", "snap"))
-        else -> ToolTrayContents(listOf("more"), emptyList())
+        EditTool.INSET -> listOf("thickness", "depth", "boundary")
+        EditTool.BRIDGE_EDGE_LOOPS -> listOf(if (session.flag("merge")) "merge_factor" else "twist_offset", "merge") +
+            (if (session.flag("merge")) listOf("twist_offset") else emptyList())
+        EditTool.SUBDIVIDE -> listOf("cuts")
+        EditTool.KNIFE -> listOf("undo_point", "new_cut", "close_cut")
+        EditTool.BISECT -> listOf("clear_inner", "clear_outer", "fill")
+        else -> emptyList()
     }
+    return ToolTrayContents(direct + "more", listOf("snap"))
 }
 
 /** Position percentages are offsets from the centre: 0% is centred, 100% reaches one side. */

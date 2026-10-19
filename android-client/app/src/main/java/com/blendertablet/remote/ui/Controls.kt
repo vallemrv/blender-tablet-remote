@@ -362,7 +362,7 @@ fun TrayTitle(text: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** Una fila: título y salidas fijos, todos los controles en un único scroll horizontal. */
+/** Controles en una fila; la ayuda vive debajo y no compite con botones ni campos. */
 @Composable
 fun SingleLineTray(
     title: String,
@@ -374,12 +374,17 @@ fun SingleLineTray(
     content: @Composable RowScope.() -> Unit,
 ) {
     FloatingPanel(modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            HoverHelp(title, help) { TrayTitle(title) }
-            Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
-                content = content)
-            if (onCancel != null) TrayExits(onCancel, onConfirm, confirmEnabled)
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                HoverHelp(title, help) { TrayTitle(title) }
+                Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    content = content)
+                if (onCancel != null) TrayExits(onCancel, onConfirm, confirmEnabled)
+            }
+            if (help.isNotBlank()) Text(help, color = Ink.Muted, fontSize = 11.sp,
+                maxLines = 2, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 3.dp))
         }
     }
 }

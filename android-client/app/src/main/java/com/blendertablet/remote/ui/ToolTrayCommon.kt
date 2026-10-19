@@ -69,7 +69,7 @@ fun ToolNumericInput(
         CompactNumericField(value = draft ?: (if(integer) kotlin.math.round(display).toLong().toString() else
             formatToolDistance(display, detailDecimalPlaces(display, 3))) + suffix,
             onValueChange = { draft = it }, onDone = { read()?.let(::send) },
-            modifier = Modifier.width(90.dp), fontSize = 16.sp, selectAllOnFocus = true)
+            modifier = Modifier.width(78.dp), fontSize = 13.sp, selectAllOnFocus = true)
         StepperButton("+", candidate != null && candidate < (max ?: Double.MAX_VALUE)) { read()?.let { send(it+step) } }
     }
 }

@@ -97,7 +97,7 @@ private fun specsFor(tool: EditTool): List<ParamSpec> = when (tool) {
 private fun defaultValue(spec: ParamSpec): Double =
     if (spec.isInt) maxOf(spec.min ?: 1.0, spec.default) else spec.default
 
-/** One parameter group per slot; the same inventory drives rendering and its limit test. */
+/** Controles directos en una fila desplazable; ayuda debajo, separada de los campos. */
 @Composable
 fun EditToolTray(
     session: ToolSession, selectionMode: SelectionMode, unitScaleLength: Double,
@@ -112,9 +112,8 @@ fun EditToolTray(
         else session.instruction.ifBlank { if (session.tool == EditTool.EXTRUDE) "Arrastra para extruir · escribe una medida, por ejemplo 5mm"
             else "Arrastra sobre la malla y toca el número para afinar" }
     if (!session.active && session.controls.isEmpty()) {
-        SingleLineTray(session.tool.label, onCancel = onCancel, modifier = modifier, help = instruction) {
-            Text(if (session.tool == EditTool.F2) session.instruction else "Toca una arista para colocar el primer corte", color = Ink.Muted, fontSize = 12.sp, maxLines = 1)
-        }
+        SingleLineTray(session.tool.label, onCancel = onCancel, modifier = modifier,
+            help = if (session.tool == EditTool.F2) session.instruction else "Toca una arista para colocar el primer corte") {}
         return
     }
     val contents = com.blendertablet.remote.model.toolTrayContents(session, selectionMode)
@@ -164,11 +163,6 @@ private fun ToolControl(id: String, session: ToolSession, scale: Double, unit: L
         ParamStepper(spec, session.double(id) ?: defaultValue(spec), scale,
             stepSize = if (spec.mode == TransformMode.MOVE) session.snapStep else null,
             lengthUnit = if (spec.mode == TransformMode.MOVE) unit else null,
-            quickValues = when {
-                session.tool in setOf(EditTool.LOOP_CUT, EditTool.SUBDIVIDE) && id == "cuts" -> listOf(1,2,3,4)
-                session.tool == EditTool.BEVEL && id == "segments" -> listOf(1,2,3)
-                else -> emptyList()
-            },
             onCommit = { change(id, it) })
         return
     }
@@ -236,13 +230,10 @@ fun BisectTray(session: ToolSession, onParameter: (String, Any?) -> Unit, onConf
     val help = "Arrastra una línea sobre la malla para cortar"
     val contents = com.blendertablet.remote.model.toolTrayContents(session)
     SingleLineTray(session.tool.label, onCancel, if (session.active) onConfirm else null, modifier = modifier, help = help) {
-        if (!session.active) Text(help, color = Ink.Muted, fontSize = 12.sp, maxLines = 1)
-        else contents.visible.forEach { id -> when (id) {
+        if (session.active) contents.visible.forEach { id -> when (id) {
             "clear_inner", "clear_outer" -> PillButton(if (id == "clear_inner") "Vaciar interior" else "Vaciar exterior", selected = session.flag(id)) { onParameter(id, !session.flag(id)) }
+            "fill" -> PillButton("Rellenar", selected = session.flag("fill")) { onParameter("fill", !session.flag("fill")) }
             "more" -> ToolMoreMenu(help) {
-                AdvancedToolOption("Cierra los huecos del corte con caras nuevas.") {
-                    PillButton("Rellenar", selected = session.flag("fill")) { onParameter("fill", !session.flag("fill")) }
-                }
                 AdvancedToolOption("Atrae los extremos de la línea a la geometría cercana.") {
                     PillButton("Snap", selected = session.flag("snap", true)) { onParameter("snap", !session.flag("snap", true)) }
                 }
