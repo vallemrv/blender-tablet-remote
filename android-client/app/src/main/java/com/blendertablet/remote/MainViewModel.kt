@@ -81,6 +81,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val client: RemoteBlenderClient = WebSocketRemoteBlenderClient(viewModelScope, sessionKey)
     private val snapPreferences = SnapPreferences(application)
     private val toolPreferences = com.blendertablet.remote.data.ToolPreferences(application)
+    private val centerPreferences = com.blendertablet.remote.data.TransformCenterPreferences(application)
     private val duplicatePreferences = com.blendertablet.remote.data.DuplicatePreferences(application)
     private val local = MutableStateFlow(AppUiState(
         duplicateLinked = duplicatePreferences.linked,
@@ -174,6 +175,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }.distinctUntilChanged().collect { ready ->
                 cadStroke = false
                 if (ready) client.cadCommand("cad.state")
+            }
+        }
+
+        viewModelScope.launch {
+            client.transformSession.collect { session ->
+                com.blendertablet.remote.model.TransformCenter.from(session, client.state.value.sceneScale.sceneId)
+                    ?.let(centerPreferences::save)
             }
         }
 
@@ -1453,6 +1461,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             orientation = local.value.orientation,
             valueMode = local.value.valueMode,
             scaleStepUnit = if (mode == TransformMode.SCALE) local.value.scaleUnit.scaleStepWireUnit else null,
+            center = centerPreferences.forScene(client.state.value.sceneScale.sceneId),
         )
     }
 
@@ -1586,6 +1595,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 orientation = session.orientation,
                 valueMode = valueMode,
                 scaleStepUnit = if (session.mode == TransformMode.SCALE) local.value.scaleUnit.scaleStepWireUnit else null,
+                center = centerPreferences.forScene(client.state.value.sceneScale.sceneId),
             )
         }
     }

@@ -145,6 +145,12 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   para ver la rejilla; Encuadrar/doble toque conserva el 85 %.
 - Al abrir una escena, el preset mostrado se deduce de su `length_unit`; nunca se
   anuncia Mediana por defecto si el `.blend` está en milímetros o metros.
+- Rotar y Escalar recuerdan el centro de Referencias entre operaciones y reinicios
+  de Android. Cursor 3D y Origen del objeto se resuelven al iniciar cada operación;
+  Punto medio usa la selección vigente. Un punto señalado conserva coordenadas
+  mundiales y solo se reutiliza en la misma escena. Cambiar la selección durante
+  una transformación Edit conserva también esa intención. Mover y los cierres de
+  sesión nunca sobrescriben el centro elegido.
 - La cámara remota no escribe en `rv3d`.
 - El zoom ortográfico conserva la profundidad alrededor del pivote: acercarse no
   recorta la cara delantera al atravesar la posición nominal de la cámara. El doble

@@ -22,6 +22,7 @@ class TransformStepsTests(unittest.TestCase):
             bpy.ops.object.mode_set(mode='OBJECT')
         bpy.ops.object.select_all(action='SELECT')
         bpy.ops.object.delete(use_global=False)
+        bpy.context.scene.cursor.location = (0, 0, 0)
         bpy.ops.mesh.primitive_cube_add(size=.02)
         self.obj = bpy.context.object
         bpy.context.scene.tool_settings.use_proportional_edit = False
@@ -67,6 +68,37 @@ class TransformStepsTests(unittest.TestCase):
 
     def assert_position(self, index, value):
         self.assertLess((self.bm.verts[index].co - Vector(value)).length, 1e-7)
+
+    def test_cursor_center_is_resolved_for_each_rotation(self):
+        bpy.context.scene.cursor.location = (.02, 0, 0)
+        status = self.begin('ROTATE', axes=['Z'], center_mode='CURSOR')
+        self.assertEqual(status['center_mode'], 'CURSOR')
+        self.assertLess((Vector(status['center']) - Vector((.02, 0, 0))).length, 1e-7)
+        modal.set_value(dict(angle=90))
+        modal.confirm({})
+        bpy.context.scene.cursor.location = (.03, .01, 0)
+        status = self.begin('ROTATE', axes=['Z'], center_mode='CURSOR')
+        self.assertLess((Vector(status['center']) - Vector((.03, .01, 0))).length, 1e-7)
+
+    def test_changing_edit_selection_retains_picked_center(self):
+        center = [.02, .03, .04]
+        self.begin('ROTATE', axes=['Z'], center_mode='PICKED', center_position=center)
+        modal.set_value(dict(angle=35))
+        status = self.select_next(self.b)
+        self.assertEqual(status['center_mode'], 'PICKED')
+        self.assertLess((Vector(status['center']) - Vector(center)).length, 1e-7)
+        self.assertTrue(status['center_locked'])
+        modal.set_reference_candidate(dict(role='CENTER', preset='SELECTION'))
+        self.assertEqual(modal.session.center_mode, 'SELECTION')
+        self.assertIsNone(modal.session.center_position)
+
+    def test_invalid_remembered_point_does_not_cancel_live_preview(self):
+        from blender_tablet_remote.errors import BadPayload
+        current = self.begin('ROTATE', axes=['Z'])
+        for point in ([1, 2], [float('nan'), 0, 0], ['bad', 0, 0]):
+            with self.assertRaises(BadPayload):
+                self.begin('ROTATE', center_mode='PICKED', center_position=point)
+            self.assertEqual(modal.session.session_id, current['session_id'])
 
     def test_move_z_10mm_then_another_vertex_x_30mm(self):
         first = self.begin(axes=['Z'], step=.001, snap_type='INCREMENT')

@@ -282,6 +282,7 @@ interface RemoteBlenderClient {
         orientation: Orientation = Orientation.GLOBAL,
         valueMode: ValueMode = ValueMode.RELATIVE,
         scaleStepUnit: String? = null,
+        center: com.blendertablet.remote.model.TransformCenter = com.blendertablet.remote.model.TransformCenter(),
     )
 
     fun transformAxes(axes: Set<Axis>)

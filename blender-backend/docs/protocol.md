@@ -2688,3 +2688,12 @@ operador nativo cuya disponibilidad habilita esta herramienta.
 
 `REVOLVE` conserva su identificador wire y motor `bmesh.ops.spin`; Android lo
 presenta como «Spin · Revolución», con ángulo/pasos/eje y centro desde el cursor.
+
+### Centro recordado de transformación
+
+`transform.begin` acepta `center_mode`: `SELECTION` (punto medio, por defecto),
+`CURSOR`, `OBJECT_ORIGIN` o `PICKED`. Este último exige `center_position: [x,y,z]`
+con tres coordenadas mundiales finitas en unidades Blender. Solo Rotar y Escalar
+usan el centro. Cursor y origen se resuelven desde el estado actual al comenzar;
+`transform.select` conserva esta intención al continuar con otra selección. Android
+recuerda la elección; los puntos explícitos se limitan a la identidad de la escena.

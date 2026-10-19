@@ -211,7 +211,8 @@ class _Session:
     def begin(self, mode: str, axes: list[str], snap: bool, step: float | None,
               owner_id=None, orientation="GLOBAL", value_mode="RELATIVE", snap_type="NONE",
               proportional=None, proportional_radius=None, proportional_falloff=None,
-              motion="FREE", slide_clamp=True, scale_step_unit="FACTOR") -> None:
+              motion="FREE", slide_clamp=True, scale_step_unit="FACTOR",
+              center_mode="SELECTION", center_position=None) -> None:
         active = bpy.context.view_layer.objects.active
         edit = active is not None and active.mode == "EDIT" and active.type == "MESH"
         objs = selected_objects()
@@ -284,6 +285,27 @@ class _Session:
         self.orientation_basis = self._resolve_orientation_basis()
         self.rotation_axis = self._resolve_rotation_axis()
         self.base_dimensions = self._measure_base_dimensions()
+        if mode != "MOVE":
+            self.set_center(center_mode, center_position)
+
+    def set_center(self, mode, position=None):
+        if mode == "SELECTION":
+            self.center_position = None
+        elif mode == "CURSOR":
+            self.center_position = bpy.context.scene.cursor.location.copy()
+        elif mode == "OBJECT_ORIGIN":
+            self.center_position = bpy.context.view_layer.objects.active.matrix_world.translation.copy()
+        elif mode == "PICKED":
+            self.center_position = Vector(position)
+        else:
+            raise BadPayload("Unknown center mode")
+        self.center_mode = mode
+        self.reference_candidate = None
+        self.reference_candidate_role = None
+        self.reference_candidate_locked = False
+        self.reference_locked = self.center_position is not None or self.source_position is not None
+        self.reference_role = "CENTER" if self.center_position is not None else (
+            "SOURCE" if self.source_position is not None else None)
 
     def _collect_edit_weights(self, bm, obj, selected, selected_indices):
         """Calcula la influencia sobre la geometría del baseline, nunca la preview."""
@@ -1027,6 +1049,19 @@ def begin(payload: dict) -> dict:
         raise BadPayload("'proportional_radius' must be greater than zero")
 
     scale_step_unit = _parse_scale_step_unit(payload)
+    center_mode = str(payload.get("center_mode", "SELECTION")).upper()
+    if center_mode not in {"SELECTION", "CURSOR", "OBJECT_ORIGIN", "PICKED"}:
+        raise BadPayload("Unknown center mode")
+    center_position = payload.get("center_position")
+    if center_mode == "PICKED":
+        try:
+            if not isinstance(center_position, (list, tuple)) or len(center_position) != 3:
+                raise ValueError()
+            center_position = [float(value) for value in center_position]
+            if not all(math.isfinite(value) for value in center_position):
+                raise ValueError()
+        except (TypeError, ValueError):
+            raise BadPayload("center_position must contain three finite coordinates")
 
     # Una sesión abierta se descarta: empezar a mover con algo a medias sería
     # acumular dos transformaciones sin que el usuario lo pidiera.
@@ -1042,7 +1077,8 @@ def begin(payload: dict) -> dict:
     session.begin(mode, _parse_axes(payload), bool(payload.get("snap", False)), step,
                   payload.get("_client_id"), orientation, value_mode, snap_type,
                   payload.get("proportional"), proportional_radius,
-                  proportional_falloff, scale_step_unit=scale_step_unit)
+                  proportional_falloff, scale_step_unit=scale_step_unit,
+                  center_mode=center_mode, center_position=center_position)
     session.apply()
     return session.status()
 
@@ -1144,24 +1180,9 @@ def set_reference_candidate(payload: dict) -> dict:
     if preset:
         if role != "CENTER" or session.mode not in {"ROTATE", "SCALE"}:
             raise CommandError("Center presets require ROTATE or SCALE", code="wrong_reference_role")
-        if preset == "SELECTION":
-            session.center_position = None
-        elif preset == "OBJECT_ORIGIN":
-            active = bpy.context.view_layer.objects.active
-            if active is None:
-                raise CommandError("No active object", code="empty_selection")
-            session.center_position = active.matrix_world.translation.copy()
-        elif preset == "CURSOR":
-            session.center_position = bpy.context.scene.cursor.location.copy()
-        else:
+        if preset not in {"SELECTION", "OBJECT_ORIGIN", "CURSOR"}:
             raise BadPayload("'preset' must be SELECTION, OBJECT_ORIGIN or CURSOR")
-        session.center_mode = preset
-        session.reference_candidate = None
-        session.reference_candidate_role = None
-        session.reference_candidate_locked = False
-        session.reference_locked = session.center_position is not None or session.source_position is not None
-        session.reference_role = "CENTER" if session.center_position is not None else (
-            "SOURCE" if session.source_position is not None else None)
+        session.set_center(preset)
         session.apply()
         return session.status()
     if payload.get("clear"):
@@ -1329,6 +1350,7 @@ def select_next(payload: dict) -> dict:
         settings = dict(mode=session.mode, axes=list(session.axes), snap=session.snap, step=session.step,
                         owner_id=session.owner_id, orientation=session.orientation, value_mode=session.value_mode,
                         snap_type=session.snap_type, scale_step_unit=session.scale_step_unit)
+        settings.update(center_mode=session.center_mode, center_position=session.center_position)
         if session.curve_edit.changed(): confirm(payload)
         else: session.reset()
         set_selection(obj,desired)
@@ -1357,6 +1379,7 @@ def select_next(payload: dict) -> dict:
                     value_mode=session.value_mode, snap_type=session.snap_type,
                     proportional=session.proportional, proportional_radius=session.proportional_radius,
                     proportional_falloff=session.proportional_falloff, scale_step_unit=session.scale_step_unit)
+    settings.update(center_mode=session.center_mode, center_position=session.center_position)
     changed = any((bm.verts[index].co - co).length_squared > 1e-20
                   for index, co in session.edit_coords.items())
     if changed:

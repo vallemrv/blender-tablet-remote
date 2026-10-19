@@ -518,7 +518,7 @@ private fun CenterReferencePicker(
         PillButton(label, selected = picking || session.centerLocked) { expanded = true }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(
-                text = { Text("Centro de selección") },
+                text = { Text("Punto medio de la selección") },
                 onClick = { expanded = false; onPreset("SELECTION") },
             )
             DropdownMenuItem(

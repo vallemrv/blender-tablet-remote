@@ -714,6 +714,7 @@ class WebSocketRemoteBlenderClient(
         orientation: Orientation,
         valueMode: ValueMode,
         scaleStepUnit: String?,
+        center: com.blendertablet.remote.model.TransformCenter,
     ) =
         command(
             "transform.begin",
@@ -727,7 +728,13 @@ class WebSocketRemoteBlenderClient(
                 .put("step", step)
                 .put("orientation", orientation.name)
                 .put("value_mode", valueMode.name)
-                .apply { scaleStepUnit?.let { put("scale_step_unit", it) } },
+                .apply {
+                    scaleStepUnit?.let { put("scale_step_unit", it) }
+                    if (mode != TransformMode.MOVE) {
+                        put("center_mode", center.mode)
+                        if (center.mode == "PICKED") put("center_position", JSONArray(center.point))
+                    }
+                },
         )
 
     override fun transformAxes(axes: Set<Axis>) =
