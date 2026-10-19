@@ -93,8 +93,8 @@ object RadialMenu {
                     add(ActionId.DUPLICATE)
                     add(ActionId.HIDE_OBJECT)
                     add(ActionId.VIEW_LOCAL)
-                    // El centro de un círculo sin caras es vacío, pero su selección
-                    // sigue siendo un destino válido para colocar o cambiar el origen.
+                    // El hueco de un contorno no invalida las operaciones del objeto seleccionado.
+                    add(ActionId.APPLY_TRANSFORMS)
                     add(ActionId.PLACE_OBJECT)
                 }
             }

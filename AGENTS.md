@@ -347,8 +347,9 @@ nuevas superficies y la adaptación gradual de las existentes.
   selección efectiva.
 - En Object, el radial agrupa Alinear caras y las acciones de origen bajo Colocar,
   conservando el límite de ocho sectores y el acceso a Borrar. Con un objeto
-  seleccionado también ofrece Colocar al pulsar el vacío, incluido el centro de
-  un círculo sin caras; la disponibilidad no depende de acertar su contorno.
+  seleccionado también ofrece Colocar y Aplicar (Posición/Rotación/Escala/Todas)
+  al pulsar el vacío, incluido el centro de un círculo sin caras; su disponibilidad
+  no depende de acertar el contorno.
 - Alinear caras pertenece a `tool.*`: mueve únicamente el objeto fuente, conserva
   tamaño, fija el destino y reconstruye desde su matriz inicial. Contacto enfrenta
   normales y hace coincidir centros; orientar y copiar rotación conservan el origen
