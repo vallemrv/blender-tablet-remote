@@ -74,6 +74,21 @@ class GizmoTests(unittest.TestCase):
         rings = {a['name']: bool(a['ring']) for a in self.layout()['axes']}
         self.assertEqual(rings, {'X': False, 'Y': False, 'Z': True})
 
+    def test_planar_views_hide_normal_axis_for_every_handle_and_hit_test(self):
+        for view, normal in [('TOP','Z'),('BOTTOM','Z'),('FRONT','Y'),('BACK','Y'),('LEFT','X'),('RIGHT','X')]:
+            with self.subTest(view=view):
+                camera.set_axis_view(view)
+                layout=self.layout()
+                axis=next(a for a in layout['axes'] if a['name']==normal)
+                self.assertFalse(axis['visible']);self.assertEqual(axis['ring'],[])
+                for step in range(64):
+                    angle=step*math.tau/64
+                    hit=gizmo.hit(layout,layout['origin']+Vector((math.cos(angle),math.sin(angle)))*gizmo.RING)
+                    self.assertFalse(hit and hit[1] and hit[1]['name']==normal)
+        camera.orbit(.2,.2,1.0)
+        self.assertIsNone(camera.axis_view)
+        self.assertTrue(any(a['ring'] for a in self.layout()['axes']))
+
     def test_hit_priorities(self):
         layout = self.layout()
         origin, x = layout['origin'], self.axis('X')

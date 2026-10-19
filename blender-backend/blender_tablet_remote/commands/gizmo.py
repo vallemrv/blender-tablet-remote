@@ -140,10 +140,15 @@ def layout(rv3d, aspect: float, center: Vector | None = None) -> dict | None:
     radius = RING / reference
     eye = camera.view_matrix().inverted().translation
     sight = (center - eye).normalized() if (center - eye).length > 1e-12 else Vector((0.0, 0.0, -1.0))
+    hidden_axis = {"TOP": "Z", "BOTTOM": "Z", "FRONT": "Y", "BACK": "Y",
+                   "LEFT": "X", "RIGHT": "X"}.get(camera.axis_view)
+    if hidden_axis is None and camera.perspective == 'ORTHO':
+        view_normal = camera.rotation @ Vector((0, 0, 1))
+        hidden_axis = next((name for name, vector in AXES if abs(vector.dot(view_normal)) > .99999), None)
     for axis in axes:
-        axis["visible"] = axis["scale"] >= MIN_AXIS_FRACTION * reference
+        axis["visible"] = axis["name"] != hidden_axis and axis["scale"] >= MIN_AXIS_FRACTION * reference
         axis["ring"] = []
-        if abs(axis["vector"].dot(sight)) < MIN_RING_OPENING:
+        if axis["name"] == hidden_axis or abs(axis["vector"].dot(sight)) < MIN_RING_OPENING:
             continue
         first = axis["vector"].orthogonal().normalized()
         second = axis["vector"].cross(first).normalized()

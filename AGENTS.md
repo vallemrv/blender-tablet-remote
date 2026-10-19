@@ -1559,3 +1559,7 @@ no quedan archivos o referencias temporales.
   Cada colección no raíz ofrece Renombrar, Mostrar/Ocultar y Bloquear selección.
   Usa las restricciones nativas de colección, respeta los estados propios de sus
   descendientes y la selección del visor consulta `context.selectable_objects`.
+
+- En vistas planas del manipulador se oculta el eje perpendicular (Z en XY, Y en
+  XZ y X en YZ), incluidas flecha, escala y anillo de rotación. El mismo layout
+  gobierna dibujo y picking; orbitar fuera del plano recupera las asas aplicables.
