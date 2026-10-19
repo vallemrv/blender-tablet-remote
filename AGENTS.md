@@ -347,8 +347,12 @@ nuevas superficies y la adaptación gradual de las existentes.
   con padres; la referencia activa también sirve de respaldo sin selección.
 - Object muestra una bandeja inferior de propiedades del activo cuando no hay
   herramientas ni sesiones: Posición XYZ, Rotación XYZ en grados, Tamaño y Visibilidad.
-  Una única lista desplegable cambia de sección, sin pestañas mezcladas con campos. El esquema viene
-  del backend (`active.properties`); las longitudes viajan en metros y se muestran
+  Una única lista desplegable cambia de sección, sin pestañas mezcladas con campos.
+  La sección elegida se recuerda por identidad de objeto fuera del ciclo de vida
+  de la bandeja: navegar, ocultar controles, snapshots sin propiedades y cambiar
+  de selección no la reinician. Al volver a cada objeto recupera su sección si
+  sigue disponible; los borradores y envíos mantienen su ciclo independiente.
+  El esquema viene del backend (`active.properties`); las longitudes viajan en metros y se muestran
   con la unidad del preset. En imágenes nativas añade un único campo Tamaño, sin
   repetir «de imagen» ni los factores Escala X/Y/Z; además ofrece
   opacidad, ortográfica/perspectiva, solo vista alineada, profundidad y lados visibles.

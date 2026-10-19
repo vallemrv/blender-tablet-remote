@@ -35,6 +35,8 @@ import com.blendertablet.remote.model.transformStepUnit
 @Composable
 fun ObjectPropertiesTray(
     properties: ObjectProperties?,
+    selectedSection: String?,
+    onSelectSection: (String, String) -> Unit,
     unit: LengthUnit,
     result: ObjectPropertiesResult?,
     stepMeters: Double,
@@ -49,8 +51,7 @@ fun ObjectPropertiesTray(
     var focused by remember(properties?.id, unit) { mutableStateOf<Set<String>>(emptySet()) }
     val fields = properties?.fields.orEmpty()
     val groups = fields.map { it.group }.distinct()
-    var group by remember(properties?.id) { mutableStateOf(groups.firstOrNull().orEmpty()) }
-    val selectedGroup = group.takeIf { it in groups } ?: groups.firstOrNull()
+    val selectedGroup = selectedSection?.takeIf { it in groups } ?: groups.firstOrNull()
 
     LaunchedEffect(result, lastToken) {
         if (lastToken != null && result?.token == lastToken) {
@@ -95,7 +96,7 @@ fun ObjectPropertiesTray(
                 groups.forEach { name -> DropdownMenuItem(
                     text = { Text(name) },
                     trailingIcon = { if (name == selectedGroup) Icon(AppIcons.Checked, null, tint = Ink.Accent) },
-                    onClick = { group = name; sectionMenu = false }) }
+                    onClick = { properties?.let { onSelectSection(it.id, name) }; sectionMenu = false }) }
             }
         }
         fields.filter { it.group == selectedGroup }.forEach { field ->

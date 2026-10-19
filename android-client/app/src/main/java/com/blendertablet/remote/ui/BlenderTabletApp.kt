@@ -114,6 +114,8 @@ fun BlenderTabletApp(viewModel: MainViewModel) {
 
 @Composable
 private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openConnection: () -> Unit) {
+    // Fuera de la bandeja y del chrome: ocultarlos o cambiar de objeto no pierde la sección.
+    var objectPropertySections by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
     val frame by vm.viewportFrame.collectAsStateWithLifecycle()
     val stats by vm.streamStats.collectAsStateWithLifecycle()
     val h264Active by vm.h264Active.collectAsStateWithLifecycle()
@@ -419,6 +421,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
 
                 if (objectPropertiesVisible) ObjectPropertiesTray(
                     properties = state.blender.objectProperties,
+                    selectedSection = objectPropertySections[state.blender.objectProperties?.id],
+                    onSelectSection = { id, section -> objectPropertySections = objectPropertySections + (id to section) },
                     unit = state.blender.sceneScale.lengthUnit,
                     result = state.blender.objectPropertiesResult,
                     stepMeters = state.distanceStepMeters ?: state.blender.sceneScale.snapStep,
