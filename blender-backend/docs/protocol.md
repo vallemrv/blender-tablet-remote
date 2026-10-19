@@ -1284,8 +1284,9 @@ El cliente los agrupa en tres submenús (`SnapGroup`): cursor, snap de selecció
 establecer origen.
 
 `snap.cursor_to_selected` mira el modo: en Edit Mode usa la mediana de los vértices
-seleccionados, en Object Mode la de los orígenes. Los que mueven objetos u orígenes
-exigen Object Mode y responden `wrong_mode` en Edit.
+seleccionados, en Object Mode la de los orígenes; en curvas usa la selección nativa.
+`snap.selected_to_cursor` admite Object/Edit. Ajustar objetos a la rejilla y cambiar
+sus orígenes sigue exigiendo Object Mode (`wrong_mode` en Edit).
 
 ### Archivo
 
@@ -2630,3 +2631,13 @@ La posición de Loop Cut se muestra como porcentaje desde el centro (`0 %` es
 fusión de Bridge incluso con snap. El nudge usa el snap; en Bridge fusionado mueve
 `merge_factor` y, sin fusión, `twist_offset`. `primary` no cambia la geometría ni
 la semántica del contrato de confirmación/cancelación.
+
+
+`snap.selected_to_cursor` admite también Edit de mallas y curvas nativas, sin
+cambiar de modo. Afecta a los vértices o puntos/tiradores seleccionados; conserva
+la matriz del objeto, los elementos no seleccionados y las reglas nativas de
+Blender. `keep_offset:true` conserva la forma del grupo y lleva su centro al cursor;
+sin él, cada elemento elegido llega al cursor. Selección vacía devuelve
+`empty_selection`. Se cierran previews antes de mover y se registra un undo.
+`snap.cursor_to_selected` admite asimismo la selección de curvas en Edit.
+Android ofrece estas acciones en Escena → Cursor 3D / Snap selección.

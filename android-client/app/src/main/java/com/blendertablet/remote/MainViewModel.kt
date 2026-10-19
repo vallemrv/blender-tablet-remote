@@ -848,7 +848,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun requestState() = client.requestState()
     fun addPrimitive(primitive: AddObject) = client.addPrimitive(primitive)
-    fun snap(action: SnapAction) = client.snap(action)
+    fun snap(action: SnapAction) {
+        selectTool()
+        client.snap(action)
+    }
 
     /** Navegación por vistas estándar y proyección (footer de vistas). */
     fun viewAxis(name: String) = client.viewAxis(name)

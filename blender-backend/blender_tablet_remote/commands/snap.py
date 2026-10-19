@@ -516,7 +516,11 @@ def cursor_to_world(payload: dict) -> dict:
 
 @command("snap.cursor_to_selected", mutating=True)
 def cursor_to_selected(payload: dict) -> dict:
-    _cursor().location = _selection_median()
+    active = bpy.context.view_layer.objects.active
+    if active is not None and active.mode == 'EDIT' and active.type == 'CURVE':
+        _edit_cursor_operator(active, bpy.ops.view3d.snap_cursor_to_selected)
+    else:
+        _cursor().location = _selection_median()
     undo_push("Remote cursor to selected")
     return _cursor_result()
 
@@ -542,12 +546,43 @@ def cursor_to_grid(payload: dict) -> dict:
 # ---------------------------------------------------------------- selección
 
 
+def _require_edit_selection(obj):
+    if obj.type == 'MESH':
+        bm = bmesh.from_edit_mesh(obj.data)
+        found = any(v.select and not v.hide for v in bm.verts)
+    elif obj.type == 'CURVE':
+        from .curve_edit import controls
+        found = any(on for _, _, on in controls(obj))
+    else:
+        raise CommandError("Esta selección no admite envío al cursor", code="wrong_mode")
+    if not found:
+        raise CommandError("Selecciona un vértice o punto primero", code="empty_selection")
+
+
+def _edit_cursor_operator(obj, operator, **options):
+    _require_edit_selection(obj)
+    if find_view3d() is None:
+        raise CommandError("Se necesita una vista 3D", code="no_viewport")
+    with view3d_override():
+        result = operator('EXEC_DEFAULT', False, **options)
+    if 'FINISHED' not in result:
+        raise CommandError("No se pudo ajustar la selección al cursor", code="selection_failed")
+
+
 @command("snap.selected_to_cursor", mutating=True)
 def selected_to_cursor(payload: dict) -> dict:
     """
     `keep_offset=True` conserva la forma del grupo y lo mueve entero, como el
     "Selection to Cursor (Keep Offset)" de Blender.
     """
+    from .sessions import cancel_all
+    cancel_all()
+    active = bpy.context.view_layer.objects.active
+    if active is not None and active.mode == 'EDIT':
+        _edit_cursor_operator(active, bpy.ops.view3d.snap_selected_to_cursor,
+                              use_offset=bool(payload.get("keep_offset", False)))
+        undo_push("Remote selection to cursor")
+        return state.snapshot(include_view=False)
     _require_object_mode()
     objs = resolve_objects(payload)
     target = Vector(_cursor().location)

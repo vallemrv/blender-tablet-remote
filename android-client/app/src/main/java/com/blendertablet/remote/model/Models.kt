@@ -413,7 +413,7 @@ enum class SnapAction(
     CURSOR_TO_ACTIVE("Al objeto activo", "snap.cursor_to_active", SnapGroup.CURSOR),
     CURSOR_TO_GRID("A la rejilla", "snap.cursor_to_grid", SnapGroup.CURSOR),
 
-    SELECTED_TO_CURSOR("Al cursor", "snap.selected_to_cursor", SnapGroup.SELECTION, objectOnly = true),
+    SELECTED_TO_CURSOR("Al cursor", "snap.selected_to_cursor", SnapGroup.SELECTION),
     SELECTED_TO_GRID("A la rejilla", "snap.selected_to_grid", SnapGroup.SELECTION, objectOnly = true),
 
     ORIGIN_TO_CURSOR("Al cursor 3D", "snap.origin_to_cursor", SnapGroup.ORIGIN, objectOnly = true),

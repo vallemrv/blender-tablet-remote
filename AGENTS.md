@@ -273,6 +273,11 @@ nuevas superficies y la adaptación gradual de las existentes.
   Pintar selección mantiene visible el navegador azul de órbita. Su zona captura
   el gesto antes de comenzar el trazo, no cambia la selección y deja Pintar activo
   para continuar desde la nueva perspectiva.
+- Escena → Cursor 3D → A la selección coloca el cursor en la selección de Edit.
+  Escena → Snap selección → Al cursor envía los vértices o puntos/tiradores de
+  curva elegidos al cursor con el operador nativo, conservando la matriz del
+  objeto y los elementos no seleccionados. Cierra previews primero y crea un
+  undo. En Objeto mantiene el movimiento de los objetos completos.
 - El radial concentra Ocultar, Aislar, Duplicar, Renombrar y Borrar según contexto;
   en CAD también Soldar. Outliner conserva su ojo. Las listas CAD seleccionan;
   las restricciones se ven y borran en la pila. El rail de boceto crea solo
