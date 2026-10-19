@@ -352,6 +352,28 @@ class CadTests(unittest.TestCase):
         self.assertEqual((tuple(rv3d.view_location),tuple(rv3d.view_rotation),rv3d.view_distance,rv3d.view_perspective),original)
 
     @unittest.skipIf(bpy.app.background,'GUI viewport required')
+    def test_frame_sketch_and_solid_keeps_pc_view(self):
+        from blender_tablet_remote.bpy_utils import find_view3d
+        from blender_tablet_remote.camera import camera
+        rv3d=find_view3d()[3]
+        original=(tuple(rv3d.view_location),tuple(rv3d.view_rotation),rv3d.view_distance)
+        cad.view_frame(OWNER)  # Empty sketch still has a plane to frame.
+        self.assertGreater(camera.distance,0)
+        entity=self.rect()
+        camera.apply(location=(10,20,0),distance=40)
+        cad.view_frame(OWNER)
+        self.assertAlmostEqual(camera.location.x,.04,places=6)
+        self.assertAlmostEqual(camera.location.y,.0225,places=6)
+        self.assertLess(camera.distance,.3)
+        self.extrude(entity)
+        cad.sketch_finish(OWNER)
+        camera.apply(location=(10,20,0),distance=40)
+        cad.view_frame(OWNER)
+        self.assertLess(camera.distance,.3)
+        self.assertAlmostEqual(camera.location.z,.01,places=6)
+        self.assertEqual((tuple(rv3d.view_location),tuple(rv3d.view_rotation),rv3d.view_distance),original)
+
+    @unittest.skipIf(bpy.app.background,'GUI viewport required')
     def test_projection_roundtrip_and_overlay_follows_camera(self):
         from blender_tablet_remote.bpy_utils import find_view3d
         from blender_tablet_remote.camera import camera

@@ -191,7 +191,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             modifiersOpen = !modifiersOpen
             if (modifiersOpen) vm.openModifiers()
         },
-        onReferences = { referencesOpen = true },
+        onDebug = vm::toggleDebug,
         onCapture = vm::captureScene,
         onVersions = { versionsOpen = true },
     )
@@ -236,7 +236,6 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     val objectTrayHeight = with(density) { objectTrayHeightPx.toDp() }.coerceAtLeast(Metrics.TrayInset)
     val cadTrayHeight = with(density) { cadTrayHeightPx.toDp() }
     val cadFooterHeight = with(density) { cadFooterHeightPx.toDp() }
-    val cadFooterVisible = state.blender.cad.activeSketchId == null
     val objectPropertiesVisible = state.connection == ConnectionStatus.CONNECTED &&
         state.blender.features.objectProperties &&
         state.blender.mode == BlenderMode.OBJECT && !materialActive && !state.blender.cad.workspace &&
@@ -546,11 +545,17 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
 
                 }
                 if (state.blender.cad.workspace) CadWorkspace(state, vm, cadStackOpen, { cadStackOpen = it },
-                    stackBottom = cadTrayHeight + if (cadFooterVisible) cadFooterHeight + Metrics.EdgeMargin * 2 else Metrics.EdgeMargin,
+                    stackBottom = cadTrayHeight + cadFooterHeight + Metrics.EdgeMargin * 2,
                     onTrayHeight = { cadTrayHeightPx = it })
                 if (sculptActive) SculptWorkspace(state, vm)
                 if (materialActive) MaterialWorkspace(state, vm)
-                if (referencesOpen) ReferencePanel(Modifier.align(Alignment.TopCenter).padding(top = 76.dp),
+                if (!referencesOpen) FloatingPanel(Modifier.align(Alignment.TopEnd)
+                    .padding(top = 142.dp, end = Metrics.EdgeMargin + Metrics.HelperRailInset + 56.dp)) {
+                    IconAction(AppIcons.Reference, "Imágenes de referencia") { referencesOpen = true }
+                }
+                if (referencesOpen) ReferencePanel(Modifier.align(Alignment.TopEnd)
+                    .padding(top = 142.dp, end = Metrics.EdgeMargin + Metrics.HelperRailInset,
+                        bottom = if (cad.workspace) cadTrayHeight + cadFooterHeight else trayInset + 74.dp),
                     onSendToBlender = if (state.blender.features.referenceImages && state.connection == ConnectionStatus.CONNECTED) {
                         { image, opacity -> vm.sendReferenceToBlender(image.path, image.name, opacity) }
                     } else null,
@@ -574,7 +579,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(Metrics.EdgeMargin)
-                        .padding(end = helperRailInset)
+                        .padding(end = if (cadConstraintRail) Metrics.HelperRailInset else helperRailInset)
                         .padding(bottom = if (state.blender.cad.workspace) cadTrayHeight else trayInset)
                         .onSizeChanged { if (state.blender.cad.workspace) cadFooterHeightPx = it.height },
                 )
@@ -583,7 +588,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     DebugOverlay(vm, state.blender.mode, Modifier.align(Alignment.TopStart).padding(start = Metrics.EdgeMargin, top = 56.dp))
                 }
 
-                if (!state.blender.cad.workspace && state.shapeTool in setOf(ShapeTool.CIRCLE, ShapeTool.PAINT)) {
+                if ((!cad.workspace || cad.activeSketchId == null) && state.shapeTool in setOf(ShapeTool.CIRCLE, ShapeTool.PAINT)) {
                     CircleRadiusBar(
                         allowFree = state.shapeTool != ShapeTool.PAINT,
                         selected = state.circleRadius,
@@ -1050,7 +1055,7 @@ private fun RailContent(
 
     // El catálogo contextual toma propiedad de las operaciones topológicas. En un
     // servidor antiguo no existe y el rail histórico sigue íntegro.
-    if (inEdit && !state.blender.features.editCatalog.available) {
+    if (inEdit && state.blender.activeObjectType == "MESH" && !state.blender.features.editToolbar.available && !state.blender.features.editCatalog.available) {
         RailDivider()
         RailLabel("EDITAR")
         // Cada herramienta pide un tipo de elemento: Inset solo trabaja con caras y
@@ -1086,8 +1091,6 @@ private fun RailContent(
         }
     }
 
-    RailDivider()
-    IconAction(AppIcons.Debug, "Diagnóstico", selected = state.debugVisible, onClick = vm::toggleDebug)
 }
 
 /** Qué borra `mesh.delete` según el submodo de selección. */
@@ -1111,8 +1114,15 @@ private fun cadRadialActions(state: AppUiState, vm: MainViewModel,
     val enabled = !cad.sessionActive
     return buildList {
         add(QuickAction("Aislar", AppIcons.localView(!cad.showScene), enabled = enabled) { vm.toggleLocalView() })
-        if (cad.activeSketchId == null && (cad.selectedSketch != null || cad.selectedFeature != null))
-            add(QuickAction("Ocultar / mostrar", AppIcons.visibility(false), enabled = enabled) { vm.hideObject() })
+        if (cad.activeSketchId == null && cad.selectedFeature != null) {
+            val feature = cad.selectedFeature!!
+            add(QuickAction(if (feature.enabled) "Desactivar operación" else "Activar operación",
+                AppIcons.cad(feature.type), enabled = enabled) { vm.hideObject() })
+        } else if (cad.activeSketchId == null && cad.selectedSketch != null) {
+            val visible = cad.selectedSketch!!.visible
+            add(QuickAction(if (visible) "Ocultar boceto" else "Mostrar boceto", AppIcons.visibility(!visible),
+                enabled = enabled) { vm.hideObject() })
+        }
         if (cad.activeSketchId == null && cad.selectedSketch != null && cad.selectedFeature == null) {
             val sketch = cad.selectedSketch!!
             add(QuickAction("Renombrar boceto", AppIcons.action(ActionId.RENAME), enabled = enabled) { onRename(sketch) })

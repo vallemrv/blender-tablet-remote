@@ -111,7 +111,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     val finishPreview = cad.sessionActive && cad.operation in listOf("FILLET", "CHAMFER")
     // Colocar un plano: el rail elige la base y la bandeja sus medidas, con preview en la vista.
     val planePreview = cad.sessionActive && cad.operation in listOf("PLANE", "SPLIT")
-    val availableHeight = (LocalConfiguration.current.screenHeightDp - 320).coerceAtLeast(100).dp
+    val availableHeight = (LocalConfiguration.current.screenHeightDp - 260).coerceAtLeast(100).dp
     fun command(name: String, vararg values: Pair<String, Any?>) { if (connected) vm.cadCommand(name, mapOf(*values)) }
     fun beginFeature(operation: String) {
         vm.cadTool(null)
@@ -124,7 +124,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             "sketch_id" to cad.selectionId.takeIf { cad.selectionKind == "SKETCH" }, "depth" to cad.step * 10,
             "operation" to operation, "target_id" to target?.id, "target_body_id" to target?.bodyId)
     }
-    if (planePreview) ToolRail(Modifier.align(Alignment.CenterStart).padding(start = Metrics.EdgeMargin, top = 120.dp, bottom = 160.dp).heightIn(max = availableHeight)) {
+    if (planePreview) ToolRail(Modifier.align(Alignment.CenterStart).padding(start = Metrics.EdgeMargin).heightIn(max = availableHeight)) {
+        RailLabel("CROQUIS")
         val plane = cad.plane
         capabilities.planes.forEach { base ->
             CadAction("PLANE_$base", "Plano base ${cadPlaneLabel(base)}", selected = plane?.base == base,
@@ -138,7 +139,8 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             selected = plane?.base == "EDGE", enabled = connected && plane?.planeId == null && cad.surface.canEdgePlane) {
             command("cad.plane.update", "base" to "EDGE")
         }
-    } else ToolRail(Modifier.align(Alignment.CenterStart).padding(start = Metrics.EdgeMargin, top = 120.dp, bottom = 160.dp).heightIn(max = availableHeight)) {
+    } else ToolRail(Modifier.align(Alignment.CenterStart).padding(start = Metrics.EdgeMargin).heightIn(max = availableHeight)) {
+        RailLabel(if (editing) "CROQUIS" else "OPERACIONES")
         CadToolContext(state, vm)
         if (!editing) {
             cad.selectedSketch?.let { sketch ->
@@ -253,8 +255,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     val contextual = editing && cad.selection.isNotEmpty()
     // La pila ocupa el sitio del inspector de modificadores —icono cerrado bajo el
     // selector de modos, panel derecho con flecha de vuelta— y se abre y se cierra
-    // igual que él. El contexto (planos, vista, finalizar boceto) vive arriba, en la
-    // fila de Deshacer/Rehacer, sin franja propia bajo el menú.
+    // igual que él. Las operaciones viven en el rail izquierdo y la vista en el pie.
     val stackEnd = Metrics.EdgeMargin + if (!editing || capabilities.constraints.isNotEmpty()) Metrics.HelperRailInset else 0.dp
     if (!stackOpen) FloatingPanel(
         Modifier.align(Alignment.TopEnd).padding(top = 142.dp, end = stackEnd),
@@ -481,7 +482,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
         offsetSource != null || mirrorSource != null -> true
         else -> drafts.isNotEmpty()
     }
-    val parameterScroll = rememberScrollState()
     val hasValues = depthPreview || finishPreview || shellPreview || dynamicPreview || planePreview || pendingDimension != null || editingConstraint != null || entity != null || feature != null || offsetPlane != null || offsetSource != null || mirrorSource != null
     val arcSelectionHelp = entity?.let { selected ->
         val otherArcs = cadOtherSelectedArcs(cad, selected)
@@ -490,78 +490,84 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             "${otherArcs.size + 1} arcos: " + if (roundings) "Radio se aplica a todos (Igualdad)" else "Radio y Ángulo se aplican a todos (Igualdad)"
         }
     }
-    FloatingPanel(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { onTrayHeight(it.height) }.padding(Metrics.EdgeMargin)) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            val help = cad.error ?: when {
-                !connected -> "Reconectando · recuperando el documento de Blender"
-                state.cadParameterPick != null -> if (state.cadParameterPick == "pick_tool_body") "Toca la pieza que se usará como herramienta" else "Toca la referencia en la pieza para fijar la dirección o el eje"
-                cad.operationControls != null -> cad.operationControls.label + " · ajusta los parámetros · ✓ confirma · × cancela"
-                planePreview -> cad.plane?.let { plane ->
-                    (if (plane.planeId != null) "Colocar plano guardado" else "Plano ${if (plane.base == "FACE") "en la cara" else cadPlaneLabel(plane.base)}") +
-                        " · arrastra las flechas: roja/verde lo deslizan, azul (o fuera de ellas) lo separa · positivo: ${plane.positiveLabel.lowercase()} · ✓ " +
-                        (if (plane.planeId != null) "aplica la posición" else "crea el croquis")
-                } ?: "Colocando plano"
-                editing && cad.sketchPending -> "Pieza pendiente de actualizar · pulsa Finalizar boceto al terminar"
-                editing && !cad.sessionActive && capabilities.selectedCut && cutSelection.isNotEmpty() -> "${cutSelection.size} elementos seleccionados · Vaciar utiliza solo estos contornos"
-                offsetSource != null -> "Desfase vinculado: elige dentro o fuera y escribe el grosor · ✓ crea el contorno"
-                mirrorSource != null -> "Simetría de ${mirrorSource!!.name}: elige el plano y su posición · ✓ crea la operación vinculada"
-                feature?.isMirror == true -> "${feature.name} · perfil y profundidad siguen a la operación fuente"
-                editingConstraint != null -> "${cadLabel(editingConstraint!!.type)} · escribe el valor · arrastra la cota para colocarla sin mover el dibujo"
-                sweepFrom != null -> "Barrido: elige en la pila el croquis del recorrido (una cadena abierta de líneas y arcos) · vuelve a pulsar Barrido para cancelar"
-                feature?.type == "SWEEP" -> "${feature.name} · el perfil recorre las líneas y arcos del otro croquis · editarlo actualiza el barrido"
-                loftFrom != null -> "Solevado: toca el perfil del otro croquis (o elígelo en la pila) · vuelve a pulsar Solevado para cancelar"
-                feature?.type == "REVOLVE" -> "${feature.name} · el perfil gira alrededor del eje elegido; puede apoyarse en él (conos, cúpulas) pero no cruzarlo"
-                feature?.type == "HELIX" -> "${feature.name} · altura ${formatToolDistance(feature.pitch * feature.turns * lengthFactor(unit), 2)} ${unit.short} · el paso debe superar la altura del perfil · el eje es X, Y o una línea del croquis"
-                feature?.type == "LOFT" -> "${feature.name} · une ${cad.sketches.firstOrNull { it.id == feature.sketchId }?.name.orEmpty()} con otro croquis · mover su plano lo actualiza"
-                state.cadFacePick != null -> "Hasta cara: toca la cara plana donde termina · su plano corta la extrusión, también inclinado · vuelve a pulsar para cancelar"
-                pendingDimension == "FILLET" -> "Redondeo: varias esquinas, el rectángulo entero o líneas unidas · un radio para todas · tras el primero, toca otra esquina"
-                drafts.isNotEmpty() && !depthPreview -> "Medidas pendientes · ✓ aplica los cambios · × descarta"
-                depthPreview && cad.extent == "THROUGH_ALL" -> "Perforar todo · atraviesa el cuerpo completo · se adapta si cambia el grosor · dos dedos navegan"
-                depthPreview -> if (cad.operation == "EXTRUDE")
-                    "Extrusión · Simetría crece a los dos lados del croquis · si no, desliza en el sentido del plano · suelta para asentar"
-                else "${cadLabel(cad.operation)} · desliza en el sentido del vaciado" +
-                    " · una dirección o las dos · dos dedos navegan" + if (cad.transparent) " · transparencia automática" else ""
-                shellPreview -> "Carcasa · ${cad.faceCount} caras abiertas · arrastra o escribe el grosor · ✓ lo añade a la pila"
-                feature?.type == "SHELL" -> "Carcasa · ${feature.faceCount} caras abiertas · las paredes siguen al sólido anterior"
-                finishPreview -> "${cadLabel(cad.operation)} · desliza arriba/abajo o escribe el ancho · ✓ lo añade a la pila"
-                dragPreview -> "Medidas en vivo · suelta para fijar una medida con su candado"
-                drawPreview -> "Medidas en vivo · Incremento redondea al paso y los puntos existentes atraen · suelta para editar las medidas"
-                cad.sessionActive && cad.operation == "POLYGON" -> "Polígono: traza o toca cada vértice · cierra tocando el primer punto o con Cerrar · dos dedos descarta"
-                editing && cad.surface.mode != "PROFILE" -> "Toca para añadir referencias; repite para quitarlas · puedes combinar Puntos/Aristas/Caras · Proyectar al plano copia toda la selección al croquis"
-                cad.surface.mode == "FACE" -> if (cad.surface.selection.size > 1) "Dos referencias para medir · quita una cara seleccionada para crear el boceto" else "Toca una cara: se resalta en el vídeo · Boceto en cara usa exactamente esa selección"
-                cad.surface.mode != "PROFILE" -> "Toca hasta dos referencias para medir · durante el boceto puedes proyectarlas para acotar desde ellas"
-                editing && state.cadTool == "ARC" -> "Arrastra centro → inicio del arco · sigue en Arco para el siguiente · arrastra un rombo para variar su ángulo"
-                editing && state.cadTool == "POINT" -> "Toca para crear un punto de referencia · Cursor permite elegirlo junto a una arista para Punto medio"
-                entity?.type == "ARC" && !entity.isFillet -> "Arrastra el rombo del extremo para variar el ángulo; centro, radio e inicio permanecen fijos"
-                editing && state.cadTool == "NGON" -> "Polígono regular: arrastra del centro a un vértice · elige los lados antes o después · Entre caras es la llave de la tuerca"
-                editing && state.cadTool == "SLOT" -> "Ranura: arrastra entre los centros de los extremos · Radio es la mitad del Ancho · Entre centros conserva la longitud recta"
-                editing && state.cadTool == "GEAR" -> "Engranaje: arrastra del centro al círculo primitivo · Incremento elige un módulo normalizado · dientes antes o después"
-                editing && state.cadTool != null -> "${cadLabel(state.cadTool!!)} · arrastra para dibujar · dos dedos navegan"
-                entity?.type == "GEAR" -> cadGearSummary(entity, unit)
-                entity?.isSquare == true -> if (entity.dimensions.any { it.constraintIds.isNotEmpty() })
-                    "Cuadrado: una cota controla ambos lados; editar Lado actualiza esa misma cota"
-                    else "Cuadrado: Igualdad une sus lados; Fijar medida añade una cota de tamaño"
-                entity?.isFillet == true -> "Redondeo: cambia su radio · su papelera en Figuras recupera la esquina"
-                editing -> "Cursor: toca para seleccionar o quitar · dos dedos giran la vista y se queda · Girar 90° y Enderezar la colocan"
-                !editing && cad.rollbackId != null -> "Vista del pasado: ${cad.history.firstOrNull { it.id == cad.rollbackId }?.name.orEmpty()} · toca un nodo para ver el modelo en ese momento · Final restaura la pila completa"
-                multipleProfiles -> "${shownProfiles.size} contornos seleccionados · Vaciar usa solo estos · toca uno seleccionado para quitarlo"
-                cad.selectionKind == "PROFILE" && capabilities.profileMultiselect -> "Toca más contornos del mismo boceto para añadirlos · repetir un toque los quita · Vaciar usa la selección"
-                cad.selectionKind == "SKETCH" -> "${selectedSketch?.name.orEmpty()} completo · Extruir crea volumen y conserva los contornos interiores como huecos"
-                selectedSketch != null -> "${selectedSketch.name} · perfil seleccionado · Seleccionar todo elige el croquis completo para extruir"
-                else -> "Abre la pila (derecha) para editar un boceto · o crea uno en Planos, arriba, y selecciona un perfil para extruir"
-            }
-            Text(if (cad.sketchReview) "$help · Edita o borra este paso, o retrocede en la pila. Se muestra la última pieza válida."
-                else if (cad.error != null) help else listOfNotNull(help, arcSelectionHelp).joinToString(" · "),
-                color = Ink.Muted, fontSize = 12.sp)
-            if (cad.surface.selection.isNotEmpty() && (cad.surface.mode != "PROFILE" || !editing)) {
-                Text(cadSurfaceSummary(cad, unit), color = Ink.Muted, fontSize = 12.sp)
-            }
+    val help = cad.error ?: when {
+        !connected -> "Reconectando · recuperando el documento de Blender"
+        state.cadParameterPick != null -> if (state.cadParameterPick == "pick_tool_body") "Toca la pieza que se usará como herramienta" else "Toca la referencia en la pieza para fijar la dirección o el eje"
+        cad.operationControls != null -> cad.operationControls.label + " · ajusta los parámetros · ✓ confirma · × cancela"
+        planePreview -> cad.plane?.let { plane ->
+            (if (plane.planeId != null) "Colocar plano guardado" else "Plano ${if (plane.base == "FACE") "en la cara" else cadPlaneLabel(plane.base)}") +
+                " · arrastra las flechas: roja/verde lo deslizan, azul (o fuera de ellas) lo separa · positivo: ${plane.positiveLabel.lowercase()} · ✓ " +
+                (if (plane.planeId != null) "aplica la posición" else "crea el croquis")
+        } ?: "Colocando plano"
+        editing && cad.sketchPending -> "Pieza pendiente de actualizar · pulsa Finalizar boceto al terminar"
+        editing && !cad.sessionActive && capabilities.selectedCut && cutSelection.isNotEmpty() -> "${cutSelection.size} elementos seleccionados · Vaciar utiliza solo estos contornos"
+        offsetSource != null -> "Desfase vinculado: elige dentro o fuera y escribe el grosor · ✓ crea el contorno"
+        mirrorSource != null -> "Simetría de ${mirrorSource!!.name}: elige el plano y su posición · ✓ crea la operación vinculada"
+        feature?.isMirror == true -> "${feature.name} · perfil y profundidad siguen a la operación fuente"
+        editingConstraint != null -> "${cadLabel(editingConstraint!!.type)} · escribe el valor · arrastra la cota para colocarla sin mover el dibujo"
+        sweepFrom != null -> "Barrido: elige en la pila el croquis del recorrido (una cadena abierta de líneas y arcos) · vuelve a pulsar Barrido para cancelar"
+        feature?.type == "SWEEP" -> "${feature.name} · el perfil recorre las líneas y arcos del otro croquis · editarlo actualiza el barrido"
+        loftFrom != null -> "Solevado: toca el perfil del otro croquis (o elígelo en la pila) · vuelve a pulsar Solevado para cancelar"
+        feature?.type == "REVOLVE" -> "${feature.name} · el perfil gira alrededor del eje elegido; puede apoyarse en él (conos, cúpulas) pero no cruzarlo"
+        feature?.type == "HELIX" -> "${feature.name} · altura ${formatToolDistance(feature.pitch * feature.turns * lengthFactor(unit), 2)} ${unit.short} · el paso debe superar la altura del perfil · el eje es X, Y o una línea del croquis"
+        feature?.type == "LOFT" -> "${feature.name} · une ${cad.sketches.firstOrNull { it.id == feature.sketchId }?.name.orEmpty()} con otro croquis · mover su plano lo actualiza"
+        state.cadFacePick != null -> "Hasta cara: toca la cara plana donde termina · su plano corta la extrusión, también inclinado · vuelve a pulsar para cancelar"
+        pendingDimension == "FILLET" -> "Redondeo: varias esquinas, el rectángulo entero o líneas unidas · un radio para todas · tras el primero, toca otra esquina"
+        drafts.isNotEmpty() && !depthPreview -> "Medidas pendientes · ✓ aplica los cambios · × descarta"
+        depthPreview && cad.extent == "THROUGH_ALL" -> "Perforar todo · atraviesa el cuerpo completo · se adapta si cambia el grosor · dos dedos navegan"
+        depthPreview -> if (cad.operation == "EXTRUDE")
+            "Extrusión · Simetría crece a los dos lados del croquis · si no, desliza en el sentido del plano · suelta para asentar"
+        else "${cadLabel(cad.operation)} · desliza en el sentido del vaciado" +
+            " · una dirección o las dos · dos dedos navegan" + if (cad.transparent) " · transparencia automática" else ""
+        shellPreview -> "Carcasa · ${cad.faceCount} caras abiertas · arrastra o escribe el grosor · ✓ lo añade a la pila"
+        feature?.type == "SHELL" -> "Carcasa · ${feature.faceCount} caras abiertas · las paredes siguen al sólido anterior"
+        finishPreview -> "${cadLabel(cad.operation)} · desliza arriba/abajo o escribe el ancho · ✓ lo añade a la pila"
+        dragPreview -> "Medidas en vivo · suelta para fijar una medida con su candado"
+        drawPreview -> "Medidas en vivo · Incremento redondea al paso y los puntos existentes atraen · suelta para editar las medidas"
+        cad.sessionActive && cad.operation == "POLYGON" -> "Polígono: traza o toca cada vértice · cierra tocando el primer punto o con Cerrar · dos dedos descarta"
+        editing && cad.surface.mode != "PROFILE" -> "Toca para sustituir referencias; ＋ Añadir las alterna · puedes combinar Puntos/Aristas/Caras · Proyectar al plano copia toda la selección al croquis"
+        cad.surface.mode == "FACE" -> if (cad.surface.selection.size > 1) "Dos referencias para medir · quita una cara seleccionada para crear el boceto" else "Toca una cara: se resalta en el vídeo · Boceto en cara usa exactamente esa selección"
+        cad.surface.mode != "PROFILE" -> "Toca hasta dos referencias para medir · durante el boceto puedes proyectarlas para acotar desde ellas"
+        editing && state.cadTool == "ARC" -> "Arrastra centro → inicio del arco · sigue en Arco para el siguiente · arrastra un rombo para variar su ángulo"
+        editing && state.cadTool == "POINT" -> "Toca para crear un punto de referencia · Cursor permite elegirlo junto a una arista para Punto medio"
+        entity?.type == "ARC" && !entity.isFillet -> "Arrastra el rombo del extremo para variar el ángulo; centro, radio e inicio permanecen fijos"
+        editing && state.cadTool == "NGON" -> "Polígono regular: arrastra del centro a un vértice · elige los lados antes o después · Entre caras es la llave de la tuerca"
+        editing && state.cadTool == "SLOT" -> "Ranura: arrastra entre los centros de los extremos · Radio es la mitad del Ancho · Entre centros conserva la longitud recta"
+        editing && state.cadTool == "GEAR" -> "Engranaje: arrastra del centro al círculo primitivo · Incremento elige un módulo normalizado · dientes antes o después"
+        editing && state.cadTool != null -> "${cadLabel(state.cadTool!!)} · arrastra para dibujar · dos dedos navegan"
+        entity?.type == "GEAR" -> cadGearSummary(entity, unit)
+        entity?.isSquare == true -> if (entity.dimensions.any { it.constraintIds.isNotEmpty() })
+            "Cuadrado: una cota controla ambos lados; editar Lado actualiza esa misma cota"
+            else "Cuadrado: Igualdad une sus lados; Fijar medida añade una cota de tamaño"
+        entity?.isFillet == true -> "Redondeo: cambia su radio · Borrar en el radial recupera la esquina"
+        editing -> "Seleccionar: toca para sustituir; ＋ Añadir alterna · dos dedos giran la vista y se queda · Girar 90° y Enderezar la colocan"
+        !editing && cad.rollbackId != null -> "Vista del pasado: ${cad.history.firstOrNull { it.id == cad.rollbackId }?.name.orEmpty()} · toca un nodo para ver el modelo en ese momento · Final restaura la pila completa"
+        multipleProfiles -> "${shownProfiles.size} contornos seleccionados · Vaciar usa solo estos · toca uno seleccionado para quitarlo"
+        cad.selectionKind == "PROFILE" && capabilities.profileMultiselect -> "Activa ＋ Añadir para alternar contornos del mismo boceto · Vaciar usa la selección"
+        cad.selectionKind == "SKETCH" -> "${selectedSketch?.name.orEmpty()} completo · Extruir crea volumen y conserva los contornos interiores como huecos"
+        selectedSketch != null -> "${selectedSketch.name} · perfil seleccionado · Seleccionar todo elige el croquis completo para extruir"
+        else -> "Abre la pila (derecha) para editar un boceto · o crea uno en el rail izquierdo, y selecciona un perfil para extruir"
+    }
+    val detail = if (cad.sketchReview) "$help · Revisa este paso en la pila. Se muestra la última pieza válida."
+        else listOfNotNull(help, arcSelectionHelp, cadSurfaceSummary(cad, unit).takeIf { cad.surface.selection.isNotEmpty() }).joinToString(" · ")
+    var helpOpen by remember { mutableStateOf(false) }
+    if (helpOpen) AlertDialog(onDismissRequest = { helpOpen = false }, title = { Text("Ayuda CAD") },
+        text = { Text(detail) }, confirmButton = { TextButton(onClick = { helpOpen = false }) { Text("Cerrar") } })
+    SingleLineTray(
+        title = if (cad.error != null) "Revisar CAD" else if (editing) "Croquis" else "CAD",
+        onCancel = if (hasValues && !livePreview) ::discardValues else null,
+        onConfirm = if (hasValues && !livePreview) ::acceptValues else null,
+        confirmEnabled = canAccept,
+        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { onTrayHeight(it.height) }.padding(Metrics.EdgeMargin),
+    ) {
+        HoverHelp(title = "Ayuda CAD", explanation = detail) {
+            PillButton(if (cad.error != null) "Revisar" else "Ayuda") { helpOpen = true }
+        }
+        key(editScope, resetInputs) {
             if (planePreview && planeMore) cad.plane?.let { plane ->
-                // Fila que se abre hacia arriba: inclinar y desplazar el plano por números.
+                // Parámetros ampliados dentro de la misma fila desplazable.
                 val axes = cadPlaneAxes(plane.base.takeIf { it != "FACE" && plane.planeId == null })
                 val id = cad.sessionId.orEmpty()
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
                     if (plane.base == "EDGE") Text("Inclinar sobre la arista gira el plano alrededor de ella", color = Ink.Accent, fontSize = 11.sp)
                     (0..1).forEach { i ->
                         CadDimension("Inclinar ${axes.rotation[i]}", plane.tilt[i], unit, id + "tilt$i", degrees = true, step = 5.0,
@@ -574,300 +580,290 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             onNudge = { sendPlane(shift = plane.shift.toMutableList().also { list -> list[i] = it }) },
                             onDone = { drafts["plane_shift$i"]?.let { sendPlane(shift = plane.shift.toMutableList().also { list -> list[i] = it }) } }) { drafts["plane_shift$i"] = it }
                     }
+            }
+            if (cad.surface.mode != "PROFILE" || !editing) {
+                CadSurfaceControls(cad, capabilities, unit, connected && !cad.sessionActive, vm)
+            }
+            if (capabilities.sketchEditing && (editing || depthPreview || shellPreview)) {
+                SnapControl(listOf(SnapType.NONE, SnapType.INCREMENT), if (cad.increment) SnapType.INCREMENT else SnapType.NONE,
+                    { command("cad.settings", "increment" to (it == SnapType.INCREMENT)) })
+            }
+            CadSnapStepInput(cad.step, unit, { unit = it }) { command("cad.settings", "step" to it) }
+            offsetSource?.let { source ->
+                listOf("OUTWARD" to "Hacia fuera", "INWARD" to "Hacia dentro").forEach { (side, label) ->
+                    PillButton(label, selected = offsetSide == side, enabled = connected) { offsetSide = side }
+                }
+                CadDimension("Grosor", drafts["thickness"] ?: cad.step, unit, source.id + "offset",
+                    step = cad.step, minimum = .0000001, enabled = connected, onDone = ::acceptValues) { drafts["thickness"] = it }
+            }
+            mirrorSource?.let { source ->
+                CadMirrorPlaneSelector(mirrorPlane, connected) { mirrorPlane = it }
+                CadDimension("Posición del plano", drafts["mirror_offset"] ?: 0.0, unit, source.id + "mirror",
+                    step = cad.step, minimum = -10000.0, enabled = connected, onDone = ::acceptValues) { drafts["mirror_offset"] = it }
+            }
+            editingConstraint?.takeIf { it.value != null }?.let { constraint ->
+                // Cota seleccionada: su valor y, al lado, quitarla. Nada más.
+                val angle = constraint.type == "ANGLE"
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CadDimension(cadLabel(constraint.type), drafts["constraint"] ?: constraint.value!!, unit, constraint.id,
+                        degrees = angle, step = if (angle) 1.0 else cad.step, enabled = connected, readOnly = livePreview,
+                        minimum = if (angle) .01 else if (constraint.type in listOf("DISTANCE_X", "DISTANCE_Y")) 0.0 else .0000001,
+                        maximum = if (angle) 359.99 else 10000.0,
+                        onDone = ::acceptValues) { drafts["constraint"] = it }
+
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                key(editScope, resetInputs) {
-                    Row(Modifier.weight(1f).horizontalScroll(parameterScroll), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        if (cad.surface.mode != "PROFILE" || !editing) {
-                            CadSurfaceControls(cad, capabilities, unit, connected && !cad.sessionActive, vm)
-                        }
-                        if (capabilities.sketchEditing && (editing || depthPreview || shellPreview)) {
-                            SnapControl(listOf(SnapType.NONE, SnapType.INCREMENT), if (cad.increment) SnapType.INCREMENT else SnapType.NONE,
-                                { command("cad.settings", "increment" to (it == SnapType.INCREMENT)) })
-                        }
-                        CadSnapStepInput(cad.step, unit, { unit = it }) { command("cad.settings", "step" to it) }
-                        offsetSource?.let { source ->
-                            listOf("OUTWARD" to "Hacia fuera", "INWARD" to "Hacia dentro").forEach { (side, label) ->
-                                PillButton(label, selected = offsetSide == side, enabled = connected) { offsetSide = side }
-                            }
-                            CadDimension("Grosor", drafts["thickness"] ?: cad.step, unit, source.id + "offset",
-                                step = cad.step, minimum = .0000001, enabled = connected, onDone = ::acceptValues) { drafts["thickness"] = it }
-                        }
-                        mirrorSource?.let { source ->
-                            CadMirrorPlaneSelector(mirrorPlane, connected) { mirrorPlane = it }
-                            CadDimension("Posición del plano", drafts["mirror_offset"] ?: 0.0, unit, source.id + "mirror",
-                                step = cad.step, minimum = -10000.0, enabled = connected, onDone = ::acceptValues) { drafts["mirror_offset"] = it }
-                        }
-                        editingConstraint?.takeIf { it.value != null }?.let { constraint ->
-                            // Cota seleccionada: su valor y, al lado, quitarla. Nada más.
-                            val angle = constraint.type == "ANGLE"
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                CadDimension(cadLabel(constraint.type), drafts["constraint"] ?: constraint.value!!, unit, constraint.id,
-                                    degrees = angle, step = if (angle) 1.0 else cad.step, enabled = connected, readOnly = livePreview,
-                                    minimum = if (angle) .01 else if (constraint.type in listOf("DISTANCE_X", "DISTANCE_Y")) 0.0 else .0000001,
-                                    maximum = if (angle) 359.99 else 10000.0,
-                                    onDone = ::acceptValues) { drafts["constraint"] = it }
-
-                            }
-                        }
-                        if (editing && editingConstraint == null && pendingDimension == null) {
-                            CadRelationalDimensions(cad, capabilities.constraints, unit, connected && !cad.sessionActive, vm)
-                        }
-                        pendingDimension?.let { type ->
-                            val angle = type == "ANGLE"
-                            CadDimension(if (type == "FILLET") "Radio" else cadLabel(type), drafts["constraint"] ?: cad.dimensionOptions[type]?.value ?: cad.step * 5, unit, type,
-                                degrees = angle, step = if (angle) 1.0 else cad.step, maximum = if (angle) 180.0 else 10000.0,
-                                // Distancia 0 entre dos puntos los une (coincidencia).
-                                enabled = connected, minimum = if (angle || type in listOf("DISTANCE", "DISTANCE_X", "DISTANCE_Y")) 0.0 else .0000001,
-                                onDone = ::acceptValues) { drafts["constraint"] = it }
-                        }
-                        if (editing && state.cadTool == "NGON" && entity == null) {
-                            CadSidesControl(state.cadNgonSides, enabled = !cad.sessionActive) { vm.cadNgonSides(it) }
-                        }
-                        if (editing && state.cadTool == "GEAR" && entity == null) {
-                            CadCountControl("Dientes", state.cadGearTeeth, 6..150, enabled = !cad.sessionActive) { vm.cadGearTeeth(it) }
-                        }
-                        entity?.let { selected ->
-                            if (selected.type == "GEAR") {
-                                val editable = connected && !livePreview && drafts.isEmpty()
-                                CadCountControl("Dientes", selected.values["teeth"]?.toInt() ?: 20, 6..150, editable) {
-                                    command("cad.entity.set", "entity_id" to selected.id, "values" to mapOf("teeth" to it))
-                                }
-                                listOf(14.5, 20.0, 25.0).forEach { angle ->
-                                    PillButton("${formatToolDistance(angle, 1)}°", selected = selected.values["pressure"] == angle, enabled = editable) {
-                                        command("cad.entity.set", "entity_id" to selected.id, "values" to mapOf("pressure" to angle))
-                                    }
-                                }
-                            }
-                            if (selected.type == "NGON") {
-                                val sides = selected.values["sides"]?.toInt() ?: 6
-                                CadSidesControl(sides, enabled = connected && !livePreview && drafts.isEmpty()) {
-                                    command("cad.entity.set", "entity_id" to selected.id, "values" to mapOf("sides" to it))
-                                }
-                            }
-                            if (selected.type in listOf("CIRCLE", "SLOT") && selected.dimensions.any { it.field == "radius" }) {
-                                PillButton("Radio", selected = !showDiameter, enabled = drafts.isEmpty()) { showDiameter = false }
-                                PillButton(if (selected.type == "SLOT") "Ancho" else "Diámetro", selected = showDiameter, enabled = drafts.isEmpty()) { showDiameter = true }
-                            }
-                            // Solo medidas: la posición se fija con candados y cotas a otros
-                            // puntos (origen, esquinas, centros), no escribiendo coordenadas.
-                            // El ángulo del arco/redondeo es una medida más, con su candado.
-                            val measures = cadDisplayMeasures(selected, showDiameter)
-                            val fields = measures.map { it.field to it.label }
-                            fields.forEach { (field, label) ->
-                                val measure = measures.firstOrNull { it.field == field }
-                                val degrees = measure?.constraintType == "ANGLE"
-                                val bound = measure?.constraintIds?.isNotEmpty() == true
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    CadDimension(label + if (measure != null) if (bound) " · cota" else " · sin cota" else "",
-                                        drafts[field] ?: selected.values[field] ?: 0.0, unit, selected.id + field,
-                                        degrees = degrees, step = if (degrees) 1.0 else cad.step, enabled = connected, readOnly = livePreview,
-                                        minimum = if (degrees) -359.99 else if (measure != null) .0000001 else -10000.0,
-                                        maximum = if (field == "sweep") 359.99 else 10000.0,
-                                        onDone = ::acceptValues) { drafts[field] = it?.takeIf { value -> field != "sweep" || kotlin.math.abs(value) in .01..359.99 } }
-                                    if (measure != null && measure.lockable) CadAction("DIMENSION_LOCK", (if (bound) "Quitar cota: " else "Fijar medida: ") + label,
-                                        selected = bound, enabled = connected && !livePreview && drafts.isEmpty()) {
-                                        if (bound) command("cad.constraint.delete", "constraint_id" to measure.constraintIds.first())
-                                        else command("cad.constraint.add", "type" to measure.constraintType,
-                                            "value" to ((selected.values[field] ?: 0.0) * measure.valueFactor),
-                                            "refs" to measure.refs.map { mapOf("id" to it.id, "part" to it.part) })
-                                    }
-                                }
-                            }
-                        }
-                        if (!editing && !cad.sessionActive && "CUT" in capabilities.features) {
-                            var expanded by remember { mutableStateOf(false) }
-                            Box {
-                                PillButton("Destino: ${cad.bodies.firstOrNull { it.id == target?.bodyId }?.name ?: "elegir cuerpo"}", enabled = connected && targets.isNotEmpty()) { expanded = true }
-                                DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
-                                    targets.forEach { item -> DropdownMenuItem(text = { Text(cad.bodies.firstOrNull { it.id == item.bodyId }?.name ?: item.name) }, onClick = { cutTarget = item.bodyId; expanded = false }) }
-                                }
-                            }
-                        }
-                        if (cad.sessionActive && cad.operation == "POLYGON") {
-                            PillButton("Cerrar polígono", enabled = connected && cad.canClose) { vm.cadCommand("cad.polygon.close") }
-                            TrayExits(onCancel = { vm.cadCommand("cad.session.cancel") })
-                        }
-                        if (planePreview) cad.plane?.let { plane ->
-                            val id = cad.sessionId.orEmpty()
-                            CadDimension("Separación", plane.offset, unit, id + "offset", step = cad.step, enabled = connected,
-                                onNudge = { sendPlane(offset = it) }, onDone = { drafts["plane_offset"]?.let { sendPlane(offset = it) } }) { drafts["plane_offset"] = it }
-                            PillButton(if (planeMore) "Menos opciones ▾" else "Más opciones ▴", selected = planeMore, enabled = connected) { planeMore = !planeMore }
-                            if (cad.planes.isNotEmpty() && plane.planeId == null) {
-                                var savedOpen by remember { mutableStateOf(false) }
-                                Box {
-                                    PillButton("Planos guardados", enabled = connected) { savedOpen = true }
-                                    DropdownMenu(savedOpen, onDismissRequest = { savedOpen = false }) {
-                                        if (capabilities.planePurge) DropdownMenuItem(text = { Text("Limpiar planos sin usar") }, onClick = {
-                                            savedOpen = false; command("cad.session.cancel"); command("cad.plane.purge")
-                                        })
-                                        cad.planes.forEach { saved ->
-                                            // Qué bocetos usa cada plano: el nombre solo dice de dónde salió.
-                                            val users = cad.sketches.filter { it.planeId == saved.id }.joinToString(", ") { it.name }
-                                            DropdownMenuItem(text = { Text("${saved.name} (${users.ifEmpty { "sin usar" }}) · ${if (cad.operation == "SPLIT") "plano de corte" else "nuevo croquis"}") }, onClick = {
-                                                savedOpen = false; command("cad.session.cancel");
-                                                if (cad.operation == "SPLIT") command("cad.plane.begin", "plane_id" to saved.id, "split_body_id" to cad.activeBodyId)
-                                                else command("cad.sketch.create", "plane_id" to saved.id)
-                                            })
-                                            if (cad.operation != "SPLIT") DropdownMenuItem(text = { Text("${saved.name} (${users.ifEmpty { "sin usar" }}) · recolocar") }, onClick = {
-                                                savedOpen = false; command("cad.plane.begin", "plane_id" to saved.id, "split_body_id" to cad.activeBodyId.takeIf { cad.operation == "SPLIT" })
-                                            })
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        if (cad.operationControls != null) {
-                            val controls = cad.operationControls
-                            fun change(values: Map<String, Any?>) {
-                                val pick = values.keys.firstOrNull { it.startsWith("pick_") }
-                                if (pick != null) { vm.cadPickParameter(pick, if (dynamicPreview) "SESSION" else controls.id); return }
-                                values.keys.forEach { drafts.remove(it) }
-                                if (dynamicPreview) command("cad.operation.update", *values.entries.map { it.key to it.value }.toTypedArray())
-                                else command("cad.feature.set", "feature_id" to controls.id, *values.entries.map { it.key to it.value }.toTypedArray())
-                            }
-                            CadOperationFields(controls, unit, connected, drafts, ::acceptValues, ::change)
-                            if (!dynamicPreview && feature != null) {
-                            }
-                        } else if (depthPreview) {
-                            PillButton("Una dirección", selected = cad.extent == "ONE" && state.cadFacePick == null, enabled = connected) {
-                                command("cad.extrude.update", "extent" to "ONE")
-                            }
-                            PillButton(if (cad.operation == "EXTRUDE") "Simetría" else "Dos direcciones", selected = cad.extent == "BOTH" && state.cadFacePick == null, enabled = connected) {
-                                command("cad.extrude.update", "extent" to "BOTH")
-                            }
-                            PillButton("Hasta cara", selected = cad.extent == "TO_FACE" || state.cadFacePick == "SESSION", enabled = connected) {
-                                vm.cadPickEndFace(if (state.cadFacePick == "SESSION") null else "SESSION")
-                            }
-                            if (cad.operation == "CUT") PillButton("Perforar todo", selected = cad.extent == "THROUGH_ALL" && state.cadFacePick == null, enabled = connected) {
-                                focusManager.clearFocus(); drafts.remove("depth")
-                                command("cad.extrude.update", "extent" to "THROUGH_ALL")
-                            }
-                            if (cad.extent == "TO_FACE") {
-                                Text("Termina en la cara elegida", color = Ink.Muted, fontSize = 12.sp)
-                            } else if (cad.extent == "THROUGH_ALL") {
-                                Text("Todo el grosor", color = Ink.Muted, fontSize = 12.sp)
-                            } else {
-                            if (cad.operation == "EXTRUDE" && cad.extent != "BOTH" && cad.positiveDirection.isNotEmpty()) {
-                                val magnitude = kotlin.math.abs(cad.depth).coerceAtLeast(cad.step)
-                                PillButton(cad.positiveDirection, selected = cad.depth >= 0, enabled = connected) {
-                                    command("cad.extrude.update", "depth" to magnitude)
-                                }
-                                PillButton(cad.negativeDirection, selected = cad.depth < 0, enabled = connected) {
-                                    command("cad.extrude.update", "depth" to -magnitude)
-                                }
-                            }
-                            fun preview(value: Double) { drafts.remove("depth"); command("cad.extrude.update", "depth" to value) }
-                            CadDimension("Profundidad", cad.depth, unit, cad.sessionId.orEmpty(), step = cad.step,
-                                minimum = if (cad.operation == "EXTRUDE") -10000.0 else .0000001, enabled = connected, onNudge = ::preview,
-                                onDone = { drafts["depth"]?.let(::preview) }) { drafts["depth"] = it }
-                            }
-                        } else if (shellPreview) {
-                            fun preview(value: Double) { drafts.remove("thickness"); command("cad.shell.update", "thickness" to value) }
-                            CadDimension("Grosor", cad.thickness, unit, cad.sessionId.orEmpty(), step = cad.step,
-                                minimum = .0000001, enabled = connected, onNudge = ::preview,
-                                onDone = { drafts["thickness"]?.let(::preview) }) { drafts["thickness"] = it }
-                            CadShellSideControl(cad.side, connected && validDrafts) { side ->
-                                drafts["thickness"]?.let(::preview)
-                                command("cad.shell.update", "side" to side)
-                            }
-                        } else if (finishPreview) {
-                            fun preview(value: Double) { drafts.remove("width"); command("cad.finish.update", "width" to value) }
-                            CadDimension("Ancho", cad.width, unit, cad.sessionId.orEmpty(), step = cad.step,
-                                minimum = .0000001, enabled = connected, onNudge = ::preview,
-                                onDone = { drafts["width"]?.let(::preview) }) { drafts["width"] = it }
-                            if (cad.operation == "FILLET") CadCountControl("Segmentos", cad.segments, 1..16, connected) {
-                                command("cad.finish.update", "segments" to it)
-                            }
-                        } else if (feature?.isMirror == true) {
-                            CadMirrorPlaneSelector(feature.mirrorPlane, connected && drafts.isEmpty()) {
-                                command("cad.feature.set", "feature_id" to feature.id, "plane" to it)
-                            }
-                            CadDimension("Posición del plano", drafts["mirror_offset"] ?: feature.mirrorOffset, unit, feature.id,
-                                step = cad.step, minimum = -10000.0, enabled = connected, onDone = ::acceptValues) { drafts["mirror_offset"] = it }
-                            PillButton("Operación fuente", enabled = connected) {
-                                command("cad.select", "kind" to "FEATURE", "id" to feature.mirrorSourceId)
-                            }
-                        } else if (feature?.type == "SHELL") {
-                            CadDimension("Grosor", drafts["thickness"] ?: feature.thickness, unit, feature.id,
-                                step = cad.step, minimum = .0000001, enabled = connected, onDone = ::acceptValues) { drafts["thickness"] = it }
-                            CadShellSideControl(feature.side, connected && validDrafts) { side ->
-                                command("cad.feature.set", "feature_id" to feature.id, "side" to side,
-                                    "thickness" to (drafts["thickness"] ?: feature.thickness))
-                                drafts.remove("thickness")
-                            }
-                        } else if (feature?.isFinish == true) {
-                            CadDimension("Ancho", drafts["width"] ?: feature.width, unit, feature.id,
-                                step = cad.step, minimum = .0000001, enabled = connected, onDone = ::acceptValues) { drafts["width"] = it }
-                            if (feature.type == "FILLET") CadCountControl("Segmentos", feature.segments, 1..16, connected && drafts.isEmpty()) {
-                                command("cad.feature.set", "feature_id" to feature.id, "segments" to it)
-                            }
-                            Text("${feature.edgeCount} aristas", color = Ink.Muted, fontSize = 12.sp)
-                        } else if (feature?.type == "REVOLVE") {
-                            CadDimension("Ángulo", drafts["angle"] ?: feature.angle, unit, feature.id + "angle", degrees = true, step = 15.0,
-                                minimum = .01, maximum = 360.0, enabled = connected, onDone = ::acceptValues) { drafts["angle"] = it }
-                            val lines = cad.sketches.firstOrNull { it.id == feature.sketchId }?.entities.orEmpty().filter { it.type == "LINE" && it.construction }
-                            (listOf("Y" to "Eje Y", "X" to "Eje X") + lines.mapIndexed { i, line -> line.id to "Eje línea ${i + 1}" }).forEach { (axis, label) ->
-                                PillButton(label, selected = feature.axis == axis, enabled = connected && drafts.isEmpty()) {
-                                    command("cad.feature.set", "feature_id" to feature.id, "axis" to axis)
-                                }
-                            }
-                        } else if (feature?.type == "HELIX") {
-                            CadDimension("Paso", drafts["pitch"] ?: feature.pitch, unit, feature.id + "pitch",
-                                step = cad.step, minimum = .0000001, enabled = connected, onDone = ::acceptValues) { drafts["pitch"] = it }
-                            CadCountControl("Vueltas", kotlin.math.round(feature.turns).toInt().coerceAtLeast(1), 1..200, connected && drafts.isEmpty()) {
-                                command("cad.feature.set", "feature_id" to feature.id, "turns" to it)
-                            }
-                            listOf("RIGHT" to "Derecha", "LEFT" to "Izquierda").forEach { (hand, label) ->
-                                PillButton(label, selected = feature.hand == hand, enabled = connected && drafts.isEmpty()) {
-                                    command("cad.feature.set", "feature_id" to feature.id, "hand" to hand)
-                                }
-                            }
-                            val lines = cad.sketches.firstOrNull { it.id == feature.sketchId }?.entities.orEmpty().filter { it.type == "LINE" && it.construction }
-                            (listOf("Y" to "Eje Y", "X" to "Eje X") + lines.mapIndexed { i, line -> line.id to "Eje línea ${i + 1}" }).forEach { (axis, label) ->
-                                PillButton(label, selected = feature.axis == axis, enabled = connected && drafts.isEmpty()) {
-                                    command("cad.feature.set", "feature_id" to feature.id, "axis" to axis)
-                                }
-                            }
-                        } else if (feature?.type == "LOFT" || feature?.type == "SWEEP") {
-                        } else if (offsetPlane != null) {
-                            CadDimension("Separación Z", drafts["offset"] ?: offsetPlane.translation.getOrElse(2) { 0.0 }, unit, offsetPlane.id,
-                                step = cad.step, enabled = connected, onDone = ::acceptValues) { drafts["offset"] = it }
-                        } else feature?.let { selected ->
-                            if (selected.type == "CUT" || selected.type == "EXTRUDE") {
-                                PillButton("Una dirección", selected = selected.extent == "ONE" && state.cadFacePick == null, enabled = connected) {
-                                    command("cad.feature.set", "feature_id" to selected.id, "extent" to "ONE")
-                                }
-                                PillButton(if (selected.type == "EXTRUDE") "Simetría" else "Dos direcciones", selected = selected.extent == "BOTH" && state.cadFacePick == null, enabled = connected) {
-                                    command("cad.feature.set", "feature_id" to selected.id, "extent" to "BOTH")
-                                }
-                                PillButton("Hasta cara", selected = selected.extent == "TO_FACE" || state.cadFacePick == selected.id, enabled = connected) {
-                                    vm.cadPickEndFace(if (state.cadFacePick == selected.id) null else selected.id)
-                                }
-                                if (selected.type == "CUT") PillButton("Perforar todo", selected = selected.extent == "THROUGH_ALL" && state.cadFacePick == null, enabled = connected) {
-                                    focusManager.clearFocus(); drafts.remove("depth")
-                                    command("cad.feature.set", "feature_id" to selected.id, "extent" to "THROUGH_ALL")
-                                }
-                            }
-                            if (selected.extent == "TO_FACE") Text("Termina en la cara elegida", color = Ink.Muted, fontSize = 12.sp)
-                            else if (selected.extent == "THROUGH_ALL") Text("Todo el grosor", color = Ink.Muted, fontSize = 12.sp)
-                            else CadDimension("Profundidad", drafts["depth"] ?: selected.depth, unit, selected.id,
-                                step = cad.step, minimum = if (selected.type == "EXTRUDE") -10000.0 else .0000001,
-                                enabled = connected, onDone = ::acceptValues) { drafts["depth"] = it }
+            if (editing && editingConstraint == null && pendingDimension == null) {
+                CadRelationalDimensions(cad, capabilities.constraints, unit, connected && !cad.sessionActive, vm)
+            }
+            pendingDimension?.let { type ->
+                val angle = type == "ANGLE"
+                CadDimension(if (type == "FILLET") "Radio" else cadLabel(type), drafts["constraint"] ?: cad.dimensionOptions[type]?.value ?: cad.step * 5, unit, type,
+                    degrees = angle, step = if (angle) 1.0 else cad.step, maximum = if (angle) 180.0 else 10000.0,
+                    // Distancia 0 entre dos puntos los une (coincidencia).
+                    enabled = connected, minimum = if (angle || type in listOf("DISTANCE", "DISTANCE_X", "DISTANCE_Y")) 0.0 else .0000001,
+                    onDone = ::acceptValues) { drafts["constraint"] = it }
+            }
+            if (editing && state.cadTool == "NGON" && entity == null) {
+                CadSidesControl(state.cadNgonSides, enabled = !cad.sessionActive) { vm.cadNgonSides(it) }
+            }
+            if (editing && state.cadTool == "GEAR" && entity == null) {
+                CadCountControl("Dientes", state.cadGearTeeth, 6..150, enabled = !cad.sessionActive) { vm.cadGearTeeth(it) }
+            }
+            entity?.let { selected ->
+                if (selected.type == "GEAR") {
+                    val editable = connected && !livePreview && drafts.isEmpty()
+                    CadCountControl("Dientes", selected.values["teeth"]?.toInt() ?: 20, 6..150, editable) {
+                        command("cad.entity.set", "entity_id" to selected.id, "values" to mapOf("teeth" to it))
+                    }
+                    listOf(14.5, 20.0, 25.0).forEach { angle ->
+                        PillButton("${formatToolDistance(angle, 1)}°", selected = selected.values["pressure"] == angle, enabled = editable) {
+                            command("cad.entity.set", "entity_id" to selected.id, "values" to mapOf("pressure" to angle))
                         }
                     }
                 }
-                if (hasValues && !livePreview) {
-                    TrayExits(onCancel = ::discardValues, onConfirm = ::acceptValues, confirmEnabled = canAccept)
+                if (selected.type == "NGON") {
+                    val sides = selected.values["sides"]?.toInt() ?: 6
+                    CadSidesControl(sides, enabled = connected && !livePreview && drafts.isEmpty()) {
+                        command("cad.entity.set", "entity_id" to selected.id, "values" to mapOf("sides" to it))
+                    }
                 }
+                if (selected.type in listOf("CIRCLE", "SLOT") && selected.dimensions.any { it.field == "radius" }) {
+                    PillButton("Radio", selected = !showDiameter, enabled = drafts.isEmpty()) { showDiameter = false }
+                    PillButton(if (selected.type == "SLOT") "Ancho" else "Diámetro", selected = showDiameter, enabled = drafts.isEmpty()) { showDiameter = true }
+                }
+                // Solo medidas: la posición se fija con candados y cotas a otros
+                // puntos (origen, esquinas, centros), no escribiendo coordenadas.
+                // El ángulo del arco/redondeo es una medida más, con su candado.
+                val measures = cadDisplayMeasures(selected, showDiameter)
+                val fields = measures.map { it.field to it.label }
+                fields.forEach { (field, label) ->
+                    val measure = measures.firstOrNull { it.field == field }
+                    val degrees = measure?.constraintType == "ANGLE"
+                    val bound = measure?.constraintIds?.isNotEmpty() == true
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CadDimension(label + if (measure != null) if (bound) " · cota" else " · sin cota" else "",
+                            drafts[field] ?: selected.values[field] ?: 0.0, unit, selected.id + field,
+                            degrees = degrees, step = if (degrees) 1.0 else cad.step, enabled = connected, readOnly = livePreview,
+                            minimum = if (degrees) -359.99 else if (measure != null) .0000001 else -10000.0,
+                            maximum = if (field == "sweep") 359.99 else 10000.0,
+                            onDone = ::acceptValues) { drafts[field] = it?.takeIf { value -> field != "sweep" || kotlin.math.abs(value) in .01..359.99 } }
+                        if (measure != null && measure.lockable) CadAction("DIMENSION_LOCK", (if (bound) "Quitar cota: " else "Fijar medida: ") + label,
+                            selected = bound, enabled = connected && !livePreview && drafts.isEmpty()) {
+                            if (bound) command("cad.constraint.delete", "constraint_id" to measure.constraintIds.first())
+                            else command("cad.constraint.add", "type" to measure.constraintType,
+                                "value" to ((selected.values[field] ?: 0.0) * measure.valueFactor),
+                                "refs" to measure.refs.map { mapOf("id" to it.id, "part" to it.part) })
+                        }
+                    }
+                }
+            }
+            if (!editing && !cad.sessionActive && "CUT" in capabilities.features) {
+                var expanded by remember { mutableStateOf(false) }
+                Box {
+                    PillButton("Destino: ${cad.bodies.firstOrNull { it.id == target?.bodyId }?.name ?: "elegir cuerpo"}", enabled = connected && targets.isNotEmpty()) { expanded = true }
+                    DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
+                        targets.forEach { item -> DropdownMenuItem(text = { Text(cad.bodies.firstOrNull { it.id == item.bodyId }?.name ?: item.name) }, onClick = { cutTarget = item.bodyId; expanded = false }) }
+                    }
+                }
+            }
+            if (cad.sessionActive && cad.operation == "POLYGON") {
+                PillButton("Cerrar polígono", enabled = connected && cad.canClose) { vm.cadCommand("cad.polygon.close") }
+                TrayExits(onCancel = { vm.cadCommand("cad.session.cancel") })
+            }
+            if (planePreview) cad.plane?.let { plane ->
+                val id = cad.sessionId.orEmpty()
+                CadDimension("Separación", plane.offset, unit, id + "offset", step = cad.step, enabled = connected,
+                    onNudge = { sendPlane(offset = it) }, onDone = { drafts["plane_offset"]?.let { sendPlane(offset = it) } }) { drafts["plane_offset"] = it }
+                PillButton(if (planeMore) "Menos opciones ▾" else "Más opciones ▴", selected = planeMore, enabled = connected) { planeMore = !planeMore }
+                if (cad.planes.isNotEmpty() && plane.planeId == null) {
+                    var savedOpen by remember { mutableStateOf(false) }
+                    Box {
+                        PillButton("Planos guardados", enabled = connected) { savedOpen = true }
+                        DropdownMenu(savedOpen, onDismissRequest = { savedOpen = false }) {
+                            if (capabilities.planePurge) DropdownMenuItem(text = { Text("Limpiar planos sin usar") }, onClick = {
+                                savedOpen = false; command("cad.session.cancel"); command("cad.plane.purge")
+                            })
+                            cad.planes.forEach { saved ->
+                                // Qué bocetos usa cada plano: el nombre solo dice de dónde salió.
+                                val users = cad.sketches.filter { it.planeId == saved.id }.joinToString(", ") { it.name }
+                                DropdownMenuItem(text = { Text("${saved.name} (${users.ifEmpty { "sin usar" }}) · ${if (cad.operation == "SPLIT") "plano de corte" else "nuevo croquis"}") }, onClick = {
+                                    savedOpen = false; command("cad.session.cancel");
+                                    if (cad.operation == "SPLIT") command("cad.plane.begin", "plane_id" to saved.id, "split_body_id" to cad.activeBodyId)
+                                    else command("cad.sketch.create", "plane_id" to saved.id)
+                                })
+                                if (cad.operation != "SPLIT") DropdownMenuItem(text = { Text("${saved.name} (${users.ifEmpty { "sin usar" }}) · recolocar") }, onClick = {
+                                    savedOpen = false; command("cad.plane.begin", "plane_id" to saved.id, "split_body_id" to cad.activeBodyId.takeIf { cad.operation == "SPLIT" })
+                                })
+                            }
+                        }
+                    }
+                }
+            }
+            if (cad.operationControls != null) {
+                val controls = cad.operationControls
+                fun change(values: Map<String, Any?>) {
+                    val pick = values.keys.firstOrNull { it.startsWith("pick_") }
+                    if (pick != null) { vm.cadPickParameter(pick, if (dynamicPreview) "SESSION" else controls.id); return }
+                    values.keys.forEach { drafts.remove(it) }
+                    if (dynamicPreview) command("cad.operation.update", *values.entries.map { it.key to it.value }.toTypedArray())
+                    else command("cad.feature.set", "feature_id" to controls.id, *values.entries.map { it.key to it.value }.toTypedArray())
+                }
+                CadOperationFields(controls, unit, connected, drafts, ::acceptValues, ::change)
+                if (!dynamicPreview && feature != null) {
+                }
+            } else if (depthPreview) {
+                PillButton("Una dirección", selected = cad.extent == "ONE" && state.cadFacePick == null, enabled = connected) {
+                    command("cad.extrude.update", "extent" to "ONE")
+                }
+                PillButton(if (cad.operation == "EXTRUDE") "Simetría" else "Dos direcciones", selected = cad.extent == "BOTH" && state.cadFacePick == null, enabled = connected) {
+                    command("cad.extrude.update", "extent" to "BOTH")
+                }
+                PillButton("Hasta cara", selected = cad.extent == "TO_FACE" || state.cadFacePick == "SESSION", enabled = connected) {
+                    vm.cadPickEndFace(if (state.cadFacePick == "SESSION") null else "SESSION")
+                }
+                if (cad.operation == "CUT") PillButton("Perforar todo", selected = cad.extent == "THROUGH_ALL" && state.cadFacePick == null, enabled = connected) {
+                    focusManager.clearFocus(); drafts.remove("depth")
+                    command("cad.extrude.update", "extent" to "THROUGH_ALL")
+                }
+                if (cad.extent == "TO_FACE") {
+                    Text("Termina en la cara elegida", color = Ink.Muted, fontSize = 12.sp)
+                } else if (cad.extent == "THROUGH_ALL") {
+                    Text("Todo el grosor", color = Ink.Muted, fontSize = 12.sp)
+                } else {
+                if (cad.operation == "EXTRUDE" && cad.extent != "BOTH" && cad.positiveDirection.isNotEmpty()) {
+                    val magnitude = kotlin.math.abs(cad.depth).coerceAtLeast(cad.step)
+                    PillButton(cad.positiveDirection, selected = cad.depth >= 0, enabled = connected) {
+                        command("cad.extrude.update", "depth" to magnitude)
+                    }
+                    PillButton(cad.negativeDirection, selected = cad.depth < 0, enabled = connected) {
+                        command("cad.extrude.update", "depth" to -magnitude)
+                    }
+                }
+                fun preview(value: Double) { drafts.remove("depth"); command("cad.extrude.update", "depth" to value) }
+                CadDimension("Profundidad", cad.depth, unit, cad.sessionId.orEmpty(), step = cad.step,
+                    minimum = if (cad.operation == "EXTRUDE") -10000.0 else .0000001, enabled = connected, onNudge = ::preview,
+                    onDone = { drafts["depth"]?.let(::preview) }) { drafts["depth"] = it }
+                }
+            } else if (shellPreview) {
+                fun preview(value: Double) { drafts.remove("thickness"); command("cad.shell.update", "thickness" to value) }
+                CadDimension("Grosor", cad.thickness, unit, cad.sessionId.orEmpty(), step = cad.step,
+                    minimum = .0000001, enabled = connected, onNudge = ::preview,
+                    onDone = { drafts["thickness"]?.let(::preview) }) { drafts["thickness"] = it }
+                CadShellSideControl(cad.side, connected && validDrafts) { side ->
+                    drafts["thickness"]?.let(::preview)
+                    command("cad.shell.update", "side" to side)
+                }
+            } else if (finishPreview) {
+                fun preview(value: Double) { drafts.remove("width"); command("cad.finish.update", "width" to value) }
+                CadDimension("Ancho", cad.width, unit, cad.sessionId.orEmpty(), step = cad.step,
+                    minimum = .0000001, enabled = connected, onNudge = ::preview,
+                    onDone = { drafts["width"]?.let(::preview) }) { drafts["width"] = it }
+                if (cad.operation == "FILLET") CadCountControl("Segmentos", cad.segments, 1..16, connected) {
+                    command("cad.finish.update", "segments" to it)
+                }
+            } else if (feature?.isMirror == true) {
+                CadMirrorPlaneSelector(feature.mirrorPlane, connected && drafts.isEmpty()) {
+                    command("cad.feature.set", "feature_id" to feature.id, "plane" to it)
+                }
+                CadDimension("Posición del plano", drafts["mirror_offset"] ?: feature.mirrorOffset, unit, feature.id,
+                    step = cad.step, minimum = -10000.0, enabled = connected, onDone = ::acceptValues) { drafts["mirror_offset"] = it }
+                PillButton("Operación fuente", enabled = connected) {
+                    command("cad.select", "kind" to "FEATURE", "id" to feature.mirrorSourceId)
+                }
+            } else if (feature?.type == "SHELL") {
+                CadDimension("Grosor", drafts["thickness"] ?: feature.thickness, unit, feature.id,
+                    step = cad.step, minimum = .0000001, enabled = connected, onDone = ::acceptValues) { drafts["thickness"] = it }
+                CadShellSideControl(feature.side, connected && validDrafts) { side ->
+                    command("cad.feature.set", "feature_id" to feature.id, "side" to side,
+                        "thickness" to (drafts["thickness"] ?: feature.thickness))
+                    drafts.remove("thickness")
+                }
+            } else if (feature?.isFinish == true) {
+                CadDimension("Ancho", drafts["width"] ?: feature.width, unit, feature.id,
+                    step = cad.step, minimum = .0000001, enabled = connected, onDone = ::acceptValues) { drafts["width"] = it }
+                if (feature.type == "FILLET") CadCountControl("Segmentos", feature.segments, 1..16, connected && drafts.isEmpty()) {
+                    command("cad.feature.set", "feature_id" to feature.id, "segments" to it)
+                }
+                Text("${feature.edgeCount} aristas", color = Ink.Muted, fontSize = 12.sp)
+            } else if (feature?.type == "REVOLVE") {
+                CadDimension("Ángulo", drafts["angle"] ?: feature.angle, unit, feature.id + "angle", degrees = true, step = 15.0,
+                    minimum = .01, maximum = 360.0, enabled = connected, onDone = ::acceptValues) { drafts["angle"] = it }
+                val lines = cad.sketches.firstOrNull { it.id == feature.sketchId }?.entities.orEmpty().filter { it.type == "LINE" && it.construction }
+                (listOf("Y" to "Eje Y", "X" to "Eje X") + lines.mapIndexed { i, line -> line.id to "Eje línea ${i + 1}" }).forEach { (axis, label) ->
+                    PillButton(label, selected = feature.axis == axis, enabled = connected && drafts.isEmpty()) {
+                        command("cad.feature.set", "feature_id" to feature.id, "axis" to axis)
+                    }
+                }
+            } else if (feature?.type == "HELIX") {
+                CadDimension("Paso", drafts["pitch"] ?: feature.pitch, unit, feature.id + "pitch",
+                    step = cad.step, minimum = .0000001, enabled = connected, onDone = ::acceptValues) { drafts["pitch"] = it }
+                CadCountControl("Vueltas", kotlin.math.round(feature.turns).toInt().coerceAtLeast(1), 1..200, connected && drafts.isEmpty()) {
+                    command("cad.feature.set", "feature_id" to feature.id, "turns" to it)
+                }
+                listOf("RIGHT" to "Derecha", "LEFT" to "Izquierda").forEach { (hand, label) ->
+                    PillButton(label, selected = feature.hand == hand, enabled = connected && drafts.isEmpty()) {
+                        command("cad.feature.set", "feature_id" to feature.id, "hand" to hand)
+                    }
+                }
+                val lines = cad.sketches.firstOrNull { it.id == feature.sketchId }?.entities.orEmpty().filter { it.type == "LINE" && it.construction }
+                (listOf("Y" to "Eje Y", "X" to "Eje X") + lines.mapIndexed { i, line -> line.id to "Eje línea ${i + 1}" }).forEach { (axis, label) ->
+                    PillButton(label, selected = feature.axis == axis, enabled = connected && drafts.isEmpty()) {
+                        command("cad.feature.set", "feature_id" to feature.id, "axis" to axis)
+                    }
+                }
+            } else if (feature?.type == "LOFT" || feature?.type == "SWEEP") {
+            } else if (offsetPlane != null) {
+                CadDimension("Separación Z", drafts["offset"] ?: offsetPlane.translation.getOrElse(2) { 0.0 }, unit, offsetPlane.id,
+                    step = cad.step, enabled = connected, onDone = ::acceptValues) { drafts["offset"] = it }
+            } else feature?.let { selected ->
+                if (selected.type == "CUT" || selected.type == "EXTRUDE") {
+                    PillButton("Una dirección", selected = selected.extent == "ONE" && state.cadFacePick == null, enabled = connected) {
+                        command("cad.feature.set", "feature_id" to selected.id, "extent" to "ONE")
+                    }
+                    PillButton(if (selected.type == "EXTRUDE") "Simetría" else "Dos direcciones", selected = selected.extent == "BOTH" && state.cadFacePick == null, enabled = connected) {
+                        command("cad.feature.set", "feature_id" to selected.id, "extent" to "BOTH")
+                    }
+                    PillButton("Hasta cara", selected = selected.extent == "TO_FACE" || state.cadFacePick == selected.id, enabled = connected) {
+                        vm.cadPickEndFace(if (state.cadFacePick == selected.id) null else selected.id)
+                    }
+                    if (selected.type == "CUT") PillButton("Perforar todo", selected = selected.extent == "THROUGH_ALL" && state.cadFacePick == null, enabled = connected) {
+                        focusManager.clearFocus(); drafts.remove("depth")
+                        command("cad.feature.set", "feature_id" to selected.id, "extent" to "THROUGH_ALL")
+                    }
+                }
+                if (selected.extent == "TO_FACE") Text("Termina en la cara elegida", color = Ink.Muted, fontSize = 12.sp)
+                else if (selected.extent == "THROUGH_ALL") Text("Todo el grosor", color = Ink.Muted, fontSize = 12.sp)
+                else CadDimension("Profundidad", drafts["depth"] ?: selected.depth, unit, selected.id,
+                    step = cad.step, minimum = if (selected.type == "EXTRUDE") -10000.0 else .0000001,
+                    enabled = connected, onDone = ::acceptValues) { drafts["depth"] = it }
             }
         }
     }
 
 }
 
-/** Frequent sketch actions form their own group next to undo/redo. */
+
 
 
 internal fun cadHasProjectedCurves(cad: CadState): Boolean =
@@ -904,7 +900,7 @@ internal fun cadWeldEnabled(cad: CadState): Boolean = cad.selection.distinct().s
     }
 }
 
-/** Contexto CAD en la fila del ojo junto a Deshacer/Rehacer, como Materiales: sin franja propia. */
+/** Acciones de boceto en el mismo rail izquierdo que las operaciones CAD. */
 @Composable
 fun CadToolContext(state: AppUiState, vm: MainViewModel) {
     val cad = state.blender.cad

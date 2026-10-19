@@ -61,6 +61,7 @@ object AppIcons {
     val Reset: ImageVector get() = StudioIcons["RESET"]
     val Frame: ImageVector get() = StudioIcons["FRAME"]
     val Multires: ImageVector get() = StudioIcons["MULTIRES"]
+    val ModeCad: ImageVector get() = StudioIcons["CAD_MODE"]
     val Reference: ImageVector get() = StudioIcons["REFERENCE"]
     val More: ImageVector get() = StudioIcons["MORE"]
     val Collection: ImageVector get() = StudioIcons["COLLECTION"]

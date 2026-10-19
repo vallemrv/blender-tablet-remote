@@ -79,7 +79,7 @@ fun BoxScope.MaterialWorkspace(state: AppUiState, vm: MainViewModel) {
     }
     // La biblioteca ocupa el sitio del inspector de modificadores —bajo el rail de
     // modos, con su mismo margen— y se abre y se cierra igual que él. El contexto
-    // (objetos, aislar, zona, luz) vive arriba, en la fila de Deshacer/Rehacer.
+    // (objetos, zona, luz) vive dentro del inspector. Aislar pertenece al radial.
     val railHeight = (LocalConfiguration.current.screenHeightDp - 260).coerceAtLeast(120).dp
 
     MaterialToolRail(

@@ -51,4 +51,22 @@ class SurfaceCoherenceTest {
         assertTrue(app.contains("cadRadialActions"))
         assertTrue(app.contains("contextKeys = if (state.blender.cad.workspace"))
     }
+    @Test fun commonControlsKeepTheirZonesAndCadUsesOneLine() {
+        val app = source("BlenderTabletApp")
+        val rail = app.substringAfter("private fun RailContent(").substringBefore("private fun deleteWhat")
+        assertFalse(rail.contains("AppIcons.SelectTool"))
+        assertFalse(rail.contains("AppIcons.Debug"))
+        assertTrue(source("MenuBar").contains("AppIcons.Debug"))
+        assertFalse(source("MenuBar").contains("onReferences"))
+        assertTrue(app.contains("ReferencePanel(Modifier.align(Alignment.TopEnd)"))
+        val modes = source("TopToolbar").substringAfter("fun ModeRail(").substringBefore("fun SelectionHelperRail(")
+        assertFalse(modes.contains("Object Mode")); assertFalse(modes.contains("Edit Mode"))
+        assertTrue(modes.contains("AppIcons.ModeCad"))
+        assertFalse(modes.contains("PillButton(\"CAD\""))
+        val cad = source("CadWorkspace")
+        assertTrue(cad.contains("SingleLineTray("))
+        assertTrue(cad.contains("HoverHelp(title = \"Ayuda CAD\""))
+        assertFalse(cad.contains("top = 120.dp, bottom = 160.dp"))
+    }
+
 }

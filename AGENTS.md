@@ -145,8 +145,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   crea un undo, cancelación/desconexión restaura y guardar descarta la preview.
 - CAD usa la misma entrada y vídeo. El overlay de sketches se proyecta en backend
   y se dibuja en el rectángulo del vídeo en Android; no persiste píxeles como geometría.
-- La vista CAD aísla temporalmente sus resultados y restaura la visibilidad previa
-  al salir. Los `.blend` y estados de undo conservan la visibilidad de la escena.
+- La acción Aislar del radial CAD aísla temporalmente la pieza elegida y restaura
+  la visibilidad previa al desactivarla o salir. Los `.blend` y estados de undo conservan la visibilidad de la escena.
 - La migración CAD ha terminado: OpenCascade (`cad/occt.py`) es el único motor
   de sólidos y OCP es obligatorio. Vive en un directorio privado
   (`~/.local/share/blender-tablet-remote/occt`, `tools/install_occt.sh`) y solo lo
@@ -220,8 +220,8 @@ nuevas superficies y la adaptación gradual de las existentes.
 | Zona | Responsabilidad |
 | --- | --- |
 | Rail izquierdo | Herramientas de uso frecuente que cambian la intención del gesto: seleccionar, mover, rotar, escalar, Tweak y herramientas propias del modo. Permanece abierto; admite desplazamiento vertical cuando haga falta. |
-| Rail derecho | Acceso e inspectores contextuales: modificadores, pila CAD, biblioteca de materiales y sus propiedades. Comparten posición, márgenes, apertura y cierre; respetan el selector de modos y el pie de vistas. |
-| Barra superior (top) | Archivo, Escena, Outliner, conexión y controles generales de vista/historial. El selector de modos conserva su lugar bajo el ojo y deja CAD siempre al final. |
+| Rail derecho | Columna común SELECCIÓN (RESTRICCIONES geométricas dentro del boceto CAD) y acceso a inspectores contextuales: modificadores, pila CAD, biblioteca de materiales y sus propiedades. Comparten posición, márgenes, apertura y cierre; respetan el selector de modos y el pie de vistas. |
+| Barra superior (top) | Archivo, Escena, Outliner, conexión y Diagnóstico a la izquierda; Wireframe, Deshacer, Rehacer y Ojo a la derecha. El selector de modos conserva su lugar bajo el ojo y deja CAD siempre al final. |
 | Barra inferior (bottom) | Parámetros de la herramienta activa o propiedades del objeto seleccionado. Una única fila fina con scroll horizontal, usando `SingleLineTray` al adaptar una bandeja. |
 
 - Una acción conserva nombre, icono y comportamiento en todos sus accesos. Se
@@ -243,6 +243,33 @@ nuevas superficies y la adaptación gradual de las existentes.
 - Ningún texto auxiliar justifica aumentar la barra inferior a varias filas:
   mostrar un resumen corto o llevar el detalle a la ayuda. El scroll conserva el
   tamaño de los controles y los paneles vecinos reservan solo la altura real.
+
+- El toque sustituye la selección en Objeto, Edición, Materiales y CAD. «＋ Añadir»
+  en el rail derecho alterna pertenencia; «Camino» en Edición arma el siguiente
+  toque de camino más corto, independiente de Añadir. Caja, Círculo, Pintar,
+  Todo/Ninguno, Invertir, Loop/Ring/Enlazado y Crecer/Decrecer solo viven ahí.
+  Seleccionar también se activa desde ese rail; el radial nunca selecciona.
+- El radial concentra Ocultar, Aislar, Duplicar, Renombrar y Borrar según contexto;
+  en CAD también Soldar. Outliner conserva su ojo. Las listas CAD seleccionan;
+  las restricciones se ven y borran en la pila. El rail de boceto crea solo
+  restricciones geométricas; las cotas (incluidas entre dos elementos) nacen de
+  la bandeja. El candado alterna la cota y Fijar punto usa una chincheta.
+- Nuevo plano, Editar y Finalizar boceto pertenecen al rail izquierdo CAD. El pie
+  de vistas permanece en el boceto con Girar 90°, Enderezar, proyección y Encuadrar.
+  CAD no aísla automáticamente: Aislar del radial conserva/restaura la visibilidad.
+- Proporcional vive en la bandeja Tweak/Transformar; Auto Merge y Manipulador en
+  el rail derecho. Los atajos Edit no repiten Cuchillo ni acciones del radial.
+- Los rails izquierdos comparten centrado vertical y cabeceras contextuales:
+  HERRAMIENTA/EDITAR, PINCEL, MODO/TRAZO y CROQUIS/OPERACIONES. Referencias se
+  abre desde un icono a la derecha, bajo los modos, con los márgenes del inspector.
+  Su ajuste local se llama Restablecer, sin confundirse con Encuadrar la escena.
+- Todos los modos usan iconos y nombres españoles: Objeto, Edición, Materiales,
+  Escultura y CAD al final. Dentro de CAD se conserva el selector completo;
+  los modos incompatibles con la pieza paramétrica permanecen deshabilitados.
+- La bandeja CAD usa SingleLineTray y TrayExits, con ayuda breve y detalle al
+  acercar el lápiz o pulsar Ayuda. Finalizar boceto y Aplicar modificador tienen
+  iconos propios distintos de Confirmar. Los controles de plano ampliados se
+  desplazan horizontalmente en la misma fila.
 
 ### Distribución y comportamiento por contexto
 
@@ -276,9 +303,8 @@ nuevas superficies y la adaptación gradual de las existentes.
   con dos dedos cancela el sondeo temporal, sin fijar otra cara.
 - Debajo del ojo hay un selector horizontal de modos; CAD solo aparece
   si el backend lo anuncia. Sculpt se habilita según `sculpt.available` sobre mallas;
-  Layouts se ha retirado. CAD permanece siempre al final del selector, después
-  de Object/Edit/Materiales/Sculpt. Dentro de CAD solo se muestran Object como
-  salida y, al final, CAD.
+  Layouts se ha retirado. CAD permanece siempre al final del selector; dentro de
+  CAD se muestran también los otros modos, con su disponibilidad contextual.
 - Sculpt usa pinceles nativos y la cámara remota; nunca escribe en `rv3d`.
   Radio se expresa como fracción de altura del vídeo. La presión real e histórica
   del lápiz gobierna fuerza/radio por separado; cero conserva cero. Solo lápiz es
@@ -342,7 +368,7 @@ nuevas superficies y la adaptación gradual de las existentes.
   opacidad. La imagen va en una ventana sin fondo entre los controles: bajar la
   opacidad deja ver el modelo detrás. Importa copias privadas acotadas y conserva los originales; sus gestos
   quedan en el panel. No son planos 3D ni contenido del `.blend`.
-  Se abre desde Archivo → Imágenes de referencia; cerrado no ocupa la vista.
+  Se abre desde el icono Referencias del borde derecho; cerrado no ocupa la vista.
   «A Blender» copia además la imagen elegida a la escena (`reference.add`) como
   Imagen de referencia nativa: Empty de imagen empaquetado en el `.blend`, frente a la
   cámara de la tablet y con la opacidad del panel, en un undo. El tablero local sigue
@@ -356,8 +382,8 @@ nuevas superficies y la adaptación gradual de las existentes.
   con padres; la referencia activa también sirve de respaldo sin selección.
 - Object muestra una bandeja inferior de propiedades del activo cuando no hay
   herramientas ni sesiones: Posición XYZ, Rotación XYZ en grados y Tamaño.
-  Al principio de la bandeja, un ojo oculta/muestra el objeto y un icono distinto
-  alterna Mostrar delante. No hay sección Visibilidad ni campos Visible en vista
+  Al principio de la bandeja, un icono alterna Mostrar delante. Ocultar/mostrar
+  queda en el radial y Outliner, sin ojo duplicado en propiedades. No hay sección Visibilidad ni campos Visible en vista
   o Visible en render; las propiedades específicas de Imagen conservan su sección.
   Una única lista desplegable cambia de sección, sin pestañas mezcladas con campos.
   La sección elegida se recuerda por identidad de objeto fuera del ciclo de vida

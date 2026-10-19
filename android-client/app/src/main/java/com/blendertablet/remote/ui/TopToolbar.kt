@@ -22,19 +22,7 @@ import com.blendertablet.remote.model.ConnectionStatus
 import com.blendertablet.remote.model.SelectionMode
 import com.blendertablet.remote.model.Shading
 
-/**
- * Barra horizontal de tools, al lado del ojo (arriba a la derecha).
- *
- * Agrupa lo que se usa a cada toque sin abrir el rail: wireframe (toggle), los
- * el control Ctrl de camino más corto y undo/redo,
- * que salen del rail para quedarse aquí con iconos. La selección por caja B y círculo C
- * vive en el long-click (RADIAL); armada, un chip sobre el viewport la señala y
- * la desarma.
- *
- * La barra entera está fuera del chrome para que el ojo siga siendo alcanzable con
- * la interfaz oculta, pero con `chromeVisible == false` solo queda el ojo: si algo
- * de aquí sobreviviera, "ocultar controles" no ocultaría los controles.
- */
+/** Controles generales junto al ojo; al ocultar la interfaz solo permanece el ojo. */
 @Composable
 fun TopToolbar(
     state: AppUiState,
@@ -44,7 +32,6 @@ fun TopToolbar(
     modifier: Modifier = Modifier,
 ) {
     val blender = state.blender
-    val inEdit = !blender.cad.workspace && blender.mode == BlenderMode.EDIT
 
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         // Esta barra vive fuera del chrome porque tiene que sobrevivir al ojo, pero
@@ -53,12 +40,11 @@ fun TopToolbar(
         if (chromeVisible) {
             FloatingPanel {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    if (blender.features.shading && !blender.material.active) {
-                        IconAction(
-                            AppIcons.Wireframe, "Wireframe",
-                            selected = blender.view.shading == Shading.WIREFRAME,
-                        ) { vm.toggleShading() }
-                    }
+                    IconAction(
+                        AppIcons.Wireframe, "Wireframe",
+                        selected = blender.view.shading == Shading.WIREFRAME,
+                        enabled = blender.features.shading && !blender.material.active,
+                    ) { vm.toggleShading() }
                     IconAction(AppIcons.Undo, "Deshacer") { vm.undo() }
                     IconAction(AppIcons.Redo, "Rehacer") { vm.redo() }
                 }
@@ -112,33 +98,20 @@ fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier
         }
         FloatingPanel {
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                // CAD permanece al final; dentro de ese workspace Object permite salir.
-                if (!blender.cad.workspace) {
-                    IconAction(
-                        AppIcons.ModeObject, "Object Mode",
-                        selected = blender.mode == BlenderMode.OBJECT && !blender.cad.workspace && !blender.material.active,
-                    ) { vm.setMode(BlenderMode.OBJECT) }
-                    IconAction(
-                        AppIcons.ModeEdit, "Edit Mode",
-                        selected = inEdit,
-                        enabled = editable,
-                    ) { vm.setMode(BlenderMode.EDIT) }
-                    if (blender.material.available) IconAction(AppIcons.materials, "Materiales",
-                        selected = blender.material.active, enabled = blender.activeObjectType == "MESH") { vm.enterMaterials() }
-                }
-                if (blender.cad.workspace) {
-                    IconAction(
-                        AppIcons.ModeObject, "Salir de CAD a Object Mode",
-                    ) { vm.setMode(BlenderMode.OBJECT) }
-                } else {
-                    IconAction(
-                        AppIcons.sculpt("DRAW"), "Escultura",
-                        selected = blender.mode == BlenderMode.SCULPT,
-                        enabled = blender.sculpt.available && editable && blender.activeObjectType == "MESH",
-                        onClick = { vm.setMode(BlenderMode.SCULPT) },
-                    )
-                }
-                if (blender.features.cad.available) PillButton("CAD", selected = blender.cad.workspace) { vm.enterCad() }
+                IconAction(AppIcons.ModeObject, "Objeto",
+                    selected = blender.mode == BlenderMode.OBJECT && !blender.cad.workspace && !blender.material.active,
+                ) { vm.setMode(BlenderMode.OBJECT) }
+                IconAction(AppIcons.ModeEdit, "Edición", selected = inEdit,
+                    enabled = editable && blender.activeObjectType in setOf("MESH", "CURVE") && !blender.cad.workspace,
+                ) { vm.setMode(BlenderMode.EDIT) }
+                IconAction(AppIcons.materials, "Materiales", selected = blender.material.active,
+                    enabled = blender.material.available && blender.activeObjectType == "MESH" && !blender.cad.workspace,
+                ) { vm.enterMaterials() }
+                IconAction(AppIcons.sculpt("DRAW"), "Escultura",
+                    selected = blender.mode == BlenderMode.SCULPT,
+                    enabled = blender.sculpt.available && editable && blender.activeObjectType == "MESH" && !blender.cad.workspace,
+                ) { vm.setMode(BlenderMode.SCULPT) }
+                if (blender.features.cad.available) IconAction(AppIcons.ModeCad, "CAD", selected = blender.cad.workspace) { vm.enterCad() }
             }
         }
     }

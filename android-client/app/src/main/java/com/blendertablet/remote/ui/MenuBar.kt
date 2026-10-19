@@ -55,10 +55,10 @@ fun MenuBar(
         MenuAnchor("Archivo", onOpen = actions.onFileMenuOpened) { close ->
             fileMenu(state, actions, close)
         }
-        if (!state.blender.material.active && !state.blender.cad.workspace && state.blender.mode != BlenderMode.SCULPT) MenuAnchor("Objeto") { close -> objectMenu(state, actions, close) }
-        if (!state.blender.material.active && !state.blender.cad.workspace && state.blender.features.outliner) {
+        MenuAnchor("Escena") { close -> objectMenu(state, actions, close) }
+        if (state.blender.features.outliner) {
             OutlinerMenu(state.blender.outlinerObjects, state.connection == ConnectionStatus.CONNECTED,
-                objectActionsEnabled && state.blender.mode == BlenderMode.OBJECT,
+                objectActionsEnabled && state.blender.mode == BlenderMode.OBJECT && !state.blender.material.active && !state.blender.cad.workspace,
                 actions.onOutlinerOpened, actions.onOutlinerMove, actions.onOutlinerAction,
                 collections = state.blender.outlinerCollections, collectionsAvailable = state.blender.features.outlinerCollections,
                 onCollection = actions.onOutlinerCollection)
@@ -66,6 +66,7 @@ fun MenuBar(
         // Modificadores no es un menú: es un panel que se enseña o se esconde, así que
         // un icono conmutable dice más que un desplegable con una sola entrada.
         ConnectionMenu(state, fps, lagMs, streaming, host, actions)
+        IconAction(AppIcons.Debug, "Diagnóstico", selected = state.debugVisible, onClick = actions.onDebug)
 
         // El nombre del archivo, fuera de los menús: es lo que orienta de un vistazo.
         Text(
@@ -94,7 +95,7 @@ data class MenuActions(
     val onOutlinerCollection: (String, Map<String, Any?>) -> Unit,
     val onApplyTransform: (Boolean, Boolean, Boolean) -> Unit,
     val onModifiers: () -> Unit,
-    val onReferences: () -> Unit,
+    val onDebug: () -> Unit,
     val onCapture: () -> Unit,
     val onVersions: () -> Unit,
 )
@@ -130,7 +131,6 @@ private fun fileMenu(state: AppUiState, actions: MenuActions, close: () -> Unit)
     MenuLeaf("Nuevo") { close(); actions.onNew() },
     MenuLeaf("Abrir…", enabled = state.blender.features.fileBrowse) { close(); actions.onBrowseOpen() },
     MenuLeaf("Capturar escena…", enabled = state.connection == ConnectionStatus.CONNECTED) { close(); actions.onCapture() },
-    MenuLeaf("Imágenes de referencia…") { close(); actions.onReferences() },
     MenuLeaf("Versiones · ValleTrack…", enabled = state.blender.features.versioning) { close(); actions.onVersions() },
     MenuSeparator,
     // Una sola entrada "Guardar": sin ruta previa abre el diálogo de nombre por su
@@ -154,7 +154,7 @@ private fun objectMenu(state: AppUiState, actions: MenuActions, close: () -> Uni
         MenuGroup(
             group.label,
             SnapAction.of(group).map { snap ->
-                MenuLeaf(snap.label, enabled = !(snap.objectOnly && inEdit)) {
+                MenuLeaf(snap.label, enabled = !state.blender.cad.workspace && !state.blender.material.active && state.blender.mode != BlenderMode.SCULPT && !(snap.objectOnly && inEdit)) {
                     close()
                     actions.onSnap(snap)
                 }

@@ -62,6 +62,7 @@ internal object IconHelp {
         "SHORTEST_PATH" to "Selecciona el camino más corto de la malla entre dos elementos.",
         "SELECT_UNDER" to "Selecciona el objeto que está bajo el punto donde abriste el menú.",
         "SELECT_ADD_UNDER" to "Añade ese objeto a la selección que ya tienes.",
+        "CAD_MODE" to "Diseña bocetos acotados y piezas paramétricas con su historial de operaciones.",
         "OBJECT_MODE" to "Trabaja con objetos completos: selecciona, coloca y transforma cada pieza.",
         "EDIT_MODE" to "Edita los vértices, aristas y caras del objeto activo.",
         "VIEWS" to "Abre los controles para cambiar la orientación y la proyección de la vista.",
