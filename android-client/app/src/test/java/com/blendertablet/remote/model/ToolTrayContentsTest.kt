@@ -40,6 +40,7 @@ class ToolTrayContentsTest {
         assertFalse("profile" in one.advanced)
         val many=toolTrayContents(ToolSession(tool=EditTool.BEVEL,parameters=mapOf("segments" to 3)),SelectionMode.VERTEX)
         assertTrue("profile" in many.advanced);assertFalse("miter_outer" in many.advanced)
+        assertTrue("miter_outer" in toolTrayContents(ToolSession(tool=EditTool.BEVEL),SelectionMode.FACE).advanced)
     }
 
     @Test fun extrudeKeepsOnlyDistanceAndAxisAndParsesTypedUnitsAtAnySceneScale() {

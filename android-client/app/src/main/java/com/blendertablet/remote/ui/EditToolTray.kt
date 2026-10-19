@@ -202,8 +202,6 @@ private fun ToolControl(id: String, session: ToolSession, scale: Double, unit: L
     }
 }
 
-internal fun toggledInsetBoundary(boundary: Boolean): Boolean = !boundary
-
 @Composable
 fun KnifeTray(session: ToolSession, onKnifePop: () -> Unit, onKnifeNewStroke: () -> Unit,
     onKnifeClose: () -> Unit, onKnifeSnap: (Boolean) -> Unit, onKnifeSnapMode: (String) -> Unit,

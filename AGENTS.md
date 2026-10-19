@@ -94,7 +94,7 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Undo, redo y borrados cierran primero cualquier sesión activa.
 - Círculo de LoopTools ejecutado desde el pump registra explícitamente un undo;
   deshacerlo conserva los Loop Cut ya confirmados.
-- El toque de Loop Cut elige el anillo y crea el corte centrado (50 %); cada nuevo
+- El toque de Loop Cut elige el anillo y crea el corte a mitad de arista (Posición 0 %); cada nuevo
   corte comienza sin desplazamiento. La bandeja permite porcentaje o mm/cm/m desde
   el centro, además de volver a Centro. Las medidas físicas incluyen la escala del
   objeto y de escena; los cortes múltiples conservan su espaciado al desplazarse.

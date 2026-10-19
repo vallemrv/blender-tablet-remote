@@ -16,7 +16,7 @@ fun toolTrayContents(session: ToolSession, selection: SelectionMode = SelectionM
                 (if ((session.double("smoothness") ?: 0.0) != 0.0) listOf("falloff") else emptyList()) + "snap")
         EditTool.BEVEL -> ToolTrayContents(listOf("offset", "segments", "more"),
             (if ((session.double("segments") ?: 1.0) > 1) listOf("profile") else emptyList()) +
-                (if (selection == SelectionMode.EDGE) listOf("miter_outer") else emptyList()) + "snap")
+                (if (selection != SelectionMode.VERTEX) listOf("miter_outer") else emptyList()) + "snap")
         EditTool.EXTRUDE -> {
             val directed = (session.parameters["variant"] ?: "REGION") in setOf("REGION", "MANIFOLD")
             ToolTrayContents(listOf("offset") + (if (directed) listOf("constraint") else emptyList()) + "more",

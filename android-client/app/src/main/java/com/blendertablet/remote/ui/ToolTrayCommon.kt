@@ -61,14 +61,15 @@ fun ToolNumericInput(
         val next = (if(integer) kotlin.math.round(raw) else raw).coerceIn(min ?: -Double.MAX_VALUE, max ?: Double.MAX_VALUE)
         pending = next; draft = null; onCommit(next)
     }
+    val candidate = read()
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.padding(end = 4.dp))
         QuickToolValues(quickValues, shown, ::send)
-        StepperButton("−", shown > (min ?: -Double.MAX_VALUE)) { read()?.let { send(it-step) } }
+        StepperButton("−", candidate != null && candidate > (min ?: -Double.MAX_VALUE)) { read()?.let { send(it-step) } }
         CompactNumericField(value = draft ?: (if(integer) kotlin.math.round(display).toLong().toString() else
             formatToolDistance(display, detailDecimalPlaces(display, 3))) + suffix,
             onValueChange = { draft = it }, onDone = { read()?.let(::send) },
             modifier = Modifier.width(90.dp), fontSize = 16.sp, selectAllOnFocus = true)
-        StepperButton("+", shown < (max ?: Double.MAX_VALUE)) { read()?.let { send(it+step) } }
+        StepperButton("+", candidate != null && candidate < (max ?: Double.MAX_VALUE)) { read()?.let { send(it+step) } }
     }
 }
