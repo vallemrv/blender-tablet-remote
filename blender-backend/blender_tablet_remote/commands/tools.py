@@ -74,7 +74,7 @@ class ToolSession:
         self.closed = False
         self.line = None  # {"start": [u, v], "end": [u, v]} de la sesión Bisect
         self.snap_candidate = None
-        self.extrude_value_exact = False
+        self.scalar_value_exact = False
         self.loop_value_exact = False
         self.alignment = None
         # Armado: familia/variante elegida, aún sin backup ni preview (B1/B3/B4).
@@ -183,6 +183,7 @@ class ToolSession:
         bm.to_mesh(backup)
         self.active, self.session_id, self.owner_id = True, str(uuid.uuid4()), owner
         self.tool, self.params, self.obj, self.backup = tool, dict(params), obj, backup
+        self.scalar_value_exact = tool in {"EXTRUDE", "BEVEL"} and "offset" in params
         if tool == "LOOP_CUT":
             self.original_backup = backup
         self.points = []
@@ -284,7 +285,7 @@ class ToolSession:
                 raise CommandError(f"Knife cut failed: {exc}", code="topology_incompatible") from exc
             return
         payload = dict(self.params)
-        if (self.tool == "EXTRUDE" and self.extrude_value_exact) or (self.tool == "LOOP_CUT" and self.loop_value_exact):
+        if (self.tool in {"EXTRUDE", "BEVEL"} and self.scalar_value_exact) or (self.tool == "LOOP_CUT" and self.loop_value_exact):
             payload["snap_type"] = "NONE"
         if str(payload.get("snap_type", "NONE")).upper() in {"VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER", "CURSOR"}:
             payload["snap_type"] = "NONE"  # aún no hay candidato o ya se resuelve abajo
@@ -514,9 +515,9 @@ def parameter(payload):
             raise
         return tool_session.status()
     tool_session.params.update(params)
-    if tool_session.tool == "EXTRUDE" and "offset" in params:
+    if tool_session.tool in {"EXTRUDE", "BEVEL"} and "offset" in params:
         tool_session.snap_candidate = None  # El valor paramétrico sustituye al destino sondeado.
-        tool_session.extrude_value_exact = True
+        tool_session.scalar_value_exact = True
     if str(tool_session.params.get("snap_type", "NONE")).upper() not in {"VERTEX", "EDGE", "EDGE_CENTER", "FACE", "FACE_CENTER", "CURSOR"}:
         tool_session.snap_candidate = None
     tool_session.preview()
@@ -949,8 +950,8 @@ def nudge(payload):
         limit = 1.999 if not tool_session.params.get("clamp", True) else 0.999
         nxt = max(-limit, min(limit, nxt))
     tool_session.params[primary] = nxt
-    if tool_session.tool == "EXTRUDE":
-        tool_session.extrude_value_exact = False
+    if tool_session.tool in {"EXTRUDE", "BEVEL"}:
+        tool_session.scalar_value_exact = False
     if primary == 'factor':
         tool_session.loop_value_exact = False
     if primary == 'factor' and 'slide_distance' in tool_session.params:

@@ -174,7 +174,11 @@ private fun ToolControl(id: String, session: ToolSession, scale: Double, unit: L
         ParamStepper(spec, session.double(id) ?: defaultValue(spec), scale,
             stepSize = if (spec.mode == TransformMode.MOVE) session.snapStep else null,
             lengthUnit = if (spec.mode == TransformMode.MOVE) unit else null,
-            quickValues = if (session.tool == EditTool.LOOP_CUT && id == "cuts") listOf(1,2,3,4) else emptyList(),
+            quickValues = when {
+                session.tool == EditTool.LOOP_CUT && id == "cuts" -> listOf(1,2,3,4)
+                session.tool == EditTool.BEVEL && id == "segments" -> listOf(1,2,3)
+                else -> emptyList()
+            },
             onCommit = { change(id, it) })
         return
     }

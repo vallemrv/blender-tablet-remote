@@ -299,6 +299,15 @@ class EditToolsTests(unittest.TestCase):
             bm = bmesh.from_edit_mesh(self.obj.data)
             self.assertAlmostEqual(max(v.co.z for v in bm.verts),1+distance,places=6)
 
+    def test_bevel_exact_width_survives_segments_and_snap(self):
+        self.begin('BEVEL', offset=.035, snap_type='INCREMENT', snap_step=.1)
+        self.assertAlmostEqual(tools.tool_session.status()['parameters']['offset'],.035)
+        tools.parameter({'parameters':{'offset':.055}})
+        state=tools.parameter({'parameters':{'segments':3}})
+        self.assertAlmostEqual(state['parameters']['offset'],.055)
+        self.assertEqual(state['parameters']['segments'],3)
+        self.assertEqual(state['snap_type'],'INCREMENT')
+
     def test_increment_accumulates_small_samples_and_reports_visual_value(self):
         for tool, primary in [('EXTRUDE','offset'),('INSET','thickness'),('BEVEL','offset')]:
             with self.subTest(tool=tool):

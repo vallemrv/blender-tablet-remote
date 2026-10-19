@@ -34,6 +34,14 @@ class ToolTrayContentsTest {
         assertTrue("falloff" in curved.advanced);assertTrue("flip" in curved.advanced)
     }
 
+    @Test fun bevelShowsOnlyWidthAndSegmentsAndHidesIneffectiveProfile() {
+        val one=toolTrayContents(ToolSession(tool=EditTool.BEVEL,parameters=mapOf("segments" to 1)))
+        assertEquals(listOf("offset","segments","more"),one.visible)
+        assertFalse("profile" in one.advanced)
+        val many=toolTrayContents(ToolSession(tool=EditTool.BEVEL,parameters=mapOf("segments" to 3)),SelectionMode.VERTEX)
+        assertTrue("profile" in many.advanced);assertFalse("miter_outer" in many.advanced)
+    }
+
     @Test fun savedLengthsFollowPhysicalSizeAndNeverRestoreLoopLocationOrGeometryIds() {
         val stored=reusableToolValues(EditTool.BEVEL,mapOf("offset" to 5.0,"snap_step" to 1.0,"segments" to 3,"edge" to 55),.001,true)
         assertEquals(.005,stored["offset"])
