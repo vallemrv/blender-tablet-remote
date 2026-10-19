@@ -254,6 +254,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     var cadFooterHeightPx by remember { mutableStateOf(0) }
     val density = LocalDensity.current
     var objectTrayHeightPx by remember { mutableStateOf(0) }
+    var toolTrayHeightPx by remember { mutableStateOf(0) }
+    val toolTrayHeight = with(density) { toolTrayHeightPx.toDp() }.coerceAtLeast(Metrics.TrayInset)
     val objectTrayHeight = with(density) { objectTrayHeightPx.toDp() }.coerceAtLeast(Metrics.TrayInset)
     val cadTrayHeight = with(density) { cadTrayHeightPx.toDp() }
     val cadFooterHeight = with(density) { cadFooterHeightPx.toDp() }
@@ -267,7 +269,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
         toolSessionArmed = toolSession.armed,
     )
     val trayInset by animateDpAsState(
-        targetValue = if (objectPropertiesVisible) objectTrayHeight else if (materialActive) 104.dp else if (sculptActive) 132.dp else if (trayPresent) Metrics.TrayInset else 0.dp,
+        targetValue = if (objectPropertiesVisible) objectTrayHeight else if (materialActive) 104.dp else if (sculptActive) 132.dp else if (trayPresent && state.activeTool != ActiveTool.TWEAK) toolTrayHeight else if (trayPresent) Metrics.TrayInset else 0.dp,
         animationSpec = tween(160),
         label = "tray-inset",
     )
@@ -523,6 +525,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
+                        .onSizeChanged { toolTrayHeightPx = it.height }
                         .padding(Metrics.EdgeMargin),
                 )
 
@@ -542,6 +545,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
+                        .onSizeChanged { toolTrayHeightPx = it.height }
                         .padding(Metrics.EdgeMargin),
                 )
 
@@ -557,6 +561,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
+                        .onSizeChanged { toolTrayHeightPx = it.height }
                         .padding(Metrics.EdgeMargin),
                 )
 
@@ -568,6 +573,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
+                        .onSizeChanged { toolTrayHeightPx = it.height }
                         .padding(Metrics.EdgeMargin),
                 )
 

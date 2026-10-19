@@ -273,7 +273,7 @@ nuevas superficies y la adaptación gradual de las existentes.
 | Rail izquierdo | Herramientas de uso frecuente que cambian la intención del gesto: seleccionar, mover, rotar, escalar, Tweak y herramientas propias del modo. Permanece abierto; admite desplazamiento vertical cuando haga falta. |
 | Rail derecho | Columna común SELECCIÓN (RESTRICCIONES geométricas dentro del boceto CAD) y acceso a inspectores contextuales: modificadores, pila CAD, biblioteca de materiales y sus propiedades. Comparten posición, márgenes, apertura y cierre; respetan el selector de modos y el pie de vistas. |
 | Barra superior (top) | Archivo, Escena, Outliner, conexión y Diagnóstico a la izquierda; Wireframe, Deshacer, Rehacer y Ojo a la derecha. El selector de modos conserva su lugar bajo el ojo y deja CAD siempre al final. |
-| Barra inferior (bottom) | Parámetros de la herramienta activa o propiedades del objeto seleccionado. Una única fila fina con scroll horizontal, usando `SingleLineTray` al adaptar una bandeja. |
+| Barra inferior (bottom) | Parámetros de la herramienta activa o propiedades del objeto seleccionado. Una fila de controles con scroll horizontal y la ayuda debajo, usando `SingleLineTray` al adaptar una bandeja. |
 
 - Una acción conserva nombre, icono y comportamiento en todos sus accesos. Se
   obtiene el símbolo por intención desde `AppIcons`; una intención distinta debe
