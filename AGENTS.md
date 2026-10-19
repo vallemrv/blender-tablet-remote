@@ -284,6 +284,8 @@ nuevas superficies y la adaptación gradual de las existentes.
   HERRAMIENTA/EDITAR, PINCEL, MODO/TRAZO y CROQUIS/OPERACIONES. Referencias se
   abre desde un icono a la derecha, bajo los modos, con los márgenes del inspector.
   Su ajuste local se llama Restablecer, sin confundirse con Encuadrar la escena.
+  El tablero se dibuja antes de los inspectores para que sus controles prevalezcan;
+  el acceso cerrado no aparece sobre una pila CAD o panel de modificadores abierto.
 - Todos los modos usan iconos y nombres españoles: Objeto, Edición, Materiales,
   Escultura y CAD al final. Dentro de CAD se conserva el selector completo;
   los modos incompatibles con la pieza paramétrica permanecen deshabilitados.

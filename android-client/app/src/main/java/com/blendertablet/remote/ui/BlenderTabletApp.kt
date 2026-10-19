@@ -370,6 +370,19 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             exit = fadeOut(tween(120)),
         ) {
             Box(Modifier.fillMaxSize()) {
+                if (!referencesOpen && !(cad.workspace && cadStackOpen) && !(!cad.workspace && !materialActive && !sculptActive && modifiersOpen)) FloatingPanel(Modifier.align(Alignment.TopEnd)
+                    .padding(top = 142.dp, end = Metrics.EdgeMargin + Metrics.HelperRailInset + 56.dp)) {
+                    IconAction(AppIcons.Reference, "Imágenes de referencia") { referencesOpen = true }
+                }
+                if (referencesOpen) ReferencePanel(Modifier.align(Alignment.TopEnd)
+                    .padding(top = 142.dp, end = Metrics.EdgeMargin + Metrics.HelperRailInset,
+                        bottom = if (cad.workspace) cadTrayHeight + cadFooterHeight else trayInset + 74.dp),
+                    onSendToBlender = if (state.blender.features.referenceImages && state.connection == ConnectionStatus.CONNECTED) {
+                        { image, opacity -> vm.sendReferenceToBlender(image.path, image.name, opacity) }
+                    } else null,
+                    onDismiss = { referencesOpen = false })
+
+
                 MenuBar(
                     state = state,
                     fps = stats.fps,
@@ -549,17 +562,6 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     onTrayHeight = { cadTrayHeightPx = it })
                 if (sculptActive) SculptWorkspace(state, vm)
                 if (materialActive) MaterialWorkspace(state, vm)
-                if (!referencesOpen) FloatingPanel(Modifier.align(Alignment.TopEnd)
-                    .padding(top = 142.dp, end = Metrics.EdgeMargin + Metrics.HelperRailInset + 56.dp)) {
-                    IconAction(AppIcons.Reference, "Imágenes de referencia") { referencesOpen = true }
-                }
-                if (referencesOpen) ReferencePanel(Modifier.align(Alignment.TopEnd)
-                    .padding(top = 142.dp, end = Metrics.EdgeMargin + Metrics.HelperRailInset,
-                        bottom = if (cad.workspace) cadTrayHeight + cadFooterHeight else trayInset + 74.dp),
-                    onSendToBlender = if (state.blender.features.referenceImages && state.connection == ConnectionStatus.CONNECTED) {
-                        { image, opacity -> vm.sendReferenceToBlender(image.path, image.name, opacity) }
-                    } else null,
-                    onDismiss = { referencesOpen = false })
 
                 ViewFooter(
                     contextKeys = if (state.blender.cad.workspace && state.blender.cad.activeSketchId != null) ({ CadViewActions(state, vm) }) else null,
