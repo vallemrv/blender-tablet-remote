@@ -21,6 +21,8 @@ internal object StudioIcons {
         "PAINT_SELECT" to Glyph("Pintar selección", "Selección", "M3,4 L6,4 M3,4 L3,7 M18,4 L21,4 L21,7 M3,18 L3,21 L6,21 M18,21 L21,21 L21,18 M7,15 L16,6 L19,9 L10,18 L6,19 Z M14,8 L17,11"),
         "FINISH_SKETCH" to Glyph("Finalizar boceto", "CAD", "M3,4 L16,4 L16,8 M3,4 L3,20 L16,20 L16,16 M8,12 L22,12 M18,8 L22,12 L18,16"),
         "APPLY_MODIFIER" to Glyph("Aplicar modificador", "Modificadores", "M3,4 L21,4 L21,8 L3,8 Z M7,12 L17,12 M12,8 L12,17 M8,14 L12,18 L16,14 M4,21 L20,21"),
+        "GROW_SELECTION" to Glyph("Crecer selección", "Selección", "M8,8 L16,8 L16,16 L8,16 Z M3,3 L8,3 M3,3 L3,8 M16,3 L21,3 L21,8 M3,16 L3,21 L8,21 M16,21 L21,21 L21,16 M12,10 L12,14 M10,12 L14,12"),
+        "SHRINK_SELECTION" to Glyph("Decrecer selección", "Selección", "M8,8 L16,8 L16,16 L8,16 Z M3,3 L8,3 M3,3 L3,8 M16,3 L21,3 L21,8 M3,16 L3,21 L8,21 M16,21 L21,21 L21,16 M10,12 L14,12"),
         "SELECT" to Glyph("Seleccionar", "Herramientas", "M5,3 L5,20 L10,15 L14,21 L17,19 L13,13 L21,13 Z"),
         "MOVE" to Glyph("Mover", "Herramientas", "M12,3 L12,21 M3,12 L21,12 M9,6 L12,3 L15,6 M9,18 L12,21 L15,18 M6,9 L3,12 L6,15 M18,9 L21,12 L18,15"),
         "ROTATE" to Glyph("Rotar", "Herramientas", "M19,7 A8,8 0,1 0,20,15 M19,3 L19,7 L15,7 M13.5,12 A1.5,1.5 0,1 1,10.5,12 A1.5,1.5 0,1 1,13.5,12"),

@@ -356,7 +356,10 @@ def local(payload: dict) -> dict:
 
     if enabled and not _local_hidden:
         view_layer = bpy.context.view_layer
-        selected = {o.name for o in view_layer.objects if o.select_get()}
+        if payload.get('objects'):
+            from ..bpy_utils import resolve_objects
+            selected = {o.name for o in resolve_objects(payload)}
+        else:selected = {o.name for o in view_layer.objects if o.select_get()}
         newly = [o for o in view_layer.objects if o.name not in selected and not o.hide_get()]
         for obj in newly:
             obj.hide_set(True)

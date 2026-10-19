@@ -11,7 +11,7 @@ package com.blendertablet.remote.model
  * Este catálogo es la única tabla `acción → superficie`: el menú radial se construye
  * con [RadialMenu.actionsFor], que devuelve [ActionId]s pertenecientes a RADIAL.
  */
-enum class ActionSurface { TOP, TOP_DYNAMIC, TOP_TOOLS, TOP_MODE, RAIL, FOOTER, FOOTER_VIEWS, FOOTER_EDIT, RADIAL, MODIFIER_PANEL }
+enum class ActionSurface { TOP, TOP_DYNAMIC, TOP_TOOLS, TOP_MODE, RAIL, FOOTER, FOOTER_VIEWS, FOOTER_EDIT, SELECTION, RADIAL, MODIFIER_PANEL }
 
 enum class ActionId {
     // Top: operaciones poco frecuentes o globales.
@@ -180,8 +180,8 @@ object SurfaceCatalog {
         ActionEntry(ActionId.VIEW_PROJECTION, ActionSurface.FOOTER_VIEWS, "Persp/Ortho"),
         ActionEntry(ActionId.VIEW_FRAME_ALL, ActionSurface.FOOTER_VIEWS, "Encuadrar todo"),
         ActionEntry(ActionId.VIEW_LOCAL, ActionSurface.RADIAL, "Aislar selección"),
-        ActionEntry(ActionId.SELECT_MORE, ActionSurface.FOOTER_VIEWS, "Crecer selección"),
-        ActionEntry(ActionId.SELECT_LESS, ActionSurface.FOOTER_VIEWS, "Decrecer selección"),
+        ActionEntry(ActionId.SELECT_MORE, ActionSurface.SELECTION, "Crecer selección"),
+        ActionEntry(ActionId.SELECT_LESS, ActionSurface.SELECTION, "Decrecer selección"),
 
         ActionEntry(ActionId.EDIT_MAKE_EDGE_FACE, ActionSurface.FOOTER_EDIT, "Crear arista/cara"),
         ActionEntry(ActionId.EDIT_CONNECT_VERTICES, ActionSurface.FOOTER_EDIT, "Conectar vértices"),
@@ -192,17 +192,17 @@ object SurfaceCatalog {
 
         // Radial
         ActionEntry(ActionId.ADD_OBJECT, ActionSurface.RADIAL, "Agregar"),
-        ActionEntry(ActionId.TOOL_BOX, ActionSurface.RADIAL, "Caja"),
-        ActionEntry(ActionId.TOOL_CIRCLE, ActionSurface.RADIAL, "Círculo"),
-        ActionEntry(ActionId.TOOL_PAINT_SELECT, ActionSurface.RADIAL, "Pintar selección"),
-        ActionEntry(ActionId.SELECT_ALL, ActionSurface.RADIAL, "Seleccionar todo"),
-        ActionEntry(ActionId.DESELECT_ALL, ActionSurface.RADIAL, "Deseleccionar"),
-        ActionEntry(ActionId.SELECT_INVERT, ActionSurface.RADIAL, "Invertir selección"),
+        ActionEntry(ActionId.TOOL_BOX, ActionSurface.SELECTION, "Caja"),
+        ActionEntry(ActionId.TOOL_CIRCLE, ActionSurface.SELECTION, "Círculo"),
+        ActionEntry(ActionId.TOOL_PAINT_SELECT, ActionSurface.SELECTION, "Pintar selección"),
+        ActionEntry(ActionId.SELECT_ALL, ActionSurface.SELECTION, "Seleccionar todo"),
+        ActionEntry(ActionId.DESELECT_ALL, ActionSurface.SELECTION, "Deseleccionar"),
+        ActionEntry(ActionId.SELECT_INVERT, ActionSurface.SELECTION, "Invertir selección"),
         ActionEntry(ActionId.SELECT_UNDER, ActionSurface.RADIAL, "Seleccionar este"),
         ActionEntry(ActionId.SELECT_ADD_UNDER, ActionSurface.RADIAL, "Añadir a la selección"),
-        ActionEntry(ActionId.SELECT_LOOP, ActionSurface.RADIAL, "Loop"),
-        ActionEntry(ActionId.SELECT_RING, ActionSurface.RADIAL, "Ring"),
-        ActionEntry(ActionId.SELECT_LINKED, ActionSurface.RADIAL, "Enlazado"),
+        ActionEntry(ActionId.SELECT_LOOP, ActionSurface.SELECTION, "Loop"),
+        ActionEntry(ActionId.SELECT_RING, ActionSurface.SELECTION, "Ring"),
+        ActionEntry(ActionId.SELECT_LINKED, ActionSurface.SELECTION, "Enlazado"),
         ActionEntry(ActionId.EDIT_MESH_TOOLS, ActionSurface.RADIAL, "Malla"),
         ActionEntry(ActionId.HIDE_OBJECT, ActionSurface.RADIAL, "Ocultar objeto"),
         ActionEntry(ActionId.SHADE_OBJECT, ActionSurface.RADIAL, "Suave"),

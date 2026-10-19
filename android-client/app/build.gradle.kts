@@ -51,3 +51,8 @@ dependencies {
     testImplementation("org.json:json:20231013")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
+
+// The coherence guard reads the actual UI bindings, not a parallel copy of their layout.
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    systemProperty("btr.repoRoot", rootProject.projectDir.absolutePath)
+}

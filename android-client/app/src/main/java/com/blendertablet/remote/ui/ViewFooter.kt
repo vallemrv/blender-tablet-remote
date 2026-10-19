@@ -41,17 +41,14 @@ fun ViewFooter(
     selectionMode: SelectionMode,
     showEditShortcuts: Boolean,
     /** Cuchillo vive en la barra de tools activas cuando `edit_toolbar` existe (F1). */
-    editToolbarAvailable: Boolean = false,
     connectVerticesEnabled: Boolean = false,
-    showGrow: Boolean,
     onAxis: (String) -> Unit,
     onOrbit: (Float, Float) -> Unit,
     onRotate180: () -> Unit,
     onProjection: (Projection) -> Unit,
     onFrameSelected: () -> Unit,
-    onMore: () -> Unit,
-    onLess: () -> Unit,
     onEditAction: (EditFooterAction) -> Unit,
+    contextKeys: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -80,14 +77,15 @@ fun ViewFooter(
                             }
                         }
                     }
-                    if (editPage && inEdit && showEditShortcuts) {
-                        EditKeys(selectionMode, editToolbarAvailable, connectVerticesEnabled, normalsPage, { normalsPage = it }, onEditAction)
+                    if (contextKeys != null) {
+                        contextKeys()
+                    } else if (editPage && inEdit && showEditShortcuts) {
+                        EditKeys(selectionMode, connectVerticesEnabled, normalsPage, { normalsPage = it }, onEditAction)
                     } else {
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         NumKey("7", "Superior / inferior", activeAxisView in setOf("TOP", "BOTTOM")) { opposite("TOP", "BOTTOM") }
                         NumKey("8", "Orbitar arriba") { onOrbit(0f, -0.06f) }
                         NumKey("9", "Girar 180°") { onRotate180() }
-                        NumKey("+", "Crecer selección", enabled = inEdit && showGrow, onClick = onMore)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         NumKey("4", "Orbitar izquierda") { onOrbit(-0.06f, 0f) }
@@ -99,7 +97,6 @@ fun ViewFooter(
                             onProjection(if (projection == Projection.PERSP) Projection.ORTHO else Projection.PERSP)
                         }
                         NumKey("6", "Orbitar derecha") { onOrbit(0.06f, 0f) }
-                        NumKey("−", "Decrecer selección", enabled = inEdit && showGrow, onClick = onLess)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         NumKey("1", "Frontal / trasera", activeAxisView in setOf("FRONT", "BACK")) { opposite("FRONT", "BACK") }
@@ -134,7 +131,6 @@ fun ViewFooter(
 @Composable
 private fun EditKeys(
     selectionMode: SelectionMode,
-    editToolbarAvailable: Boolean,
     connectVerticesEnabled: Boolean,
     normalsPage: Boolean,
     setNormalsPage: (Boolean) -> Unit,
@@ -153,11 +149,6 @@ private fun EditKeys(
         Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             NumKey("F", if (selectionMode == SelectionMode.EDGE) "Rellenar" else "Crear arista/cara",
                 enabled = selectionMode != SelectionMode.FACE) { onAction(EditFooterAction.MAKE_EDGE_FACE) }
-            // Cuchillo vive en la barra de tools activas cuando edit_toolbar existe;
-            // aquí sería la duplicidad que el plan prohíbe (F1).
-            if (!editToolbarAvailable) {
-                NumKey("K", "Cuchillo") { onAction(EditFooterAction.KNIFE) }
-            }
             NumKey("P", "Separar a objeto") { onAction(EditFooterAction.SEPARATE) }
             NumKey("Y", "Split") { onAction(EditFooterAction.SPLIT) }
         }

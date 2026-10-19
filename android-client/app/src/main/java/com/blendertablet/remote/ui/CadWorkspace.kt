@@ -45,7 +45,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     var offsetSide by remember { mutableStateOf("OUTWARD") }
     var mirrorSource by remember(cad.documentId, cad.activeSketchId) { mutableStateOf<CadFeature?>(null) }
     var mirrorPlane by remember { mutableStateOf("XZ") }
-    var renamingSketch by remember(cad.documentId) { mutableStateOf<CadSketch?>(null) }
     LaunchedEffect(cad.sketchReview, cad.sketchFailure?.featureId) {
         if (cad.sketchReview) onStackOpen(true)
     }
@@ -114,11 +113,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     val planePreview = cad.sessionActive && cad.operation in listOf("PLANE", "SPLIT")
     val availableHeight = (LocalConfiguration.current.screenHeightDp - 320).coerceAtLeast(100).dp
     fun command(name: String, vararg values: Pair<String, Any?>) { if (connected) vm.cadCommand(name, mapOf(*values)) }
-    fun editSketch(sketchId: String) {
-        vm.cadTool(null)
-        constraintsVisible = false
-        command("cad.sketch.activate", "sketch_id" to sketchId)
-    }
     fun beginFeature(operation: String) {
         vm.cadTool(null)
         if (operation == "CUT" && multipleProfiles) {
@@ -145,7 +139,23 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             command("cad.plane.update", "base" to "EDGE")
         }
     } else ToolRail(Modifier.align(Alignment.CenterStart).padding(start = Metrics.EdgeMargin, top = 120.dp, bottom = 160.dp).heightIn(max = availableHeight)) {
-        CadAction("SELECT", "Cursor · tocar alterna selección · arrastrar mueve", selected = state.cadTool == null && cad.surface.mode == "PROFILE", enabled = !cad.sessionActive) { vm.cadTool(null) }
+        CadToolContext(state, vm)
+        if (!editing) {
+            cad.selectedSketch?.let { sketch ->
+                if ("HOLE" in capabilities.features && sketch.entities.any { it.type in listOf("POINT", "CIRCLE") })
+                    CadAction("HOLE", "Taladro métrico", enabled = connected && !cad.sessionActive) { command("cad.hole.begin", "sketch_id" to sketch.id) }
+            }
+            cad.selectedFeature?.let { selected ->
+                if ("PATTERN" in capabilities.features && selected.type in listOf("EXTRUDE", "CUT", "HOLE"))
+                    CadAction("PATTERN", "Patrón", enabled = connected && !cad.sessionActive && selected.enabled) {
+                        command("cad.pattern.begin", "source_ids" to listOf(selected.id))
+                    }
+                if (capabilities.featureMirror && selected.type in listOf("EXTRUDE", "CUT") && !selected.isMirror)
+                    CadAction("MIRROR", "Simetría de operación", enabled = connected && !cad.sessionActive && selected.enabled) {
+                        vm.cadTool(null); mirrorSource = selected; mirrorPlane = "XZ"; pendingDimension = null; editingConstraint = null
+                    }
+            }
+        }
         if (editing) {
             RailDivider()
             capabilities.entities.forEach { type ->
@@ -188,17 +198,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             }
         } else {
             RailDivider()
-            capabilities.planes.forEach { plane ->
-                CadAction("PLANE_$plane", "Nuevo boceto en ${cadPlaneLabel(plane)}", enabled = connected && !cad.sessionActive) { command("cad.plane.begin", "base" to plane) }
-            }
-            if (capabilities.sketchEditing) CadAction("SKETCH_FACE", "Crear croquis en la cara seleccionada",
-                enabled = connected && !cad.sessionActive && cad.surface.canSketch) { command("cad.plane.begin", "base" to "FACE") }
-            if (capabilities.edgePlane) CadAction("PLANE_EDGE", if (cad.surface.canEdgePlane) "Plano en la arista seleccionada · gíralo sobre ella"
-                else "Plano en una arista: elige antes una arista recta del sólido",
-                enabled = connected && !cad.sessionActive && (cad.surface.canEdgePlane || cad.surface.mode != "EDGE")) {
-                if (cad.surface.canEdgePlane) command("cad.plane.begin", "base" to "EDGE") else vm.cadSurfaceMode("EDGE")
-            }
-            RailDivider()
             if ("LOFT" in capabilities.features) CadAction("LOFT", "Solevado: une este perfil con el de otro croquis", selected = loftFrom != null,
                 enabled = connected && !cad.sessionActive && !multipleProfiles && (loftFrom != null || cad.selectionKind in listOf("PROFILE", "SKETCH"))) {
                 loftFrom = if (loftFrom != null) null else cad.selectionKind!! to cad.selectionId!!
@@ -226,8 +225,15 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
         Modifier.align(Alignment.CenterEnd).padding(end = Metrics.EdgeMargin, top = 142.dp, bottom = 180.dp)
             .heightIn(max = availableHeight)
     ) {
-        RailLabel("RESTRICCIONES")
+        RailLabel("SELECCIÓN")
         SelectionIntentControls(state, vm)
+        IconAction(AppIcons.action(if (cad.selectionId != null) ActionId.DESELECT_ALL else ActionId.SELECT_ALL),
+            if (cad.selectionId != null) "Deseleccionar todo" else "Seleccionar todo") {
+            if (cad.selectionId != null) vm.deselectAll() else vm.selectAll()
+        }
+        IconAction(AppIcons.action(ActionId.SELECT_INVERT), "Invertir selección", onClick = vm::invertSelection)
+        RailDivider()
+        RailLabel("RESTRICCIONES")
         cadConstraintGroups(capabilities.constraints).forEachIndexed { index, group ->
             if (index > 0) RailDivider()
             group.forEach { type ->
@@ -284,9 +290,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                 vm.cadTool(null)
                                 command("cad.select", "kind" to "ENTITY", "id" to drawing.id, "part" to "BODY", "additive" to (state.selectionOp == SelectionOp.TOGGLE))
                             }
-                            CadAction("DELETE", if (drawing.isFillet) "Quitar redondeo" else "Borrar figura", enabled = connected && !cad.sessionActive) {
-                                command(if (drawing.isFillet) "cad.fillet.remove" else "cad.entity.delete", "entity_id" to drawing.id)
-                            }
                         }
                     } else (if (contextual && constraintsSelectionOnly) contextualConstraints else cad.activeSketch?.constraints.orEmpty()).forEach { c ->
                         CadConstraintRow(c, cad.activeSketch!!, unit, !cad.sessionActive,
@@ -329,25 +332,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                                 "path_sketch_id" to sketch.id)
                                         } else command("cad.history.rollback", "node_id" to node.id)
                                     },
-                                    actions = listOfNotNull(
-                                        if ("HOLE" in capabilities.features && sketch.entities.any { it.type in listOf("POINT", "CIRCLE") }) CadNodeAction("Taladro métrico") {
-                                            vm.cadTool(null); command("cad.hole.begin", "sketch_id" to sketch.id)
-                                        } else null,
-                                        CadNodeAction("Renombrar croquis") { renamingSketch = sketch },
-                                        CadNodeAction("Editar boceto") { editSketch(sketch.id) },
-                                        CadNodeAction("Seleccionar croquis completo", sketch.profiles.isNotEmpty()) {
-                                            vm.cadTool(null); command("cad.select", "kind" to "SKETCH", "id" to sketch.id)
-                                        },
-                                        CadNodeAction("Copiar a otro plano paralelo") {
-                                            vm.cadTool(null); command("cad.sketch.copy", "sketch_id" to sketch.id, "offset" to cad.step * 10)
-                                        },
-                                        CadNodeAction(if (sketch.visible) "Ocultar boceto" else "Mostrar boceto") {
-                                            command("cad.sketch.visibility", "sketch_id" to sketch.id, "visible" to !sketch.visible)
-                                        },
-                                        CadNodeAction("Borrar boceto", cad.features.none { it.sketchId == sketch.id }) {
-                                            command("cad.sketch.delete", "sketch_id" to sketch.id)
-                                        },
-                                    ))
+                                    )
                             }
                         } else {
                             val feature = cad.features.firstOrNull { it.id == node.id }
@@ -356,26 +341,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                     cad.selectedFeature?.id == feature.id, dimmed, nodeEnabled,
                                     reveal = cad.sketchReview && cad.sketchFailure?.featureId == feature.id,
                                     tap = { command("cad.history.rollback", "node_id" to node.id) },
-                                    actions = listOfNotNull(
-                                        CadNodeAction("Seleccionar") {
-                                            vm.cadTool(null); command("cad.select", "kind" to "FEATURE", "id" to feature.id)
-                                        },
-                                        if (feature.sketchId.isNotEmpty()) CadNodeAction("Editar ${cad.sketches.firstOrNull { it.id == feature.sketchId }?.name ?: "boceto fuente"}") { editSketch(feature.sketchId) } else null,
-                                        if ("PATTERN" in capabilities.features && feature.type in listOf("EXTRUDE", "CUT", "HOLE")) CadNodeAction("Patrón", feature.enabled && !dimmed) {
-                                            vm.cadTool(null); command("cad.pattern.begin", "source_ids" to listOf(feature.id))
-                                        } else null,
-                                        if (capabilities.featureMirror && feature.type in listOf("EXTRUDE", "CUT") && !feature.isMirror)
-                                            CadNodeAction("Simetría de operación", feature.enabled && !dimmed) {
-                                                vm.cadTool(null); mirrorSource = feature; mirrorPlane = "XZ"
-                                                pendingDimension = null; editingConstraint = null
-                                            } else null,
-                                        CadNodeAction(if (feature.enabled) "Desactivar" else "Activar") {
-                                            command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled)
-                                        },
-                                        CadNodeAction("Borrar") {
-                                            vm.cadTool(null); command("cad.feature.delete", "feature_id" to feature.id)
-                                        },
-                                    ))
+                                    )
                             }
                         }
                     }
@@ -763,8 +729,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             }
                             CadOperationFields(controls, unit, connected, drafts, ::acceptValues, ::change)
                             if (!dynamicPreview && feature != null) {
-                                CadAction("VISIBLE", "Activar/desactivar operación", selected = feature.enabled, enabled = connected) { change(mapOf("enabled" to !feature.enabled)) }
-                                CadAction("DELETE", "Borrar operación", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
                             }
                         } else if (depthPreview) {
                             PillButton("Una dirección", selected = cad.extent == "ONE" && state.cadFacePick == null, enabled = connected) {
@@ -825,10 +789,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             PillButton("Operación fuente", enabled = connected) {
                                 command("cad.select", "kind" to "FEATURE", "id" to feature.mirrorSourceId)
                             }
-                            CadAction("VISIBLE", if (feature.enabled) "Desactivar simetría" else "Activar simetría", selected = feature.enabled, enabled = connected) {
-                                command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled)
-                            }
-                            CadAction("DELETE", "Borrar simetría", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
                         } else if (feature?.type == "SHELL") {
                             CadDimension("Grosor", drafts["thickness"] ?: feature.thickness, unit, feature.id,
                                 step = cad.step, minimum = .0000001, enabled = connected, onDone = ::acceptValues) { drafts["thickness"] = it }
@@ -837,8 +797,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                     "thickness" to (drafts["thickness"] ?: feature.thickness))
                                 drafts.remove("thickness")
                             }
-                            CadAction("VISIBLE", if (feature.enabled) "Ocultar" else "Mostrar", selected = feature.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled) }
-                            CadAction("DELETE", "Borrar carcasa", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
                         } else if (feature?.isFinish == true) {
                             CadDimension("Ancho", drafts["width"] ?: feature.width, unit, feature.id,
                                 step = cad.step, minimum = .0000001, enabled = connected, onDone = ::acceptValues) { drafts["width"] = it }
@@ -846,8 +804,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                 command("cad.feature.set", "feature_id" to feature.id, "segments" to it)
                             }
                             Text("${feature.edgeCount} aristas", color = Ink.Muted, fontSize = 12.sp)
-                            CadAction("VISIBLE", if (feature.enabled) "Ocultar" else "Mostrar", selected = feature.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled) }
-                            CadAction("DELETE", "Borrar operación", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
                         } else if (feature?.type == "REVOLVE") {
                             CadDimension("Ángulo", drafts["angle"] ?: feature.angle, unit, feature.id + "angle", degrees = true, step = 15.0,
                                 minimum = .01, maximum = 360.0, enabled = connected, onDone = ::acceptValues) { drafts["angle"] = it }
@@ -857,8 +813,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                     command("cad.feature.set", "feature_id" to feature.id, "axis" to axis)
                                 }
                             }
-                            CadAction("VISIBLE", if (feature.enabled) "Ocultar" else "Mostrar", selected = feature.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled) }
-                            CadAction("DELETE", "Borrar operación", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
                         } else if (feature?.type == "HELIX") {
                             CadDimension("Paso", drafts["pitch"] ?: feature.pitch, unit, feature.id + "pitch",
                                 step = cad.step, minimum = .0000001, enabled = connected, onDone = ::acceptValues) { drafts["pitch"] = it }
@@ -876,11 +830,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                                     command("cad.feature.set", "feature_id" to feature.id, "axis" to axis)
                                 }
                             }
-                            CadAction("VISIBLE", if (feature.enabled) "Ocultar" else "Mostrar", selected = feature.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled) }
-                            CadAction("DELETE", "Borrar operación", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
                         } else if (feature?.type == "LOFT" || feature?.type == "SWEEP") {
-                            CadAction("VISIBLE", if (feature.enabled) "Ocultar" else "Mostrar", selected = feature.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to feature.id, "enabled" to !feature.enabled) }
-                            CadAction("DELETE", "Borrar operación", enabled = connected) { command("cad.feature.delete", "feature_id" to feature.id) }
                         } else if (offsetPlane != null) {
                             CadDimension("Separación Z", drafts["offset"] ?: offsetPlane.translation.getOrElse(2) { 0.0 }, unit, offsetPlane.id,
                                 step = cad.step, enabled = connected, onDone = ::acceptValues) { drafts["offset"] = it }
@@ -905,8 +855,6 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             else CadDimension("Profundidad", drafts["depth"] ?: selected.depth, unit, selected.id,
                                 step = cad.step, minimum = if (selected.type == "EXTRUDE") -10000.0 else .0000001,
                                 enabled = connected, onDone = ::acceptValues) { drafts["depth"] = it }
-                            CadAction("VISIBLE", if (selected.enabled) "Ocultar" else "Mostrar", selected = selected.enabled, enabled = connected) { command("cad.feature.set", "feature_id" to selected.id, "enabled" to !selected.enabled) }
-                            CadAction("DELETE", "Borrar operación", enabled = connected) { command("cad.feature.delete", "feature_id" to selected.id) }
                         }
                     }
                 }
@@ -916,48 +864,11 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             }
         }
     }
-    renamingSketch?.let { sketch ->
-        var name by remember(sketch.id) { mutableStateOf(sketch.name) }
-        AlertDialog(onDismissRequest = { renamingSketch = null }, title = { Text("Renombrar croquis") },
-            text = { OutlinedTextField(name, { name = it.take(80) }, singleLine = true, label = { Text("Nombre") }) },
-            confirmButton = { TextButton(enabled = connected && name.isNotBlank(), onClick = {
-                command("cad.sketch.rename", "sketch_id" to sketch.id, "name" to name.trim()); renamingSketch = null
-            }) { Text("Guardar") } },
-            dismissButton = { TextButton(onClick = { renamingSketch = null }) { Text("Cancelar") } })
-    }
+
 }
 
 /** Frequent sketch actions form their own group next to undo/redo. */
-@Composable
-fun CadSelectionActions(state: AppUiState, vm: MainViewModel) {
-    val cad = state.blender.cad
-    val enabled = state.connection == ConnectionStatus.CONNECTED && !cad.sessionActive && cad.surface.mode == "PROFILE"
-    val entities = cad.activeSketch?.entities.orEmpty().filter { e -> cad.selection.any { it.id == e.id } }
-    // One toggle: with a selection it clears it, otherwise it selects the whole sketch.
-    val selected = cad.selectionId != null
-    IconAction(AppIcons.cad(if (selected) "DESELECT_ALL" else "SELECT_ALL"),
-        if (selected) "Deseleccionar todo" else "Seleccionar todo el croquis",
-        enabled = enabled && (selected || cad.selectionSketch?.entities?.isNotEmpty() == true)) {
-        if (selected) vm.deselectAll() else vm.selectAll()
-    }
-    if (cad.activeSketchId == null) return
-    IconAction(AppIcons.cad("DELETE"), "Borrar selección", enabled = enabled && cad.selection.any { it.id != "ORIGIN" }) { vm.delete() }
-    val construction = if (entities.isEmpty()) cad.construction else entities.all { it.construction }
-    IconAction(AppIcons.cad("CONSTRUCTION"), if (entities.isEmpty()) "Dibujar construcción" else "Construcción de la selección",
-        selected = construction, enabled = enabled) {
-        vm.cadCommand(if (entities.isEmpty()) "cad.settings" else "cad.entity.construction", mapOf("construction" to !construction))
-    }
-    IconAction(AppIcons.cad("WELD"), "Soldar extremos en el último punto seleccionado", enabled = enabled && cadWeldEnabled(cad)) {
-        vm.cadCommand("cad.points.weld")
-    }
-    // Only sketches holding projected curves need it; elsewhere it would be a dead icon.
-    if (state.blender.features.cad.referenceProfile && cadHasProjectedCurves(cad)) IconAction(AppIcons.cad("CLOSE_REFERENCE"),
-        "Cerrar perfil proyectado · une extremos cercanos hasta el Paso y retira Construcción",
-        enabled = enabled && cadCloseReferenceEnabled(cad)) {
-        vm.cadTool(null)
-        vm.cadCommand("cad.reference.close")
-    }
-}
+
 
 internal fun cadHasProjectedCurves(cad: CadState): Boolean =
     cad.activeSketch?.entities.orEmpty().any { it.reference && it.type != "POINT" }
@@ -995,43 +906,50 @@ internal fun cadWeldEnabled(cad: CadState): Boolean = cad.selection.distinct().s
 
 /** Contexto CAD en la fila del ojo junto a Deshacer/Rehacer, como Materiales: sin franja propia. */
 @Composable
-fun CadTopActions(state: AppUiState, vm: MainViewModel) {
+fun CadToolContext(state: AppUiState, vm: MainViewModel) {
     val cad = state.blender.cad
-    val connected = state.connection == ConnectionStatus.CONNECTED
-    val editing = cad.activeSketchId != null
-    fun command(name: String, vararg values: Pair<String, Any?>) { if (connected) vm.cadCommand(name, mapOf(*values)) }
-    // Ver escena vale para todo CAD (3D, boceto y planos): muestra lo que el aislamiento oculta.
-    IconAction(AppIcons.cad("SCENE"), if (cad.showScene) "Ocultar el resto de la escena" else "Ver escena: mostrar también los objetos que no son CAD",
-        selected = cad.showScene, enabled = connected) { command("cad.settings", "show_scene" to !cad.showScene) }
-    if (!editing) IconAction(AppIcons.cad("NEW_PLANE"), "Nuevo plano y croquis", enabled = connected && !cad.sessionActive) {
-        command("cad.plane.begin", "base" to if (cad.surface.canSketch) "FACE" else if (cad.surface.canEdgePlane) "EDGE" else "XY")
-    }
-    if (editing) {
-        if (state.blender.features.cad.sectionView) IconAction(AppIcons.cad("SECTION"),
-            if (cad.section) "Quitar la sección" else "Vista en sección: corta la pieza por el plano del boceto",
-            selected = cad.section, enabled = connected) { command("cad.settings", "section" to !cad.section) }
-        val perspective = state.blender.view.perspective == Projection.PERSP
-        IconAction(AppIcons.cad("PERSPECTIVE"), if (perspective) "Volver a vista ortográfica" else "Ver el boceto en perspectiva",
-            selected = perspective, enabled = connected) { vm.viewPerspective(if (perspective) Projection.ORTHO else Projection.PERSP) }
-        IconAction(AppIcons.cad("VIEW_ROLL"), "Girar la vista 90° sobre el plano",
-            enabled = connected && !cad.sessionActive) { command("cad.view.roll", "degrees" to 90) }
-        IconAction(AppIcons.cad("VIEW_ALIGN"), "Enderezar: de frente y sin girar",
-            enabled = connected && !cad.sessionActive) { command("cad.view.align") }
-        IconAction(AppIcons.FinishSketch, "Finalizar boceto", enabled = connected && !cad.sessionActive) {
-            vm.cadTool(null); command("cad.sketch.finish")
+    val enabled = state.connection == ConnectionStatus.CONNECTED && !cad.sessionActive
+    if (cad.activeSketchId == null) {
+        IconAction(AppIcons.cad("NEW_PLANE"), "Nuevo plano y croquis", enabled = enabled) {
+            vm.cadCommand("cad.plane.begin", mapOf("base" to if (cad.surface.canSketch) "FACE" else if (cad.surface.canEdgePlane) "EDGE" else "XY"))
+        }
+        val sketch = cad.selectedSketch ?: cad.selectedFeature?.sketchId?.let { id -> cad.sketches.firstOrNull { it.id == id } }
+        if (sketch != null) IconAction(AppIcons.cad("SKETCH"), "Editar boceto", enabled = enabled) {
+            vm.cadTool(null); vm.cadCommand("cad.sketch.activate", mapOf("sketch_id" to sketch.id))
         }
     } else {
-        IconAction(AppIcons.Frame, "Encuadrar la vista 3D del sólido",
-            enabled = connected && !cad.sessionActive) {
-            command("cad.view.solid")
+        IconAction(AppIcons.FinishSketch, "Finalizar boceto", enabled = enabled) {
+            vm.cadTool(null); vm.cadCommand("cad.sketch.finish")
         }
-        cad.selectedSketch?.let { sketch ->
-            IconAction(AppIcons.cad("SKETCH"), "Editar ${sketch.name}", enabled = connected && !cad.sessionActive) {
-                vm.cadTool(null); command("cad.sketch.activate", "sketch_id" to sketch.id)
-            }
+        val entities = cad.activeSketch?.entities.orEmpty().filter { e -> cad.selection.any { it.id == e.id } }
+        val construction = if (entities.isEmpty()) cad.construction else entities.all { it.construction }
+        IconAction(AppIcons.cad("CONSTRUCTION"), "Construcción", selected = construction, enabled = enabled) {
+            vm.cadCommand(if (entities.isEmpty()) "cad.settings" else "cad.entity.construction", mapOf("construction" to !construction))
+        }
+        if (state.blender.features.cad.referenceProfile && cadHasProjectedCurves(cad)) IconAction(AppIcons.cad("CLOSE_REFERENCE"),
+            "Cerrar perfil proyectado", enabled = enabled && cadCloseReferenceEnabled(cad)) { vm.cadCommand("cad.reference.close") }
+    }
+}
+
+@Composable
+fun CadViewActions(state: AppUiState, vm: MainViewModel) {
+    val cad = state.blender.cad
+    val enabled = state.connection == ConnectionStatus.CONNECTED && !cad.sessionActive
+    Row {
+        IconAction(AppIcons.cad("VIEW_ROLL"), "Girar 90°", enabled = enabled) { vm.cadCommand("cad.view.roll", mapOf("degrees" to 90)) }
+        IconAction(AppIcons.cad("VIEW_ALIGN"), "Enderezar", enabled = enabled) { vm.cadCommand("cad.view.align") }
+        IconAction(AppIcons.Frame, "Encuadrar boceto", enabled = enabled, onClick = vm::frameSelected)
+    }
+    Row {
+        IconAction(AppIcons.cad("PERSPECTIVE"), "Perspectiva / ortográfica", selected = state.blender.view.perspective == Projection.PERSP) {
+            vm.viewPerspective(if (state.blender.view.perspective == Projection.PERSP) Projection.ORTHO else Projection.PERSP)
+        }
+        if (state.blender.features.cad.sectionView) IconAction(AppIcons.cad("SECTION"), "Vista en sección", selected = cad.section) {
+            vm.cadCommand("cad.settings", mapOf("section" to !cad.section))
         }
     }
 }
+
 
 
 internal fun cadRefsTouch(a: CadSelection, b: CadSelection): Boolean {
@@ -1204,13 +1122,11 @@ private fun CadAction(intent: String, description: String, selected: Boolean = f
     }
 }
 
-private class CadNodeAction(val label: String, val enabled: Boolean = true, val action: () -> Unit)
 
 /** One node of the operation stack: tap shows the model as of that node; ⋮ opens its actions. */
 @Composable
 private fun CadStackNodeRow(icon: String, label: String, selected: Boolean, dimmed: Boolean, enabled: Boolean,
-                            tap: () -> Unit, actions: List<CadNodeAction>, reveal: Boolean = false) {
-    var menuOpen by remember { mutableStateOf(false) }
+                            tap: () -> Unit, reveal: Boolean = false) {
     val bringIntoView = remember { BringIntoViewRequester() }
     LaunchedEffect(reveal) {
         if (reveal) {
@@ -1222,14 +1138,9 @@ private fun CadStackNodeRow(icon: String, label: String, selected: Boolean, dimm
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Icon(AppIcons.cad(icon), null, tint = if (dimmed) Ink.Faint else Ink.Muted, modifier = Modifier.size(20.dp))
             PillButton(label, modifier = Modifier.weight(1f), selected = selected, enabled = enabled && !dimmed, onClick = tap)
-            IconAction(AppIcons.More, "Acciones del nodo", enabled = enabled && !dimmed) { menuOpen = true }
+
         }
-        DropdownMenu(menuOpen, { menuOpen = false }) {
-            actions.forEach { item ->
-                DropdownMenuItem(text = { Text(item.label) }, enabled = enabled && item.enabled,
-                    onClick = { menuOpen = false; item.action() })
-            }
-        }
+
     }
 }
 
@@ -1336,9 +1247,6 @@ private fun CadShellSideControl(side: String, enabled: Boolean, select: (String)
 @Composable
 private fun CadSurfaceControls(cad: CadState, capabilities: CadCapabilities, unit: LengthUnit, enabled: Boolean, vm: MainViewModel) {
     val edges = cad.surface.selection.isNotEmpty() && cad.surface.selection.all { it.kind == "EDGE" }
-    if (cad.surface.selection.isNotEmpty()) {
-        PillButton("Limpiar", enabled = enabled) { vm.cadCommand("cad.surface.clear") }
-    }
     if (cadShellEnabled(cad, capabilities)) {
         CadAction("SHELL", "Carcasa", enabled = enabled) { vm.cadCommand("cad.shell.begin") }
     }
@@ -1346,9 +1254,6 @@ private fun CadSurfaceControls(cad: CadState, capabilities: CadCapabilities, uni
         // Varias aristas del sólido se redondean o achaflanan de una vez, como un paso de la pila.
         CadAction("FILLET", "Redondear aristas", enabled = enabled) { vm.cadCommand("cad.finish.begin", mapOf("operation" to "FILLET")) }
         CadAction("CHAMFER", "Chaflán en aristas", enabled = enabled) { vm.cadCommand("cad.finish.begin", mapOf("operation" to "CHAMFER")) }
-    }
-    if (cad.activeSketchId != null && cad.surface.selection.isNotEmpty()) {
-        PillButton("Proyectar al plano (${cad.surface.selection.size})", enabled = enabled) { vm.cadCommand("cad.reference.project") }
     }
 }
 

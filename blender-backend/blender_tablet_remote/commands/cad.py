@@ -563,6 +563,12 @@ def entity_delete(payload):
         if payload.get('entity_id'):
             sketch,e=model.entity(doc,payload['entity_id'])
             refs=[dict(id=e['id'],part='BODY')]
+        elif payload.get('profile_ids'):
+            profiles=[model.profile(doc,identifier) for identifier in payload['profile_ids']]
+            sketch=profiles[0][0]
+            if any(s['id']!=sketch['id'] for s,_ in profiles):raise BadPayload('Selecciona perfiles del mismo boceto')
+            ids={identifier for _,p in profiles for identifier in (p.get('members',[p['id']]) if p['type']!='SKETCH' else [e['id'] for e in sketch['entities']])}
+            refs=[dict(id=i,part='BODY') for i in ids]
         else:
             sketch=model.find(doc,'sketches',runtime.active_sketch_id)
             refs=[r for r in selection if r.get('kind')=='ENTITY' and r['id']!='ORIGIN']
@@ -1584,8 +1590,10 @@ def settings(payload):
     if runtime.session: runtime.require(payload)
     if 'show_scene' in payload:
         if not isinstance(payload['show_scene'],bool): raise BadPayload('show_scene debe ser booleano')
+        runtime.restore_visibility()
         runtime.show_scene=payload['show_scene']
-        if runtime.show_scene: runtime.restore_visibility()
+        runtime.isolated_body=None if runtime.show_scene else runtime.active_body_id
+        runtime.isolate()
     if 'section' in payload:
         if not isinstance(payload['section'],bool): raise BadPayload('section debe ser booleano')
         runtime.section=payload['section']
@@ -2428,4 +2436,38 @@ def view_solid(payload):
         runtime.require(payload); runtime.cancel()
     yield from runtime.finish_sketch_steps()
     runtime.solid_view()
+    return runtime.status()
+
+
+@command('cad.view.frame')
+def view_frame(payload):
+    runtime.require_workspace()
+    from ..bpy_utils import find_view3d
+    from ..camera import camera
+    from mathutils import Vector
+    found=find_view3d()
+    if not found:raise CommandError('Se necesita una vista 3D',code='no_viewport')
+    camera.sync_from_region(found[3])
+    if runtime.active_sketch_id:
+        sketch=model.find(runtime.doc(),'sketches',runtime.active_sketch_id)
+        scale=max(float(bpy.context.scene.unit_settings.scale_length),1e-12)
+        from ..cad.kernel import world
+        points=[Vector(world(sketch,*p))/scale for e in sketch['entities'] for p in model.outline(e)]
+        if not points:
+            from ..cad.plane_display import plane_gizmo
+            points=plane_gizmo({'plane_frame':model.frame(sketch)},found[3])['quad']
+    else:
+        from .view import _bounds
+        objects=[o for o in runtime.objects(runtime.doc()) if o.visible_get()]
+        selected=[o for o in objects if o.get(BODY_KEY)==runtime.active_body_id]
+        if objects:_,points=_bounds(selected or objects)
+        else:
+            from ..cad.kernel import world
+            scale=max(float(bpy.context.scene.unit_settings.scale_length),1e-12)
+            points=[Vector(world(sketch,*p))/scale for sketch in runtime.doc()['sketches'] if sketch.get('visible',True)
+                    for e in sketch['entities'] for p in model.outline(e)]
+            if not points:raise CommandError('No hay geometría CAD que encuadrar',code='empty_scene')
+    low=Vector(tuple(min(p[i] for p in points) for i in range(3)))
+    high=Vector(tuple(max(p[i] for p in points) for i in range(3)))
+    camera.look_at((low+high)*.5,points,found[3])
     return runtime.status()

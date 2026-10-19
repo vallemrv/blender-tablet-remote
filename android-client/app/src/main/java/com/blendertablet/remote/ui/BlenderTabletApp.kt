@@ -52,6 +52,7 @@ import com.blendertablet.remote.model.BlenderMode
 import com.blendertablet.remote.model.ConnectionStatus
 import com.blendertablet.remote.model.Constraint
 import com.blendertablet.remote.model.EditTool
+import com.blendertablet.remote.model.EditFooterCatalog
 import com.blendertablet.remote.model.EditFooterAction
 import com.blendertablet.remote.model.EditCatalogAction
 import com.blendertablet.remote.model.Gesture
@@ -131,6 +132,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     var newSceneOpen by remember { mutableStateOf(false) }
     var fileBrowserMode by remember { mutableStateOf<FileBrowserMode?>(null) }
     // Guarda a QUIÉN se renombra: el sondeo se borra al cerrar el anillo.
+    var renameSketchTarget by remember { mutableStateOf<com.blendertablet.remote.model.CadSketch?>(null) }
     var renameTarget by remember { mutableStateOf<String?>(null) }
     // Acción pendiente de confirmar porque descarta cambios sin guardar.
     var pendingDiscard by remember { mutableStateOf<PendingDiscard?>(null) }
@@ -202,6 +204,11 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             guardDiscard(PendingDiscard.New { vm.fileNew(preset) })
         },
     )
+
+    renameSketchTarget?.let { sketch -> RenameDialog(sketch.name, title = "Renombrar boceto",
+        onDismiss = { renameSketchTarget = null }, onRename = { name ->
+            vm.cadCommand("cad.sketch.rename", mapOf("sketch_id" to sketch.id, "name" to name)); renameSketchTarget = null
+        }) }
 
     val session by vm.transformSession.collectAsStateWithLifecycle()
     val toolSession by vm.toolSession.collectAsStateWithLifecycle()
@@ -310,7 +317,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 state.blender.features.knifeDrag,
             tweakActive = !state.blender.cad.workspace && state.activeTool == ActiveTool.TWEAK &&
                 state.blender.mode == BlenderMode.EDIT,
-            longPressEnabled = !materialActive && !sculptActive && !state.blender.cad.workspace && toolSession.input != "REPEAT_TAP" && viewportLongPressEnabled(session.active, toolSession.active),
+            longPressEnabled = (!cad.sessionActive || (cad.operation == "DRAG" && state.cadTool == null)) && toolSession.input != "REPEAT_TAP" && viewportLongPressEnabled(session.active, toolSession.active),
             repeatTap = toolSession.armed && toolSession.input == "REPEAT_TAP",
             independentTaps = materialActive || state.blender.mode == BlenderMode.EDIT || state.blender.cad.workspace,
             // Los marcadores de transformación ya forman parte del fotograma.
@@ -329,7 +336,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 // se pregunta qué hay debajo: esperar a la respuesta para dibujarlo
                 // se notaría como un tirón.
                 quickMenuAt = x to y
-                vm.probeTouch(u, v)
+                if (!state.blender.cad.workspace && !materialActive && !sculptActive) vm.probeTouch(u, v) else vm.clearProbe()
             },
         )
 
@@ -482,6 +489,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     onFlatten = vm::flattenScaleAxis,
                     onProportionalRadiusValue = vm::setProportionalRadius,
                     onProportionalFalloff = vm::cycleProportionalFalloff,
+                    proportionalAvailable = state.blender.mode == BlenderMode.EDIT && state.blender.activeObjectType == "MESH",
+                    onProportional = vm::toggleProportional,
                     onConfirm = vm::transformConfirm,
                     onCancel = vm::transformCancel,
                     modifier = Modifier
@@ -547,23 +556,20 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     } else null,
                     onDismiss = { referencesOpen = false })
 
-                if (!state.blender.cad.workspace || state.blender.cad.activeSketchId == null) ViewFooter(
+                ViewFooter(
+                    contextKeys = if (state.blender.cad.workspace && state.blender.cad.activeSketchId != null) ({ CadViewActions(state, vm) }) else null,
                     onFrameSelected = vm::frameSelected,
                     projection = state.blender.view.perspective,
                     activeAxisView = state.blender.view.axisView,
                     inEdit = !state.blender.cad.workspace && state.blender.mode == BlenderMode.EDIT,
                     selectionMode = state.blender.selectionMode,
                     showEditShortcuts = state.blender.activeObjectType == "MESH" && state.blender.features.editCatalog.available,
-                    editToolbarAvailable = state.blender.features.editToolbar.available,
                     connectVerticesEnabled = state.blender.features.editCatalog.actionsFor(SelectionMode.VERTEX)
                         .any { it.id == "CONNECT_VERTICES" && it.enabled },
-                    showGrow = state.blender.activeObjectType == "MESH" && state.blender.features.selectionGrow,
                     onAxis = vm::viewAxis,
                     onOrbit = vm::viewOrbitStep,
                     onRotate180 = { vm.viewOrbitStep(1f, 0f) },
                     onProjection = vm::viewPerspective,
-                    onMore = vm::selectMore,
-                    onLess = vm::selectLess,
                     onEditAction = vm::editFooterAction,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
@@ -629,7 +635,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             val meshToolsChildren = if (touchContext.mode == BlenderMode.EDIT && state.blender.activeObjectType == "MESH" && state.blender.features.editCatalog.available) {
                 // Ya en el anillo (Loop/Ring/Ocultar) o en la barra izquierda
                 // (Extrude/Inset/Loop Cut/Cut) no se repiten aquí (F1 "cero duplicidades").
-                val excluded = RADIAL_TOP_LEVEL_CATALOG_IDS +
+                val excluded = RADIAL_TOP_LEVEL_CATALOG_IDS + EditFooterCatalog.ids +
                     if (state.blender.features.editToolbar.available)
                         state.blender.features.editToolbar.families.flatMap { family ->
                             family.variants.map { variant ->
@@ -642,9 +648,15 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             } else {
                 emptyList()
             }
-            val actions = quickActions(touchContext, vm, meshToolsChildren) {
-                renameTarget = touchContext.objectName ?: state.blender.activeObject
-            }
+            val actions = if (state.blender.cad.workspace) cadRadialActions(state, vm) { renameSketchTarget = it }
+                else if (state.blender.material.active || state.blender.mode == BlenderMode.SCULPT) listOf(
+                    QuickAction("Ocultar", AppIcons.visibility(false), enabled = state.blender.activeObject != null) { vm.hideObject() },
+                    QuickAction("Aislar", AppIcons.localView(if (state.blender.material.active) state.blender.material.isolate else state.localViewActive)) { vm.toggleLocalView() },
+                    QuickAction("Borrar", AppIcons.Delete, enabled = state.blender.activeObject != null) { vm.delete() },
+                )
+                else quickActions(touchContext, vm, meshToolsChildren) {
+                    renameTarget = touchContext.objectName ?: state.blender.activeObject
+                }
             QuickMenu(
                 open = true,
                 center = x to y,
@@ -1002,11 +1014,6 @@ private fun RailContent(
     val inEdit = state.blender.mode == BlenderMode.EDIT
 
     RailLabel("HERRAMIENTA")
-    IconAction(
-        AppIcons.SelectTool, "Seleccionar",
-        selected = state.activeTool == ActiveTool.SELECT && !session.active && !toolSession.active,
-        onClick = vm::selectTool,
-    )
     if (inEdit && state.blender.activeObjectType == "MESH" && state.blender.features.selectionTweak) {
         TweakToolButton(
             selected = state.activeTool == ActiveTool.TWEAK,
@@ -1098,6 +1105,28 @@ private fun deleteWhat(mode: SelectionMode): String = when (mode) {
  * que permite comprobar en un test que el long click no invade el rail ni el top: la
  * lista de [ActionId] es dato, no interfaz.
  */
+private fun cadRadialActions(state: AppUiState, vm: MainViewModel,
+                             onRename: (com.blendertablet.remote.model.CadSketch) -> Unit): List<QuickAction> {
+    val cad = state.blender.cad
+    val enabled = !cad.sessionActive
+    return buildList {
+        add(QuickAction("Aislar", AppIcons.localView(!cad.showScene), enabled = enabled) { vm.toggleLocalView() })
+        if (cad.activeSketchId == null && (cad.selectedSketch != null || cad.selectedFeature != null))
+            add(QuickAction("Ocultar / mostrar", AppIcons.visibility(false), enabled = enabled) { vm.hideObject() })
+        if (cad.activeSketchId == null && cad.selectedSketch != null && cad.selectedFeature == null) {
+            val sketch = cad.selectedSketch!!
+            add(QuickAction("Renombrar boceto", AppIcons.action(ActionId.RENAME), enabled = enabled) { onRename(sketch) })
+            add(QuickAction("Copiar boceto", AppIcons.Duplicate, enabled = enabled) {
+                vm.cadCommand("cad.sketch.copy", mapOf("sketch_id" to sketch.id, "offset" to cad.step * 10))
+            })
+        }
+        if (cad.activeSketchId != null && cadWeldEnabled(cad))
+            add(QuickAction("Soldar", AppIcons.cad("WELD"), enabled = enabled) { vm.cadCommand("cad.points.weld") })
+        if (cad.selectionId != null && cad.selectionKind !in setOf("CONSTRAINT", "SURFACE") && cad.selectionId != "ORIGIN")
+            add(QuickAction("Borrar", AppIcons.Delete, enabled = enabled) { vm.delete() })
+    }
+}
+
 private fun quickActions(
     context: TouchContext,
     vm: MainViewModel,
@@ -1162,7 +1191,7 @@ private fun quickActions(
         ActionId.VIEW_LOCAL -> QuickAction(
             label,
             AppIcons.localView(context.localView),
-        ) { vm.toggleLocalView() }
+        ) { vm.toggleLocalView(context.objectName.takeIf { context.hit && !context.objectSelected }) }
         ActionId.HIDE_GEOMETRY -> QuickAction(label, AppIcons.action(id)) { vm.hideSelection() }
         ActionId.DUPLICATE -> if (context.mode == BlenderMode.EDIT) {
             QuickAction("Duplicar selección", AppIcons.Duplicate) { vm.runDuplicateVariant(false) }
@@ -1212,7 +1241,9 @@ private fun quickActions(
                     vm.meshDissolve(deleteWhat(context.selectionMode))
                 },
             ),
-        ) else QuickAction(label, AppIcons.Delete, tint = Ink.Bad) { vm.delete() }
+        ) else QuickAction(label, AppIcons.Delete, tint = Ink.Bad) {
+            if (context.hit && !context.objectSelected && context.objectName != null) vm.deleteObject(context.objectName) else vm.delete()
+        }
         // El catálogo tiene más acciones, pero son de otras superficies y
         // RadialMenu no las emite. Un `else` mudo evitaría que se notara.
         else -> QuickAction(label, AppIcons.Fallback, enabled = false)

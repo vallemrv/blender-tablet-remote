@@ -107,6 +107,8 @@ fun TransformBar(
     onValue: (List<Double>?, Double?, List<Double>?) -> Unit,
     onProportionalRadiusValue: (Double) -> Unit,
     onProportionalFalloff: () -> Unit,
+    proportionalAvailable: Boolean,
+    onProportional: () -> Unit,
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
@@ -126,6 +128,7 @@ fun TransformBar(
                     PillButton(if (selectionPicking) "Toca la selección" else "Otra selección", selected = selectionPicking,
                         onClick = onChooseSelection)
                 }
+                if (proportionalAvailable) IconAction(AppIcons.Proportional, "Edición proporcional", selected = session.proportional, onClick = onProportional)
                 if (session.proportional) {
                     key(session.sessionId) {
                         ProportionalRadiusInput(session.proportionalRadius, unitScaleLength,

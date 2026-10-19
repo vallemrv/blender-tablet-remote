@@ -205,6 +205,8 @@ class CadTests(unittest.TestCase):
         bpy.ops.mesh.primitive_cube_add()
         obj=bpy.context.view_layer.objects.active
         mode.mode_set(dict(mode='CAD',**OWNER))
+        self.assertFalse(obj.hide_get())
+        cad.settings(dict(show_scene=False,**OWNER))
         self.assertTrue(obj.hide_get())
         for raw in ('{broken', '{"version":99}'):
             bpy.context.scene[model.KEY]=raw
@@ -233,6 +235,18 @@ class CadTests(unittest.TestCase):
             with self.assertRaises(CommandError):
                 model.loads(json.dumps(bad))
 
+    def test_delete_profiles_preserves_unselected_and_rejects_used_profile(self):
+        first=self.rect()
+        second=self.draw('CIRCLE',(.12,0),(.13,0))
+        cad.sketch_finish(OWNER)
+        cad.entity_delete(dict(profile_ids=['profile_'+second],**OWNER))
+        self.assertEqual([e['id'] for e in runtime.doc()['sketches'][0]['entities']],[first])
+        self.extrude(first)
+        before=copy.deepcopy(runtime.doc())
+        with self.assertRaises(CommandError):
+            cad.entity_delete(dict(profile_ids=['profile_'+first],**OWNER))
+        self.assertEqual(runtime.doc(),before)
+
     def test_edit_guard_and_convert(self):
         e=self.rect()
         f=self.extrude(e)
@@ -258,6 +272,7 @@ class CadTests(unittest.TestCase):
         bpy.ops.mesh.primitive_cube_add()
         bpy.context.view_layer.objects.active.name='Saved unrelated'
         mode.mode_set(dict(mode='CAD',**OWNER))
+        cad.settings(dict(show_scene=False,**OWNER))
         self.assertTrue(bpy.data.objects['Saved unrelated'].hide_get())
         from blender_tablet_remote.cad.lifecycle import register_handlers, unregister_handlers
         register_handlers()
@@ -286,6 +301,8 @@ class CadTests(unittest.TestCase):
         hidden.hide_set(True)
         view._local_hidden=['Previously hidden']
         mode.mode_set(dict(mode='CAD',**OWNER))
+        self.assertFalse(visible.hide_get())
+        cad.settings(dict(show_scene=False,**OWNER))
         self.assertTrue(visible.hide_get())
         self.assertTrue(hidden.hide_get())
         self.assertTrue(runtime.status()['isolated'])
@@ -301,6 +318,8 @@ class CadTests(unittest.TestCase):
         bpy.ops.mesh.primitive_cube_add()
         obj=bpy.context.view_layer.objects.active
         mode.mode_set(dict(mode='CAD',**OWNER))
+        self.assertFalse(obj.hide_get())
+        cad.settings(dict(show_scene=False,**OWNER))
         self.assertTrue(obj.hide_get())
         with runtime.saving():
             self.assertFalse(obj.hide_get())

@@ -49,6 +49,8 @@ internal object IconHelp {
         "VERTEX" to "Permite seleccionar y editar los puntos que forman la malla.",
         "EDGE" to "Permite seleccionar y editar las líneas que unen los vértices.",
         "FACE" to "Permite seleccionar y editar las superficies de la malla.",
+        "GROW_SELECTION" to "Amplía la selección a los elementos vecinos de la malla.",
+        "SHRINK_SELECTION" to "Reduce la selección retirando los elementos de su borde.",
         "SELECT_ALL" to "Selecciona todos los elementos disponibles en el contexto actual.",
         "DESELECT_ALL" to "Quita la selección de todos los elementos.",
         "INVERT" to "Selecciona lo que no estaba seleccionado y deselecciona lo que sí lo estaba.",

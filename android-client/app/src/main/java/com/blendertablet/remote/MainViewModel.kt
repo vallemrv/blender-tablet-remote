@@ -706,6 +706,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun redo() { cancelMaterialStroke(); cancelSculptStroke(); cancelCadStroke(); client.redo() }
     fun repeatLast() = client.repeatLast()
     fun delete() {
+        cancelMaterialStroke(); cancelSculptStroke()
+        if (client.state.value.material.active) {
+            client.editCatalogCommand("object.delete", mapOf("objects" to client.state.value.material.targets))
+            materialCommand("material.select", mapOf("objects" to emptyList<String>())); return
+        }
+        if (client.state.value.mode == BlenderMode.SCULPT) client.setMode(BlenderMode.OBJECT)
         val cad = client.state.value.cad
         if (cad.workspace) {
             if (cad.surface.mode != "PROFILE") { cadCommand("cad.surface.clear"); return }
@@ -717,7 +723,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (rounding != null) cadCommand("cad.fillet.remove", mapOf("entity_id" to rounding.id))
                 else cadCommand("cad.entity.delete")
             }
-            else cad.selectedFeature?.let { cadCommand("cad.feature.delete", mapOf("feature_id" to it.id)) }
+            else if (cad.selectedFeature != null) cadCommand("cad.feature.delete", mapOf("feature_id" to cad.selectedFeature!!.id))
+            else cad.selectedSketch?.let { sketch ->
+                if (cad.selectionKind == "PROFILE") cadCommand("cad.entity.delete", mapOf("profile_ids" to cad.selection.map { it.id }.ifEmpty { listOfNotNull(cad.selectionId) }))
+                else cadCommand("cad.sketch.delete", mapOf("sketch_id" to sketch.id))
+            }
         } else client.delete()
     }
     fun duplicate() = client.duplicate()
@@ -725,7 +735,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         local.update { it.copy(duplicateLinked = linked) }
         if (linked) client.duplicateLinked() else client.duplicate()
     }
-    fun frameSelected() = client.frameSelected()
+    fun frameSelected() {
+        if (client.state.value.cad.workspace) cadCommand("cad.view.frame") else client.frameSelected()
+    }
     /**
      * Un toque en el viewport. Normalmente selecciona, pero con una transformación
      * abierta y un snap geométrico elegido significa "pega el movimiento a esto":
@@ -894,10 +906,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Aísla la selección (el `/` del footer de vistas). Optimista: no hay push. */
-    fun toggleLocalView() {
+    fun toggleLocalView(target: String? = null) {
+        val remote = client.state.value
+        if (remote.material.active) { materialSettings(mapOf("isolate" to !remote.material.isolate)); return }
+        if (remote.cad.workspace) { cadCommand("cad.settings", mapOf("show_scene" to !remote.cad.showScene)); return }
         val next = !local.value.localViewActive
         local.update { it.copy(localViewActive = next) }
-        client.viewLocal(next)
+        if (target != null) client.editCatalogCommand("view.local", mapOf("enabled" to next, "objects" to listOf(target)))
+        else client.viewLocal(next)
     }
 
     fun selectMore() = client.selectMore()
@@ -1020,7 +1036,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         else client.invertSelection()
     }
     fun hideSelection() = client.hideSelection()
-    fun hideObject(name: String? = null) = client.hideObjects(name?.let(::listOf))
+    fun hideObject(name: String? = null) {
+        val remote = client.state.value
+        if (remote.material.active) {
+            client.hideObjects(remote.material.targets); materialCommand("material.select", mapOf("objects" to emptyList<String>())); return
+        }
+        if (remote.cad.workspace) {
+            remote.cad.selectedFeature?.let { cadCommand("cad.feature.set", mapOf("feature_id" to it.id, "enabled" to !it.enabled)); return }
+            remote.cad.selectedSketch?.let { cadCommand("cad.sketch.visibility", mapOf("sketch_id" to it.id, "visible" to !it.visible)) }
+            return
+        }
+        if (remote.mode == BlenderMode.SCULPT) client.setMode(BlenderMode.OBJECT)
+        client.hideObjects(name?.let(::listOf))
+    }
+    fun deleteObject(name: String) = client.editCatalogCommand("object.delete", mapOf("objects" to listOf(name)))
+
     fun toggleObjectShading(name: String? = null) = client.shadeObjects(name?.let(::listOf))
     fun revealObject(name: String) = client.revealObjects(listOf(name))
     fun revealAllObjects() = client.revealObjects()
@@ -1188,17 +1218,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * wire: mantenerlo deliberadamente sin envío evita que la UI invente protocolos.
      */
     fun editFooterAction(action: EditFooterAction) {
-        val id = when (action) {
-            EditFooterAction.MAKE_EDGE_FACE -> "MAKE_EDGE_FACE"
-            EditFooterAction.CONNECT_VERTICES -> "CONNECT_VERTICES"
-            EditFooterAction.KNIFE -> "KNIFE"
-            EditFooterAction.SEPARATE -> "SEPARATE"
-            EditFooterAction.SPLIT -> "SPLIT"
-            EditFooterAction.NORMALS -> return
-            EditFooterAction.NORMALS_OUTSIDE -> "RECALCULATE_NORMALS_OUTSIDE"
-            EditFooterAction.NORMALS_INSIDE -> "RECALCULATE_NORMALS_INSIDE"
-            EditFooterAction.NORMALS_FLIP -> "FLIP_NORMALS"
-        }
+        val id = com.blendertablet.remote.model.EditFooterCatalog.id(action) ?: return
         client.state.value.features.editCatalog.actionsFor(client.state.value.selectionMode)
             .firstOrNull { it.id == id }?.let(::editCatalogAction)
     }

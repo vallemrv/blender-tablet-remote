@@ -2558,3 +2558,21 @@ El evento `versioning.changed` y las consultas sin refresh actualizan el progres
 El cliente refresca también archivo/escena al completar una acción. Las versiones
 usan el mismo proyecto al Guardar como (ID en la escena), y un almacenamiento
 independiente del Git del directorio donde vive el archivo de trabajo.
+
+
+### Coherencia de superficies y selección (octubre 2026)
+
+El toque normal reemplaza; `additive:true` alterna pertenencia. Android comparte
+«＋ Añadir» entre Objeto, Edición, Materiales y CAD; «Camino» es independiente.
+`cad.select_all` acepta también `INVERT` y `selection.box` / `selection.circle` seleccionan por
+región en el contexto CAD. Pintar conserva un baseline y alterna cada referencia
+una vez por trazo; cancelar lo restaura. Las restricciones geométricas se crean
+en el rail y las cotas desde las medidas de la bandeja; su candado alterna la cota.
+
+`cad.view.frame {}` encuadra el boceto abierto o la pieza CAD activa con la cámara
+remota. `cad.entity.delete {profile_ids:[...]}` elimina los contornos seleccionados
+del mismo boceto y valida sus dependencias antes de guardar. No modifica otros perfiles.
+`view.local {enabled,objects?:[nombres]}` permite aislar el objeto tocado sin cambiar
+la selección. CAD comienza mostrando la escena: `cad.settings {show_scene:false}`
+aísla la pieza activa y `true` restaura la visibilidad previa. La entrada en CAD
+por sí sola ya no aísla; la acción vive en el radial, como en los demás modos.

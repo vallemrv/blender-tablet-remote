@@ -144,8 +144,7 @@ fun BoxScope.MaterialWorkspace(state: AppUiState, vm: MainViewModel) {
  * icono y con el desplegable, no con una etiqueta permanente ocupando el viewport.
  */
 @Composable
-fun MaterialTopActions(state: AppUiState, vm: MainViewModel) {
-    val material = state.blender.material
+private fun MaterialInspectorControls(material: MaterialState, vm: MainViewModel) {
     var objectsOpen by remember { mutableStateOf(false) }
     var zoneOpen by remember { mutableStateOf(false) }
     var lightOpen by remember { mutableStateOf(false) }
@@ -163,16 +162,14 @@ fun MaterialTopActions(state: AppUiState, vm: MainViewModel) {
                 DropdownMenuItem(text = { Text(obj.label) }, leadingIcon = {
                     Checkbox(obj.id in material.targets, onCheckedChange = null)
                 }, onClick = {
-                    val next = if (obj.id in material.targets) material.targets - obj.id else material.targets + obj.id
+                    val next = if (vm.uiState.value.selectionOp != com.blendertablet.remote.model.SelectionOp.TOGGLE) listOf(obj.id)
+                        else if (obj.id in material.targets) material.targets - obj.id else material.targets + obj.id
                     vm.materialCommand("material.select", mapOf("objects" to next))
                 })
             }
         }
     }
-    IconAction(AppIcons.material("ISOLATE"), "Aislar la selección para trabajar dentro",
-        selected = material.isolate, enabled = targets > 0) {
-        vm.materialSettings(mapOf("isolate" to !material.isolate))
-    }
+
     Box {
         IconAction(AppIcons.material(if (material.scope == "ALL") "ZONE_ALL" else "ZONE"),
             "Zona: " + (zone?.label ?: "objeto completo"), selected = material.scope != "ALL") { zoneOpen = true }
@@ -282,6 +279,7 @@ private fun MaterialLibrary(
                 Text("MATERIALES", color = Ink.Accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f).padding(start = 2.dp))
             }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { MaterialInspectorControls(material, vm) }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 listOf("material" to "Material", "finish" to "Acabado", "grain" to "Grano", "layers" to "Capas").forEach { (id, label) ->
                     PillButton(label, Modifier.weight(1f), selected = tab == id) { tab = id }

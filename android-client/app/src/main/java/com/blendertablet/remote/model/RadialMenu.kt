@@ -71,6 +71,8 @@ object RadialMenu {
             // tocarían otra cosa distinta de la que se está señalando.
             context.hit && !context.objectSelected -> {
                 add(ActionId.RENAME)
+                add(ActionId.HIDE_OBJECT)
+                add(ActionId.VIEW_LOCAL)
             }
             // Sobre lo ya seleccionado: operaciones cortas sobre eso mismo.
             context.hit -> {
@@ -95,7 +97,7 @@ object RadialMenu {
             }
         }
         // Borrar solo si hay algo que borrar, y siempre el último: es el destructivo.
-        if (context.objectSelected || (!context.hit && context.hasSelection)) add(ActionId.DELETE)
+        if (context.hit || context.hasSelection) add(ActionId.DELETE)
     }
 
     // La selección vive en su barra fija (EditSelectionBar); el radial queda para la malla.
@@ -103,6 +105,7 @@ object RadialMenu {
         add(ActionId.EDIT_MESH_TOOLS)
         if (context.hasSelection) {
             add(ActionId.HIDE_GEOMETRY)
+            add(ActionId.VIEW_LOCAL)
             add(ActionId.DUPLICATE)
             add(ActionId.DELETE)
         }

@@ -84,7 +84,8 @@ class CadRuntime:
         self.increment = True
         self.construction = False
         self.active_body_id = None
-        self.show_scene = False
+        self.show_scene = True
+        self.isolated_body = None
         self.section = False
         # Projection of the face-on sketch view; orbit stays locked in both.
         self.sketch_projection = 'ORTHO'
@@ -120,7 +121,7 @@ class CadRuntime:
             # Undo replaces RNA addresses. Keep the workspace, but never hold an
             # old scene preview; explicit file loads call reset_session().
             workspace, active = self.workspace, self.active_sketch_id
-            settings={k:getattr(self,k) for k in ("active_body_id","step","increment","construction","show_scene","section","sketch_projection","_solid_view","rollback_id")}
+            settings={k:getattr(self,k) for k in ("active_body_id","step","increment","construction","show_scene","isolated_body","section","sketch_projection","_solid_view","rollback_id")}
             hidden, shown, owner = self._hidden, self._shown, self.workspace_owner
             self.reset()
             self.workspace, self.active_sketch_id = workspace, active
@@ -160,7 +161,7 @@ class CadRuntime:
             if obj.get(DOC_KEY)==doc['id'] and obj.get(COPY_SOURCE_KEY) and obj.hide_get():
                 if obj.name not in self._shown: self._shown.append(obj.name)
                 obj.hide_set(False)
-            elif not self.show_scene and obj.get(DOC_KEY) != doc['id'] and not obj.hide_get() and not obj.hide_viewport:
+            elif not self.show_scene and (obj.get(DOC_KEY) != doc['id'] or (self.isolated_body and obj.get(BODY_KEY)!=self.isolated_body)) and not obj.hide_get() and not obj.hide_viewport:
                 if obj.name not in self._hidden:
                     self._hidden.append(obj.name)
                 obj.hide_set(True)
@@ -707,6 +708,7 @@ class CadRuntime:
         bar = self.bar(doc)
         sequence = [n['id'] for n in model.history(doc)] if bar else None
         for sketch in doc['sketches']:
+            if not self.show_scene and self.isolated_body and sketch.get('body_id')!=self.isolated_body:continue
             if self.active_sketch_id and sketch['id'] != self.active_sketch_id:
                 continue
             whole_sketch=(self.selection or {}).get('kind')=='SKETCH' and self.selection['id']==sketch['id']

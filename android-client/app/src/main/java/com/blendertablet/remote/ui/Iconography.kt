@@ -207,6 +207,8 @@ object AppIcons {
     fun action(id: ActionId): ImageVector = when (id) {
         ActionId.PLACE_OBJECT -> StudioIcons["PLACE"]
         ActionId.ADD_OBJECT -> Add
+        ActionId.SELECT_MORE -> StudioIcons["GROW_SELECTION"]
+        ActionId.SELECT_LESS -> StudioIcons["SHRINK_SELECTION"]
         ActionId.SELECT_ALL -> StudioIcons["SELECT_ALL"]
         ActionId.TOOL_BOX -> StudioIcons["BOX_SELECT"]
         ActionId.TOOL_CIRCLE -> StudioIcons["CIRCLE_SELECT"]

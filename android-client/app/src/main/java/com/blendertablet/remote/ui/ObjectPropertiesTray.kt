@@ -76,11 +76,6 @@ fun ObjectPropertiesTray(
         title = "Objeto",
         modifier = modifier,
     ) {
-        fields.firstOrNull { it.id == "visible" }?.let { field ->
-            val visible = (drafts[field.id] ?: properties?.values?.get(field.id)) == true
-            IconAction(AppIcons.visibility(visible), if (visible) "Ocultar objeto" else "Mostrar objeto",
-                enabled = !field.readOnly) { edit(field, !visible) }
-        }
         fields.firstOrNull { it.id == "in_front" }?.let { field ->
             val inFront = (drafts[field.id] ?: properties?.values?.get(field.id)) == true
             IconAction(AppIcons.InFront, "Mostrar delante", selected = inFront,

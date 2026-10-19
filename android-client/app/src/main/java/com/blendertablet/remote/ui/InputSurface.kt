@@ -422,6 +422,7 @@ private class GestureView(
                     shapeCurrentX = event.x; shapeCurrentY = event.y
                     lastDispatchAt = event.eventTime
                     onCadGesture(GesturePhase.BEGIN, nx(event.x), ny(event.y))
+                    if (cadCursorEnabled && longPressEnabled) postDelayed(longPressRunnable, FINGER_LONG_PRESS_MS)
                     return true
                 }
                 if (knifeActive) {
@@ -694,11 +695,12 @@ private class GestureView(
             MotionEvent.ACTION_DOWN -> {
                 parent?.requestDisallowInterceptTouchEvent(true)
                 sculptSuppressPalm = false
-                moved = false
+                moved = false; longPressFired = false
                 lastX = event.x; lastY = event.y
                 startX = event.x; startY = event.y
                 downToolType = event.getToolType(0)
                 resetPending()
+                if (!isStylus(downToolType) && longPressEnabled) postDelayed(longPressRunnable, FINGER_LONG_PRESS_MS)
                 if (navigationOrbitEnabled && NavigationOrbitLayout.contains(width, height, event.x, event.y, navigationOrbitRightInset)) {
                     navigationOrbitActive = true; navigationOrbitBegan = false
                 } else if (isStylus(downToolType) || !sculptStylusOnly) {
@@ -709,6 +711,7 @@ private class GestureView(
                 }
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
+                removeCallbacks(longPressRunnable)
                 val incomingStylus = isStylus(event.getToolType(actionIndex))
                 if (sculptPointerId >= 0 && sculptPointerStylus) return true // Palm cannot navigate or cancel the pen.
                 if (incomingStylus) {
@@ -722,6 +725,7 @@ private class GestureView(
                 }
             }
             MotionEvent.ACTION_MOVE -> {
+                if (hypot(event.x-startX,event.y-startY)>systemTouchSlop) { moved=true; removeCallbacks(longPressRunnable) }
                 if (sculptPointerId >= 0) {
                     val index = event.findPointerIndex(sculptPointerId)
                     if (index < 0) cancelSculpt() else {
@@ -734,6 +738,7 @@ private class GestureView(
                 }
             }
             MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_UP -> {
+                removeCallbacks(longPressRunnable)
                 if (sculptPointerId >= 0 && event.getPointerId(actionIndex) == sculptPointerId) {
                     // Release pressure/position is jitter, not another dab.
                     flushSculpt(event.eventTime)
@@ -743,7 +748,7 @@ private class GestureView(
                     updateSculptHoverModifiers(event, actionIndex)
                     sculptSuppressPalm = event.pointerCount > 1
                 } else if (sculptPointerId < 0) {
-                    if (action == MotionEvent.ACTION_UP && !moved && !sculptSuppressPalm) {
+                    if (action == MotionEvent.ACTION_UP && !moved && !sculptSuppressPalm && !longPressFired) {
                         if (event.eventTime - lastTapAt in 1..DOUBLE_TAP_MS) {
                             lastTapAt = 0L; onDoubleTap()
                         } else lastTapAt = event.eventTime
@@ -1344,6 +1349,8 @@ private class GestureView(
         removeCallbacks(longPressRunnable)
         if (!longPressEnabled || longPressFired || moved) return
         longPressFired = true
+        if (cadDrawing) { onCadGesture(GesturePhase.CANCEL, nx(shapeCurrentX), ny(shapeCurrentY)); cadDrawing = false; suppressSingleAfterTweak = true }
+        if (sculptEnabled) { cancelSculpt(); endNavigationOrbit(); endViewGesture(); sculptSuppressPalm = true }
         performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
         onLongPress(x, y, nx(x), ny(y))
     }

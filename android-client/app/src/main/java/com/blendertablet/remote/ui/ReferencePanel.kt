@@ -153,7 +153,7 @@ fun BoxScope.ReferencePanel(
                 if (selected != null) {
                     Text(selected.name, color = Ink.Muted, fontSize = 11.sp, maxLines = 1)
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconAction(AppIcons.Reset, "Encuadrar referencia") { zoom = 1f; pan = Offset.Zero; opacity = 1f }
+                        IconAction(AppIcons.Reset, "Restablecer referencia") { zoom = 1f; pan = Offset.Zero; opacity = 1f }
                         Text("Opacidad", color = Ink.Muted, fontSize = 11.sp)
                         Slider(opacity, { opacity = it }, valueRange = .15f..1f, modifier = Modifier.weight(1f))
                     }

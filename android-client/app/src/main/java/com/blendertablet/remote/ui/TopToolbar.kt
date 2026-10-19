@@ -59,31 +59,8 @@ fun TopToolbar(
                             selected = blender.view.shading == Shading.WIREFRAME,
                         ) { vm.toggleShading() }
                     }
-                    if (inEdit && blender.activeObjectType == "MESH" && blender.features.editSettings) {
-                        IconAction(
-                            AppIcons.Proportional, "Edición proporcional",
-                            selected = blender.editSettings.proportional,
-                        ) {
-                            vm.toggleProportional()
-                        }
-                        IconAction(
-                            AppIcons.AutoMerge, "Auto Merge",
-                            selected = blender.editSettings.autoMerge,
-                        ) {
-                            vm.toggleAutoMerge()
-                        }
-                    }
-                    if (!blender.cad.workspace && blender.mode != BlenderMode.SCULPT && !blender.material.active) {
-                    if (blender.features.gizmo && !(inEdit && blender.activeObjectType == "CURVE")) IconAction(AppIcons.gizmo, "Manipulador", selected = state.gizmoEnabled) { vm.toggleGizmo() }
-
-                    }
-                    // Materiales y CAD no abren una franja propia: su contexto son
-                    // iconos en esta misma fila, delante de Deshacer.
-                    if (blender.material.active) MaterialTopActions(state, vm)
-                    if (blender.cad.workspace) CadTopActions(state, vm)
                     IconAction(AppIcons.Undo, "Deshacer") { vm.undo() }
                     IconAction(AppIcons.Redo, "Rehacer") { vm.redo() }
-                    if (blender.cad.workspace) CadSelectionActions(state, vm)
                 }
             }
         }
@@ -179,8 +156,16 @@ fun SelectionHelperRail(state: AppUiState, vm: MainViewModel, modifier: Modifier
     ToolRail(modifier) {
         RailLabel("SELECCIÓN")
         SelectionIntentControls(state, vm)
+        if (!blender.cad.workspace && !blender.material.active && blender.features.gizmo && blender.activeObjectType != "CURVE")
+            IconAction(AppIcons.gizmo, "Manipulador", selected = state.gizmoEnabled, onClick = vm::toggleGizmo)
+        if (blender.mode == BlenderMode.EDIT && blender.activeObjectType == "MESH")
+            IconAction(AppIcons.AutoMerge, "Auto Merge", selected = blender.editSettings.autoMerge, onClick = vm::toggleAutoMerge)
         if (blender.mode == BlenderMode.EDIT && blender.activeObjectType == "MESH")
             PillButton("Camino", selected = state.shortestPathActive, onClick = vm::toggleShortestPath)
+        if (blender.mode == BlenderMode.EDIT && blender.activeObjectType == "MESH" && blender.features.selectionGrow) {
+            IconAction(AppIcons.action(ActionId.SELECT_MORE), "Crecer selección", enabled = hasSelection, onClick = vm::selectMore)
+            IconAction(AppIcons.action(ActionId.SELECT_LESS), "Decrecer selección", enabled = hasSelection, onClick = vm::selectLess)
+        }
         androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally) {
             EditSelectionBar.actions.filter {
                 when {
