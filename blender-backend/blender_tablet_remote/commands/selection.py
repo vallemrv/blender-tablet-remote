@@ -749,6 +749,8 @@ def _projected_center(obj, elem, rv3d):
 
 
 def _shape_select(payload: dict, contains) -> dict:
+    from . import workspace_selection
+    if workspace_selection.scope():return workspace_selection.shape(payload,contains)
     # En Object Mode no hace falta objeto activo (puede no haberlo tras un
     # delete); en Edit sí, y edit_bmesh lo exige.
     active = bpy.context.view_layer.objects.active

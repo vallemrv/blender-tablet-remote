@@ -15,6 +15,9 @@ _session = None
 def _valid(s):
     try:
         if bpy.context.scene.session_uid != s['scene']:return False
+        if s['mode']=='WORKSPACE':
+            from .workspace_selection import scope
+            return scope()==s['scope']
         if s['mode']=='OBJECT':return bpy.context.mode=='OBJECT'
         obj=s['object']
         if obj.name not in bpy.data.objects or obj.mode!='EDIT' or obj.data!=s['data']:return False
@@ -28,7 +31,10 @@ def _valid(s):
 
 def _restore(s):
     if not _valid(s):return
-    if s['mode']=='OBJECT':
+    if s['mode']=='WORKSPACE':
+        from .workspace_selection import restore
+        restore(s['baseline'])
+    elif s['mode']=='OBJECT':
         for obj,value in s['baseline']:
             try:obj.select_set(value)
             except (ReferenceError,RuntimeError):pass
@@ -57,14 +63,17 @@ def owner_disconnected(owner):
 def _begin(payload):
     from ..cad.runtime import runtime as cad
     from ..materials.runtime import runtime as materials
-    if cad.workspace or materials.active or bpy.context.mode not in {'OBJECT','EDIT_MESH','EDIT_CURVE'}:
+    if (cad.workspace and (cad.active_sketch_id or cad.session)) or bpy.context.mode not in {'OBJECT','EDIT_MESH','EDIT_CURVE'}:
         raise CommandError('Pintar selección requiere Object o Edit de malla/curva',code='wrong_mode')
     from .sessions import cancel_all
     cancel_all()
     obj=bpy.context.view_layer.objects.active
     s=dict(owner=payload.get('_client_id'),id=payload['stroke_id'],scene=bpy.context.scene.session_uid,
            object=obj,active=obj,touched=set(),mode='OBJECT')
-    if obj and obj.mode=='EDIT':
+    from . import workspace_selection
+    if workspace_selection.scope():
+        s.update(mode='WORKSPACE',scope=workspace_selection.scope(),baseline=workspace_selection.snapshot(),hits={})
+    elif obj and obj.mode=='EDIT':
         s['data']=obj.data
         if obj.type=='CURVE':
             from .curve_edit import selected,topology
@@ -102,6 +111,14 @@ def _paint(s,payload):
         if screen is None:return False
         clip=camera.perspective_matrix(rv3d)@Vector((*position,1.))
         return -clip.w<=clip.z<=clip.w and (s.get('object') and s['object'].show_in_front or _visible(position,screen,graph,rv3d,set(),viewport))
+    if s['mode']=='WORKSPACE':
+        from . import workspace_selection as ws
+        for stamp in stamps:
+            item=ws.hit(stamp.x,stamp.y*aspect,rv3d,region,area,graph,radius)
+            if item is not None:s['hits'][ws.key(item)]=item
+        s['touched']=set(s['hits'])
+        ws.restore(s['baseline']);ws.apply(s['hits'].values(),'TOGGLE')
+        return
     if s['mode']=='OBJECT':
         baseline={o.session_uid:value for o,value in s['baseline'] if o.name in bpy.data.objects}
         for stamp in stamps:

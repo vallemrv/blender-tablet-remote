@@ -1520,17 +1520,22 @@ def select_all(payload):
     if runtime.session:
         runtime.require(payload); runtime.cancel()
     action=payload.get('action','SELECT')
-    if action not in ('SELECT','DESELECT'): raise BadPayload('action: SELECT o DESELECT')
+    if action not in ('SELECT','DESELECT','INVERT'): raise BadPayload('action: SELECT, DESELECT o INVERT')
     doc = runtime.doc()
     if action == 'DESELECT':
-        _set_selection([])
+        _set_selection([]); runtime.surface.clear()
     else:
         sketch=model.find(doc,'sketches',runtime.active_sketch_id or payload.get('sketch_id'))
         if runtime.active_sketch_id:
-            _set_selection([dict(kind='ENTITY',id=e['id'],part='BODY') for e in sketch['entities']])
+            refs=[dict(kind='ENTITY',id=e['id'],part='BODY') for e in sketch['entities']]
+            if action=='INVERT':refs=[r for r in refs if not any(_covers(old,r) for old in _refs())]
+            _set_selection(refs)
         else:
             _require_reachable(doc, sketch['id'])
-            _set_selection([dict(kind='SKETCH',id=sketch['id'])])
+            if action=='INVERT':
+                refs=[dict(kind='PROFILE',id=p['id']) for p in model.profiles(sketch)]
+                _set_selection([r for r in refs if not any(old.get('kind')=='SKETCH' or old.get('id')==r['id'] for old in _refs())])
+            else:_set_selection([dict(kind='SKETCH',id=sketch['id'])])
     return runtime.status()
 
 
@@ -1568,7 +1573,8 @@ def select(payload):
         else: raise BadPayload('Selección CAD no compatible')
     else: ref=_pick(payload)
     refs=copy.deepcopy(_refs()) if payload.get('additive') else []
-    _set_selection(_toggle_refs(refs,ref))
+    if ref is not None or not payload.get('additive'):
+        _set_selection(_toggle_refs(refs,ref))
     return runtime.status()
 
 
@@ -1607,7 +1613,7 @@ def drag_begin(payload):
     start=runtime.point(payload,sketch) if hit else None
     session=runtime.begin(payload,'DRAG')
     session.update(sketch_id=sketch['id'],refs=refs,start=start,hit=hit,
-                   selection_before=selection_before,dragged=False)
+                   selection_before=selection_before,dragged=False,additive=bool(payload.get('additive',False)))
     if hit and hit['kind']=='CONSTRAINT':
         from ..cad import annotations, dimensions
         rules=dimensions.visible_constraints(sketch)
@@ -1666,8 +1672,9 @@ def drag_end(payload):
     if session.get('candidate'): return (yield from confirm.__wrapped__(payload))
     if not session.get('dragged'):
         previous=session.get('selection_before') or {}
-        refs=previous.get('items',[previous] if previous else [])
-        _set_selection(_toggle_refs(refs,session.get('hit')))
+        refs=previous.get('items',[previous] if previous else []) if session.get('additive') else []
+        if session.get('hit') is not None or not session.get('additive'):
+            _set_selection(_toggle_refs(refs,session.get('hit')))
     runtime.session=None
     return runtime.status()
 
@@ -2015,7 +2022,8 @@ def surface_mode(payload):
 def surface_select(payload):
     runtime.require_workspace()
     if runtime.session: raise CommandError('Termina la preview antes de medir',code='session_active')
-    runtime.surface.select(payload,accumulate=runtime.active_sketch_id is not None)
+    if not payload.get('additive',False): runtime.surface.clear()
+    runtime.surface.select(payload,accumulate=bool(payload.get('additive',False)))
     last=runtime.surface.items[-1] if runtime.surface.items else None
     runtime.selection=dict(kind='SURFACE',id=last['id'],feature_id=last['feature_id']) if last else None
     if last and last['feature_id'] and not runtime.active_sketch_id:

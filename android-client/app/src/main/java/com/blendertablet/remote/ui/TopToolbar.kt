@@ -1,5 +1,9 @@
 package com.blendertablet.remote.ui
 
+import com.blendertablet.remote.model.ActiveTool
+
+import com.blendertablet.remote.model.SelectionOp
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
@@ -71,9 +75,7 @@ fun TopToolbar(
                     }
                     if (!blender.cad.workspace && blender.mode != BlenderMode.SCULPT && !blender.material.active) {
                     if (blender.features.gizmo && !(inEdit && blender.activeObjectType == "CURVE")) IconAction(AppIcons.gizmo, "Manipulador", selected = state.gizmoEnabled) { vm.toggleGizmo() }
-                    if (inEdit && blender.activeObjectType == "MESH" && blender.features.selectionShortestPath) {
-                        PillButton("Ctrl", selected = state.shortestPathActive) { vm.toggleShortestPath() }
-                    }
+
                     }
                     // Materiales y CAD no abren una franja propia: su contexto son
                     // iconos en esta misma fila, delante de Deshacer.
@@ -169,12 +171,22 @@ fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier
 @Composable
 fun SelectionHelperRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier) {
     val blender = state.blender
-    val hasSelection = blender.context.hasSelection(blender.mode, blender.selectionMode)
+    val hasSelection = when {
+        blender.material.active -> blender.material.targets.isNotEmpty()
+        blender.cad.workspace -> blender.cad.selectionId != null || blender.cad.surface.selection.isNotEmpty()
+        else -> blender.context.hasSelection(blender.mode, blender.selectionMode)
+    }
     ToolRail(modifier) {
-        RailLabel("HELPER")
+        RailLabel("SELECCIÓN")
+        SelectionIntentControls(state, vm)
+        if (blender.mode == BlenderMode.EDIT && blender.activeObjectType == "MESH")
+            PillButton("Camino", selected = state.shortestPathActive, onClick = vm::toggleShortestPath)
         androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally) {
             EditSelectionBar.actions.filter {
                 when {
+                    blender.cad.workspace -> it in setOf(ActionId.SELECT_ALL, ActionId.SELECT_INVERT, ActionId.TOOL_BOX, ActionId.TOOL_CIRCLE, ActionId.TOOL_PAINT_SELECT) &&
+                        ((blender.cad.surface.mode == "PROFILE" && blender.cad.selectionSketch != null) || (it == ActionId.SELECT_ALL && hasSelection) ||
+                         (it in setOf(ActionId.TOOL_BOX, ActionId.TOOL_CIRCLE, ActionId.TOOL_PAINT_SELECT) && blender.cad.surface.mode != "PROFILE"))
                     blender.mode == BlenderMode.OBJECT -> it in setOf(ActionId.SELECT_ALL, ActionId.SELECT_INVERT, ActionId.TOOL_BOX, ActionId.TOOL_CIRCLE, ActionId.TOOL_PAINT_SELECT)
                     blender.activeObjectType == "CURVE" -> it in setOf(ActionId.SELECT_ALL, ActionId.SELECT_INVERT, ActionId.TOOL_PAINT_SELECT)
                     else -> EditSelectionBar.enabled(it, blender.selectionMode, hasSelection)
@@ -205,4 +217,13 @@ fun SelectionHelperRail(state: AppUiState, vm: MainViewModel, modifier: Modifier
             }
         }
     }
+}
+
+
+@Composable
+fun SelectionIntentControls(state: AppUiState, vm: MainViewModel) {
+    IconAction(AppIcons.SelectTool, "Seleccionar", selected = state.shapeTool == ShapeTool.NONE &&
+        (!state.blender.material.active || state.blender.material.interaction == "SELECT") && state.activeTool == ActiveTool.SELECT,
+        onClick = vm::activateSelection)
+    PillButton("＋ Añadir", selected = state.selectionOp == SelectionOp.TOGGLE, onClick = vm::toggleSelectionAdd)
 }

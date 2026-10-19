@@ -134,12 +134,14 @@ def select(payload):
             hit=query_candidate(dict(payload,snap_type='FACE'))
         if hit.get('hit'):
             name=hit['object']
+            if name not in {o.name for o in runtime.selectable_objects()}:return {'material':runtime.status()}
             additive=payload.get('additive',False)
             if not isinstance(additive,bool): raise BadPayload('additive requiere true o false')
             names=list(runtime.targets) if additive else []
             if name in names: names.remove(name)
             else: names.append(name)
             runtime.select(names)
+        elif not payload.get('additive',False):runtime.select([])
     return {'material':runtime.status()}
 
 

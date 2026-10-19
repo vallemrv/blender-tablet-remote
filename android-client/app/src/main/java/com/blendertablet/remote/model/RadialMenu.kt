@@ -70,8 +70,6 @@ object RadialMenu {
             // operarlo todavía; casi todos los comandos actúan sobre la selección y
             // tocarían otra cosa distinta de la que se está señalando.
             context.hit && !context.objectSelected -> {
-                add(ActionId.SELECT_UNDER)
-                add(ActionId.SELECT_ADD_UNDER)
                 add(ActionId.RENAME)
             }
             // Sobre lo ya seleccionado: operaciones cortas sobre eso mismo.
@@ -89,8 +87,6 @@ object RadialMenu {
             // Caja y Círculo arman el arrastre por forma para seleccionar varios.
             else -> {
                 add(ActionId.ADD_OBJECT)
-                add(ActionId.TOOL_BOX)
-                add(ActionId.TOOL_CIRCLE)
                 if (context.hasSelection) {
                     add(ActionId.DUPLICATE)
                     add(ActionId.HIDE_OBJECT)

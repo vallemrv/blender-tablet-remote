@@ -496,7 +496,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     "DRAG" -> "cad.drag.begin"
                     "POLY" -> "cad.polygon.begin"
                     else -> "cad.entity.begin"
-                }, if (cadGestureMode == "TRIM") mapOf("phase" to "BEGIN", "u" to u, "v" to v) else if (cadGestureMode == "DRAG") mapOf("u" to u, "v" to v) else when (type) {
+                }, if (cadGestureMode == "TRIM") mapOf("phase" to "BEGIN", "u" to u, "v" to v) else if (cadGestureMode == "DRAG") mapOf("u" to u, "v" to v, "additive" to (local.value.selectionOp == SelectionOp.TOGGLE)) else when (type) {
                     null -> mapOf("u" to u, "v" to v)
                     "NGON" -> mapOf("type" to type, "sides" to local.value.cadNgonSides, "u" to u, "v" to v)
                     "GEAR" -> mapOf("type" to type, "teeth" to local.value.cadGearTeeth, "u" to u, "v" to v)
@@ -735,7 +735,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun pick(u: Float, v: Float, stylus: Boolean = false) {
         if (client.state.value.material.active) {
             if (client.state.value.material.interaction == "SELECT")
-                materialCommand("material.select", mapOf("u" to u, "v" to v))
+                materialCommand("material.select", mapOf("u" to u, "v" to v, "additive" to (local.value.selectionOp == SelectionOp.TOGGLE)))
             return
         }
         if (client.state.value.cad.workspace) {
@@ -757,9 +757,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 client.cadCommand("cad.feature.set", mapOf("feature_id" to endFace, "extent" to "TO_FACE", "u" to u, "v" to v)); return
             }
             if (client.state.value.cad.surface.mode != "PROFILE") {
-                client.cadCommand("cad.surface.select", mapOf("u" to u, "v" to v)); return
+                client.cadCommand("cad.surface.select", mapOf("u" to u, "v" to v, "additive" to (local.value.selectionOp == SelectionOp.TOGGLE))); return
             }
-            client.cadCommand("cad.select", mapOf("u" to u, "v" to v, "additive" to (client.state.value.cad.activeSketchId != null || client.state.value.features.cad.profileMultiselect))); return
+            client.cadCommand("cad.select", mapOf("u" to u, "v" to v, "additive" to (local.value.selectionOp == SelectionOp.TOGGLE))); return
         }
         val surfaceTool = client.toolSession.value
         if (surfaceTool.armed && surfaceTool.input == "REPEAT_TAP") {
@@ -846,7 +846,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             lastEditTap = if (plainEdit && blender.activeObjectType == "MESH") Triple(u, v, now) else null
             // En Edit el toque sin modificador acumula: añade o quita lo tocado, sin Mayús.
-            client.pick(u.toDouble(), v.toDouble(), threshold, if (plainEdit) SelectionOp.TOGGLE else local.value.selectionOp)
+            client.pick(u.toDouble(), v.toDouble(), threshold, local.value.selectionOp)
         }
     }
     fun requestState() = client.requestState()
@@ -914,17 +914,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         ) }
     }
 
+    fun activateSelection() {
+        when {
+            client.state.value.material.active -> materialSettings(mapOf("interaction" to "SELECT"))
+            client.state.value.cad.workspace -> cadTool(null)
+            else -> selectTool()
+        }
+    }
+
+    fun toggleSelectionAdd() {
+        activateSelection()
+        local.update { it.copy(selectionOp = if (it.selectionOp == SelectionOp.TOGGLE) SelectionOp.SET else SelectionOp.TOGGLE) }
+    }
+
     fun toggleShortestPath() {
-        local.update { it.copy(
-            shortestPathActive = !it.shortestPathActive,
-            selectionOp = SelectionOp.SET,
-        ) }
+        activateSelection()
+        local.update { it.copy(shortestPathActive = !it.shortestPathActive) }
     }
 
     /** B/C: arma/desarma la herramienta de arrastre por forma. */
     fun toggleShapeTool(tool: ShapeTool) {
         val next = if (local.value.shapeTool == tool) ShapeTool.NONE else tool
-        if (next == ShapeTool.PAINT) selectTool()
+        if (next != ShapeTool.NONE) activateSelection()
         local.update { it.copy(shapeTool = next, shortestPathActive = false,
             circleRadius = if (next == ShapeTool.PAINT) it.circleRadius ?: .05f else it.circleRadius) }
     }
@@ -971,7 +982,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         // Mayús+arrastre extiende, no alterna: es el Shift de la caja de Blender, que
         // suma lo barrido en vez de invertir cada elemento que toca.
-        val op = local.value.selectionOp.let { if (it == SelectionOp.TOGGLE) SelectionOp.ADD else it }
+        val op = local.value.selectionOp
         when (shape) {
             ShapeTool.BOX -> client.boxSelect(u0.toDouble(), v0.toDouble(), u1.toDouble(), v1.toDouble(), op)
             ShapeTool.CIRCLE -> client.circleSelect(
@@ -986,17 +997,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Acciones contextuales de selección (Edit y Object). */
     fun selectAll() {
-        if (client.state.value.cad.workspace) {
+        activateSelection()
+        if (client.state.value.material.active) {
+            materialCommand("material.select", mapOf("objects" to client.state.value.material.objects.map { it.id }))
+        } else if (client.state.value.cad.workspace) {
             val sketch = client.state.value.cad.selectionSketch ?: return
-            cadTool(null); cadCommand("cad.select_all", mapOf("action" to "SELECT", "sketch_id" to sketch.id))
+            cadCommand("cad.select_all", mapOf("action" to "SELECT", "sketch_id" to sketch.id))
         } else client.selectAll(true)
     }
     fun deselectAll() {
-        if (client.state.value.cad.workspace) {
+        activateSelection()
+        if (client.state.value.material.active) materialCommand("material.select", mapOf("objects" to emptyList<String>()))
+        else if (client.state.value.cad.workspace) {
             cadCommand("cad.select_all", mapOf("action" to "DESELECT"))
         } else client.selectAll(false)
     }
-    fun invertSelection() = client.invertSelection()
+    fun invertSelection() {
+        activateSelection()
+        val remote = client.state.value
+        if (remote.material.active) materialCommand("material.select", mapOf("objects" to remote.material.objects.map { it.id }.filter { it !in remote.material.targets }))
+        else if (remote.cad.workspace) cadCommand("cad.select_all", mapOf("action" to "INVERT", "sketch_id" to remote.cad.selectionSketch?.id))
+        else client.invertSelection()
+    }
     fun hideSelection() = client.hideSelection()
     fun hideObject(name: String? = null) = client.hideObjects(name?.let(::listOf))
     fun toggleObjectShading(name: String? = null) = client.shadeObjects(name?.let(::listOf))

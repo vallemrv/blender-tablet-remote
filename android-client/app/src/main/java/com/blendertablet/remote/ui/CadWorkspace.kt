@@ -227,6 +227,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             .heightIn(max = availableHeight)
     ) {
         RailLabel("RESTRICCIONES")
+        SelectionIntentControls(state, vm)
         cadConstraintGroups(capabilities.constraints).forEachIndexed { index, group ->
             if (index > 0) RailDivider()
             group.forEach { type ->
@@ -248,7 +249,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     // selector de modos, panel derecho con flecha de vuelta— y se abre y se cierra
     // igual que él. El contexto (planos, vista, finalizar boceto) vive arriba, en la
     // fila de Deshacer/Rehacer, sin franja propia bajo el menú.
-    val stackEnd = Metrics.EdgeMargin + if (editing && capabilities.constraints.isNotEmpty()) Metrics.HelperRailInset else 0.dp
+    val stackEnd = Metrics.EdgeMargin + if (!editing || capabilities.constraints.isNotEmpty()) Metrics.HelperRailInset else 0.dp
     if (!stackOpen) FloatingPanel(
         Modifier.align(Alignment.TopEnd).padding(top = 142.dp, end = stackEnd),
     ) {
@@ -281,7 +282,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             Icon(AppIcons.cad(drawing.type), null, tint = Ink.Muted, modifier = Modifier.size(20.dp))
                             PillButton("${if (drawing.reference) "Referencia" else if (drawing.isFillet) "Redondeo" else if (drawing.isSquare) "Cuadrado" else cadLabel(drawing.type)} ${index + 1}", selected = cad.selection.any { it.id == drawing.id }, enabled = connected && !cad.sessionActive) {
                                 vm.cadTool(null)
-                                command("cad.select", "kind" to "ENTITY", "id" to drawing.id, "part" to "BODY", "additive" to true)
+                                command("cad.select", "kind" to "ENTITY", "id" to drawing.id, "part" to "BODY", "additive" to (state.selectionOp == SelectionOp.TOGGLE))
                             }
                             CadAction("DELETE", if (drawing.isFillet) "Quitar redondeo" else "Borrar figura", enabled = connected && !cad.sessionActive) {
                                 command(if (drawing.isFillet) "cad.fillet.remove" else "cad.entity.delete", "entity_id" to drawing.id)

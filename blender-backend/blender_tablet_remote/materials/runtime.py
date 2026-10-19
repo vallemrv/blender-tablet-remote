@@ -75,8 +75,7 @@ class Runtime:
         base = next((r for r in catalog if r['id']==self.preset), recipes.FALLBACK)
         layer_state=self.layer_status(objects)
         return dict(available=True, active=self.active, targets=[o.name for o in self.objects()],
-            objects=[dict(id=o.name,label=o.name) for o in bpy.context.view_layer.objects
-                     if o.type=='MESH' and o.visible_get()],
+            objects=[dict(id=o.name,label=o.name) for o in self.selectable_objects()],
             paint_kind=self.paint_kind,active_layer=self.active_layer,
             layers=layer_state,layers_editable=len(objects)==1,
             interaction=self.interaction,isolate=self.isolate,brush=self.brush,scope=self.scope,
@@ -152,12 +151,17 @@ class Runtime:
             raise CommandError('Usa objetos locales para editar sus materiales',code='material_linked_library')
         return objects
 
+    def selectable_objects(self):
+        from ..cad.runtime import FEATURE_KEY
+        return [o for o in bpy.context.view_layer.objects if o.type=='MESH' and o.visible_get()
+                and not o.hide_select and not o.get(FEATURE_KEY) and o.library is None and o.data.library is None]
+
     def select(self, names):
         if not isinstance(names,list) or any(not isinstance(n,str) for n in names):
             raise BadPayload('objects requiere una lista de nombres')
         names=list(dict.fromkeys(names))
         objects=[bpy.context.view_layer.objects.get(n) for n in names]
-        if any(o is None or o.type!='MESH' or not o.visible_get() for o in objects):
+        if any(o is None or o.type!='MESH' or not o.visible_get() or o.hide_select for o in objects):
             raise BadPayload('Selecciona mallas visibles de esta escena')
         if objects: self.validate_selection(objects)
         self.cancel()

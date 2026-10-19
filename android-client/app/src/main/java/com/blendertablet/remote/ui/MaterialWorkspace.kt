@@ -93,7 +93,7 @@ fun BoxScope.MaterialWorkspace(state: AppUiState, vm: MainViewModel) {
     )
 
     if (!libraryOpen) FloatingPanel(
-        Modifier.align(Alignment.TopEnd).padding(top = 142.dp, end = Metrics.EdgeMargin),
+        Modifier.align(Alignment.TopEnd).padding(top = 142.dp, end = Metrics.EdgeMargin + Metrics.HelperRailInset),
     ) {
         IconAction(AppIcons.materials, "Abrir biblioteca de materiales") { libraryOpen = true }
     }
@@ -110,7 +110,7 @@ fun BoxScope.MaterialWorkspace(state: AppUiState, vm: MainViewModel) {
         onClose = { libraryOpen = false },
         modifier = Modifier
             .align(Alignment.TopEnd)
-            .padding(top = 142.dp, end = Metrics.EdgeMargin, bottom = 114.dp),
+            .padding(top = 142.dp, end = Metrics.EdgeMargin + Metrics.HelperRailInset, bottom = 114.dp),
     )
 
     MaterialBrushTray(
@@ -225,9 +225,7 @@ private fun MaterialToolRail(
     val painting = material.interaction == "PAINT"
     ToolRail(modifier) {
         RailLabel("MODO")
-        IconAction(AppIcons.material("SELECT"), "Tocar para elegir objetos", selected = material.interaction == "SELECT") {
-            vm.materialSettings(mapOf("interaction" to "SELECT"))
-        }
+
         IconAction(AppIcons.material("PAINT"), "Pintar color o material",
             selected = painting && !material.erase, enabled = material.targets.isNotEmpty()) {
             vm.materialSettings(mapOf("interaction" to "PAINT", "erase" to false))

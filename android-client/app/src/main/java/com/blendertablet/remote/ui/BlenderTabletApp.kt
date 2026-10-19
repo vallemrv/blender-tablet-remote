@@ -219,9 +219,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     val cad = state.blender.cad
     val cadNavigationOrbit = cad.workspace && !cadStackOpen &&
         (cad.activeSketchId != null || (cad.sessionActive && cad.operation in listOf("EXTRUDE", "CUT")))
-    val helperRailVisible = !cad.workspace && !materialActive &&
-        (state.blender.mode == BlenderMode.OBJECT || (state.blender.mode == BlenderMode.EDIT &&
-        state.blender.activeObjectType in setOf("MESH", "CURVE")))
+    val helperRailVisible = !sculptActive && (!cad.workspace || cad.activeSketchId == null)
     val helperRailInset = if (helperRailVisible) Metrics.HelperRailInset else 0.dp
     val cadConstraintRail = cad.workspace && cad.activeSketchId != null && state.blender.features.cad.constraints.isNotEmpty()
     var cadTrayHeightPx by remember { mutableStateOf(0) }
@@ -290,7 +288,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             h264Active = h264Active,
             h264Size = h264Size,
             input = viewportInput,
-            sculptEnabled = (sculptActive || (materialActive && state.blender.material.interaction == "PAINT")) && state.connection == ConnectionStatus.CONNECTED,
+            sculptEnabled = (sculptActive || (materialActive && state.blender.material.interaction == "PAINT" && state.shapeTool == ShapeTool.NONE)) && state.connection == ConnectionStatus.CONNECTED,
             lightCursorEnabled = materialActive && state.blender.material.interaction == "LIGHTS" && state.connection == ConnectionStatus.CONNECTED,
             sculptStylusOnly = if (materialActive) state.materialStylusOnly else state.sculptStylusOnly,
             sculptRadius = if (materialActive) state.blender.material.radius else state.blender.sculpt.radius,
@@ -305,7 +303,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 (state.blender.features.cad.sketchEditing && state.blender.cad.sessionActive && state.blender.cad.operation in listOf("EXTRUDE", "CUT"))),
             cadCursorEnabled = state.blender.cad.workspace && state.blender.cad.activeSketchId != null && state.blender.cad.surface.mode == "PROFILE" && state.cadTool == null,
             cadOverlay = if (state.blender.cad.workspace) state.blender.cad.overlay else emptyList(),
-            shapeTool = if (state.blender.cad.workspace) ShapeTool.NONE else state.shapeTool,
+            shapeTool = if (state.blender.cad.workspace && state.blender.cad.activeSketchId != null) ShapeTool.NONE else state.shapeTool,
             fixedCircleRadius = state.circleRadius,
             knifePoints = knifeScreenPoints,
             knifeActive = !state.blender.cad.workspace && toolSession.active && toolSession.tool == EditTool.KNIFE &&
@@ -377,6 +375,9 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     modifier = Modifier.align(Alignment.TopStart).padding(Metrics.EdgeMargin),
                 )
 
+                if (helperRailVisible) SelectionHelperRail(state, vm,
+                    Modifier.align(Alignment.CenterEnd).padding(end = Metrics.EdgeMargin, top = 142.dp,
+                        bottom = trayInset + 74.dp))
                 if (!materialActive && !state.blender.cad.workspace && !sculptActive) {
                 val modifiersAvailable = state.blender.features.modifiers &&
                     state.blender.mode in setOf(BlenderMode.OBJECT, BlenderMode.EDIT) && state.blender.activeObjectType == "MESH"
@@ -407,9 +408,6 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                         ),
                 )
 
-                if (helperRailVisible) SelectionHelperRail(state, vm,
-                    Modifier.align(Alignment.CenterEnd).padding(end = Metrics.EdgeMargin, top = 142.dp,
-                        bottom = trayInset + 74.dp))
                 ToolRail(
                     modifier = Modifier.align(Alignment.CenterStart).padding(start = Metrics.EdgeMargin),
                 ) { RailContent(state, session, toolSession, vm) }

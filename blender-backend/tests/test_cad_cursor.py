@@ -19,16 +19,16 @@ def ref(identifier,part='BODY'):
 
 
 class CursorTests(CadTests):
-    def begin(self,hit,point=(.02,.02)):
+    def begin(self,hit,point=(.02,.02),additive=False):
         with patch.object(cad,'_pick',return_value=hit),patch.object(runtime,'point',return_value=point):
-            return cad.drag_begin(dict(u=.3,v=.3,**OWNER))
+            return cad.drag_begin(dict(u=.3,v=.3,additive=additive,**OWNER))
 
     def update(self,point):
         with patch.object(runtime,'point',return_value=point): return cad.drag_update(dict(u=.4,v=.4,**OWNER))
 
-    def tap(self,hit):
+    def tap(self,hit,additive=True):
         before=copy.deepcopy(runtime.selection)
-        self.begin(hit)
+        self.begin(hit,additive=additive)
         self.assertEqual(runtime.selection,before,'DOWN must not change selection')
         with patch.object(cad,'_pick',side_effect=AssertionError('release pick')),patch.object(runtime,'point',side_effect=AssertionError('release raycast')):
             cad.drag_end(OWNER)
@@ -46,6 +46,14 @@ class CursorTests(CadTests):
         _,after=model.entity(runtime.doc(),slot)
         self.assertAlmostEqual(after['width'],.010,places=7)
         for key in ('x','y','length','angle'): self.assertAlmostEqual(after[key],before[key],places=7)
+
+    def test_plain_taps_replace_and_repeated_tap_keeps_the_element(self):
+        a=self.draw('LINE',(0,0),(.04,0)); b=self.draw('LINE',(0,.02),(.04,.02))
+        cad._set_selection([ref(a,'END')])
+        self.tap(ref(b,'START'),additive=False)
+        self.assertEqual(cad._refs(),[ref(b,'START')])
+        self.tap(ref(b,'START'),additive=False)
+        self.assertEqual(cad._refs(),[ref(b,'START')])
 
     def test_taps_toggle_multiple_elements_without_geometry_or_undo(self):
         a=self.draw('LINE',(0,0),(.04,0)); b=self.draw('LINE',(0,.02),(.04,.02))
@@ -92,7 +100,7 @@ class CursorTests(CadTests):
         self.begin(None); self.update((.1,.1)); cad.drag_end(OWNER)
         self.assertEqual(cad._refs(),[ref(a)])
         self.begin(None); cad.cancel(OWNER); self.assertEqual(cad._refs(),[ref(a)])
-        self.tap(None); self.assertIsNone(runtime.selection)
+        self.tap(None,additive=False); self.assertIsNone(runtime.selection)
 
     def test_constrained_drag_is_not_misinterpreted_as_toggle(self):
         a=self.rect(); cad._set_selection([ref(a)])
