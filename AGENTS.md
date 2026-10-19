@@ -342,6 +342,9 @@ nuevas superficies y la adaptación gradual de las existentes.
   aspecto, offset y transformación nativos, visibilidad, lados y profundidad
   Delante/Predeterminada/Detrás. Respeta ocultación y bloqueo; no crea una malla
   auxiliar ni participa en el picking de Edit.
+  Doble toque/Encuadrar usan las cuatro esquinas del mismo rectángulo para centrar
+  y ajustar al 85 %, no solo el origen del Empty. Incluye aspecto de píxel y matriz
+  con padres; la referencia activa también sirve de respaldo sin selección.
 - Object muestra una bandeja inferior de propiedades del activo cuando no hay
   herramientas ni sesiones: Posición XYZ, Rotación XYZ en grados, Tamaño y Visibilidad.
   Una única lista desplegable cambia de sección, sin pestañas mezcladas con campos. El esquema viene

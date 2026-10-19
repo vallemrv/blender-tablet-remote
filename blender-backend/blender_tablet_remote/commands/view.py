@@ -137,9 +137,15 @@ def zoom(payload: dict) -> dict:
 
 def _bounds(objects):
     """Centro y esquinas que engloban a los objetos, en coordenadas de mundo."""
+    from .reference import image_local_bounds
     corners = []
     for obj in objects:
-        if obj.bound_box and obj.type != "EMPTY":
+        image_bounds = image_local_bounds(obj)
+        if image_bounds is not None:
+            x0, y0, x1, y1 = image_bounds
+            corners.extend(obj.matrix_world @ Vector((x, y, 0))
+                           for x, y in ((x0, y0), (x1, y0), (x1, y1), (x0, y1)))
+        elif obj.bound_box and obj.type != "EMPTY":
             corners.extend(obj.matrix_world @ Vector(corner) for corner in obj.bound_box)
         else:
             corners.append(obj.matrix_world.translation.copy())
@@ -164,7 +170,8 @@ def frame_selected(payload: dict) -> dict:
     view_layer = bpy.context.view_layer
     selected = [o for o in view_layer.objects if o.select_get()]
     active = view_layer.objects.active
-    targets = selected or ([active] if active and active.visible_get() and active.type not in {'CAMERA','LIGHT','EMPTY'} else
+    active_image = active and active.type == 'EMPTY' and active.empty_display_type == 'IMAGE' and active.data is not None
+    targets = selected or ([active] if active and active.visible_get() and (active_image or active.type not in {'CAMERA','LIGHT','EMPTY'}) else
                            [o for o in view_layer.objects if o.visible_get() and o.type not in {'CAMERA','LIGHT','EMPTY'}])
     if not targets:
         raise CommandError("Nothing to frame", code="empty_scene")

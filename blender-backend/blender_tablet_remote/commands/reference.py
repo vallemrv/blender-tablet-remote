@@ -28,6 +28,22 @@ MAX_BYTES = 6 * 1024 * 1024
 VIEW_FRACTION = 0.8
 
 
+def image_local_bounds(obj):
+    """Rectángulo nativo compartido por picking y encuadre, en el plano XY local."""
+    if obj.type != 'EMPTY' or obj.empty_display_type != 'IMAGE' or obj.data is None:
+        return None
+    width, height = obj.data.size
+    if width <= 0 or height <= 0:
+        return None
+    aspect_x, aspect_y = obj.data.display_aspect
+    width *= aspect_x
+    height *= aspect_y
+    longest = max(width, height)
+    width, height = width / longest * obj.empty_display_size, height / longest * obj.empty_display_size
+    offset_x, offset_y = obj.empty_image_offset
+    return offset_x * width, offset_y * height, (offset_x + 1) * width, (offset_y + 1) * height
+
+
 def pick_image(origin, direction, rv3d, area, mesh_location=None):
     """Sondea el rectángulo de los Empty IMAGE que el vídeo de la tablet dibuja.
 
@@ -78,18 +94,11 @@ def pick_image(origin, direction, rv3d, area, mesh_location=None):
         if distance < 0:
             continue
         point = local_origin + local_direction * distance
-        image = obj.data
-        width, height = image.size
-        if width <= 0 or height <= 0:
+        bounds = image_local_bounds(obj)
+        if bounds is None:
             continue
-        aspect_x, aspect_y = image.display_aspect
-        width *= aspect_x
-        height *= aspect_y
-        longest = max(width, height)
-        width, height = width / longest * obj.empty_display_size, height / longest * obj.empty_display_size
-        offset_x, offset_y = obj.empty_image_offset
-        if not (offset_x * width <= point.x <= (offset_x + 1) * width
-                and offset_y * height <= point.y <= (offset_y + 1) * height):
+        x0, y0, x1, y1 = bounds
+        if not (x0 <= point.x <= x1 and y0 <= point.y <= y1):
             continue
         location = matrix @ point
         clip = projection @ Vector((*location, 1))
