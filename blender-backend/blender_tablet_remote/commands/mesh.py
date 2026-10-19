@@ -561,6 +561,10 @@ def subdivide(payload: dict) -> dict:
 def delete(payload: dict) -> dict:
     from .sessions import cancel_all
     cancel_all(restore=True)
+    active=bpy.context.view_layer.objects.active
+    if active and active.type=='CURVE' and active.mode=='EDIT':
+        from .curve_edit import execute
+        return execute('delete', type='VERT')
     obj, bm = _bm_and_obj()
     what = str(payload.get("what", "VERTS")).upper()
     contexts = {"VERTS": "VERTS", "EDGES": "EDGES", "FACES": "FACES", "ONLY_FACES": "FACES_ONLY"}
@@ -593,6 +597,10 @@ def duplicate(payload: dict) -> dict:
     """
     from .sessions import cancel_all
     cancel_all(restore=True)
+    active=bpy.context.view_layer.objects.active
+    if active and active.type=='CURVE' and active.mode=='EDIT':
+        from .curve_edit import execute
+        return execute('duplicate')
     obj, bm = _bm_and_obj()
     geom = [elem for elem in _selected_geometry(bm) if not elem.hide]
     if not geom:

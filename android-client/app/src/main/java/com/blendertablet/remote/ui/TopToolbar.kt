@@ -55,7 +55,7 @@ fun TopToolbar(
                             selected = blender.view.shading == Shading.WIREFRAME,
                         ) { vm.toggleShading() }
                     }
-                    if (inEdit && blender.features.editSettings) {
+                    if (inEdit && blender.activeObjectType == "MESH" && blender.features.editSettings) {
                         IconAction(
                             AppIcons.Proportional, "Edición proporcional",
                             selected = blender.editSettings.proportional,
@@ -70,8 +70,8 @@ fun TopToolbar(
                         }
                     }
                     if (!blender.cad.workspace && blender.mode != BlenderMode.SCULPT && !blender.material.active) {
-                    if (blender.features.gizmo) IconAction(AppIcons.gizmo, "Manipulador", selected = state.gizmoEnabled) { vm.toggleGizmo() }
-                    if (inEdit && blender.features.selectionShortestPath) {
+                    if (blender.features.gizmo && !(inEdit && blender.activeObjectType == "CURVE")) IconAction(AppIcons.gizmo, "Manipulador", selected = state.gizmoEnabled) { vm.toggleGizmo() }
+                    if (inEdit && blender.activeObjectType == "MESH" && blender.features.selectionShortestPath) {
                         PillButton("Ctrl", selected = state.shortestPathActive) { vm.toggleShortestPath() }
                     }
                     }
@@ -114,8 +114,7 @@ fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier
             }
         }
         if (inEdit) {
-            EditSelectionActions(state, vm)
-            FloatingPanel {
+            if (blender.activeObjectType == "MESH") FloatingPanel {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     IconAction(
                         AppIcons.selectionMode(SelectionMode.VERTEX), "Vértices",
@@ -166,20 +165,28 @@ fun ModeRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier
     }
 }
 
-/** Selección de Edit a un toque, a la izquierda de Vértices/Aristas/Caras. */
+/** Rail helper contextual: selección a un toque en el borde derecho. */
 @Composable
-private fun EditSelectionActions(state: AppUiState, vm: MainViewModel) {
+fun SelectionHelperRail(state: AppUiState, vm: MainViewModel, modifier: Modifier = Modifier) {
     val blender = state.blender
     val hasSelection = blender.context.hasSelection(blender.mode, blender.selectionMode)
-    FloatingPanel {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            EditSelectionBar.actions.forEach { id ->
+    ToolRail(modifier) {
+        RailLabel("HELPER")
+        androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            EditSelectionBar.actions.filter {
+                when {
+                    blender.mode == BlenderMode.OBJECT -> it in setOf(ActionId.SELECT_ALL, ActionId.SELECT_INVERT, ActionId.TOOL_BOX, ActionId.TOOL_CIRCLE, ActionId.TOOL_PAINT_SELECT)
+                    blender.activeObjectType == "CURVE" -> it in setOf(ActionId.SELECT_ALL, ActionId.SELECT_INVERT, ActionId.TOOL_PAINT_SELECT)
+                    else -> EditSelectionBar.enabled(it, blender.selectionMode, hasSelection)
+                }
+            }.forEach { id ->
                 // Un único botón alterna Seleccionar todo / Deseleccionar.
                 val shown = if (id == ActionId.SELECT_ALL && hasSelection) ActionId.DESELECT_ALL else id
                 IconAction(
                     AppIcons.action(shown), SurfaceCatalog.labelOf(shown),
                     selected = (shown == ActionId.TOOL_BOX && state.shapeTool == ShapeTool.BOX) ||
-                        (shown == ActionId.TOOL_CIRCLE && state.shapeTool == ShapeTool.CIRCLE),
+                        (shown == ActionId.TOOL_CIRCLE && state.shapeTool == ShapeTool.CIRCLE) ||
+                        (shown == ActionId.TOOL_PAINT_SELECT && state.shapeTool == ShapeTool.PAINT),
                     enabled = EditSelectionBar.enabled(shown, blender.selectionMode, hasSelection),
                 ) {
                     when (shown) {
@@ -191,6 +198,7 @@ private fun EditSelectionActions(state: AppUiState, vm: MainViewModel) {
                         ActionId.SELECT_LINKED -> vm.selectLinked()
                         ActionId.TOOL_BOX -> vm.toggleShapeTool(ShapeTool.BOX)
                         ActionId.TOOL_CIRCLE -> vm.toggleShapeTool(ShapeTool.CIRCLE)
+                        ActionId.TOOL_PAINT_SELECT -> vm.toggleShapeTool(ShapeTool.PAINT)
                         else -> Unit
                     }
                 }

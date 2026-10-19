@@ -100,6 +100,10 @@ def sel_all(payload: dict) -> dict:
     """En Edit Mode selecciona/deselecciona todos los elementos de la malla."""
     obj = active_object()
     value = bool(payload.get("value", True))
+    if obj.type == 'CURVE' and obj.mode == 'EDIT':
+        from .curve_edit import controls, set_selection
+        set_selection(obj,{key for key,_,_ in controls(obj)} if value else set())
+        return _with_state({"selected_verts":sum(1 for _,_,on in controls(obj) if on)})
     bm = edit_bmesh(obj)
     for seq in (bm.verts, bm.edges, bm.faces):
         for elem in seq:
@@ -176,27 +180,27 @@ def pick(payload: dict) -> dict:
     active = bpy.context.view_layer.objects.active
     depsgraph = bpy.context.evaluated_depsgraph_get()
 
+    if active is not None and active.mode == 'EDIT' and active.type == 'CURVE':
+        from .curve_edit import pick as pick_curve
+        return _with_state(pick_curve(active,u,v,mode,_touch_threshold(payload),rv3d,_region,
+                                     _area.spaces.active if _area else None))
+
     # En Edit Mode los índices de ``scene.ray_cast`` pertenecen a la geometría
     # evaluada, o a otro objeto de fondo. Raycast sobre la jaula original para que
     # cara/vértice/arista tocados sean los del BMesh editable y fuera de él sea vacío.
     if active is not None and active.mode == "EDIT" and active.type == "MESH":
         edit_hit = _edit_cage_raycast(active, origin, direction)
         if edit_hit is None:
+            loose = _pick_loose_element(active,u,v,mode,payload,rv3d,_region,_area,depsgraph)
+            if loose is not None: return _with_state(loose)
             hit, location, face_index, obj = False, None, -1, active
         else:
             location, face_index = edit_hit
             hit, obj = True, active
     else:
-        hit, location, _normal, face_index, obj, _matrix = bpy.context.scene.ray_cast(
-            depsgraph, origin, direction
-        )
-        if active is None or active.mode == "OBJECT":
-            from .reference import pick_image
-            image_hit = pick_image(origin, direction, rv3d, _area,
-                                   location if hit else None)
-            if image_hit is not None:
-                obj, location = image_hit
-                hit, face_index = True, -1
+        result = _object_hit(u,v,origin,direction,rv3d,_region,_area,depsgraph,_touch_threshold(payload))
+        hit = result is not None
+        obj,location,face_index = result if hit else (None,None,-1)
         if hit and obj.hide_select:
             return _with_state({"hit": False})
 
@@ -219,7 +223,7 @@ def pick(payload: dict) -> dict:
     # y poder elegir solo el frente sería frustrante.
     from .view import is_xray_wireframe
 
-    if obj.type != "EMPTY" and is_xray_wireframe() and mode in ("SET", "ADD", "TOGGLE") and obj.select_get():
+    if face_index >= 0 and is_xray_wireframe() and mode in ("SET", "ADD", "TOGGLE") and obj.select_get():
         origin, location, obj = _cycle_behind(depsgraph, origin, direction, location, obj)
 
     if mode == "SET":
@@ -228,6 +232,54 @@ def pick(payload: dict) -> dict:
     obj.select_set(False if mode == "REMOVE" else (not obj.select_get() if mode == "TOGGLE" else True))
     bpy.context.view_layer.objects.active = obj
     return _with_state({"hit": True, "object": obj.name, "location": list(location)})
+
+
+def _object_hit(u,v,origin,direction,rv3d,region,area,depsgraph,threshold):
+    hit,location,_normal,face_index,obj,_matrix=bpy.context.scene.ray_cast(depsgraph,origin,direction)
+    from .snap import query_wire_object
+    viewport=area.spaces.active if area else None
+    wire=query_wire_object(u,v,rv3d,region,viewport,depsgraph,threshold)
+    if wire is not None:
+        obj,location=wire;hit,face_index=True,-1
+    from .reference import pick_image
+    image=pick_image(origin,direction,rv3d,area,location if hit else None)
+    if image is not None:
+        obj,location=image;hit,face_index=True,-1
+    return (obj,location,face_index) if hit else None
+
+
+def _pick_loose_element(obj,u,v,mode,payload,rv3d,region,area,depsgraph):
+    from .snap import _screen_candidates, _visible
+    bm = edit_bmesh(obj)
+    bm.verts.ensure_lookup_table();bm.edges.ensure_lookup_table()
+    kind = state.selection_mode()
+    if kind == 'FACE': return None
+    if kind == 'VERTEX':
+        eligible = {v.index:v for v in bm.verts if not v.link_faces and not v.hide}
+        snap_type, element = 'VERTEX','vert'
+    else:
+        eligible = {'-'.join(str(i) for i in sorted(v.index for v in e.verts)):e
+                    for e in bm.edges if not e.link_faces and not e.hide}
+        snap_type, element = 'EDGE','edge'
+    if not eligible: return None
+    aspect = max(1,region.width)/max(1,region.height)
+    candidates = [(distance,eligible[key],position) for distance,key,position in
+                  _screen_candidates(obj,snap_type,rv3d,Vector((u,v)),aspect,set())
+                  if key in eligible and distance <= _touch_threshold(payload)]
+    for _,target,position in sorted(candidates,key=lambda c:c[0]):
+        screen = camera.project(position,rv3d)
+        if not _visible(position,screen,depsgraph,rv3d,set(),area.spaces.active if area else None):continue
+        result = dict(hit=True,object=obj.name,element=element,index=target.index,location=list(position))
+        if mode != 'PROBE':
+            if mode == 'SET':
+                bm.select_history.clear()
+                for seq in (bm.verts,bm.edges,bm.faces):
+                    for item in seq:item.select=False
+            target.select_set(False if mode=='REMOVE' else not target.select if mode=='TOGGLE' else True)
+            if target.select:bm.select_history.add(target)
+            bm.select_flush_mode();flush_bmesh(obj,bm,destructive=False)
+        return result
+    return None
 
 
 def _edit_cage_raycast(obj, world_origin: Vector, world_direction: Vector):
@@ -965,7 +1017,16 @@ def linked(payload: dict) -> dict:
 
 @command("selection.invert", mutating=True)
 def invert(payload: dict) -> dict:
+    obj = bpy.context.view_layer.objects.active
+    if obj is None or obj.mode == 'OBJECT':
+        for item in bpy.context.view_layer.objects:
+            if item.visible_get() and not item.hide_select:item.select_set(not item.select_get())
+        return _with_state({})
     obj = active_object()
+    if obj.type == 'CURVE' and obj.mode == 'EDIT':
+        from .curve_edit import controls, set_selection
+        set_selection(obj,{key for key,_,on in controls(obj) if not on})
+        return _with_state({})
     bm = edit_bmesh(obj)
     active_seq = bm.verts if MODE_FLAGS["VERTEX"] == tuple(bpy.context.scene.tool_settings.mesh_select_mode) else (
         bm.edges if MODE_FLAGS["EDGE"] == tuple(bpy.context.scene.tool_settings.mesh_select_mode) else bm.faces)
@@ -980,6 +1041,9 @@ def invert(payload: dict) -> dict:
 @command("selection.hide", mutating=True)
 def hide(payload: dict) -> dict:
     obj = active_object()
+    if obj.type=='CURVE' and obj.mode=='EDIT':
+        from .curve_edit import execute
+        return execute('hide',unselected=bool(payload.get('unselected',False)))
     bm = edit_bmesh(obj)
     unselected = bool(payload.get("unselected", False))
     for seq in (bm.verts, bm.edges, bm.faces):

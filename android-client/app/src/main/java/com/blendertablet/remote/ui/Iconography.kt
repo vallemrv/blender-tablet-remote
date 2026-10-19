@@ -207,6 +207,7 @@ object AppIcons {
         ActionId.SELECT_ALL -> StudioIcons["SELECT_ALL"]
         ActionId.TOOL_BOX -> StudioIcons["BOX_SELECT"]
         ActionId.TOOL_CIRCLE -> StudioIcons["CIRCLE_SELECT"]
+        ActionId.TOOL_PAINT_SELECT -> StudioIcons["PAINT_SELECT"]
         ActionId.DESELECT_ALL -> StudioIcons["DESELECT_ALL"]
         ActionId.SELECT_INVERT -> StudioIcons["INVERT"]
         ActionId.SELECT_UNDER -> StudioIcons["SELECT_UNDER"]

@@ -77,6 +77,14 @@ def describe(obj):
                 field(f'scale_{axis.lower()}', f'Escala {axis}', 'Tamaño', obj.scale[i], unit='factor')
                 fields[-1]['read_only'] |= obj.lock_scale[i]
 
+    from .circle_properties import describe as describe_circle
+    circle = describe_circle(obj)
+    if circle:
+        field('circle_vertices', 'Resolución', 'Círculo', circle['count'], unit='count', min=3, max=4096)
+    if obj.type == 'CURVE':
+        limits = obj.data.bl_rna.properties['resolution_u']
+        field('curve_resolution', 'Resolución', 'Curva', obj.data.resolution_u, unit='count',
+              min=limits.hard_min, max=limits.hard_max)
     field('visible', 'Visible en la vista', 'Visibilidad', not obj.hide_get(), 'bool')
     if obj.type != 'EMPTY':
         field('render', 'Visible en render', 'Visibilidad', not obj.hide_render, 'bool')
@@ -134,6 +142,8 @@ def apply(payload):
                 raise BadPayload(f'{key} requiere un número finito')
             if value < spec.get('min', -math.inf) or value > spec.get('max', math.inf):
                 raise BadPayload(f'{key} está fuera del rango permitido')
+            if spec['unit'] == 'count' and int(value) != value:
+                raise BadPayload('La resolución requiere un número entero de vértices')
             native = value / (bpy.context.scene.unit_settings.scale_length or 1.) if spec['unit'] == 'length' else value
             if not math.isfinite(native) or abs(native) > 3.402823e38:
                 raise BadPayload(f'{key} excede el rango de Blender')
@@ -154,7 +164,18 @@ def apply(payload):
         baseline['image'] = {attr: getattr(obj, attr) for attr in image_attrs.values()}
         baseline['alpha'] = obj.use_empty_image_alpha
         baseline['color'] = tuple(obj.color)
+    replacement_data = None
+    original_data = obj.data if any(k in validated for k in ('circle_vertices', 'curve_resolution')) else None
+    data_collection = bpy.data.curves if obj.type == 'CURVE' else bpy.data.meshes
     try:
+        if original_data is not None:
+            if 'circle_vertices' in validated:
+                from .circle_properties import describe as describe_circle, resized_mesh
+                replacement_data = resized_mesh(obj, describe_circle(obj), int(validated['circle_vertices']))
+            else:
+                replacement_data = obj.data.copy()
+                replacement_data.resolution_u = int(validated['curve_resolution'])
+            obj.data = replacement_data
         dimensions = obj.dimensions.copy()
         rotation = _rotation(obj)
         for key, value in validated.items():
@@ -178,6 +199,9 @@ def apply(payload):
             obj.dimensions = dimensions
         bpy.context.view_layer.update()
     except Exception:
+        if replacement_data is not None:
+            obj.data = original_data
+            data_collection.remove(replacement_data)
         obj.location, obj.scale = baseline['location'], baseline['scale']
         obj.rotation_euler, obj.rotation_quaternion = baseline['euler'], baseline['quaternion']
         obj.rotation_axis_angle = baseline['axis_angle']
@@ -189,6 +213,8 @@ def apply(payload):
             obj.use_empty_image_alpha, obj.color = baseline['alpha'], baseline['color']
         bpy.context.view_layer.update()
         raise
+    if original_data is not None and original_data.users == 0:
+        data_collection.remove(original_data)
     if validated: undo_push('Remote object properties')
     from .. import state
     return state.snapshot()

@@ -162,7 +162,7 @@ interface RemoteBlenderClient {
     fun modifierRemove(name: String)
     fun modifierMove(name: String, index: Int)
     fun modifierSet(name: String, parameters: Map<String, Any?>)
-    fun modifierToggle(name: String, viewport: Boolean? = null, render: Boolean? = null)
+    fun modifierToggle(name: String, viewport: Boolean? = null, render: Boolean? = null, editMode: Boolean? = null)
     fun modifierApply(name: String)
 
     /** Loop y Ring parten de una arista ya seleccionada. */

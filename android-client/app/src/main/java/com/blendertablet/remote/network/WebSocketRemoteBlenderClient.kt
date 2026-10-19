@@ -575,7 +575,7 @@ class WebSocketRemoteBlenderClient(
     override fun modifierRemove(name: String) = command("modifier.remove", JSONObject().put("name", name))
     override fun modifierMove(name: String, index: Int) = command("modifier.move", JSONObject().put("name", name).put("index", index))
     override fun modifierSet(name: String, parameters: Map<String, Any?>) = command("modifier.set", JSONObject().put("name", name).put("parameters", JSONObject(parameters)))
-    override fun modifierToggle(name: String, viewport: Boolean?, render: Boolean?) = command("modifier.toggle", JSONObject().put("name", name).apply { viewport?.let { put("viewport", it) }; render?.let { put("render", it) } })
+    override fun modifierToggle(name: String, viewport: Boolean?, render: Boolean?, editMode: Boolean?) = command("modifier.toggle", JSONObject().put("name", name).apply { viewport?.let { put("viewport", it) }; render?.let { put("render", it) }; editMode?.let { put("editmode", it) } })
     override fun modifierApply(name: String) = command("modifier.apply", JSONObject().put("name", name))
     override fun meshDelete(what: String) = command("mesh.delete", JSONObject().put("what", what))
     override fun meshDissolve(what: String) = command("mesh.dissolve", JSONObject().put("what", what))
@@ -964,7 +964,7 @@ class WebSocketRemoteBlenderClient(
                 val propertyToken = objectPropertyRequests.remove(id)
                 val sent = sentAtNs.remove(id)
                 if (command == "selection.pick" || command == "selection.shortest_path") pickInFlight.set(false)
-                if (sent != null && (command == "selection.pick" || command == "selection.shortest_path" || command?.startsWith("transform.") == true)) {
+                if (sent != null && (command == "selection.paint" || command == "selection.pick" || command == "selection.shortest_path" || command?.startsWith("transform.") == true)) {
                     Log.d(LATENCY_TAG, "response command=$command ok=${message.optBoolean("ok", false)} rtt=${(System.nanoTime() - sent) / 1_000_000}ms")
                 }
                 if (command == "scene.get_state") stateRequestInFlight.set(false)
@@ -1086,7 +1086,7 @@ class WebSocketRemoteBlenderClient(
                     // selection.pick ya incluye el snapshot: evita esperar el evento
                     // semántico y hacer un segundo viaje scene.get_state. Lo mismo
                     // box/circle/more/less, que vuelven con el estado completo.
-                    command == "selection.pick" || command == "selection.shortest_path" ||
+                    command == "selection.paint" || command == "selection.pick" || command == "selection.shortest_path" ||
                         command == "selection.box" || command == "selection.circle" ||
                         command == "selection.more" || command == "selection.less" -> result?.let(::updateState)
                     // El toggle de wireframe responde con el shading nuevo: pintarlo ya,

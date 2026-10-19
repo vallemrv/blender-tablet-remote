@@ -60,6 +60,7 @@ def load_all() -> None:
         scene,
         sculpt,
         selection,
+        selection_paint,
         snap,
         stream,
         transform,

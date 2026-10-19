@@ -42,5 +42,7 @@ def cancel_all(*, restore=True):
 
 
 def cancel_cad(*, restore=True):
+    from .selection_paint import cancel
+    cancel(restore=restore)
     from ..cad.runtime import runtime
     runtime.cancel(restore=restore)

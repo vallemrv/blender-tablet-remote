@@ -175,6 +175,7 @@ class _Session:
         self.orientation = "GLOBAL"
         self.value_mode = "RELATIVE"
         self.edit_object = None
+        self.curve_edit = None
         self.edit_coords: dict[int, Vector] = {}
         self.edit_topology = None
         self.selection_signature = None
@@ -238,7 +239,15 @@ class _Session:
         self.proportional_falloff = str(
             tool_settings.proportional_edit_falloff if proportional_falloff is None else proportional_falloff
         ).upper()
-        if edit:
+        if active is not None and active.mode == "EDIT" and active.type == "CURVE":
+            from .curve_edit import Snapshot
+            try:
+                self.curve_edit = Snapshot(active)
+            except Exception:
+                self.reset(); raise
+            self.proportional = False
+            self.pivot = sum(self.curve_edit.points, Vector()) / len(self.curve_edit.points)
+        elif edit:
             bm = bmesh.from_edit_mesh(active.data)
             bm.verts.ensure_lookup_table()
             selected = [v for v in bm.verts if v.select and not v.hide]
@@ -414,7 +423,9 @@ class _Session:
     def _measure_base_dimensions(self) -> Vector:
         """Caja de la selección en la orientación congelada de la sesión."""
         points = []
-        if self.edit_object is not None:
+        if self.curve_edit is not None:
+            points = self.curve_edit.points
+        elif self.edit_object is not None:
             for index in self.selection_signature:
                 co = self.edit_coords.get(index)
                 if co is not None:
@@ -541,6 +552,9 @@ class _Session:
             raise CommandError("No transform in progress", code="no_session")
         if owner_id is not None and self.owner_id is not None and owner_id != self.owner_id:
             raise CommandError("Transform session belongs to another client", code="session_owned")
+        if self.curve_edit is not None:
+            if not self.curve_edit.valid(): self.invalidate("selection_or_topology_changed")
+            return
         if self.edit_object is not None:
             obj = self.edit_object
             try:
@@ -698,6 +712,9 @@ class _Session:
     def apply(self) -> None:
         """Reconstruye desde las matrices originales. Idempotente a propósito."""
         values = self._effective()
+        if self.curve_edit is not None:
+            self.curve_edit.apply(lambda point:self._transform_point(point,values))
+            return
         if self.edit_object is not None:
             self._apply_edit(values)
             return
@@ -781,6 +798,9 @@ class _Session:
                         candidate[axis] = 0.0
                 verts[index].co = from_mirror @ candidate
     def restore(self) -> None:
+        if self.curve_edit is not None:
+            self.curve_edit.restore()
+            return
         if self.edit_object is not None and self.edit_object.name in bpy.data.objects and self.edit_object.mode == "EDIT":
             bm = bmesh.from_edit_mesh(self.edit_object.data)
             bm.verts.ensure_lookup_table()
@@ -916,7 +936,7 @@ class _Session:
             "proportional_radius": self.proportional_radius,
             "proportional_falloff": self.proportional_falloff,
             "proportional_circle": proportional_circle,
-            "objects": [o.name for o, _m in self.originals] or ([self.edit_object.name] if self.edit_object else []),
+            "objects": [o.name for o, _m in self.originals] or ([self.edit_object.name] if self.edit_object else [self.curve_edit.obj.name] if self.curve_edit else []),
             # Lo que la barra enseña mientras se arrastra. La rotación va en grados
             # porque es lo que se lee, no radianes.
             "values": list(values),
@@ -1296,6 +1316,23 @@ def select_next(payload: dict) -> dict:
     from . import selection
 
     session.require(payload.get("_client_id"))
+    if session.curve_edit is not None:
+        from .curve_edit import selected, set_selection
+        obj = session.curve_edit.obj
+        picked = selection.pick(dict(payload, _probe=True))
+        if not picked.get('hit'): return dict(session.status(), selection_changed=False)
+        current = selected(obj); target = {tuple(picked['control'])}
+        operation = selection._selection_op(payload)
+        desired = target if operation == 'SET' else current|target if operation == 'ADD' else current-target if operation == 'REMOVE' else current^target
+        if not desired or desired == current: return dict(session.status(), selection_changed=False)
+        settings = dict(mode=session.mode, axes=list(session.axes), snap=session.snap, step=session.step,
+                        owner_id=session.owner_id, orientation=session.orientation, value_mode=session.value_mode,
+                        snap_type=session.snap_type, scale_step_unit=session.scale_step_unit)
+        if session.curve_edit.changed(): confirm(payload)
+        else: session.reset()
+        set_selection(obj,desired)
+        session.begin(**settings);session.apply()
+        return dict(session.status(), selection_changed=True,state=state.snapshot(include_view=False))
     obj = session.edit_object
     if obj is None or session.motion != "FREE":
         raise CommandError("Changing transform selection requires Edit Mode", code="wrong_mode")

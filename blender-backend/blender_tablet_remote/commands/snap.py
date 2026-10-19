@@ -318,6 +318,40 @@ def _query_geometric(payload, thresholds, previous=None, release_threshold=None)
     return {k: value for k, value in chosen.items() if k != "acquire_threshold"}
 
 
+def query_wire_object(u, v, rv3d, region, viewport, depsgraph, threshold):
+    """Picking de contornos sin caras usando la proyección y oclusión comunes."""
+    if viewport is not None and not viewport.overlay.show_overlays:
+        return None
+    aspect = max(1, region.width) / max(1, region.height)
+    candidates = []
+    for obj in bpy.context.view_layer.objects:
+        if obj.type not in {'MESH', 'CURVE'} or obj.hide_select or not obj.visible_get(viewport=viewport):
+            continue
+        if viewport is not None and not getattr(viewport, 'show_object_viewport_' + obj.type.lower(), True):
+            continue
+        evaluated = obj.evaluated_get(depsgraph)
+        temporary = obj.type == 'CURVE'
+        mesh = evaluated.to_mesh() if temporary else evaluated.data
+        try:
+            if mesh is None or mesh.polygons or not mesh.edges:
+                continue
+            from types import SimpleNamespace
+            source = SimpleNamespace(mode='OBJECT', matrix_world=evaluated.matrix_world, data=mesh)
+            for distance, _, position in _screen_candidates(source, 'EDGE', rv3d, Vector((u, v)), aspect, set()):
+                if distance <= threshold:
+                    clip = camera.perspective_matrix(rv3d) @ Vector((*position, 1.))
+                    if clip.w > 0 and -clip.w <= clip.z <= clip.w:
+                        candidates.append((distance, obj, position))
+        finally:
+            if temporary:
+                evaluated.to_mesh_clear()
+    for _, obj, position in sorted(candidates, key=lambda c: c[0]):
+        screen = camera.project(position, rv3d)
+        if obj.show_in_front or _visible(position, screen, depsgraph, rv3d, set(), viewport):
+            return obj, position
+    return None
+
+
 def _screen_candidates(obj, snap_type, rv3d, touch, aspect, excluded_vertices):
     """Distancia circular en pantalla y puntos de arista correctos en perspectiva."""
     matrix = obj.matrix_world

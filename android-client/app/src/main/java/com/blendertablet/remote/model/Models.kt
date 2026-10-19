@@ -24,7 +24,7 @@ enum class SelectionOp { SET, ADD, REMOVE, TOGGLE }
  * activo — no tiene botón propio, es el mismo mecanismo de "un dedo dibuja" que ya
  * usan B/C, reinterpretado como línea de corte en vez de selección.
  */
-enum class ShapeTool { NONE, BOX, CIRCLE, LINE }
+enum class ShapeTool { NONE, BOX, CIRCLE, PAINT, LINE }
 
 data class HiddenObject(val name: String, val type: String)
 data class OutlinerObject(
@@ -64,6 +64,7 @@ data class VertexGroupState(val name: String, val locked: Boolean = false)
 data class ModifierState(
     val name: String, val type: String, val showViewport: Boolean = true,
     val showRender: Boolean = true, val parameters: Map<String, Any?> = emptyMap(),
+    val showInEditMode: Boolean = true,
 )
 data class ServerFeatures(
     val repeatLast: Boolean = false,

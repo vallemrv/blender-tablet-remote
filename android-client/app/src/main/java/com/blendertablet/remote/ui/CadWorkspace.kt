@@ -251,7 +251,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
     // selector de modos, panel derecho con flecha de vuelta— y se abre y se cierra
     // igual que él. El contexto (planos, vista, finalizar boceto) vive arriba, en la
     // fila de Deshacer/Rehacer, sin franja propia bajo el menú.
-    val stackEnd = Metrics.EdgeMargin + if (editing && capabilities.constraints.isNotEmpty()) 80.dp else 0.dp
+    val stackEnd = Metrics.EdgeMargin + if (editing && capabilities.constraints.isNotEmpty()) Metrics.HelperRailInset else 0.dp
     if (!stackOpen) FloatingPanel(
         Modifier.align(Alignment.TopEnd).padding(top = 142.dp, end = stackEnd),
     ) {

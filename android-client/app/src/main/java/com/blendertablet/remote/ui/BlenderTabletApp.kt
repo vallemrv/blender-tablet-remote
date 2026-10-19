@@ -139,7 +139,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     var referencesOpen by rememberSaveable { mutableStateOf(false) }
     var versionsOpen by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(state.blender.activeObject, state.blender.mode, state.blender.features.modifiers, state.blender.cad.workspace, state.blender.material.active) {
-        if (state.blender.material.active || state.blender.cad.workspace || !state.blender.features.modifiers || state.blender.mode != BlenderMode.OBJECT || state.blender.activeObjectType != "MESH") modifiersOpen = false
+        if (state.blender.material.active || state.blender.cad.workspace || !state.blender.features.modifiers || state.blender.mode !in setOf(BlenderMode.OBJECT, BlenderMode.EDIT) || state.blender.activeObjectType != "MESH") modifiersOpen = false
     }
 
     // El toast de error se auto-descarta: un aviso que no caduca es ruido permanente.
@@ -219,6 +219,10 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
     val cad = state.blender.cad
     val cadNavigationOrbit = cad.workspace && !cadStackOpen &&
         (cad.activeSketchId != null || (cad.sessionActive && cad.operation in listOf("EXTRUDE", "CUT")))
+    val helperRailVisible = !cad.workspace && !materialActive &&
+        (state.blender.mode == BlenderMode.OBJECT || (state.blender.mode == BlenderMode.EDIT &&
+        state.blender.activeObjectType in setOf("MESH", "CURVE")))
+    val helperRailInset = if (helperRailVisible) Metrics.HelperRailInset else 0.dp
     val cadConstraintRail = cad.workspace && cad.activeSketchId != null && state.blender.features.cad.constraints.isNotEmpty()
     var cadTrayHeightPx by remember { mutableStateOf(0) }
     var cadFooterHeightPx by remember { mutableStateOf(0) }
@@ -320,7 +324,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 toolSession.active,
                 state.activeTool,
             )) && quickMenuAt == null && !modifiersOpen,
-            navigationOrbitRightInsetDp = if (cadConstraintRail) 80f else 0f,
+            navigationOrbitRightInsetDp = if (cadConstraintRail || helperRailVisible) Metrics.HelperRailInset.value else 0f,
             onShape = vm::shapeSelect,
             onLongPress = { x, y, u, v ->
                 // El menú se abre ya, en el sitio donde está el dedo, y en paralelo
@@ -344,7 +348,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         if (state.shapeTool == ShapeTool.BOX) "Selección por caja"
-                        else "Selección por círculo",
+                        else if (state.shapeTool == ShapeTool.PAINT) "Pintar selección" else "Selección por círculo",
                         color = Ink.Muted,
                         fontSize = 12.sp,
                         modifier = Modifier.padding(start = 6.dp, end = 2.dp),
@@ -375,13 +379,13 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
 
                 if (!materialActive && !state.blender.cad.workspace && !sculptActive) {
                 val modifiersAvailable = state.blender.features.modifiers &&
-                    state.blender.mode == BlenderMode.OBJECT && state.blender.activeObjectType == "MESH"
+                    state.blender.mode in setOf(BlenderMode.OBJECT, BlenderMode.EDIT) && state.blender.activeObjectType == "MESH"
 
                 if (modifiersAvailable && !modifiersOpen) {
                     FloatingPanel(
                         Modifier
                             .align(Alignment.TopEnd)
-                            .padding(top = 142.dp, end = Metrics.EdgeMargin),
+                            .padding(top = 142.dp, end = Metrics.EdgeMargin + helperRailInset),
                     ) {
                         IconAction(AppIcons.Modifiers, "Abrir modificadores") {
                             modifiersOpen = true
@@ -398,11 +402,14 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                         .align(Alignment.TopEnd)
                         .padding(
                             top = 142.dp,
-                            end = Metrics.EdgeMargin,
+                            end = Metrics.EdgeMargin + helperRailInset,
                             bottom = if (objectPropertiesVisible) trayInset + 74.dp else 74.dp,
                         ),
                 )
 
+                if (helperRailVisible) SelectionHelperRail(state, vm,
+                    Modifier.align(Alignment.CenterEnd).padding(end = Metrics.EdgeMargin, top = 142.dp,
+                        bottom = trayInset + 74.dp))
                 ToolRail(
                     modifier = Modifier.align(Alignment.CenterStart).padding(start = Metrics.EdgeMargin),
                 ) { RailContent(state, session, toolSession, vm) }
@@ -548,11 +555,11 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     activeAxisView = state.blender.view.axisView,
                     inEdit = !state.blender.cad.workspace && state.blender.mode == BlenderMode.EDIT,
                     selectionMode = state.blender.selectionMode,
-                    showEditShortcuts = state.blender.features.editCatalog.available,
+                    showEditShortcuts = state.blender.activeObjectType == "MESH" && state.blender.features.editCatalog.available,
                     editToolbarAvailable = state.blender.features.editToolbar.available,
                     connectVerticesEnabled = state.blender.features.editCatalog.actionsFor(SelectionMode.VERTEX)
                         .any { it.id == "CONNECT_VERTICES" && it.enabled },
-                    showGrow = state.blender.features.selectionGrow,
+                    showGrow = state.blender.activeObjectType == "MESH" && state.blender.features.selectionGrow,
                     onAxis = vm::viewAxis,
                     onOrbit = vm::viewOrbitStep,
                     onRotate180 = { vm.viewOrbitStep(1f, 0f) },
@@ -563,6 +570,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(Metrics.EdgeMargin)
+                        .padding(end = helperRailInset)
                         .padding(bottom = if (state.blender.cad.workspace) cadTrayHeight else trayInset)
                         .onSizeChanged { if (state.blender.cad.workspace) cadFooterHeightPx = it.height },
                 )
@@ -571,8 +579,9 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     DebugOverlay(vm, state.blender.mode, Modifier.align(Alignment.TopStart).padding(start = Metrics.EdgeMargin, top = 56.dp))
                 }
 
-                if (!state.blender.cad.workspace && state.shapeTool == ShapeTool.CIRCLE) {
+                if (!state.blender.cad.workspace && state.shapeTool in setOf(ShapeTool.CIRCLE, ShapeTool.PAINT)) {
                     CircleRadiusBar(
+                        allowFree = state.shapeTool != ShapeTool.PAINT,
                         selected = state.circleRadius,
                         onRadius = vm::setCircleRadius,
                         modifier = Modifier.align(Alignment.TopCenter).padding(top = 62.dp),
@@ -619,7 +628,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 quickMenuAt = null
                 vm.clearProbe()
             }
-            val meshToolsChildren = if (touchContext.mode == BlenderMode.EDIT && state.blender.features.editCatalog.available) {
+            val meshToolsChildren = if (touchContext.mode == BlenderMode.EDIT && state.blender.activeObjectType == "MESH" && state.blender.features.editCatalog.available) {
                 // Ya en el anillo (Loop/Ring/Ocultar) o en la barra izquierda
                 // (Extrude/Inset/Loop Cut/Cut) no se repiten aquí (F1 "cero duplicidades").
                 val excluded = RADIAL_TOP_LEVEL_CATALOG_IDS +
@@ -799,7 +808,7 @@ private fun ViewportLayer(
     cancelPickOnNavigation: Boolean,
     navigationOrbitEnabled: Boolean,
     navigationOrbitRightInsetDp: Float,
-    onShape: (ShapeTool, Float, Float, Float, Float) -> Unit,
+    onShape: (ShapeTool, GesturePhase, Float, Float, Float, Float) -> Unit,
     onLongPress: (px: Float, py: Float, u: Float, v: Float) -> Unit,
 ) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1000,7 +1009,7 @@ private fun RailContent(
         selected = state.activeTool == ActiveTool.SELECT && !session.active && !toolSession.active,
         onClick = vm::selectTool,
     )
-    if (inEdit && state.blender.features.selectionTweak) {
+    if (inEdit && state.blender.activeObjectType == "MESH" && state.blender.features.selectionTweak) {
         TweakToolButton(
             selected = state.activeTool == ActiveTool.TWEAK,
             enabled = true,
@@ -1028,7 +1037,7 @@ private fun RailContent(
     // Barra de tools activas (edit_toolbar, B0/F1): Extrude, Inset, Loop Cut y Cut
     // agrupados con la lógica de Blender, en vez de duplicarlos en el catálogo
     // contextual. Un servidor sin la feature no la anuncia y no se dibuja nada aquí.
-    if (inEdit && state.blender.features.editToolbar.available) {
+    if (inEdit && state.blender.activeObjectType == "MESH" && state.blender.features.editToolbar.available) {
         RailDivider()
         RailLabel("EDITAR")
         ToolbarFamilyButtons(state.blender.features.editToolbar.families, toolSession, state.toolbarVariant, state.blender.selectionMode, vm)
@@ -1227,13 +1236,14 @@ private fun quickContextLabel(context: TouchContext): String = when {
 @Composable
 private fun CircleRadiusBar(
     selected: Float?,
+    allowFree: Boolean = true,
     onRadius: (Float?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     FloatingPanel(modifier) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Radio", color = Ink.Muted, fontSize = 11.sp)
-            PillButton("Libre", selected = selected == null) { onRadius(null) }
+            if (allowFree) PillButton("Libre", selected = selected == null) { onRadius(null) }
             listOf(.05f to "5%", .10f to "10%", .20f to "20%", .30f to "30%").forEach { (radius, label) ->
                 PillButton(label, selected = selected == radius) { onRadius(radius) }
             }

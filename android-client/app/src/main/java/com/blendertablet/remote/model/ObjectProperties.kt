@@ -15,6 +15,7 @@ data class ObjectPropertiesResult(val token: String, val success: Boolean)
 /** Solo los campos modificados viajan; un borrador vacío nunca se convierte en cero. */
 fun objectPropertyNumber(text: String, field: ObjectPropertyField, unit: LengthUnit): Double? {
     val value = NumericExpression.evaluate(text) ?: return null
+    if (field.unit == "count" && value % 1.0 != 0.0) return null
     val factor = when (field.unit) {
         "length" -> unit.transformStepUnit().meters
         "percent" -> .01

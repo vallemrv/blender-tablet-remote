@@ -36,6 +36,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.blendertablet.remote.model.BlenderMode
 import com.blendertablet.remote.model.BlenderState
 import com.blendertablet.remote.model.LengthUnit
 import com.blendertablet.remote.model.ModifierDefault
@@ -51,7 +52,7 @@ import kotlin.math.roundToInt
 data class ModifierActions(
     val add: (String, Map<String, Any?>) -> Unit,
     val set: (String, String, Any?) -> Unit,
-    val toggle: (String, Boolean?, Boolean?) -> Unit,
+    val toggle: (String, Boolean?, Boolean?, Boolean?) -> Unit,
     val move: (String, Int) -> Unit,
     val apply: (String) -> Unit,
     val remove: (String) -> Unit,
@@ -124,7 +125,8 @@ private fun Header(state: BlenderState, actions: ModifierActions) {
             ) {
                 OutlinedTextField(query, { query = it }, singleLine = true, label = { Text("Buscar modificador") },
                     modifier = Modifier.width(260.dp).padding(horizontal = 8.dp))
-                val matches = state.modifierOptions.filter { modifierMatchesQuery(it.type, it.label, query) }
+                val matches = state.modifierOptions.filter { modifierMatchesQuery(it.type, it.label, query) &&
+                    (state.mode != BlenderMode.EDIT || it.type != "MULTIRES") }
                 if (matches.isEmpty()) Text("Sin coincidencias", color = Ink.Muted, modifier = Modifier.padding(12.dp))
                 for (descriptor in matches) {
                     DropdownMenuItem(
@@ -202,12 +204,15 @@ private fun ModifierCard(
                     AppIcons.visibility(true),
                     if (item.showViewport) "Visible en el viewport" else "Oculto en el viewport",
                     selected = item.showViewport,
-                ) { actions.toggle(item.name, !item.showViewport, null) }
+                ) { actions.toggle(item.name, !item.showViewport, null, null) }
+                if (state.mode == BlenderMode.EDIT) ModifierHeaderButton(
+                    AppIcons.ModeEdit, "Mostrar modificador en edición", selected = item.showInEditMode,
+                ) { actions.toggle(item.name, null, null, !item.showInEditMode) }
                 ModifierHeaderButton(
                     AppIcons.Render,
                     if (item.showRender) "Visible en el render" else "Oculto en el render",
                     selected = item.showRender,
-                ) { actions.toggle(item.name, null, !item.showRender) }
+                ) { actions.toggle(item.name, null, !item.showRender, null) }
             }
 
             if (expanded) {
@@ -217,7 +222,7 @@ private fun ModifierCard(
 
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     Spacer(Modifier.weight(1f))
-                    IconAction(AppIcons.Confirm, "Aplicar", tint = Ink.Ok) { actions.apply(item.name) }
+                    IconAction(AppIcons.Confirm, "Aplicar (solo Object)", enabled = state.mode == BlenderMode.OBJECT, tint = Ink.Ok) { actions.apply(item.name) }
                     IconAction(AppIcons.Delete, "Eliminar", tint = Ink.Bad) { actions.remove(item.name) }
                 }
             }
@@ -276,7 +281,7 @@ private fun ModifierParameter(
         return
     }
     when (spec.type) {
-        "action" -> PillButton(spec.label, enabled = spec.max == null || actualMaximum == null || actualMaximum < spec.max) {
+        "action" -> PillButton(spec.label, enabled = state.mode != BlenderMode.EDIT && (spec.max == null || actualMaximum == null || actualMaximum < spec.max)) {
             set(item.name, spec.name, true)
         }
         "bool" -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

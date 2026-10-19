@@ -151,7 +151,7 @@ object StateParser {
         (0 until array.length()).mapNotNull { array.optJSONObject(it) }.map { item ->
             ModifierState(item.optString("name"), item.optString("type"),
                 item.optBoolean("show_viewport", true), item.optBoolean("show_render", true),
-                jsonMap(item.optJSONObject("parameters")))
+                jsonMap(item.optJSONObject("parameters")), showInEditMode = item.optBoolean("show_in_editmode", true))
         }
 
     fun vertexGroups(array: JSONArray?): List<VertexGroupState> = if (array == null) emptyList() else

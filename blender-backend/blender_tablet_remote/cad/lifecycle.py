@@ -6,6 +6,8 @@ from .runtime import runtime
 
 @persistent
 def save_pre(*_):
+    from ..commands.selection_paint import cancel
+    cancel()
     runtime.suspend_save()
 
 
@@ -16,6 +18,8 @@ def save_post(*_):
 
 @persistent
 def load_pre(*_):
+    from ..commands.selection_paint import cancel
+    cancel()
     from ..commands import reconnect
     reconnect.clear()
     runtime.leave()
@@ -28,6 +32,8 @@ def load_post(*_):
 
 @persistent
 def undo_pre(*_):
+    from ..commands.selection_paint import cancel
+    cancel()
     runtime.cancel()
 
 

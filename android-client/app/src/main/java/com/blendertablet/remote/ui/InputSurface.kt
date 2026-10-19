@@ -90,7 +90,7 @@ fun InputSurface(
     navigationOrbitEnabled: Boolean = false,
     navigationOrbitRightInsetDp: Float = 0f,
     /** Forma terminada: esquinas (box) o centro+borde (circle) normalizados. */
-    onShape: (ShapeTool, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> },
+    onShape: (ShapeTool, GesturePhase, Float, Float, Float, Float) -> Unit = { _, _, _, _, _, _ -> },
     /** Puntos del Knife en pantalla, para dibujarlos sobre el vídeo. */
     knifePoints: List<List<Pair<Float, Float>>> = emptyList(),
     snapCandidate: SnapCandidate? = null,
@@ -246,6 +246,13 @@ private class GestureView(
 
     /** Herramienta de forma (B/C). Con una armada, el dedo dibuja en vez de orbitar. */
     var shapeTool: ShapeTool = ShapeTool.NONE
+        set(value) {
+            if (field == ShapeTool.PAINT && value != field && shapeDrawing) {
+                dispatchSelectionPaint(GesturePhase.CANCEL)
+                shapeDrawing = false
+            }
+            field = value
+        }
     var fixedCircleRadius: Float? = null
     var knifeActive: Boolean = false
     var onKnifeDrag: (GesturePhase, Float, Float) -> Unit = { _, _, _ -> }
@@ -261,7 +268,7 @@ private class GestureView(
     var navigationOrbitEnabled: Boolean = false
     var navigationOrbitRightInset = 0f
         set(value) { if (field != value) { field = value; invalidate() } }
-    var onShape: (ShapeTool, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> }
+    var onShape: (ShapeTool, GesturePhase, Float, Float, Float, Float) -> Unit = { _, _, _, _, _, _ -> }
     var onSculptStroke: (GesturePhase, List<SculptPoint>, Boolean, Boolean) -> Unit = { _, _, _, _ -> }
     var sculptEnabled = false
         set(value) {
@@ -442,6 +449,7 @@ private class GestureView(
                     shapeCurrentX = event.x; shapeCurrentY = event.y
                     moved = false
                     longPressFired = false
+                    if (shapeTool == ShapeTool.PAINT) dispatchSelectionPaint(GesturePhase.BEGIN)
                     invalidate()
                     return true
                 }
@@ -472,6 +480,10 @@ private class GestureView(
                     suppressSingleAfterTweak = true
                 }
                 if (shapeDrawing) {
+                    if (shapeTool == ShapeTool.PAINT) {
+                        dispatchSelectionPaint(GesturePhase.CANCEL)
+                        suppressSingleAfterTweak = true
+                    }
                     shapeDrawing = false
                     invalidate()
                 }
@@ -522,7 +534,10 @@ private class GestureView(
                 } else if (suppressSingleAfterTweak) {
                     // Tras cancelar Tweak, el dedo restante no inicia otra edición.
                 } else if (shapeDrawing) {
+                    val previousX = shapeCurrentX; val previousY = shapeCurrentY
                     shapeCurrentX = event.x; shapeCurrentY = event.y
+                    if (shapeTool == ShapeTool.PAINT) onShape(shapeTool, GesturePhase.UPDATE,
+                        nx(previousX), ny(previousY), nx(shapeCurrentX), ny(shapeCurrentY))
                     invalidate()
                 } else if (navigationOrbitActive) handleNavigationOrbit(event) else handleSingle(event)
 
@@ -579,6 +594,7 @@ private class GestureView(
             }
 
             MotionEvent.ACTION_CANCEL -> {
+                if (shapeDrawing && shapeTool == ShapeTool.PAINT) dispatchSelectionPaint(GesturePhase.CANCEL)
                 removeCallbacks(longPressRunnable)
                 tapExtrusion.cancel()
                 if (cadDrawing) onCadGesture(GesturePhase.CANCEL, nx(shapeCurrentX), ny(shapeCurrentY))
@@ -1020,6 +1036,8 @@ private class GestureView(
     }
 
     private fun cancelGestures() {
+        if (shapeDrawing && shapeTool == ShapeTool.PAINT) dispatchSelectionPaint(GesturePhase.CANCEL)
+        shapeDrawing = false
         if (toolActive) onToolGesture(GesturePhase.CANCEL, 0f, 0f)
         if (pairActive) {
             onViewGesture(Gesture.PAN, GesturePhase.CANCEL, 0f, 0f, 1f)
@@ -1066,15 +1084,20 @@ private class GestureView(
      * Cierra la forma dibujada y la entrega. Un recorrido por debajo del umbral de
      * deslizamiento es un tap simple con la herramienta armada: no hace nada.
      */
+    private fun dispatchSelectionPaint(phase: GesturePhase) {
+        onShape(ShapeTool.PAINT, phase, nx(shapeCurrentX), ny(shapeCurrentY), nx(shapeCurrentX), ny(shapeCurrentY))
+    }
+
     private fun finishShape() {
+        if (shapeTool == ShapeTool.PAINT) { dispatchSelectionPaint(GesturePhase.END); return }
         invalidate()
         if (shapeTool == ShapeTool.CIRCLE && fixedCircleRadius != null) {
             val radius = fixedCircleRadius!!.coerceIn(0.01f, 0.5f)
-            onShape(shapeTool, nx(shapeStartX), ny(shapeStartY), nx(shapeStartX) + radius, ny(shapeStartY))
+            onShape(shapeTool, GesturePhase.END, nx(shapeStartX), ny(shapeStartY), nx(shapeStartX) + radius, ny(shapeStartY))
             return
         }
         if (hypot(shapeCurrentX - shapeStartX, shapeCurrentY - shapeStartY) <= systemTouchSlop) return
-        onShape(shapeTool, nx(shapeStartX), ny(shapeStartY), nx(shapeCurrentX), ny(shapeCurrentY))
+        onShape(shapeTool, GesturePhase.END, nx(shapeStartX), ny(shapeStartY), nx(shapeCurrentX), ny(shapeCurrentY))
     }
 
     private val cadAnnotationPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
@@ -1228,6 +1251,8 @@ private class GestureView(
                     maxOf(shapeStartX, shapeCurrentX), maxOf(shapeStartY, shapeCurrentY),
                     shapePaint,
                 )
+            } else if (shapeTool == ShapeTool.PAINT) {
+                canvas.drawCircle(shapeCurrentX, shapeCurrentY, (fixedCircleRadius ?: .05f) * width, shapePaint)
             } else if (shapeTool == ShapeTool.CIRCLE) {
                 canvas.drawCircle(
                     shapeStartX, shapeStartY,

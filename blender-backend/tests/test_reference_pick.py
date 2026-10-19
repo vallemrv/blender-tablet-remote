@@ -34,7 +34,7 @@ class ReferencePickTests(unittest.TestCase):
         camera.perspective = 'PERSP'
         camera.set_clipping(.001, 100)
         self.rv3d = SimpleNamespace(window_matrix=Matrix(((1,0,0,0),(0,2,0,0),(0,0,-1,-.02),(0,0,-1,0))))
-        self.patches = [patch.object(selection, 'find_view3d', return_value=(None, None, None, self.rv3d)),
+        self.patches = [patch.object(selection, 'find_view3d', return_value=(None, None, SimpleNamespace(width=1000, height=500), self.rv3d)),
                         patch.object(selection.state, 'snapshot', return_value={})]
         for p in self.patches: p.start()
 

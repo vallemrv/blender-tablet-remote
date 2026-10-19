@@ -351,6 +351,22 @@ estén dentro del umbral táctil normalizado (`threshold`, 0.035 por defecto). D
 el rayo solo considera la jaula del objeto editado, de modo que otro objeto detrás
 cuenta como vacío, y un vacío con `TOGGLE` también deselecciona todo: Android envía
 `TOGGLE` en el toque sin modificador para acumular sin Mayús.
+`selection.paint` recibe `phase:BEGIN|UPDATE|END|CANCEL`, `stroke_id`, `u0/v0`,
+`u1/v1` y `radius` (fracción de ancho del vídeo). Pinta en Object o Edit de mallas/curvas:
+invierte cada objeto/elemento una vez por trazo respecto a la selección inicial.
+El radio corrige el aspecto, UPDATE barre el segmento y END no vuelve a sondear.
+Cancelación/desconexión restaura; confirmar crea un undo si hubo elementos afectados.
+La identidad y el propietario descartan eventos atrasados. Devuelve snapshot y `paint_active`.
+
+En Object, mallas sin caras y curvas sin superficie también admiten selección por
+proximidad al contorno evaluado, con `threshold` y oclusión mediante el sondeo común.
+Respeta visibilidad y bloqueo; no rellena el centro para convertirlo en superficie.
+En Edit, el sondeo de malla incluye vértices y aristas sin caras. En curvas retorna
+`element:curve`, `control:[spline_index,point_index,POINT|LEFT|RIGHT]` y `location`.
+Los puntos y tiradores usan `transform.*` sobre un baseline de curva, sin modificar
+la matriz del objeto ni convertir a malla. `transform.select` también continúa entre
+controles. Cancelar restaura coordenadas y tipos de tirador; confirmar crea un undo.
+
 En Object también sondea el rectángulo visible de las referencias nativas (Empty
 IMAGE), con aspecto de imagen/píxel, offset y transformación. Respeta ocultación,
 bloqueo, perspectiva/ortográfica, lados visibles, vista alineada y profundidad
@@ -401,6 +417,12 @@ un único undo; mover a la única colección actual no crea undo vacío.
 espacios externos). Renombra la colección nativa en un undo, conserva identidad y
 pertenencias, y devuelve el listado actualizado. Rechaza la raíz, colecciones
 enlazadas e IDs obsoletos; repetir el nombre actual no crea undo.
+
+Campos numéricos con `unit:count` aceptan solo enteros. `circle_vertices`, en la
+sección Círculo, cambia entre 3 y 4096 vértices de un anillo regular sin caras;
+conserva radio/marco y no se ofrece sobre geometría deformada o datos personalizados.
+`curve_resolution`, en Curva, expone la resolución nativa con sus límites RNA.
+Ambos cambios separan los datos enlazados del activo y crean un solo undo.
 
 `object.properties` (`object_properties.version:1`) recibe `object_id`, `revision`
 y `values` con únicamente los campos modificados. `active.properties` publica la
@@ -1129,7 +1151,7 @@ Pila no destructiva del objeto activo. No confundir `modifier.add type=BEVEL` co
 | `modifier.remove` | `object?`, `name` |
 | `modifier.move` | `object?`, `name`, `index` |
 | `modifier.set` | `object?`, `name`, `parameters{}` |
-| `modifier.toggle` | `object?`, `name`, `viewport?`, `render?` |
+| `modifier.toggle` | `object?`, `name`, `viewport?`, `render?`, `editmode?` |
 | `modifier.apply` | `object?`, `name` — Object Mode; Edit → `wrong_mode` |
 
 Tipos y parámetros:
@@ -1155,7 +1177,7 @@ de un único eje son parciales y conservan el resto de parámetros del modificad
 `object_info` incluye `modifiers[]`:
 
 ```json
-{"name": "Subdivision", "type": "SUBSURF", "show_viewport": true, "show_render": true,
+{"name": "Subdivision", "type": "SUBSURF", "show_viewport": true, "show_render": true, "show_in_editmode": true,
  "parameters": {"levels": 2, "render_levels": 2, "subdivision_type": "CATMULL_CLARK"}}
 ```
 

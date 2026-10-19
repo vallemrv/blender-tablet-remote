@@ -38,6 +38,7 @@ object Metrics {
     val Radius = 14.dp
     val PanelPadding = 8.dp
     val EdgeMargin = 10.dp
+    val HelperRailInset = 80.dp
 
     /**
      * Hueco que reserva una bandeja horizontal inferior (una línea de controles

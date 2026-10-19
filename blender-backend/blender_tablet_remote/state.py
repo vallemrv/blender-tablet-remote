@@ -21,6 +21,8 @@ _SNAP_TYPES = ["NONE", "INCREMENT", "VERTEX", "EDGE_CENTER", "FACE_CENTER"]
 
 
 def selection_mode() -> str:
+    active=bpy.context.view_layer.objects.active
+    if active and active.type=='CURVE' and active.mode=='EDIT':return 'VERTEX'
     try:
         flags = bpy.context.scene.tool_settings.mesh_select_mode
     except AttributeError:
@@ -139,18 +141,24 @@ def context_snapshot() -> dict:
                         local_normal += f.normal
                 if local_normal.length_squared:
                     normal = (active.matrix_world.to_3x3() @ local_normal.normalized()).normalized()
+    elif mode == 'EDIT' and active is not None and active.type == 'CURVE':
+        from .commands.curve_edit import controls
+        points=[active.matrix_world@co for _,co,on in controls(active) if on]
+        counts['verts']=len(points)
+        if points:center=sum(points,Vector())/len(points)
     elif selected_objects:
         center = sum((o.matrix_world.translation for o in selected_objects), Vector()) / len(selected_objects)
 
-    edit_tools = _TOOLS_EDIT if mode == "EDIT" else _TOOLS_OBJECT
+    curve_edit = mode == 'EDIT' and active is not None and active.type == 'CURVE'
+    edit_tools = _TOOLS_EDIT if mode == "EDIT" and not curve_edit else _TOOLS_OBJECT
     return {
         "selection_counts": counts,
         "active_tool": "SELECT",
         "orientation": "GLOBAL",
         "pivot": "MEDIAN",
         "available_tools": edit_tools,
-        "available_constraints": _CONSTRAINTS_EDIT if mode == "EDIT" else _CONSTRAINTS_OBJECT,
-        "available_orientations": _ORIENTATIONS_EDIT if mode == "EDIT" else _ORIENTATIONS_OBJECT,
+        "available_constraints": _CONSTRAINTS_EDIT if mode == "EDIT" and not curve_edit else _CONSTRAINTS_OBJECT,
+        "available_orientations": _ORIENTATIONS_EDIT if mode == "EDIT" and not curve_edit else _ORIENTATIONS_OBJECT,
         "available_snap_types": _SNAP_TYPES,
         "selection_center": list(center),
         "selection_normal": list(normal),
@@ -235,6 +243,9 @@ class StateWatcher:
         active = bpy.context.view_layer.objects.active
         if active is not None and active.mode == "EDIT" and active.type == "MESH":
             counts = (active.data.total_vert_sel, active.data.total_edge_sel, active.data.total_face_sel)
+        elif active is not None and active.mode == 'EDIT' and active.type == 'CURVE':
+            from .commands.curve_edit import selected
+            counts = tuple(sorted(selected(active)))
         else:
             counts = (0, 0, 0)
         return (current_mode(), selection_mode(), counts, tuple(selected_names))
@@ -325,7 +336,7 @@ def _modifiers_sig(obj) -> tuple:
         return ()
     bits = []
     for mod in obj.modifiers:
-        entry = [mod.name, mod.type, bool(mod.show_viewport), bool(mod.show_render)]
+        entry = [mod.name, mod.type, bool(mod.show_viewport), bool(mod.show_render), bool(mod.show_in_editmode)]
         from .commands.modifiers import RNA_TYPES,_read_rna
         if mod.type in RNA_TYPES:entry.append(tuple(_read_rna(mod,mod.type).items()))
         for attr in ("levels", "sculpt_levels", "total_levels", "render_levels", "count", "width", "segments", "thickness",

@@ -102,6 +102,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var dragStartPoint: Pair<Float, Float>? = null
     /** El arrastre de un dedo pertenece al manipulador (o a su órbita si no tocó asa). */
     private var gizmoDragActive = false
+    private var selectionPaintId: String? = null
     private var gizmoPendingDx = 0f
     private var gizmoPendingDy = 0f
     private var gizmoLastPointer: Pair<Float, Float>? = null
@@ -835,7 +836,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             // en Vértices, la pieza enlazada. El ADD previo lo deja como semilla activa.
             val previous = lastEditTap
             val now = android.os.SystemClock.uptimeMillis()
-            if (plainEdit && previous != null && now - previous.third <= EDIT_DOUBLE_TAP_MS &&
+            if (plainEdit && blender.activeObjectType == "MESH" && previous != null && now - previous.third <= EDIT_DOUBLE_TAP_MS &&
                 kotlin.math.hypot(u - previous.first, v - previous.second) <= EDIT_DOUBLE_TAP_DISTANCE) {
                 lastEditTap = null
                 client.pick(u.toDouble(), v.toDouble(), threshold, SelectionOp.ADD)
@@ -843,7 +844,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 else client.selectLoop(SelectionOp.ADD)
                 return
             }
-            lastEditTap = if (plainEdit) Triple(u, v, now) else null
+            lastEditTap = if (plainEdit && blender.activeObjectType == "MESH") Triple(u, v, now) else null
             // En Edit el toque sin modificador acumula: añade o quita lo tocado, sin Mayús.
             client.pick(u.toDouble(), v.toDouble(), threshold, if (plainEdit) SelectionOp.TOGGLE else local.value.selectionOp)
         }
@@ -922,7 +923,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** B/C: arma/desarma la herramienta de arrastre por forma. */
     fun toggleShapeTool(tool: ShapeTool) {
-        local.update { it.copy(shapeTool = if (it.shapeTool == tool) ShapeTool.NONE else tool) }
+        val next = if (local.value.shapeTool == tool) ShapeTool.NONE else tool
+        if (next == ShapeTool.PAINT) selectTool()
+        local.update { it.copy(shapeTool = next, shortestPathActive = false,
+            circleRadius = if (next == ShapeTool.PAINT) it.circleRadius ?: .05f else it.circleRadius) }
     }
 
     /** El menú radial siempre arma B/C; repetir el botón nunca debe desarmarla. */
@@ -949,7 +953,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * y el siguiente gesto vuelve a ser navegación/selección normal. Para otra caja
      * hay que rearmarla desde el long-click (B/C).
      */
-    fun shapeSelect(shape: ShapeTool, u0: Float, v0: Float, u1: Float, v1: Float) {
+    fun shapeSelect(shape: ShapeTool, phase: GesturePhase, u0: Float, v0: Float, u1: Float, v1: Float) {
+        if (shape == ShapeTool.PAINT) {
+            if (phase == GesturePhase.BEGIN) selectionPaintId = java.util.UUID.randomUUID().toString()
+            val id = selectionPaintId ?: return
+            client.editCatalogCommand("selection.paint", mapOf("phase" to phase.name, "stroke_id" to id,
+                "u0" to u0, "v0" to v0, "u1" to u1, "v1" to v1, "radius" to (local.value.circleRadius ?: .05f)))
+            if (phase == GesturePhase.END || phase == GesturePhase.CANCEL) selectionPaintId = null
+            return
+        }
         // Bisect es la excepción: no es selección y no se desarma sola tras un
         // arrastre (F4 permite redibujar la línea mientras la sesión sigue viva). El
         // watcher de [toolSession] es quien la desarma al salir de Bisect.
@@ -967,7 +979,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 Math.hypot((u1 - u0).toDouble(), (v1 - v0).toDouble()),
                 op,
             )
-            ShapeTool.NONE, ShapeTool.LINE -> Unit
+            ShapeTool.NONE, ShapeTool.LINE, ShapeTool.PAINT -> Unit
         }
         local.update { it.copy(shapeTool = ShapeTool.NONE) }
     }
@@ -1012,7 +1024,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setModifier(name: String, key: String, value: Any?) = client.modifierSet(name, mapOf(key to value))
     fun setObjectProperties(id: String, revision: String, values: Map<String, Any?>, token: String) =
         client.setObjectProperties(id, revision, values, token)
-    fun toggleModifier(name: String, viewport: Boolean? = null, render: Boolean? = null) = client.modifierToggle(name, viewport, render)
+    fun toggleModifier(name: String, viewport: Boolean? = null, render: Boolean? = null, editMode: Boolean? = null) = client.modifierToggle(name, viewport, render, editMode)
     fun applyModifier(name: String) = client.modifierApply(name)
     fun selectLoop() {
         val op = local.value.selectionOp
@@ -1673,7 +1685,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** El manipulador se ofrece en Object/Edit con la selección normal, sin otras herramientas. */
     private fun gizmoWanted(remote: BlenderState, ui: AppUiState): Boolean =
-        remote.features.gizmo && ui.gizmoEnabled && !remote.cad.workspace && !remote.material.active &&
+        remote.features.gizmo && ui.gizmoEnabled && !(remote.mode == BlenderMode.EDIT && remote.activeObjectType == "CURVE") && !remote.cad.workspace && !remote.material.active &&
             (remote.mode == BlenderMode.OBJECT || remote.mode == BlenderMode.EDIT) &&
             ui.activeTool == ActiveTool.SELECT && ui.shapeTool == ShapeTool.NONE &&
             !ui.shortestPathActive && !ui.loopCutAwaitingTap

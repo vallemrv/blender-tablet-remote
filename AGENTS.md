@@ -182,6 +182,12 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 
 - No se crean planes de trabajo.
 - Solo existe una incidencia activa.
+- Encargos por lotes: cuando el usuario (o otro bot de Valle en su nombre) entrega un
+  documento de encargo con varios puntos y pide hacerlo todo, se implementan todos en la
+  misma entrega, sin pedir aceptación entre puntos. En ese caso no aplican «una
+  incidencia activa» ni «no rediseñar asuntos adyacentes» para lo que el documento
+  describe; sí un commit por punto, tests en verde y un único APK al final. Encargo
+  vigente: `~/proyectos/tareas-ui-coherencia-blender.md` (coherencia de la interfaz).
 - Cada cambio debe ser pequeño y centrado en el comportamiento comunicado.
 - No se aprovecha una reparación para rediseñar o corregir asuntos adyacentes.
 - Cuando el usuario comunica un fallo distinto después de recibir una entrega, la
@@ -375,6 +381,21 @@ nuevas superficies y la adaptación gradual de las existentes.
   o cambios concurrentes del PC. No abre ni altera la sesión de Mover.
   Rotación conserva el modo nativo Euler/cuaternión/eje-ángulo y los bloqueos.
   El pie de vistas y el inspector de modificadores respetan la altura de la bandeja.
+- Edit permite seleccionar vértices/aristas sueltos sin una cara bajo el toque.
+  Las curvas Bézier/NURBS mantienen sus datos nativos: se seleccionan puntos y
+  tiradores y se usa Mover/Rotar/Escalar con baseline reversible y un undo al confirmar.
+  La matriz del objeto no cambia. Un tirador automático/vector pasa a libre al moverlo;
+  cancelar restaura coordenadas y tipos. No se anuncian Tweak, proporcional ni herramientas
+  topológicas de malla sobre curvas. Ocultar, duplicar y borrar usan operadores nativos.
+- El círculo de malla regular sin caras ofrece Círculo → Resolución (3–4096
+  vértices). Se reconoce por su geometría, también en archivos anteriores; conserva
+  radio, plano, origen, transformación y materiales al reconstruir. No sobrescribe
+  círculos deformados, grupos de vértices, shape keys ni atributos con datos propios.
+  Las curvas ofrecen Curva → Resolución con el valor nativo. Cada cambio crea un undo
+  y separa los datos del activo para conservar otras copias enlazadas.
+  Los contornos de mallas sin caras y curvas sin grosor se seleccionan por sus
+  aristas evaluadas mediante la proyección y oclusión comunes de `commands/snap.py`;
+  respetan ocultación y bloqueo. El centro vacío no se trata como una cara rellena.
 - Outliner sustituye a «Ocultos» en la barra superior. Lista todos los objetos de
   la escena, incluidos ocultos y los de colecciones excluidas, con buscador, nombre,
   colección/padre, selección, ojo y candado. Las acciones usan identidad efímera,
@@ -410,11 +431,19 @@ nuevas superficies y la adaptación gradual de las existentes.
 - Los botones del Paso de herramientas Edit siguen su orden de magnitud y nunca
   muestran cero por falta de decimales. Sculpt muestra el radio métrico aproximado
   del plano del pivote; su parámetro de gesto continúa siendo relativo a la pantalla.
-- La selección de Edit vive en una barra fija a la izquierda de Vértices/Aristas/Caras
-  (`EditSelectionBar`): Todo/Nada en un botón, Invertir, Loop, Enlazado, Caja y
-  Círculo, a un toque y sin cambiar de posición (se deshabilitan si no aplican). El
-  radial Edit ya no tiene submenú Selección: ofrece Malla y, con selección, Ocultar,
-  Duplicar y Borrar.
+- La selección de Object/Edit vive en el rail helper vertical derecho (`SelectionHelperRail`),
+  con el mismo `ToolRail` que las restricciones CAD. Muestra solo las acciones aplicables:
+  Object muestra Todo/Nada, Invertir, Caja, Círculo y Pintar selección; Edit añade
+  Loop/Enlazado cuando proceden. En curvas muestra Todo/Nada, Invertir y Pintar.
+  Pintar selección alterna una sola vez cada elemento atravesado en cada trazo,
+  con radio ajustable. BEGIN/UPDATE acumulan una selección reversible; END confirma
+  la última muestra sin sondear de nuevo y crea un undo. CANCEL, dos dedos,
+  desconexión, cambio de herramienta o guardar restauran la selección inicial.
+  Identidad de trazo y propietario rechazan eventos antiguos; respeta ocultación,
+  bloqueo y oclusión. No cambia vértices ni convierte objetos.
+  Modificadores (botón y panel), vistas/atajos y navegación reservan a su derecha
+  `Metrics.HelperRailInset` (80 dp). Vértices/Aristas/Caras siguen bajo el ojo en mallas.
+  El radial conserva Malla y, con selección, Ocultar, Duplicar y Borrar.
 - Mayús, Alt, ⇧R y Ring se han retirado de sus barras a petición del usuario. El doble toque
   conserva la selección de loop en Aristas/Caras y de enlazado en Vértices; no se
   sustituye por ring. Ctrl permanece para camino más corto.
@@ -430,8 +459,12 @@ nuevas superficies y la adaptación gradual de las existentes.
   no duplica el boceto ni crea un undo de navegación.
 - En Edit, Vértices/Aristas/Caras se sitúa a la izquierda del selector de modo, en
   la misma fila bajo el ojo; no aparece en la barra superior.
-- El panel de modificadores queda limitado entre ese selector de modos y el selector
-  inferior de vistas/atajos, con un pequeño margen respecto a ambos y sin invadirlos.
+- El panel de modificadores está disponible en Object y Edit de mallas, limitado
+  entre modos y vistas/atajos. En Edit permite añadir modificadores compatibles,
+  cambiar parámetros (incluido Clipping), ordenar, retirar y alternar visibilidad
+  global o solo en edición (`show_in_editmode`). Aplicar y acciones nativas que
+  requieren Object quedan deshabilitados. Una transformación activa debe cerrarse
+  antes de modificar la pila en Edit.
 - El botón cerrado de modificadores se sitúa 10 dp debajo del selector de modos para
   no tapar el manejador de órbita.
 - Nueva escena exige elegir Pequeña/Mediana/Grande (`mm`/`cm`/`m`) antes de crearla.

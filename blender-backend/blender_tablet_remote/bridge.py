@@ -475,6 +475,8 @@ def _handle(client: WSClient, msg: dict) -> None:
         session.owner_disconnected(msg["client_id"])
         from .commands.tools import tool_session
         tool_session.owner_disconnected(msg["client_id"])
+        from .commands.selection_paint import owner_disconnected as cancel_selection_paint
+        cancel_selection_paint(msg["client_id"])
         from .commands import gizmo
         gizmo.owner_disconnected(msg["client_id"])
         from .cad.runtime import runtime

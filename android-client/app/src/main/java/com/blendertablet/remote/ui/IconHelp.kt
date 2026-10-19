@@ -71,6 +71,7 @@ internal object IconHelp {
         "ISOLATE_EXIT" to "Sale de la vista aislada y recupera la visibilidad del resto de la escena.",
         "ALIGN" to "Elige una cara de origen y otra de destino para colocar u orientar el objeto fuente.",
         "PLACE" to "Abre las opciones para alinear caras o cambiar el origen del objeto.",
+        "PAINT_SELECT" to "Pinta para alternar la selección: cada elemento cambia una sola vez por trazo. Dos dedos cancelan el trazo y permiten navegar.",
         "DUPLICATE" to "Crea una copia independiente de la selección.",
         "IN_FRONT" to "Muestra el objeto por delante de otros en la vista 3D, sin moverlo ni cambiar el render. Pulsa de nuevo para desactivarlo.",
         "DUPLICATE_LINKED" to "Crea otro objeto que comparte la misma malla: editar esa malla afecta a sus copias enlazadas.",

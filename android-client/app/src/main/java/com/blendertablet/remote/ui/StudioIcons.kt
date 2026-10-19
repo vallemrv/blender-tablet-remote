@@ -18,6 +18,7 @@ internal object StudioIcons {
     internal data class Glyph(val label: String, val group: String, val path: String)
     internal val glyphs = mapOf(
         // Herramientas: siluetas amplias y reconocibles también a 24 dp.
+        "PAINT_SELECT" to Glyph("Pintar selección", "Selección", "M3,4 L6,4 M3,4 L3,7 M18,4 L21,4 L21,7 M3,18 L3,21 L6,21 M18,21 L21,21 L21,18 M7,15 L16,6 L19,9 L10,18 L6,19 Z M14,8 L17,11"),
         "SELECT" to Glyph("Seleccionar", "Herramientas", "M5,3 L5,20 L10,15 L14,21 L17,19 L13,13 L21,13 Z"),
         "MOVE" to Glyph("Mover", "Herramientas", "M12,3 L12,21 M3,12 L21,12 M9,6 L12,3 L15,6 M9,18 L12,21 L15,18 M6,9 L3,12 L6,15 M18,9 L21,12 L18,15"),
         "ROTATE" to Glyph("Rotar", "Herramientas", "M19,7 A8,8 0,1 0,20,15 M19,3 L19,7 L15,7 M13.5,12 A1.5,1.5 0,1 1,10.5,12 A1.5,1.5 0,1 1,13.5,12"),

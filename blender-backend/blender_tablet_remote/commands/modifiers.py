@@ -107,7 +107,7 @@ SCHEMA = {
         "use_bisect_flip_x": {"type": "bool", "default": False},
         "use_bisect_flip_y": {"type": "bool", "default": False},
         "use_bisect_flip_z": {"type": "bool", "default": False},
-        "use_clip": {"type": "bool", "default": False},
+        "use_clip": {"type": "bool", "default": False, "label": "Clipping"},
         "use_merge": {"type": "bool", "default": True},
         "merge_threshold": {"type": "float", "default": 0.001, "min": 0.0, "max": 1.0, "step": 0.001},
         "mirror_object": {"type": "object", "default": None, "object_filter": {"exclude_self": True}},
@@ -149,6 +149,9 @@ def _target(payload=None):
         raise CommandError(f"Object not found: {name}", code="not_found")
     if obj.type != "MESH":
         raise CommandError(f"Object '{obj.name}' is not a mesh", code="unsupported_type")
+    if obj.mode == 'EDIT':
+        from .object_properties import _require_idle
+        _require_idle()
     return obj
 
 
@@ -411,6 +414,7 @@ def _read(mod) -> dict:
         "type": kind or mod.type,
         "show_viewport": bool(mod.show_viewport),
         "show_render": bool(mod.show_render),
+        "show_in_editmode": bool(mod.show_in_editmode),
         "parameters": params,
     }
 
@@ -451,7 +455,7 @@ def add_options(payload: dict) -> dict:
             "use_axis_x": {"type": "bool", "default": True}, "use_axis_y": {"type": "bool", "default": False}, "use_axis_z": {"type": "bool", "default": False},
             "use_bisect_x": {"type": "bool", "default": False}, "use_bisect_y": {"type": "bool", "default": False}, "use_bisect_z": {"type": "bool", "default": False},
             "use_bisect_flip_x": {"type": "bool", "default": False}, "use_bisect_flip_y": {"type": "bool", "default": False}, "use_bisect_flip_z": {"type": "bool", "default": False},
-            "use_clip": {"type": "bool", "default": False}, "use_merge": {"type": "bool", "default": True},
+            "use_clip": {"type": "bool", "default": False, "label": "Clipping"}, "use_merge": {"type": "bool", "default": True},
             "merge_threshold": _number("float", 0.001, 0.0, 1.0, 0.001),
             "mirror_object": {"type": "object", "default": None, "object_filter": {"exclude_self": True}}
         }}
@@ -636,7 +640,9 @@ def toggle(payload: dict) -> dict:
         mod.show_viewport = bool(payload["viewport"])
     if "render" in payload:
         mod.show_render = bool(payload["render"])
-    if "viewport" not in payload and "render" not in payload:
+    if "editmode" in payload:
+        mod.show_in_editmode = bool(payload["editmode"])
+    if "viewport" not in payload and "render" not in payload and "editmode" not in payload:
         mod.show_viewport = not mod.show_viewport
     undo_push("Remote toggle modifier")
     return stack(obj)

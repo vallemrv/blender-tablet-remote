@@ -131,12 +131,12 @@ private fun PropertyControl(field: ObjectPropertyField, value: Any?, draft: Bool
         "number" -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             val text = if (draft) value as? String ?: "" else (value as? Number)?.let {
                 val shown = objectPropertyDisplay(it, field, unit)
-                formatToolDistance(shown, detailDecimalPlaces(shown, 4))
+                formatToolDistance(shown, if (field.unit == "count") 0 else detailDecimalPlaces(shown, 4))
             }.orEmpty()
             Text(field.label, color = Ink.Muted, fontSize = 12.sp)
             val step = when (field.unit) {
                 "length" -> stepMeters / unit.transformStepUnit().meters
-                "percent", "angle" -> 1.0
+                "percent", "angle", "count" -> 1.0
                 else -> .1
             }
             fun nudge(direction: Int) {

@@ -22,6 +22,15 @@ class ObjectPropertiesTest {
         assertNull(objectPropertyNumber("101", opacity, LengthUnit.METERS))
         assertNull(objectPropertyNumber("-1", opacity, LengthUnit.METERS))
     }
+    @Test fun resolutionAcceptsOnlyWholeCountsWithinLimits() {
+        val resolution = length.copy(id="circle_vertices", unit="count", min=3.0, max=4096.0)
+        for (unit in LengthUnit.entries) {
+            assertEquals(64.0, objectPropertyNumber("64", resolution, unit)!!, 0.0)
+            assertNull(objectPropertyNumber("64.5", resolution, unit))
+            assertNull(objectPropertyNumber("2", resolution, unit))
+            assertNull(objectPropertyNumber("4097", resolution, unit))
+        }
+    }
     @Test fun stateParsesNativeImageSchemaWithoutInferringItFromObjectType() {
         val state=StateParser.state(JSONObject("""{"mode":"OBJECT","active_object":"Plano","active":{
           "type":"EMPTY","properties":{"id":"runtime:scene:object","name":"Plano","revision":"r1",
