@@ -2562,10 +2562,14 @@ independiente del Git del directorio donde vive el archivo de trabajo.
 
 ### Coherencia de superficies y selección (octubre 2026)
 
-En Edición Android envía siempre `TOGGLE` al seleccionar: el toque añade o quita
-sin conmutador «＋ Añadir», también durante una transformación. En Objeto,
-Materiales y CAD el toque normal reemplaza y «＋ Añadir» activa la alternancia
-(`additive:true` en los workspaces). «Camino» es independiente.
+Android usa siempre selección múltiple, sin conmutador: `TOGGLE` en Objeto y
+Edición y `additive:true` en Materiales/CAD. Tocar añade o quita lo tocado; un
+toque vacío limpia toda la selección, también en boceto y referencias CAD. El
+fin de un gesto de cursor usa el último candidato y no repite el sondeo.
+`transform.select` permite vaciar: confirma el paso estable si cambió geometría,
+limpia la selección y cierra la sesión; sin cambios no crea un undo vacío.
+«Camino» es una acción independiente de Edit. Caja/Círculo/Pintar conservan sus
+operaciones de región; un trazo de pintura vacío no se interpreta como un toque.
 `cad.select_all` acepta también `INVERT` y `selection.box` / `selection.circle` seleccionan por
 región en el contexto CAD. Pintar conserva un baseline y alterna cada referencia
 una vez por trazo; cancelar lo restaura. Las restricciones geométricas se crean

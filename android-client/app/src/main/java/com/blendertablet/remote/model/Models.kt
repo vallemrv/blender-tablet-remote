@@ -604,7 +604,6 @@ data class AppUiState(
     val scaleUnit: TransformStepUnit = TransformStepUnit.CM,
     val scaleStepValue: Double = 1.0,
     /** Mayús alterna como el Shift+click de Blender; Alt resta. */
-    val selectionOp: SelectionOp = SelectionOp.SET,
     /** El usuario quiere ver el manipulador sobre la selección (botón de la barra). */
     val gizmoEnabled: Boolean = false,
     /** Un arrastre del manipulador en curso: su sesión interna no abre la barra. */

@@ -26,8 +26,25 @@ class WorkspaceSelectionTests(unittest.TestCase):
         self.tap(self.b.name);self.assertEqual(runtime.targets,[self.b.name])
         self.tap(self.a.name,True);self.assertEqual(set(runtime.targets),{self.a.name,self.b.name})
         self.tap(self.a.name,True);self.assertEqual(runtime.targets,[self.b.name])
-        self.tap(None,True);self.assertEqual(runtime.targets,[self.b.name])
+        self.tap(None,True);self.assertEqual(runtime.targets,[])
         self.tap(None);self.assertEqual(runtime.targets,[])
+    def test_object_taps_toggle_and_empty_clears_even_in_xray(self):
+        from blender_tablet_remote.commands import selection as picking, view
+        from mathutils import Vector
+        runtime.leave()
+        for obj in bpy.context.view_layer.objects:obj.select_set(False)
+        found=(None,None,None,object())
+        with patch.object(picking,'find_view3d',return_value=found), \
+             patch.object(picking.camera,'sync_from_region'), \
+             patch.object(picking.camera,'ray',return_value=(Vector((0,0,10)),Vector((0,0,-1)))), \
+             patch.object(picking,'_with_state',side_effect=lambda value:value), \
+             patch.object(view,'is_xray_wireframe',return_value=True), \
+             patch.object(picking,'_cycle_behind',side_effect=AssertionError('Toggle must deselect the touched object')):
+            for obj,expected in ((self.a,{self.a.name}),(self.b,{self.a.name,self.b.name}),(self.a,{self.b.name}),(None,set())):
+                hit=(obj,Vector(),0) if obj else None
+                with patch.object(picking,'_object_hit',return_value=hit):picking.pick(dict(u=.5,v=.5,mode='TOGGLE'))
+                self.assertEqual({o.name for o in bpy.context.selected_objects},expected)
+
     def test_region_adapter_and_cancel_restore_material_target_context(self):
         runtime.active_layer='saved';runtime.scope='SELECTED'
         before=selection.snapshot()

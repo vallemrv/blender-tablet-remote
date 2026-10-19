@@ -210,7 +210,7 @@ def pick(payload: dict) -> dict:
             if mode in ("SET", "TOGGLE"):
                 sel_elements({"mode": "SET"})
             return _with_state({"hit": False})
-        if mode == "SET":
+        if mode in ("SET", "TOGGLE"):
             for o in bpy.context.view_layer.objects:
                 o.select_set(False)
         return _with_state({"hit": False})
@@ -218,12 +218,12 @@ def pick(payload: dict) -> dict:
     if active is not None and active.mode == "EDIT":
         return _with_state(_pick_element(active, location, face_index, mode, payload))
 
-    # En wireframe+xray, picar sobre lo ya seleccionado con ADD/TOGGLE pasa al
+    # En wireframe+xray, picar sobre lo ya seleccionado con SET/ADD pasa al
     # objeto que está detrás (el Alt+click de Blender): se ve el armazón entero
     # y poder elegir solo el frente sería frustrante.
     from .view import is_xray_wireframe
 
-    if face_index >= 0 and is_xray_wireframe() and mode in ("SET", "ADD", "TOGGLE") and obj.select_get():
+    if face_index >= 0 and is_xray_wireframe() and mode in ("SET", "ADD") and obj.select_get():
         origin, location, obj = _cycle_behind(depsgraph, origin, direction, location, obj)
 
     if mode == "SET":

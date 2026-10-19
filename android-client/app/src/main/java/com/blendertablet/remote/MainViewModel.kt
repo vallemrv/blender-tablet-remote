@@ -496,7 +496,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     "DRAG" -> "cad.drag.begin"
                     "POLY" -> "cad.polygon.begin"
                     else -> "cad.entity.begin"
-                }, if (cadGestureMode == "TRIM") mapOf("phase" to "BEGIN", "u" to u, "v" to v) else if (cadGestureMode == "DRAG") mapOf("u" to u, "v" to v, "additive" to (local.value.selectionOp == SelectionOp.TOGGLE)) else when (type) {
+                }, if (cadGestureMode == "TRIM") mapOf("phase" to "BEGIN", "u" to u, "v" to v) else if (cadGestureMode == "DRAG") mapOf("u" to u, "v" to v, "additive" to true) else when (type) {
                     null -> mapOf("u" to u, "v" to v)
                     "NGON" -> mapOf("type" to type, "sides" to local.value.cadNgonSides, "u" to u, "v" to v)
                     "GEAR" -> mapOf("type" to type, "teeth" to local.value.cadGearTeeth, "u" to u, "v" to v)
@@ -744,13 +744,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * el toque fija el destino. En Edit también permite continuar en otra selección
      * confirmando el paso anterior.
      */
-    private val effectiveSelectionOp: SelectionOp
-        get() = if (client.state.value.mode == BlenderMode.EDIT) SelectionOp.TOGGLE else local.value.selectionOp
-
     fun pick(u: Float, v: Float, stylus: Boolean = false) {
         if (client.state.value.material.active) {
             if (client.state.value.material.interaction == "SELECT")
-                materialCommand("material.select", mapOf("u" to u, "v" to v, "additive" to (local.value.selectionOp == SelectionOp.TOGGLE)))
+                materialCommand("material.select", mapOf("u" to u, "v" to v, "additive" to true))
             return
         }
         if (client.state.value.cad.workspace) {
@@ -772,9 +769,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 client.cadCommand("cad.feature.set", mapOf("feature_id" to endFace, "extent" to "TO_FACE", "u" to u, "v" to v)); return
             }
             if (client.state.value.cad.surface.mode != "PROFILE") {
-                client.cadCommand("cad.surface.select", mapOf("u" to u, "v" to v, "additive" to (local.value.selectionOp == SelectionOp.TOGGLE))); return
+                client.cadCommand("cad.surface.select", mapOf("u" to u, "v" to v, "additive" to true)); return
             }
-            client.cadCommand("cad.select", mapOf("u" to u, "v" to v, "additive" to (local.value.selectionOp == SelectionOp.TOGGLE))); return
+            client.cadCommand("cad.select", mapOf("u" to u, "v" to v, "additive" to true)); return
         }
         val surfaceTool = client.toolSession.value
         if (surfaceTool.armed && surfaceTool.input == "REPEAT_TAP") {
@@ -787,7 +784,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         if (choosingTransformSelection()) {
-            client.transformSelect(u.toDouble(), v.toDouble(), if (stylus) 0.028 else 0.055, effectiveSelectionOp)
+            client.transformSelect(u.toDouble(), v.toDouble(), if (stylus) 0.028 else 0.055, SelectionOp.TOGGLE)
             return
         }
         if (local.value.referencePicking && client.transformSession.value.active) {
@@ -810,7 +807,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val blender = uiState.value.blender
             if (blender.mode == BlenderMode.EDIT) {
                 if (client.toolSession.value.active) {
-                    val add = blender.features.loopCutMultiple && local.value.selectionOp == SelectionOp.TOGGLE
+                    val add = blender.features.loopCutMultiple
                     client.toolLoopPick(u.toDouble(), v.toDouble(), add = add)
                     return
                 }
@@ -835,7 +832,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (session.active) {
             if (client.state.value.mode == BlenderMode.EDIT && client.state.value.features.transformStepSelection &&
                 local.value.activeTool != ActiveTool.TWEAK) {
-                client.transformSelect(u.toDouble(), v.toDouble(), if (stylus) 0.028 else 0.055, effectiveSelectionOp)
+                client.transformSelect(u.toDouble(), v.toDouble(), if (stylus) 0.028 else 0.055, SelectionOp.TOGGLE)
             }
             return
         }
@@ -861,7 +858,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             lastEditTap = if (plainEdit && blender.activeObjectType == "MESH") Triple(u, v, now) else null
             // En Edit el toque sin modificador acumula: añade o quita lo tocado, sin Mayús.
-            client.pick(u.toDouble(), v.toDouble(), threshold, effectiveSelectionOp)
+            client.pick(u.toDouble(), v.toDouble(), threshold, SelectionOp.TOGGLE)
         }
     }
     fun requestState() = client.requestState()
@@ -922,28 +919,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun selectMore() = client.selectMore()
     fun selectLess() = client.selectLess()
 
-    /**
-     * Ctrl/Alt: fijan la operación de selección del siguiente tap/caja/círculo.
-     * Pulsar el mismo lo desarma; pulsar el otro cambia el modificador.
-     */
-    fun toggleSelectionOp(op: SelectionOp) {
-        local.update { it.copy(
-            selectionOp = if (it.selectionOp == op && !it.shortestPathActive) SelectionOp.SET else op,
-            shortestPathActive = false,
-        ) }
-    }
-
     fun activateSelection() {
         when {
             client.state.value.material.active -> materialSettings(mapOf("interaction" to "SELECT"))
             client.state.value.cad.workspace -> cadTool(null)
             else -> selectTool()
         }
-    }
-
-    fun toggleSelectionAdd() {
-        activateSelection()
-        local.update { it.copy(selectionOp = if (it.selectionOp == SelectionOp.TOGGLE) SelectionOp.SET else SelectionOp.TOGGLE) }
     }
 
     fun toggleShortestPath() {
@@ -999,9 +980,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             bisectDragLine(u0, v0, u1, v1)
             return
         }
-        // Mayús+arrastre extiende, no alterna: es el Shift de la caja de Blender, que
-        // suma lo barrido en vez de invertir cada elemento que toca.
-        val op = effectiveSelectionOp
+        // Las regiones alternan su pertenencia con la misma intención múltiple del toque.
+        val op = SelectionOp.TOGGLE
         when (shape) {
             ShapeTool.BOX -> client.boxSelect(u0.toDouble(), v0.toDouble(), u1.toDouble(), v1.toDouble(), op)
             ShapeTool.CIRCLE -> client.circleSelect(
@@ -1082,11 +1062,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleModifier(name: String, viewport: Boolean? = null, render: Boolean? = null, editMode: Boolean? = null) = client.modifierToggle(name, viewport, render, editMode)
     fun applyModifier(name: String) = client.modifierApply(name)
     fun selectLoop() {
-        val op = effectiveSelectionOp
+        val op = SelectionOp.TOGGLE
         client.selectLoop(op)
     }
     fun selectRing() {
-        val op = effectiveSelectionOp.let { if (it == SelectionOp.TOGGLE) SelectionOp.ADD else it }
+        val op = SelectionOp.ADD
         client.selectRing(op)
     }
 

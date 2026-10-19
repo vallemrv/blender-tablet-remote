@@ -2,7 +2,6 @@ package com.blendertablet.remote.ui
 
 import com.blendertablet.remote.model.ActiveTool
 
-import com.blendertablet.remote.model.SelectionOp
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -183,6 +182,4 @@ fun SelectionIntentControls(state: AppUiState, vm: MainViewModel) {
     IconAction(AppIcons.SelectTool, "Seleccionar", selected = state.shapeTool == ShapeTool.NONE &&
         (!state.blender.material.active || state.blender.material.interaction == "SELECT") && state.activeTool == ActiveTool.SELECT,
         onClick = vm::activateSelection)
-    if (state.blender.mode != BlenderMode.EDIT)
-        PillButton("＋ Añadir", selected = state.selectionOp == SelectionOp.TOGGLE, onClick = vm::toggleSelectionAdd)
 }

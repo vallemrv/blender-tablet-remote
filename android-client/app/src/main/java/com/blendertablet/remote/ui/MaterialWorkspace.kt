@@ -162,8 +162,7 @@ private fun MaterialInspectorControls(material: MaterialState, vm: MainViewModel
                 DropdownMenuItem(text = { Text(obj.label) }, leadingIcon = {
                     Checkbox(obj.id in material.targets, onCheckedChange = null)
                 }, onClick = {
-                    val next = if (vm.uiState.value.selectionOp != com.blendertablet.remote.model.SelectionOp.TOGGLE) listOf(obj.id)
-                        else if (obj.id in material.targets) material.targets - obj.id else material.targets + obj.id
+                    val next = if (obj.id in material.targets) material.targets - obj.id else material.targets + obj.id
                     vm.materialCommand("material.select", mapOf("objects" to next))
                 })
             }

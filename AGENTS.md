@@ -244,13 +244,14 @@ nuevas superficies y la adaptación gradual de las existentes.
   mostrar un resumen corto o llevar el detalle a la ayuda. El scroll conserva el
   tamaño de los controles y los paneles vecinos reservan solo la altura real.
 
-- En Edición la selección múltiple está siempre activa, sin botón «＋ Añadir»:
-  tocar añade o quita el elemento; también se conserva al seleccionar durante
-  una transformación. El doble toque sigue eligiendo loop/enlazado y «Camino»
-  arma el siguiente toque de camino más corto. En Objeto, Materiales y CAD el
-  toque sustituye y «＋ Añadir» en el rail derecho alterna pertenencia. Caja, Círculo, Pintar,
-  Todo/Ninguno, Invertir, Loop/Ring/Enlazado y Crecer/Decrecer solo viven ahí.
-  Seleccionar también se activa desde ese rail; el radial nunca selecciona.
+- La selección múltiple está siempre activa en Objeto, Edición, Materiales y CAD,
+  sin conmutador «＋ Añadir»: tocar añade, tocar un elemento seleccionado lo quita
+  y tocar el vacío deselecciona todo. En una transformación Edit, vaciar confirma
+  el paso visual estable y cierra la sesión, sin crear undo si no hubo movimiento.
+  El doble toque de Edit conserva loop/enlazado; «Camino» arma el siguiente toque
+  de camino más corto. Caja, Círculo, Pintar, Todo/Ninguno, Invertir,
+  Loop/Ring/Enlazado y Crecer/Decrecer solo viven en el rail derecho. Seleccionar
+  también se activa desde ese rail; el radial nunca selecciona.
 - El radial concentra Ocultar, Aislar, Duplicar, Renombrar y Borrar según contexto;
   en CAD también Soldar. Outliner conserva su ojo. Las listas CAD seleccionan;
   las restricciones se ven y borran en la pila. El rail de boceto crea solo

@@ -247,6 +247,44 @@ class CadTests(unittest.TestCase):
             cad.entity_delete(dict(profile_ids=['profile_'+first],**OWNER))
         self.assertEqual(runtime.doc(),before)
 
+    def test_additive_taps_toggle_entities_and_empty_clears(self):
+        a=self.rect();b=self.draw('CIRCLE',(.12,0),(.13,0))
+        cad._set_selection([])
+        for identifier in (a,b):
+            cad.select(dict(kind='ENTITY',id=identifier,additive=True,**OWNER))
+        self.assertEqual({r['id'] for r in cad._refs()},{a,b})
+        cad.select(dict(kind='ENTITY',id=a,additive=True,**OWNER))
+        self.assertEqual([r['id'] for r in cad._refs()],[b])
+        with patch.object(cad,'_pick',return_value=None):cad.select(dict(u=0,v=0,additive=True,**OWNER))
+        self.assertIsNone(runtime.selection)
+
+    def test_cursor_taps_toggle_on_end_and_empty_tap_clears_without_resampling(self):
+        a=self.rect();b=self.draw('CIRCLE',(.12,0),(.13,0))
+        cad._set_selection([])
+        for identifier,expected in ((a,{a}),(b,{a,b}),(a,{b}),(None,set())):
+            hit=dict(kind='ENTITY',id=identifier,part='BODY') if identifier else None
+            before=copy.deepcopy(runtime.selection)
+            with patch.object(cad,'_pick',return_value=hit),patch.object(runtime,'point',return_value=(0,0)):
+                cad.drag_begin(dict(u=0,v=0,additive=True,**OWNER))
+            self.assertEqual(runtime.selection,before)
+            with patch.object(cad,'_pick',side_effect=AssertionError('END must not pick again')):
+                cad.drag_end(OWNER)
+            self.assertEqual({r['id'] for r in cad._refs()},expected)
+        self.assertIsNone(runtime.session)
+
+    def test_additive_surface_empty_tap_clears_references(self):
+        from blender_tablet_remote.commands import snap
+        feature=self.extrude(self.rect());obj=self.obj()
+        cad.sketch_finish(OWNER)
+        cad.surface_mode(dict(mode='FACE',**OWNER))
+        for identifier,expected in (('one',1),('two',2),('one',1),(None,0)):
+            hit=dict(id=identifier,object=obj.name,kind='FACE',planar=True,feature_id=feature,
+                     segments=[],triangles=[],normal=[0,0,1],center=[0,0,0]) if identifier else None
+            with patch.object(snap,'query_cad_surface',return_value=hit):
+                cad.surface_select(dict(u=0,v=0,additive=True,**OWNER))
+            self.assertEqual(len(runtime.surface.items),expected)
+        self.assertIsNone(runtime.selection)
+
     def test_edit_guard_and_convert(self):
         e=self.rect()
         f=self.extrude(e)

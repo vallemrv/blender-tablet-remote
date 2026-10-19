@@ -116,7 +116,7 @@ class SurfaceSelection:
         self.validate()
         item=query_cad_surface(payload,self.mode)
         if item is None:
-            if not accumulate: self.clear()
+            self.clear()
             return
         old=next((i for i in self.items if i['id']==item['id']),None)
         if old: self.items.remove(old); return

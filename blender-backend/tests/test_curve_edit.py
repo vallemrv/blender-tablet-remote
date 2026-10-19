@@ -109,6 +109,18 @@ class CurveEditTests(unittest.TestCase):
         self.assertEqual(self.obj.matrix_world,matrix)
         modal.cancel({'_client_id':'test'})
 
+    def test_empty_tap_commits_curve_step_and_clears_selection(self):
+        curve_edit.set_selection(self.obj,{(0,0,'POINT')})
+        before=self.obj.data.splines[0].bezier_points[0].co.copy()
+        modal.session.begin('MOVE',[],False,1.,owner_id='test')
+        modal.session.values=Vector((.2,0,0));modal.session.apply()
+        result=modal.select_next(dict(u=0,v=0,mode='TOGGLE',threshold=.015,_client_id='test'))
+        self.assertFalse(result['active'])
+        self.assertTrue(result['selection_changed'])
+        self.assertEqual(curve_edit.selected(self.obj),set())
+        self.assertLess((self.obj.data.splines[0].bezier_points[0].co-before-Vector((.2,0,0))).length,1e-6)
+        self.undo.assert_called_once()
+
     def test_nurbs_points_keep_weight_and_cancel_restores(self):
         bpy.ops.object.mode_set(mode='OBJECT');bpy.data.objects.remove(self.obj,do_unlink=True)
         bpy.ops.curve.primitive_nurbs_circle_add();self.obj=bpy.context.object

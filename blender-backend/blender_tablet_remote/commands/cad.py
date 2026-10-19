@@ -1579,8 +1579,7 @@ def select(payload):
         else: raise BadPayload('Selección CAD no compatible')
     else: ref=_pick(payload)
     refs=copy.deepcopy(_refs()) if payload.get('additive') else []
-    if ref is not None or not payload.get('additive'):
-        _set_selection(_toggle_refs(refs,ref))
+    _set_selection(_toggle_refs(refs,ref))
     return runtime.status()
 
 
@@ -1681,8 +1680,7 @@ def drag_end(payload):
     if not session.get('dragged'):
         previous=session.get('selection_before') or {}
         refs=previous.get('items',[previous] if previous else []) if session.get('additive') else []
-        if session.get('hit') is not None or not session.get('additive'):
-            _set_selection(_toggle_refs(refs,session.get('hit')))
+        _set_selection(_toggle_refs(refs,session.get('hit')))
     runtime.session=None
     return runtime.status()
 

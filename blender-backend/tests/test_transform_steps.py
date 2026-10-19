@@ -106,14 +106,23 @@ class TransformStepsTests(unittest.TestCase):
         self.assertEqual(modal.session.selection_signature, frozenset([self.b]))
         self.undo.assert_called_once()
 
-    def test_miss_same_selection_and_empty_toggle_keep_current_step(self):
-        original = self.begin()
+    def test_same_selection_keeps_step_but_empty_toggle_commits_and_clears(self):
+        self.begin()
         modal.set_value(dict(values=[0, 0, .01]))
         self.assertFalse(self.select_next(self.a)['selection_changed'])
-        self.assertFalse(self.select_next(self.a, mode='TOGGLE')['selection_changed'])
-        result = modal.select_next(dict(u=0, v=0, _client_id='tablet'))
-        self.assertFalse(result['selection_changed'])
-        self.assertEqual(result['session_id'], original['session_id'])
+        result=self.select_next(self.a, mode='TOGGLE')
+        self.assertTrue(result['selection_changed'])
+        self.assertFalse(result['active'])
+        self.assertFalse(any(v.select for v in self.bm.verts))
+        self.assert_position(self.a,self.original[self.a]+Vector((0,0,.01)))
+        self.undo.assert_called_once()
+
+    def test_empty_tap_clears_selection_without_empty_undo(self):
+        self.begin()
+        result = modal.select_next(dict(u=0, v=0, mode='TOGGLE', _client_id='tablet'))
+        self.assertTrue(result['selection_changed'])
+        self.assertFalse(result['active'])
+        self.assertFalse(any(v.select for v in self.bm.verts))
         self.undo.assert_not_called()
 
     def test_change_unmodified_selection_has_no_empty_undo(self):

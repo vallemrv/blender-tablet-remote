@@ -289,7 +289,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                             Icon(AppIcons.cad(drawing.type), null, tint = Ink.Muted, modifier = Modifier.size(20.dp))
                             PillButton("${if (drawing.reference) "Referencia" else if (drawing.isFillet) "Redondeo" else if (drawing.isSquare) "Cuadrado" else cadLabel(drawing.type)} ${index + 1}", selected = cad.selection.any { it.id == drawing.id }, enabled = connected && !cad.sessionActive) {
                                 vm.cadTool(null)
-                                command("cad.select", "kind" to "ENTITY", "id" to drawing.id, "part" to "BODY", "additive" to (state.selectionOp == SelectionOp.TOGGLE))
+                                command("cad.select", "kind" to "ENTITY", "id" to drawing.id, "part" to "BODY", "additive" to true)
                             }
                         }
                     } else (if (contextual && constraintsSelectionOnly) contextualConstraints else cad.activeSketch?.constraints.orEmpty()).forEach { c ->
@@ -525,7 +525,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
         dragPreview -> "Medidas en vivo · suelta para fijar una medida con su candado"
         drawPreview -> "Medidas en vivo · Incremento redondea al paso y los puntos existentes atraen · suelta para editar las medidas"
         cad.sessionActive && cad.operation == "POLYGON" -> "Polígono: traza o toca cada vértice · cierra tocando el primer punto o con Cerrar · dos dedos descarta"
-        editing && cad.surface.mode != "PROFILE" -> "Toca para sustituir referencias; ＋ Añadir las alterna · puedes combinar Puntos/Aristas/Caras · Proyectar al plano copia toda la selección al croquis"
+        editing && cad.surface.mode != "PROFILE" -> "Toca para añadir referencias; tocar de nuevo las quita · puedes combinar Puntos/Aristas/Caras · Proyectar al plano copia toda la selección al croquis"
         cad.surface.mode == "FACE" -> if (cad.surface.selection.size > 1) "Dos referencias para medir · quita una cara seleccionada para crear el boceto" else "Toca una cara: se resalta en el vídeo · Boceto en cara usa exactamente esa selección"
         cad.surface.mode != "PROFILE" -> "Toca hasta dos referencias para medir · durante el boceto puedes proyectarlas para acotar desde ellas"
         editing && state.cadTool == "ARC" -> "Arrastra centro → inicio del arco · sigue en Arco para el siguiente · arrastra un rombo para variar su ángulo"
@@ -540,10 +540,10 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             "Cuadrado: una cota controla ambos lados; editar Lado actualiza esa misma cota"
             else "Cuadrado: Igualdad une sus lados; Fijar medida añade una cota de tamaño"
         entity?.isFillet == true -> "Redondeo: cambia su radio · Borrar en el radial recupera la esquina"
-        editing -> "Seleccionar: toca para sustituir; ＋ Añadir alterna · dos dedos giran la vista y se queda · Girar 90° y Enderezar la colocan"
+        editing -> "Seleccionar: toca para añadir; tocar lo seleccionado lo quita · dos dedos giran la vista y se queda · Girar 90° y Enderezar la colocan"
         !editing && cad.rollbackId != null -> "Vista del pasado: ${cad.history.firstOrNull { it.id == cad.rollbackId }?.name.orEmpty()} · toca un nodo para ver el modelo en ese momento · Final restaura la pila completa"
         multipleProfiles -> "${shownProfiles.size} contornos seleccionados · Vaciar usa solo estos · toca uno seleccionado para quitarlo"
-        cad.selectionKind == "PROFILE" && capabilities.profileMultiselect -> "Activa ＋ Añadir para alternar contornos del mismo boceto · Vaciar usa la selección"
+        cad.selectionKind == "PROFILE" && capabilities.profileMultiselect -> "Toca para añadir o quitar contornos del mismo boceto · Vaciar usa la selección"
         cad.selectionKind == "SKETCH" -> "${selectedSketch?.name.orEmpty()} completo · Extruir crea volumen y conserva los contornos interiores como huecos"
         selectedSketch != null -> "${selectedSketch.name} · perfil seleccionado · Seleccionar todo elige el croquis completo para extruir"
         else -> "Abre la pila (derecha) para editar un boceto · o crea uno en el rail izquierdo, y selecciona un perfil para extruir"

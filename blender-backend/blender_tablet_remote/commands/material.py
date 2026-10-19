@@ -141,7 +141,7 @@ def select(payload):
             if name in names: names.remove(name)
             else: names.append(name)
             runtime.select(names)
-        elif not payload.get('additive',False):runtime.select([])
+        else:runtime.select([])
     return {'material':runtime.status()}
 
 
