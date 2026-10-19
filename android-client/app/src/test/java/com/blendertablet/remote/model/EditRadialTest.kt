@@ -4,6 +4,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class EditRadialTest {
+    @Test fun selectedWireObjectCanBePlacedEvenWhenLongPressMissesItsContour() {
+        val selected = TouchContext(mode=BlenderMode.OBJECT,hasSelection=true)
+        val centre = RadialMenu.actionsFor(selected.copy(hit=false))
+        val contour = RadialMenu.actionsFor(selected.copy(hit=true,objectSelected=true))
+        assertTrue(ActionId.PLACE_OBJECT in centre)
+        assertTrue(ActionId.PLACE_OBJECT in contour)
+        assertTrue(centre.size <= RadialMenu.MAX_ACTIONS)
+        assertEquals(ActionId.DELETE,centre.last())
+        assertFalse(ActionId.PLACE_OBJECT in RadialMenu.actionsFor(selected.copy(hasSelection=false)))
+        assertTrue(centre.intersect(EditSelectionBar.actions.toSet()).isEmpty())
+    }
+
     @Test fun ringAndSimilarAreAvailableFromTheSelectionRail() {
         assertTrue(ActionId.SELECT_RING in EditSelectionBar.actions)
         assertTrue(ActionId.SELECT_SIMILAR in EditSelectionBar.actions)
