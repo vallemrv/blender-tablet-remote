@@ -1571,3 +1571,6 @@ no quedan archivos o referencias temporales.
   conservan su cancelación explícita. Cada operación confirmada conserva su undo.
   Cambiar la variante de Extruir ajusta la misma operación desde su baseline;
   no añade otra extrusión ni confirma una variante inválida.
+
+- Mover/Rotar/Escalar ofrecen snap Arista (cualquier punto del segmento) separado
+  de Centro arista. No se llama secante; reutiliza el candidato geométrico EDGE.

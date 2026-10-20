@@ -4,6 +4,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class EditToolSnapTest {
+    @org.junit.Test fun transformsOfferContinuousEdgeSnapSeparatelyFromMidpoint() {
+        for (mode in TransformMode.entries) {
+            org.junit.Assert.assertTrue(SnapType.EDGE in SnapType.forMode(mode))
+            org.junit.Assert.assertTrue(SnapType.EDGE_CENTER in SnapType.forMode(mode))
+        }
+    }
+
     @Test fun sameFingerDistanceAdvancesOneStepForEveryMetricToolAndSceneScale() {
         for (tool in listOf(EditTool.EXTRUDE, EditTool.INSET, EditTool.BEVEL)) {
             for (step in listOf(.001, .01, 1.0, 10.0)) {
