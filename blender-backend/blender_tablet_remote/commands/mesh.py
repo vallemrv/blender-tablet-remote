@@ -476,12 +476,19 @@ def loop_probe(payload: dict) -> dict:
     u = get_float(payload, "u", 0.5)
     v = get_float(payload, "v", 0.5)
     origin, direction = camera.ray(u, v, rv3d)
+    # Los índices de cara de la malla evaluada no son los del BMesh (Mirror con
+    # bisect, Subdivisión…): se sondea la jaula viva y la escena solo ocluye.
+    from .selection import _edit_cage_raycast
+    live = _edit_cage_raycast(obj, origin, direction)
+    if live is None:
+        return {"hit": False}
+    location, face_index = live
     depsgraph = bpy.context.evaluated_depsgraph_get()
-    hit, _location, _normal, face_index, hit_obj, _matrix = bpy.context.scene.ray_cast(
+    hit, scene_location, _normal, _index, hit_obj, _matrix = bpy.context.scene.ray_cast(
         depsgraph, origin, direction
     )
-    if not hit or hit_obj != obj:
-        return {"hit": False}
+    if hit and hit_obj != obj and (scene_location - origin).length < (location - origin).length:
+        return {"hit": False, "reason": "occluded"}
 
     bm.faces.ensure_lookup_table()
     face = bm.faces[face_index] if 0 <= face_index < len(bm.faces) else None

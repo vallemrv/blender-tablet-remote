@@ -65,6 +65,37 @@ class LoopCutTests(unittest.TestCase):
             tools.loop_pick({'u':.5,'v':.5,'add':True})
         self.assertEqual(tools.tool_session.params['factor'], 0.0)
 
+    def test_probe_uses_live_faces_under_a_mirror_with_bisect(self):
+        from mathutils import Quaternion
+        from blender_tablet_remote.camera import camera
+        from blender_tablet_remote.bpy_utils import find_view3d
+        obj = bpy.context.object
+        bm = bmesh.from_edit_mesh(obj.data)
+        bm.clear()
+        bmesh.ops.create_grid(bm, x_segments=3, y_segments=4, size=1)
+        # Cruza el plano del espejo: el bisect reordena las caras evaluadas.
+        bmesh.ops.translate(bm, verts=bm.verts, vec=(.4, 0, 0))
+        bmesh.update_edit_mesh(obj.data)
+        modifier = obj.modifiers.new('Mirror', 'MIRROR')
+        modifier.use_bisect_axis[0] = True
+        modifier.show_in_editmode = True
+        rv = find_view3d()[3]
+        camera.reset(); camera._synced = True; camera.perspective = 'PERSP'
+        camera.location = obj.matrix_world @ Vector((.4, 0, 0))
+        camera.rotation = Quaternion((1, 0, 0, 0)); camera.distance = 20
+        bm = bmesh.from_edit_mesh(obj.data)
+        checked = 0
+        for face in bm.faces:
+            center = obj.matrix_world @ face.calc_center_median()
+            for edge in face.edges:
+                middle = obj.matrix_world @ ((edge.verts[0].co + edge.verts[1].co) / 2)
+                u, v = camera.project(middle + (center - middle) * .15, rv)
+                probe = mesh.loop_probe({'u': u, 'v': v})
+                self.assertTrue(probe['hit'])
+                self.assertEqual(probe['edge'], edge.index)
+                checked += 1
+        self.assertGreater(checked, 20)
+
     def test_selected_edge_does_not_start_cut_and_cancel_is_idempotent(self):
         bm=bmesh.from_edit_mesh(bpy.context.object.data)
         bm.edges.ensure_lookup_table(); bm.edges[self.edge].select_set(True)
