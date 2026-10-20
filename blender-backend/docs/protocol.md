@@ -1197,7 +1197,7 @@ Tipos y parámetros:
 |---|---|---|
 | `SUBSURF` | `levels`, `render_levels`, `subdivision_type` (`CATMULL_CLARK`\|`SIMPLE`) | 1, 2, `CATMULL_CLARK` |
 | `MULTIRES` | `levels`, `sculpt_levels`, `render_levels`; `total_levels` de solo lectura; acción `subdivide:true` | Se crea con un nivel nativo; no duplica uno existente |
-| `ARRAY` | `count`, `relative_offset` `[x,y,z]`, `use_merge`, `merge_threshold` | 2, `[1,0,0]`, false, 0.01 |
+| `ARRAY` | `count`, `relative_offset` `[x,y,z]`, `use_merge`, `merge_threshold`, `use_relative_offset`, `use_object_offset`, `offset_object` (nombre, nunca el propio objeto) | 2, `[1,0,0]`, false, 0.01, true, false, null |
 | `BEVEL` | `width`, `segments`, `affect` (`EDGES`\|`VERTICES`), `limit_method` (`NONE`\|`ANGLE`), `angle_limit` (grados), `profile` | 0.1, 1, `EDGES`, `ANGLE`, 30, 0.5 |
 | `SOLIDIFY` | `thickness`, `offset`, `use_even_offset`, `use_rim` | 0.1, −1, true, true |
 | `BOOLEAN` | `operation` (`DIFFERENCE`\|`UNION`\|`INTERSECT`), `object` (nombre), `solver` (`EXACT`\|`FAST`) | `DIFFERENCE`, ninguno, `EXACT` |
