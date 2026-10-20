@@ -89,6 +89,10 @@ fun ViewFooter(
                         NumKey("7", "Superior / inferior", activeAxisView in setOf("TOP", "BOTTOM")) { opposite("TOP", "BOTTOM") }
                         NumKey("8", "Orbitar arriba", enabled = !planeLocked) { onOrbit(0f, -0.06f) }
                         NumKey("9", "Girar 180°", enabled = !planeLocked) { onRotate180() }
+                        // El candado es una tecla más de la botonera, junto a las vistas que fija.
+                        if (planeLockAvailable) PageKey(AppIcons.selectionLock(planeLocked),
+                            if (planeLocked) "Desbloquear plano de vista" else "Bloquear plano · elige primero una vista",
+                            selected = planeLocked, enabled = planeLocked || activeAxisView != null, onClick = onPlaneLock)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         NumKey("4", "Orbitar izquierda", enabled = !planeLocked) { onOrbit(-0.06f, 0f) }
@@ -113,9 +117,6 @@ fun ViewFooter(
                 }
             }
 
-            if (planeLockAvailable) IconAction(AppIcons.selectionLock(planeLocked),
-                if (planeLocked) "Desbloquear plano de vista" else "Bloquear plano · elige primero una vista",
-                selected = planeLocked, enabled = planeLocked || activeAxisView != null, onClick = onPlaneLock)
             HoverHelp(
                 title = if (expanded) "Plegar vistas" else "Desplegar vistas",
                 explanation = "Abre o recoge los controles de orientación, proyección y atajos.",
@@ -173,17 +174,22 @@ private fun PageKey(
     icon: ImageVector,
     description: String,
     selected: Boolean,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
-    val background = if (selected) Ink.Accent.copy(alpha = .24f) else Color.White.copy(alpha = .05f)
-    val content = if (selected) Ink.Accent else Ink.Muted
+    val background = when {
+        !enabled -> Color.Transparent
+        selected -> Ink.Accent.copy(alpha = .24f)
+        else -> Color.White.copy(alpha = .05f)
+    }
+    val content = if (!enabled) Ink.Faint else if (selected) Ink.Accent else Ink.Muted
     HoverHelp(
-        title = description, explanation = IconHelp.explanation(icon, description),
+        title = description, explanation = IconHelp.explanation(icon, description), enabled = enabled,
         modifier = Modifier
             .size(38.dp)
             .clip(RoundedCornerShape(9.dp))
             .background(background)
-            .clickableNoRipple(onClick),
+            .then(if (enabled) Modifier.clickableNoRipple(onClick) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, description, Modifier.size(19.dp), tint = content)
