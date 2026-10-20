@@ -168,7 +168,7 @@ fun TransformBar(
                     }
                 }
             }
-            TrayOption("Orientación", "Ejes con los que se interpretan X, Y y Z.") {
+            if (constraint == Constraint.FREE) TrayOption("Orientación", "Ejes con los que se interpretan X, Y y Z.") {
                 OrientationPicker(availableOrientations, orientation, onOrientation)
             }
             if (canChangeSelection) TrayOption("Otra selección", "Confirma este paso y continúa con otra selección.") {
@@ -204,8 +204,12 @@ fun TransformBar(
             if (scaleLinked) "Dimensiones vinculadas" else "Dimensiones independientes", selected = scaleLinked) {
             scaleLinked = !scaleLinked
         }
-        SnapControl(snapOptions, snapType, onSnapType)
+        // Misma disposición que Extruir: ejes tras los valores y, si hay restricción,
+        // su orientación al lado; el snap queda a continuación.
         AxisConstraintButtons(constraint, onSelect = onConstraint)
+        if (constraint != Constraint.FREE) ChoiceIcon(availableOrientations, orientation, "Orientación",
+            { AppIcons.orientation(it.name) }, { it.label }, active = true, onSelect = onOrientation)
+        SnapControl(snapOptions, snapType, onSnapType)
     }
 }
 

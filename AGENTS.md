@@ -721,8 +721,10 @@ nuevas superficies y la adaptación gradual de las existentes.
   lo activa con `gizmo.set` solo sin otra herramienta, forma ni sesión. Los tiradores
   empiezan desactivados al abrir la app y al crear/abrir otra escena; su botón los activa. Su sesión interna no abre la barra de transformación.
 - Mover, Rotar y Escalar usan un único `TransformAxisInputs` (X/Y/Z) en Object y Edit
-  sobre la misma sesión modal. Su fila muestra X/Y/Z, Snap, Libre·X·Y·Z y,
-  en Escalar, la cadena; como mucho cinco controles además de título y ×/✓.
+  sobre la misma sesión modal. Su fila sigue la disposición de Extruir: X/Y/Z (y en
+  Escalar la cadena), Libre·X·Y·Z, el icono de orientación junto a los ejes solo
+  con restricción (si no, en Más · Referencia) y Snap; como mucho cinco controles
+  además de título y ×/✓.
 - En Edit, Mover/Rotar/Escalar continúan por pasos al tocar otra selección. Un único
   `transform.select` sondea la preview viva, confirma el cambio anterior con un undo
   y abre otro baseline sin salir de la herramienta; conserva ejes, orientación y snap.

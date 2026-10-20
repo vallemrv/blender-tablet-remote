@@ -89,7 +89,7 @@ class TrayDesignRulesTest {
     @Test fun transformShowsAxesSnapAndConstraintWithTheRestUnderMore() {
         val bar = body(source("TransformBar"), "fun TransformBar(")
         val controls = rowControls(bar, "hintKey = \"transform.")
-        assertEquals(listOf("TransformAxisInputs", "IconAction", "SnapControl", "AxisConstraintButtons"), controls)
+        assertEquals(listOf("TransformAxisInputs", "IconAction", "AxisConstraintButtons", "ChoiceIcon", "SnapControl"), controls)
         assertTrue("Rotar no puede mostrar más de cinco controles", controls.size <= 5)
         for (option in listOf("\"Paso\"", "\"Centro\"", "\"Fuente\"", "\"Propio\"", "\"Orientación\"",
             "\"Otra selección\"", "\"Proporcional\"", "\"Perfil\""))
