@@ -25,6 +25,8 @@ internal object StudioIcons {
         "SHRINK_SELECTION" to Glyph("Decrecer selección", "Selección", "M8,8 L16,8 L16,16 L8,16 Z M3,3 L8,3 M3,3 L3,8 M16,3 L21,3 L21,8 M3,16 L3,21 L8,21 M16,21 L21,21 L21,16 M10,12 L14,12"),
         "SIMILAR_SELECT" to Glyph("Seleccionar similares", "Selección", "M3,3 L9,3 L9,9 L3,9 Z M15,15 L21,15 L21,21 L15,21 Z M13,5 L21,5 M13,8 L21,8 M3,16 L11,16 M3,19 L11,19"),
         "SPACE_VERTICES" to Glyph("Espaciar", "Malla", "M4,5 L4,19 M12,5 L12,19 M20,5 L20,19 M4,12 L20,12 M2,9 L4,7 L6,9 M18,15 L20,17 L22,15"),
+        "DRAW_POLYLINE" to Glyph("Dibujar · polilínea", "Malla", "M3,19 L9,8 L15,15 L21,5 M4.5,19 A1.5,1.5 0,1 1,1.5,19 A1.5,1.5 0,1 1,4.5,19 M10.5,8 A1.5,1.5 0,1 1,7.5,8 A1.5,1.5 0,1 1,10.5,8 M16.5,15 A1.5,1.5 0,1 1,13.5,15 A1.5,1.5 0,1 1,16.5,15 M22.5,5 A1.5,1.5 0,1 1,19.5,5 A1.5,1.5 0,1 1,22.5,5"),
+        "DRAW_NEW_STROKE" to Glyph("Nuevo trazo", "Malla", "M2,20 L8,11 M9.5,11 A1.5,1.5 0,1 1,6.5,11 A1.5,1.5 0,1 1,9.5,11 M14,20 A1.5,1.5 0,1 1,11,20 A1.5,1.5 0,1 1,14,20 M18,4 L18,12 M14,8 L22,8"),
         "F2_COMPLETE" to Glyph("Completar cara · F2", "Malla", "M3,4 L12,4 L12,13 L3,13 Z M12,4 L21,4 L21,13 L12,13 M12,13 L12,22 L21,22 L21,13 M15,17 L19,17 M17,15 L17,19"),
         "SELECT" to Glyph("Seleccionar", "Herramientas", "M5,3 L5,20 L10,15 L14,21 L17,19 L13,13 L21,13 Z"),
         "MOVE" to Glyph("Mover", "Herramientas", "M12,3 L12,21 M3,12 L21,12 M9,6 L12,3 L15,6 M9,18 L12,21 L15,18 M6,9 L3,12 L6,15 M18,9 L21,12 L18,15"),

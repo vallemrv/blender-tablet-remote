@@ -16,7 +16,10 @@ from . import knife as knife_commands
 from . import mesh as mesh_commands
 from . import profile_tools
 
-SUPPORTED = {"EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE", "BISECT", "ALIGN", "REVOLVE", "SWEEP", "F2"}
+SUPPORTED = {"EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE", "BISECT", "ALIGN", "REVOLVE", "SWEEP", "F2", "DRAW"}
+
+DRAW_INSTRUCTION = ("Toca para poner un vértice · cada toque añade una arista desde el anterior · "
+                    "toca un vértice existente para unirlo y cerrar la forma")
 
 # Herramientas cuya sesión puede quedar ARMED (elegidas pero sin backup ni preview
 # todavía) porque su primer dato lo da un toque/arrastre en el viewport, no la
@@ -180,6 +183,19 @@ class ToolSession:
             return
         if tool == "EXTRUDE" and params.get("variant") == "CURSOR":
             self.arm(tool, owner, {"variant": "CURSOR", "rotate_source": params.get("rotate_source", True)})
+            return
+        if tool == "DRAW":
+            # Vértices y aristas sueltos no se ven en submodo Caras: dibuja en Vértices.
+            if bpy.context.scene.tool_settings.mesh_select_mode[2]:
+                bpy.context.scene.tool_settings.mesh_select_mode = (True, False, False)
+                bm.select_mode = {'VERT'}
+            # Dibujar empieza siempre una línea nueva: la selección previa no se extruye.
+            for seq in (bm.verts, bm.edges, bm.faces):
+                for element in seq:
+                    element.select = False
+            bm.select_history.clear()
+            bmesh.update_edit_mesh(obj.data)
+            self.arm(tool, owner, {})
             return
         if tool == "LOOP_CUT" and "edge" not in params:
             # Elegir la herramienta nunca interpreta la selección como un corte.
@@ -413,6 +429,8 @@ class ToolSession:
             if self.armed_tool == 'F2':
                 result.update(input='F2_DRAW',can_confirm=False,
                     instruction='Selecciona 1–3 vértices o una arista · fuera crea un quad y arrastra · 4 vértices completan la cara')
+            if self.armed_tool == "DRAW":
+                result.update(input="REPEAT_TAP", can_confirm=False, instruction=DRAW_INSTRUCTION)
             if self.armed_tool == "EXTRUDE" and self.armed_params.get("variant") == "CURSOR":
                 result.update(input="REPEAT_TAP", can_confirm=False,
                               instruction="Toca para extruir · cada toque crea un tramo · Deshacer retira el último",
@@ -443,17 +461,39 @@ def f2_gesture(payload):
 @command("tool.extrude_cursor", mutating=True)
 def extrude_cursor(payload):
     tool_session.require_armed_owner(payload.get("_client_id"))
-    if tool_session.armed_tool != "EXTRUDE" or tool_session.armed_params.get("variant") != "CURSOR":
+    drawing = tool_session.armed_tool == "DRAW"
+    if not drawing and (tool_session.armed_tool != "EXTRUDE" or tool_session.armed_params.get("variant") != "CURSOR"):
         raise CommandError("Extruir A toque no está activo", code="wrong_tool")
     obj = active_object()
     if obj != tool_session.obj or obj.mode != "EDIT" or obj.type != "MESH":
         tool_session.disarm()
         raise CommandError("La selección de edición ha cambiado", code="session_invalidated")
     from . import extrude_cursor as cursor_commands
+    if drawing:
+        result = cursor_commands.apply(obj, payload, rotate_source=False, connect=True)
+        if result["changed"]:
+            undo_push("Remote draw polyline")
+        return dict(tool_session.status(), result=result)
     result = cursor_commands.apply(obj, payload, bool(tool_session.armed_params.get("rotate_source", True)))
     if result["changed"]:
         undo_push("Remote extrude to cursor")
     return dict(tool_session.status(), result=result)
+
+
+@command("tool.draw_break", mutating=True)
+def draw_break(payload):
+    """Dibujar: suelta el último vértice; el siguiente toque empieza otra línea."""
+    tool_session.require_armed_owner(payload.get("_client_id"))
+    if tool_session.armed_tool != "DRAW":
+        raise CommandError("Dibujar no está activo", code="wrong_tool")
+    obj = active_object()
+    bm = bmesh.from_edit_mesh(obj.data)
+    for seq in (bm.verts, bm.edges, bm.faces):
+        for element in seq:
+            element.select = False
+    bm.select_history.clear()
+    bmesh.update_edit_mesh(obj.data)
+    return tool_session.status()
 
 
 @command("tool.begin", mutating=True)

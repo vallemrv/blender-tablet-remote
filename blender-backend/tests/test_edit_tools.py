@@ -296,6 +296,39 @@ class EditToolsTests(unittest.TestCase):
         self.assertTrue(all(abs(co.z-1.5) < 1e-5 for co in new))
         tools.cancel({})
 
+    def test_draw_polyline_chains_vertices_and_closes_on_an_existing_vertex(self):
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        bm.clear()
+        bmesh.update_edit_mesh(self.obj.data)
+        bpy.context.scene.cursor.location = (0,0,0)
+        state = self.begin('DRAW')
+        self.assertTrue(state['armed'])
+        self.assertEqual(state['input'],'REPEAT_TAP')
+        def tap(x,y):
+            u,v = camera.project(Vector((x,y,0)),self.rv3d)
+            return tools.extrude_cursor(dict(u=u,v=v))['result']
+        for x,y in ((1,0),(1,1),(0,1)):
+            self.assertTrue(tap(x,y)['changed'])
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        self.assertEqual((len(bm.verts),len(bm.edges),len(bm.faces)),(3,2,0))
+        self.assertTrue(all(abs(v.co.z) < 1e-6 for v in bm.verts))
+        result = tap(1,0)
+        self.assertTrue(result['connected'])
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        self.assertEqual((len(bm.verts),len(bm.edges)),(3,3))
+        # Nuevo trazo: el siguiente toque crea un vértice suelto, sin arista.
+        tools.draw_break({})
+        tap(3,3)
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        self.assertEqual((len(bm.verts),len(bm.edges)),(4,3))
+        tools.cancel({})
+
+    def test_draw_starts_clean_even_with_a_previous_selection(self):
+        self.begin('DRAW')
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        self.assertFalse(any(v.select for v in bm.verts))
+        tools.cancel({})
+
     def test_invalid_extrude_variant_keeps_existing_preview(self):
         bpy.context.scene.tool_settings.mesh_select_mode = (False,True,False)
         self.begin('EXTRUDE', variant='REGION', offset=.5)

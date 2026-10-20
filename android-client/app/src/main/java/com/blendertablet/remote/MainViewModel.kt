@@ -1185,6 +1185,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun nudgeTool(delta: Double) = client.toolNudge(delta)
 
+    /** Dibujar: suelta el último vértice; el siguiente toque empieza otra línea. */
+    fun drawBreak() = client.editCatalogCommand("tool.draw_break")
+
     /** Seguimiento absoluto del dedo para snap geométrico durante el arrastre. */
     fun toolPointer(u: Float, v: Float) {
         if (gizmoDragActive) {
@@ -1306,7 +1309,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
         EditTool.SUBDIVIDE -> mapOf("cuts" to 1.0)
         EditTool.REVOLVE, EditTool.SWEEP -> emptyMap()
-        EditTool.F2 -> emptyMap()
+        EditTool.F2, EditTool.DRAW -> emptyMap()
         EditTool.LOOP_CUT -> mapOf("cuts" to 1.0, "smoothness" to 0.0, "factor" to 0.0, "snap_type" to "NONE")
         EditTool.BRIDGE_EDGE_LOOPS -> mapOf("twist_offset" to 0.0, "merge_factor" to 0.0, "snap_type" to "NONE")
         EditTool.ALIGN -> emptyMap()
@@ -1370,7 +1373,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * parámetro, igual que ya hacía el catálogo contextual.
      */
     fun activateToolbarFamily(family: EditToolbarFamily, variantId: String? = null) {
-        if (family.id == "F2" && client.toolSession.value.armed && client.toolSession.value.tool == EditTool.F2) {
+        // F2 y Dibujar se desarman al repetir su botón.
+        val armed = client.toolSession.value
+        if (armed.armed && ((family.id == "F2" && armed.tool == EditTool.F2) || (family.id == "DRAW" && armed.tool == EditTool.DRAW))) {
             selectTool(); return
         }
         val available = family.variants.filter { it.availableIn(client.state.value.selectionMode) }
@@ -1384,7 +1389,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val toolWire = (variant.payload["tool"] as? String) ?: (family.payload["tool"] as? String) ?: family.id
         val tool = EditTool.fromWire(toolWire) ?: return
         when (tool) {
-            EditTool.LOOP_CUT, EditTool.KNIFE, EditTool.F2 -> beginEditTool(tool)
+            EditTool.LOOP_CUT, EditTool.KNIFE, EditTool.F2, EditTool.DRAW -> beginEditTool(tool)
             EditTool.BISECT -> {
                 closeTransformForToolChange()
                 local.update { it.copy(activeTool = ActiveTool.BISECT, loopCutAwaitingTap = false) }

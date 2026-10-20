@@ -254,6 +254,7 @@ object AppIcons {
         "RECALCULATE_NORMALS_INSIDE" -> StudioIcons["NORMALS_INSIDE"]
         "FLIP_NORMALS" -> StudioIcons["NORMALS_FLIP"]
         "F2" -> StudioIcons["F2_COMPLETE"]
+        "DRAW" -> StudioIcons["DRAW_POLYLINE"]
         "LOOPTOOLS_SPACE" -> StudioIcons["SPACE_VERTICES"]
         "LOOPTOOLS_CIRCLE" -> StudioIcons["MAKE_CIRCLE"]
         else -> Fallback
@@ -327,6 +328,7 @@ object AppIcons {
         else -> null
     }
     val TweakSlide: ImageVector get() = StudioIcons["TWEAK_SLIDE"]
+    val DrawNewStroke: ImageVector get() = StudioIcons["DRAW_NEW_STROKE"]
     val EdgeExtend: ImageVector get() = StudioIcons["EDGE_EXTEND"]
     val SculptInvert: ImageVector get() = StudioIcons["SCULPT_INVERT"]
     val SculptSmooth: ImageVector get() = StudioIcons["SMOOTH"]

@@ -903,6 +903,15 @@ paramétrico. Su campo Distancia muestra unidades y acepta cantidades con o sin 
 Extrude Región mueve y selecciona únicamente los vértices nuevos: las conexiones
 con la base no incluyen sus vértices originales en el desplazamiento ni la selección.
 
+Dibujar · polilínea (`tool.begin`, `tool: DRAW`; familia `DRAW` de `edit_toolbar`,
+entrada `REPEAT_TAP`) deselecciona la malla y pasa de Caras a Vértices al armarse.
+Cada `tool.extrude_cursor` añade un vértice en el plano de la vista, a la profundidad
+del extremo (o del cursor 3D al empezar), unido al anterior por una arista, con un
+undo por toque y sin girar el origen. Un toque a menos de 0,03 de alto de vídeo de un
+vértice visible lo une con el extremo sin crear otro (`result.connected`) y continúa
+desde él; así se cierran formas o se empieza desde geometría existente.
+`tool.draw_break` suelta el extremo: el siguiente toque empieza una línea suelta.
+
 Extrude «A toque» se activa con `tool.begin`, `tool: EXTRUDE` y
 `parameters: {variant: CURSOR, rotate_source: true}`. El rail anuncia la variante
 `CURSOR` con entrada `REPEAT_TAP`. Permanece `armed: true`, `active: false` y no

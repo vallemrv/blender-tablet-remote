@@ -772,6 +772,11 @@ nuevas superficies y la adaptación gradual de las existentes.
 - Extruir ofrece Manifold en Caras con la operación nativa de Blender: disuelve
   bordes coplanares e intersecta los nuevos. Comparte distancia, paso, ejes y snap
   de Región; cada preview parte del baseline y confirmar crea un único undo.
+- Dibujar · polilínea (rail EDITAR, familia `DRAW`) traza vértice → arista →
+  vértice con toques sucesivos, como Ctrl+clic derecho desde cero: empieza sin
+  selección (pasa de Caras a Vértices), cada toque es un undo, tocar un vértice
+  existente lo une y cierra la forma, y «Nuevo trazo» (`tool.draw_break`) empieza
+  otra línea suelta. Reutiliza el plano de la cámara de Extruir «A toque».
 - Extruir «A toque» reproduce Ctrl+clic derecho en el plano de la cámara remota,
   a la profundidad de la selección (del cursor 3D si no hay selección). Cada toque
   crea y confirma un tramo, selecciona el extremo nuevo y registra un undo; salir

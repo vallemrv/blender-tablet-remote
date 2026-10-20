@@ -308,6 +308,10 @@ LOOPTOOLS_SPACE_ACTION = dict(LOOPTOOLS_CIRCLE_ACTION,
     requirements={"mode": "EDIT", "selection_modes": ["VERTEX", "EDGE"], "selection": {"verts": {"min": 2}}})
 
 
+DRAW_TOOLBAR = _toolbar_family("DRAW", "Dibujar · polilínea", "DRAW", input="REPEAT_TAP",
+    variants=[_toolbar_variant("DRAW", "Polilínea", input="REPEAT_TAP")])
+
+
 F2_TOOLBAR = _toolbar_family("F2", "Cuadriláteros · F2", "F2", input="F2_DRAW",
     requirements={"selection_modes": ["VERTEX", "EDGE"]},
     variants=[_toolbar_variant("F2", "Cuadriláteros", input="F2_DRAW", requirements={"selection_modes": ["VERTEX", "EDGE"]})])

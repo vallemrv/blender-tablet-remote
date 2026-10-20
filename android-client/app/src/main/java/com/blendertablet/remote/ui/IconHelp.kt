@@ -173,6 +173,8 @@ internal object IconHelp {
         "UNLOCK" to "Bloquea la selección del objeto para evitar moverlo o editarlo por accidente.",
         "FALLBACK" to "Abre las propiedades de este elemento.",
         "DIMENSION_LOCK" to "Fija esta medida con una cota del croquis; si ya está fijada, quita la cota y conserva el dibujo.",
+        "DRAW_POLYLINE" to "Dibuja vértices unidos por aristas: cada toque añade un vértice y la arista desde el anterior. Tocar un vértice existente lo une y cierra la forma.",
+        "DRAW_NEW_STROKE" to "Suelta el último vértice: el siguiente toque empieza una línea nueva, sin unirla a la anterior.",
         "FALLOFF_SMOOTH" to "La influencia cae de forma suave y gradual desde el centro.",
         "FALLOFF_SPHERE" to "La influencia se mantiene alta y cae como el borde de una esfera.",
         "FALLOFF_ROOT" to "La influencia cae despacio al principio y deprisa cerca del borde.",

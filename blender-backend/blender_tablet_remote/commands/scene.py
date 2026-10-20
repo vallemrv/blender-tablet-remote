@@ -8,7 +8,7 @@ import bpy
 
 from .. import state
 from ..errors import CommandError
-from ..protocol import ENUMS, FEATURES, LOOPTOOLS_CIRCLE_ACTION, LOOPTOOLS_SPACE_ACTION, F2_TOOLBAR, PROTOCOL_VERSION, UNITS
+from ..protocol import ENUMS, FEATURES, LOOPTOOLS_CIRCLE_ACTION, LOOPTOOLS_SPACE_ACTION, F2_TOOLBAR, DRAW_TOOLBAR, PROTOCOL_VERSION, UNITS
 from . import command, names
 
 
@@ -76,6 +76,8 @@ def capabilities(payload: dict) -> dict:
 
     features['edit_toolbar']['families'].append(deepcopy(F2_TOOLBAR))
     features['edit_tools']['tools'].append('F2')
+    features['edit_toolbar']['families'].append(deepcopy(DRAW_TOOLBAR))
+    features['edit_tools']['tools'].append('DRAW')
 
     return {
         "addon_version": ".".join(str(n) for n in VERSION),
