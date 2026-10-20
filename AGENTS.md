@@ -419,12 +419,18 @@ nuevas superficies y la adaptación gradual de las existentes.
 - Una acción no se duplica entre el rail lateral y la bandeja inferior en el mismo
   contexto. Se prioriza el espacio de dibujo y el acceso táctil en la tablet.
 - El rail de tools permanece siempre abierto, sin botón de cierre ni estado plegado.
-  Mover/Rotar/Escalar viven ahí; en Edit añade Tweak.
+  Mover/Rotar/Escalar viven ahí; Tweak comparte botón con Seleccionar en el rail derecho.
 - Tweak marca únicamente su botón, aunque use una sesión MOVE interna. Mientras está
   encendido muestra ayudas en la bandeja inferior: GG y Snap activables, con paso
   editable para Incremento. GG solo admite vértices/aristas; en caras sigue libre.
-  Las ayudas modifican el gesto sin activar otra herramienta ni reabrir Tweak;
-  no hay un menú alternativo de ajustes por pulsación larga en su botón.
+  Las ayudas modifican el gesto sin activar otra herramienta ni reabrir Tweak.
+- En Edición de mallas, Seleccionar y Tweak comparten el botón de SELECCIÓN del rail
+  derecho (`SelectTweakButton`), como Cuchillo/Bisecar en Cortar: tocar activa la
+  variante mostrada (repetir Tweak vuelve a Seleccionar) y mantener abre el menú de
+  las dos. No hay botón Tweak aparte en el rail izquierdo. Tweak hereda la selección
+  normal: el gesto Tweak solo empieza al superar el umbral táctil; un toque quieto
+  alterna, deselecciona en el vacío, hace el loop con doble toque y abre el radial
+  igual que Seleccionar. Caja, Círculo, Pintar y Camino funcionan sin apagar Tweak.
 - Tweak libre hereda la edición proporcional, su radio y perfil desde los ajustes
   de Edit. Su bandeja ofrece Proporcional/Radio/Perfil mediante el mismo campo
   métrico de radio de las transformaciones. Cambiar la influencia conserva el

@@ -943,6 +943,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         when {
             client.state.value.material.active -> materialSettings(mapOf("interaction" to "SELECT"))
             client.state.value.cad.workspace -> cadTool(null)
+            // Tweak hereda la selección: Caja, Círculo, Pintar y Camino no lo apagan.
+            local.value.activeTool == ActiveTool.TWEAK -> Unit
             else -> selectTool()
         }
     }

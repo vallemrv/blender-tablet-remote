@@ -1084,13 +1084,6 @@ private fun RailContent(
     val inEdit = state.blender.mode == BlenderMode.EDIT
 
     RailLabel("HERRAMIENTA")
-    if (inEdit && state.blender.activeObjectType == "MESH" && state.blender.features.selectionTweak) {
-        TweakToolButton(
-            selected = state.activeTool == ActiveTool.TWEAK,
-            enabled = true,
-            vm = vm,
-        )
-    }
     IconAction(
         AppIcons.transform(TransformMode.MOVE), "Mover",
         selected = isTransformToolSelected(state.activeTool, session, TransformMode.MOVE),

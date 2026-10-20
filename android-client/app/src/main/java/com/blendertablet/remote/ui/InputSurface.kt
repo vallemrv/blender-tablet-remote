@@ -280,6 +280,8 @@ private class GestureView(
     var onTweakDrag: (GesturePhase, Float, Float, Float, Float) -> Unit = { _, _, _, _, _ -> }
     var onDragStart: (Float, Float) -> Unit = { _, _ -> }
     private var tweakDrawing = false
+    /** Dedo apoyado con Tweak que aún no ha superado el umbral: todavía es un toque. */
+    private var tweakPending = false
     private var suppressSingleAfterTweak = false
     var navigationOrbitEnabled: Boolean = false
     var navigationOrbitRightInset = 0f
@@ -455,14 +457,9 @@ private class GestureView(
                     invalidate()
                     return true
                 }
-                if (tweakActive) {
-                    tweakDrawing = true
-                    lastDispatchAt = event.eventTime
-                    pendingDx = 0f; pendingDy = 0f
-                    onTweakDrag(GesturePhase.BEGIN, nx(event.x), ny(event.y), 0f, 0f)
-                    invalidate()
-                    return true
-                }
+                // Tweak solo empieza al arrastrar: un toque quieto es la selección normal
+                // (alternar, vaciar, doble toque de loop y radial), igual que Seleccionar.
+                tweakPending = tweakActive && shapeTool == ShapeTool.NONE
                 // Con B/C armada, un dedo dibuja la forma: no orbita, no selecciona
                 // y no abre el menú. El tap simple no hace nada (se resuelve al soltar).
                 if (shapeTool != ShapeTool.NONE) {
@@ -491,6 +488,7 @@ private class GestureView(
 
             MotionEvent.ACTION_POINTER_DOWN -> if (event.pointerCount >= 2) {
                 removeCallbacks(longPressRunnable)
+                tweakPending = false
                 if (f2Touch.active) { f2Touch.cancel(); suppressSingleAfterTweak = true }
                 if (repeatTap) {
                     tapExtrusion.cancel()
@@ -557,6 +555,20 @@ private class GestureView(
                         lastDispatchAt = event.eventTime
                     }
                     invalidate()
+                } else if (tweakPending) {
+                    val slop = if (isStylus(downToolType)) stylusTouchSlop else systemTouchSlop
+                    if (hypot(event.x - startX, event.y - startY) > slop) {
+                        removeCallbacks(longPressRunnable)
+                        tweakPending = false
+                        tweakDrawing = true
+                        moved = true
+                        lastDispatchAt = event.eventTime
+                        pendingDx = 0f; pendingDy = 0f
+                        lastX = startX; lastY = startY
+                        onTweakDrag(GesturePhase.BEGIN, nx(startX), ny(startY), 0f, 0f)
+                        handleTweak(event)
+                        invalidate()
+                    }
                 } else if (tweakDrawing) {
                     handleTweak(event)
                 } else if (suppressSingleAfterTweak) {
@@ -578,6 +590,7 @@ private class GestureView(
 
             MotionEvent.ACTION_UP -> {
                 removeCallbacks(longPressRunnable)
+                tweakPending = false
                 if (f2Touch.active) {
                     f2Touch.end()
                     parent?.requestDisallowInterceptTouchEvent(false)
@@ -628,6 +641,7 @@ private class GestureView(
 
             MotionEvent.ACTION_CANCEL -> {
                 f2Touch.cancel()
+                tweakPending = false
                 if (shapeDrawing && shapeTool == ShapeTool.PAINT) dispatchSelectionPaint(GesturePhase.CANCEL)
                 removeCallbacks(longPressRunnable)
                 tapExtrusion.cancel()

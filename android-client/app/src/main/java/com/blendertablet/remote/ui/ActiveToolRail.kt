@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.blendertablet.remote.MainViewModel
+import com.blendertablet.remote.model.ActiveTool
 import com.blendertablet.remote.model.EditTool
 import com.blendertablet.remote.model.EditToolbarFamily
 import com.blendertablet.remote.model.EditToolbarVariant
@@ -123,11 +125,58 @@ private fun FamilyToolButton(
 internal fun hasLongClickMenu(family: EditToolbarFamily): Boolean =
     family.variants.count { it.enabled } > 1
 
-/** Tweak es una única herramienta; sus ayudas viven en la bandeja inferior. */
+/**
+ * Seleccionar y Tweak comparten botón, como Cuchillo y Bisecar en Cortar: tocar activa
+ * la variante mostrada (repetir Tweak vuelve a Seleccionar) y mantener elige la otra.
+ * Tweak hereda la selección normal: un toque quieto selecciona igual que Seleccionar.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun TweakToolButton(selected: Boolean, enabled: Boolean, vm: MainViewModel) {
-    IconAction(AppIcons.Tweak, "Tweak", selected = selected, enabled = enabled) {
-        if (selected) vm.selectTool() else vm.activateTweak()
+internal fun SelectTweakButton(activeTool: ActiveTool, selectSelected: Boolean, vm: MainViewModel) {
+    var expanded by remember { mutableStateOf(false) }
+    var preferTweak by rememberSaveable { mutableStateOf(false) }
+    val tweakActive = activeTool == ActiveTool.TWEAK
+    // Muestra la última variante elegida, salvo que Seleccionar esté activo ahora mismo.
+    val showTweak = tweakActive || (preferTweak && !selectSelected)
+    val selected = tweakActive || (!showTweak && selectSelected)
+    val icon = if (showTweak) AppIcons.Tweak else AppIcons.SelectTool
+    val description = if (showTweak) "Seleccionar: Tweak" else "Seleccionar"
+    fun choose(tweak: Boolean) {
+        preferTweak = tweak
+        if (tweak) vm.activateTweak() else vm.selectTool()
+    }
+    Box {
+        HoverHelp(
+            title = description,
+            explanation = IconHelp.explanation(icon, description) + " Mantén pulsado para elegir otra variante.",
+            modifier = Modifier
+                .size(Metrics.Touch)
+                .clip(RoundedCornerShape(10.dp))
+                .background(if (selected) Ink.Accent.copy(alpha = .22f) else Color.Transparent)
+                .combinedClickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = { if (tweakActive) vm.selectTool() else choose(showTweak) },
+                    onLongClick = { expanded = true },
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, description, tint = if (selected) Ink.Accent else Ink.OnPanel)
+            VariantBadge(if (showTweak) "T" else "S", selected)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            listOf(false to "Seleccionar", true to "Tweak").forEach { (tweak, label) ->
+                val variantIcon = if (tweak) AppIcons.Tweak else AppIcons.SelectTool
+                HoverHelp(label, IconHelp.explanation(variantIcon, label)) {
+                    DropdownMenuItem(
+                        text = { Text(label) },
+                        leadingIcon = { Icon(variantIcon, null) },
+                        trailingIcon = { if (tweak == showTweak) Icon(AppIcons.Checked, null, tint = Ink.Accent) },
+                        onClick = { expanded = false; choose(tweak) },
+                    )
+                }
+            }
+        }
     }
 }
 

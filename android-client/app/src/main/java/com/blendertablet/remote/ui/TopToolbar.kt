@@ -193,9 +193,14 @@ fun SelectionHelperRail(state: AppUiState, vm: MainViewModel, modifier: Modifier
 
 @Composable
 fun SelectionIntentControls(state: AppUiState, vm: MainViewModel) {
-    IconAction(AppIcons.SelectTool, "Seleccionar", selected = state.shapeTool == ShapeTool.NONE &&
-        (!state.blender.material.active || state.blender.material.interaction == "SELECT") && state.activeTool == ActiveTool.SELECT,
-        onClick = vm::activateSelection)
+    val selectSelected = state.shapeTool == ShapeTool.NONE &&
+        (!state.blender.material.active || state.blender.material.interaction == "SELECT") && state.activeTool == ActiveTool.SELECT
+    val blender = state.blender
+    // En Edición de mallas Tweak comparte botón con Seleccionar (mantener elige la variante).
+    if (!blender.cad.workspace && !blender.material.active && blender.mode == BlenderMode.EDIT &&
+        blender.activeObjectType == "MESH" && blender.features.selectionTweak) {
+        SelectTweakButton(state.activeTool, selectSelected, vm)
+    } else IconAction(AppIcons.SelectTool, "Seleccionar", selected = selectSelected, onClick = vm::activateSelection)
 }
 
 @Composable
