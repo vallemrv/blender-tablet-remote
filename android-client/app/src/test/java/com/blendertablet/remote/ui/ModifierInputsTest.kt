@@ -10,6 +10,14 @@ class ModifierInputsTest {
     private val width = ModifierParameterDescriptor("width", "float", ModifierDefault.Decimal(.1),
         min = 0.0, max = 1000.0, step = .01, editable = true, unit = "LENGTH")
 
+    @Test fun modifierAccordionOpensTheAddedOneAndKeepsTheRenamedOne() {
+        assertEquals("Array", nextOpenModifier("Mirror", listOf("Mirror"), listOf("Mirror", "Array")))
+        assertEquals("Mirror", nextOpenModifier("Mirror", listOf("Mirror", "Array"), listOf("Array", "Mirror")))
+        assertNull(nextOpenModifier("Array", listOf("Mirror", "Array"), listOf("Mirror")))
+        assertEquals("Círculo", nextOpenModifier("Array", listOf("Mirror", "Array"), listOf("Mirror", "Círculo")))
+        assertEquals("Array", nextOpenModifier("Array", listOf("Mirror", "Array"), listOf("Espejo", "Array")))
+    }
+
     @Test fun modifierSearchUsesServerLabelsAndNativeNamesWithoutAccents() {
         assertTrue(modifierMatchesQuery("LATTICE", "Lattice · Jaula", "jaula"))
         assertTrue(modifierMatchesQuery("LATTICE", "Lattice · Jaula", "latt"))

@@ -80,7 +80,20 @@ fun ModifierPanel(state: BlenderState, actions: ModifierActions, modifier: Modif
                 verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (state.vertexGroupsAvailable) VertexGroupControls(state, actions.group)
                 if (state.modifiers.isEmpty()) Empty()
-                else state.modifiers.forEachIndexed { index, item -> ModifierCard(item, index, state, actions) }
+                else {
+                    val names = state.modifiers.map { it.name }
+                    var open by remember { mutableStateOf(names.lastOrNull()) }
+                    var known by remember { mutableStateOf(names) }
+                    if (names != known) {
+                        open = nextOpenModifier(open, known, names)
+                        known = names
+                    }
+                    state.modifiers.forEachIndexed { index, item ->
+                        ModifierCard(item, index, state, actions, expanded = item.name == open) {
+                            open = if (open == item.name) null else item.name
+                        }
+                    }
+                }
             }
         }
     }
@@ -160,6 +173,21 @@ private fun Empty() {
     )
 }
 
+/**
+ * Acordeón: un único modificador abierto. Uno recién añadido se abre (es el que se
+ * va a ajustar); si desaparece el abierto, o se renombra, no se abre otro por sorpresa
+ * salvo el renombrado, que conserva su posición.
+ */
+internal fun nextOpenModifier(open: String?, before: List<String>, after: List<String>): String? {
+    after.firstOrNull { it !in before }?.let { added ->
+        if (after.size > before.size) return added
+        // Mismo número: renombrado. Sigue abierto si era el abierto.
+        val gone = before.firstOrNull { it !in after }
+        return if (gone == open) added else open
+    }
+    return open?.takeIf { it in after }
+}
+
 /** Una tarjeta por modificador: identidad, visibilidad, parámetros y orden. */
 @Composable
 private fun ModifierCard(
@@ -167,9 +195,10 @@ private fun ModifierCard(
     index: Int,
     state: BlenderState,
     actions: ModifierActions,
+    expanded: Boolean,
+    onToggle: () -> Unit,
 ) {
     val specs = state.modifierOptions.firstOrNull { it.type == item.type }?.parameters.orEmpty()
-    var expanded by remember(item.name) { mutableStateOf(true) }
 
     Box(
         Modifier
@@ -183,7 +212,7 @@ private fun ModifierCard(
                 ModifierHeaderButton(
                     AppIcons.disclosure(expanded),
                     if (expanded) "Plegar ${item.name}" else "Desplegar ${item.name}",
-                ) { expanded = !expanded }
+                ) { onToggle() }
                 Icon(AppIcons.modifier(item.type), item.type, Modifier.size(16.dp), tint = Ink.Accent)
                 Spacer(Modifier.width(4.dp))
                 Text(
@@ -191,7 +220,8 @@ private fun ModifierCard(
                     color = Ink.OnPanel,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
+                    // Todo el nombre abre/cierra: la flecha sola es un blanco pequeño.
+                    modifier = Modifier.weight(1f).clickableNoRipple(onToggle),
                 )
                 ModifierHeaderButton(
                     AppIcons.MoveUp, "Subir en la pila",
