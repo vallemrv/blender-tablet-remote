@@ -33,13 +33,10 @@ class ExtrudeCursorStateTest {
         assertTrue(state.availableSnapTypes.isEmpty())
     }
 
-    @org.junit.Test fun planarExtrusionIsAnnouncedAndPlanesAreOffered() {
+    @org.junit.Test fun planarExtrusionIsAnnounced() {
         val planar = StateParser.toolSession(JSONObject("""{"active":true,"tool":"EXTRUDE","planar_drag":true,
             "parameters":{"constraint":"XY"}}"""))
         org.junit.Assert.assertTrue(planar.planarDrag)
         org.junit.Assert.assertFalse(StateParser.toolSession(JSONObject("""{"active":true,"tool":"EXTRUDE"}""")).planarDrag)
-        for (plane in listOf(com.blendertablet.remote.model.Constraint.XY, com.blendertablet.remote.model.Constraint.XZ,
-            com.blendertablet.remote.model.Constraint.YZ))
-            org.junit.Assert.assertTrue(plane in com.blendertablet.remote.ui.ExtrudeConstraints)
     }
 }

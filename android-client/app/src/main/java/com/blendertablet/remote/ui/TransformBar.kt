@@ -1,6 +1,8 @@
 package com.blendertablet.remote.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -203,7 +205,7 @@ fun TransformBar(
             scaleLinked = !scaleLinked
         }
         SnapControl(snapOptions, snapType, onSnapType)
-        ConstraintChoice(Constraint.entries, constraint, onSelect = onConstraint)
+        AxisConstraintButtons(constraint, onSelect = onConstraint)
     }
 }
 
@@ -403,15 +405,57 @@ internal fun ProportionalRadiusInput(
     }
 }
 
-/** Extruir admite un eje o un plano (XY, XZ, YZ), como Mover. */
-internal val ExtrudeConstraints = Constraint.entries.toList()
 
-/** Restricción de ejes: el trípode muestra en color los ejes activos y abre la lista. */
+/**
+ * Restricción con los botones Libre · X · Y · Z siempre a la vista. Tocar un eje lo
+ * deja solo (otra vez, vuelve a Libre); mantenerlo pulsado bloquea los otros dos,
+ * como Shift+Z en Blender: mantener Z deja el plano XY. [planes] falso solo admite ejes.
+ */
 @Composable
-internal fun ConstraintChoice(options: List<Constraint>, selected: Constraint, enabled: Boolean = true,
-                              onSelect: (Constraint) -> Unit) {
-    ChoiceIcon(options, selected, "Restricción", AppIcons::constraint, ::constraintLabel,
-        enabled = enabled, multicolor = true, onSelect = onSelect)
+internal fun AxisConstraintButtons(selected: Constraint, enabled: Boolean = true, planes: Boolean = true,
+                                   onSelect: (Constraint) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+        val free = selected == Constraint.FREE
+        HoverHelp("Libre", "Sin restricción: sigue al dedo.", enabled = enabled) {
+            Box(Modifier.height(Metrics.Touch).clip(RoundedCornerShape(10.dp))
+                .background(if (free) Ink.Accent.copy(alpha = .22f) else Color.Transparent)
+                .then(if (enabled) Modifier.clickableNoRipple { onSelect(Constraint.FREE) } else Modifier)
+                .padding(horizontal = 10.dp), contentAlignment = Alignment.Center) {
+                Text("Libre", color = if (!enabled) Ink.Faint else if (free) Ink.Accent else Ink.Muted,
+                    fontSize = 13.sp, fontWeight = if (free) FontWeight.SemiBold else FontWeight.Normal)
+            }
+        }
+        Axis.entries.forEach { axis ->
+            val active = axis in selected.axes
+            val color = AxisColors.getValue(axis)
+            HoverHelp("Eje ${axis.name}", "Toca para mover solo en ${axis.name}" +
+                if (planes) "; mantén pulsado para bloquear los otros dos ejes (como Shift+${axis.name})." else ".",
+                enabled = enabled) {
+                Box(Modifier.size(Metrics.Touch).clip(RoundedCornerShape(10.dp))
+                    .background(if (active) color.copy(alpha = .28f) else Color.Transparent)
+                    .then(if (!enabled) Modifier else Modifier.combinedClickable(
+                        interactionSource = remember { MutableInteractionSource() }, indication = null,
+                        onClick = { onSelect(constraintAfterTap(selected, axis)) },
+                        onLongClick = if (planes) ({ onSelect(constraintAfterHold(selected, axis)) }) else null)),
+                    contentAlignment = Alignment.Center) {
+                    Text(axis.name, color = if (enabled) color else Ink.Faint, fontSize = 15.sp,
+                        fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
+                }
+            }
+        }
+    }
+}
+
+/** Tocar un eje lo deja solo; tocar el eje que ya está solo vuelve a Libre. */
+internal fun constraintAfterTap(current: Constraint, axis: Axis): Constraint {
+    val only = Constraint.ofAxes(setOf(axis))
+    return if (current == only) Constraint.FREE else only
+}
+
+/** Mantener un eje bloquea los otros dos (Shift+eje); repetirlo vuelve a Libre. */
+internal fun constraintAfterHold(current: Constraint, axis: Axis): Constraint {
+    val plane = Constraint.ofAxes(Axis.entries.toSet() - axis)
+    return if (current == plane) Constraint.FREE else plane
 }
 
 internal fun constraintLabel(value: Constraint) = when (value) {

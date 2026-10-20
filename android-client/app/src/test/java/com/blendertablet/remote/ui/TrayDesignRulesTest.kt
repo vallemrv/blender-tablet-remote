@@ -1,5 +1,7 @@
 package com.blendertablet.remote.ui
 
+import com.blendertablet.remote.model.Axis
+import com.blendertablet.remote.model.Constraint
 import java.io.File
 import org.junit.Assert.*
 import org.junit.Test
@@ -80,14 +82,14 @@ class TrayDesignRulesTest {
     /** Controles directos de la fila de una bandeja: el bloque de contenido de SingleLineTray. */
     private fun rowControls(code: String, marker: String): List<String> {
         val row = code.substringAfter(marker).substringAfter(") {").substringBefore("\n}\n")
-        return Regex("""\b(TransformAxisInputs|IconAction|SnapControl|ConstraintChoice|ChoiceIcon|PillButton|FalloffChoice|TrayNumber)\(""")
+        return Regex("""\b(TransformAxisInputs|IconAction|SnapControl|AxisConstraintButtons|ChoiceIcon|PillButton|FalloffChoice|TrayNumber)\(""")
             .findAll(row).map { it.groupValues[1] }.toList()
     }
 
     @Test fun transformShowsAxesSnapAndConstraintWithTheRestUnderMore() {
         val bar = body(source("TransformBar"), "fun TransformBar(")
         val controls = rowControls(bar, "hintKey = \"transform.")
-        assertEquals(listOf("TransformAxisInputs", "IconAction", "SnapControl", "ConstraintChoice"), controls)
+        assertEquals(listOf("TransformAxisInputs", "IconAction", "SnapControl", "AxisConstraintButtons"), controls)
         assertTrue("Rotar no puede mostrar más de cinco controles", controls.size <= 5)
         for (option in listOf("\"Paso\"", "\"Centro\"", "\"Fuente\"", "\"Propio\"", "\"Orientación\"",
             "\"Otra selección\"", "\"Proporcional\"", "\"Perfil\""))
@@ -147,5 +149,15 @@ class TrayDesignRulesTest {
         }
         assertTrue(body(source("ModifierPanel"), "private fun EditableModifierScalar(").contains("ScrubNumber("))
         assertTrue(body(source("SnapControl"), "internal fun DistanceSnapStepInput(").contains("ScrubNumber("))
+    }
+
+    @Test fun axisButtonsTapOneAxisAndHoldLocksTheOtherTwoLikeBlenderShift() {
+        assertEquals(Constraint.Z, constraintAfterTap(Constraint.FREE, Axis.Z))
+        assertEquals(Constraint.FREE, constraintAfterTap(Constraint.Z, Axis.Z))
+        assertEquals(Constraint.X, constraintAfterTap(Constraint.XY, Axis.X))
+        assertEquals(Constraint.XY, constraintAfterHold(Constraint.FREE, Axis.Z))
+        assertEquals(Constraint.YZ, constraintAfterHold(Constraint.Z, Axis.X))
+        assertEquals(Constraint.FREE, constraintAfterHold(Constraint.XZ, Axis.Y))
+        assertTrue(body(source("EditToolTray"), "private fun ToolControl(").contains("AxisConstraintButtons("))
     }
 }
