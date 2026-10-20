@@ -186,6 +186,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   hasta soltar; después quedan seleccionados esos vértices, o su arista frontal
   en submodo Aristas. Tocar el cuarto vértice completa automáticamente la cara;
   si ya existe, extiende su arista de borde más cercana al toque con un quad nuevo.
+  Con una arista cuyos extremos ya salen por aristas libres hacia dos vértices de
+  enfrente (fuera de su cara), F2 solo crea la arista frontal y la cara, sin vértices
+  nuevos; el toque elige el lado si hay varios y queda seleccionada esa arista.
   Cada gesto congela su intención al comenzar. UP confirma el último candidato
   válido sin raycast ni nuevo movimiento, con un undo por cara. Una preview
   degenerada conserva la última válida. Repetir el botón o × desarma; dos dedos,

@@ -2698,6 +2698,10 @@ para arista/2 vértices. Se requieren dos aristas de borde vecinas para una esqu
 La selección queda en los nuevos vértices o en su arista frontal en modo Edge.
 Tocar el cuarto vértice completa una cara; si ya existe, prolonga su arista de
 borde más cercana al toque con otros dos vértices y un quad contiguo.
+Si cada extremo de la arista ya continúa por una arista sin dos caras hacia un
+vértice de enfrente (fuera de la cara contigua), no se crean vértices: se añade
+solo la arista frontal y la cara, como el F2 de Blender. Con varios pares posibles
+gana el más cercano al toque y, a igualdad, el más paralelo; UPDATE no mueve nada.
 
 END confirma el último candidato válido, sin raycast, con un undo por cara.
 Cada UPDATE reconstruye desde una plantilla privada, nunca sobre la preview

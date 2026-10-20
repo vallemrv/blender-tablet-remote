@@ -56,6 +56,27 @@ class RemoteF2Tests(unittest.TestCase):
         self.run_f2((.5,1,0))
         face=list(bmesh.from_edit_mesh(obj.data).faces)[0]
         self.assertTrue(all(v.co.y>=0 for v in face.verts))
+    def test_edge_with_front_vertices_only_adds_the_front_edge_and_face(self):
+        obj=self.shape([(0,0,0),(1,0,0),(0,1,0),(1,1.2,0)],[(0,1),(0,2),(1,3)],selected_edge=0)
+        with patch('blender_tablet_remote.bpy_utils.undo_push') as push:
+            self.gesture('BEGIN',(.5,1.5,0));self.gesture('UPDATE',(.5,3,0));self.gesture('END',(.5,3,0))
+            push.assert_called_once()
+        bm=bmesh.from_edit_mesh(obj.data)
+        self.assertEqual((len(bm.verts),len(bm.edges),len(bm.faces)),(4,4,1))
+        self.assertTrue(any((v.co-Vector((1,1.2,0))).length<1e-6 for v in bm.verts))
+        selected=[e for e in bm.edges if e.select]
+        self.assertEqual(len(selected),1)
+        self.assertEqual({tuple(round(c,6) for c in v.co) for v in selected[0].verts},{(0,1,0),(1,1.2,0)})
+    def test_edge_on_a_face_uses_front_vertices_on_the_open_side(self):
+        obj=self.shape([(0,0,0),(1,0,0),(0,-1,0),(1,-1,0),(0,1,0),(1,1,0)],[(0,1),(0,2),(1,3),(2,3),(0,4),(1,5)])
+        bm=bmesh.from_edit_mesh(obj.data);bm.verts.ensure_lookup_table()
+        bm.faces.new([bm.verts[i] for i in (0,2,3,1)])
+        bpy.context.scene.tool_settings.mesh_select_mode=(False,True,False)
+        bm.edges.ensure_lookup_table();bm.edges[0].select_set(True);bmesh.update_edit_mesh(obj.data)
+        self.run_f2((.5,-.5,0))
+        bm=bmesh.from_edit_mesh(obj.data)
+        self.assertEqual((len(bm.verts),len(bm.faces)),(6,2))
+        self.assertTrue(any(all(v.co.y>=-1e-6 for v in f.verts) for f in bm.faces))
     def test_two_unconnected_vertices_create_two_new_vertices_and_drag_in_same_gesture(self):
         obj=self.shape([(0,0,0),(1,0,0)],[])
         bpy.ops.mesh.select_all(action='SELECT')

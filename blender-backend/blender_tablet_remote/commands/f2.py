@@ -98,9 +98,47 @@ def _face(bm, vertices):
     return bm.faces.new(vertices)
 
 
+def _degenerate(points):
+    lengths=[(points[(i+1)%4]-points[i]).length_squared for i in range(4)]
+    first=(points[1]-points[0]).cross(points[2]-points[0])
+    second=(points[2]-points[0]).cross(points[3]-points[0])
+    return (min(lengths)<=max(lengths)*1e-12 or (first+second).length_squared <= max(lengths)**2*1e-12
+            or first.dot(second)<-max(lengths)**2*1e-12)
+
+
+def _front_pair(bm, world, a, b, side_face, payload):
+    """Como F2: si cada extremo de la arista ya sale hacia un vértice de enfrente, los usa."""
+    def fronts(vert, other):
+        return [e.other_vert(vert) for e in vert.link_edges if not e.hide and len(e.link_faces)<2
+                and e.other_vert(vert) is not other and not e.other_vert(vert).hide
+                and (side_face is None or e not in side_face.edges)]
+    p,q=world@a.co,world@b.co
+    side=None
+    if side_face is not None: side=world@side_face.calc_center_median()-(p+q)*.5
+    choices=[]
+    for c in fronts(a,b):
+        for d in fronts(b,a):
+            if c is d or any(set(f.verts)=={a,b,c,d} for f in c.link_faces): continue
+            pc,pd=world@c.co,world@d.co
+            if side is not None and side.dot((pc+pd)*.5-(p+q)*.5)>0: continue
+            if _degenerate([p,q,pd,pc]): continue
+            # El toque elige el lado; a igualdad, el par más paralelo a la arista.
+            choices.append((_score((pc+pd)*.5,payload),((pc-p)-(pd-q)).length_squared,c,d))
+    return min(choices,key=lambda item:item[:2])[2:] if choices else None
+
+
 def _edge_quad(bm, obj, edge_vertices, payload, existing_face=None):
     a,b = edge_vertices
     world=obj.matrix_world; inverse=world.inverted()
+    side_face=existing_face
+    if side_face is None:
+        edge=bm.edges.get((a,b))
+        if edge is not None and len(edge.link_faces)==1: side_face=edge.link_faces[0]
+    pair=_front_pair(bm,world,a,b,side_face,payload)
+    if pair is not None:
+        # Solo falta la arista de enfrente: se crea con la cara y no hay vértices que colocar.
+        c,d=pair
+        return _face(bm,[a,b,d,c]),[],world@a.co,Vector((0,0,1)),world@a.co,[d,c]
     p,q=world@a.co,world@b.co
     normal=(camera.rotation @ Vector((0,0,1))).normalized()
     center=(p+q)*.5
@@ -114,7 +152,7 @@ def _edge_quad(bm, obj, edge_vertices, payload, existing_face=None):
     face=_face(bm,[a,b,c,d])
     # Con cuatro vértices sobre una cara, nace fuera de ella y el arrastre la recoloca.
     anchor=_on_plane(payload,center,normal) if existing_face is not None else center+outward
-    return face,[d,c],center,normal,anchor
+    return face,[d,c],center,normal,anchor,[d,c]
 
 
 def _build(pending, payload):
@@ -122,7 +160,7 @@ def _build(pending, payload):
     vertices=[v for v in bm.verts if v.select and not v.hide]
     if not 1<=len(vertices)<=4:
         raise CommandError('F2 usa de uno a cuatro vértices o una arista',code='incompatible_selection')
-    moving=[]
+    moving=[];front=None
     if len(vertices)==4:
         existing=next((f for f in bm.faces if set(f.verts)==set(vertices)),None)
         if existing is None:
@@ -139,9 +177,9 @@ def _build(pending, payload):
                 if None in screen:return float('inf')
                 return _point_segment_distance(Vector((u,v)),Vector(screen[0]),Vector(screen[1]))
             edge=min(edges,key=score)
-            face,moving,point,normal,anchor=_edge_quad(bm,obj,list(edge.verts),payload,existing)
+            face,moving,point,normal,anchor,front=_edge_quad(bm,obj,list(edge.verts),payload,existing)
     elif len(vertices)==2:
-        face,moving,point,normal,anchor=_edge_quad(bm,obj,vertices,payload)
+        face,moving,point,normal,anchor,front=_edge_quad(bm,obj,vertices,payload)
     else:
         if len(vertices)==1:
             corner=vertices[0]
@@ -166,15 +204,15 @@ def _build(pending, payload):
         if not choices:raise CommandError('Elige una esquina con dos aristas de borde, o selecciona una arista',code='topology_incompatible')
         _,a,b,c,normal,predicted=min(choices,key=lambda item:item[0])
         new=bm.verts.new(world.inverted()@predicted)
-        face=_face(bm,[a,b,c,new]);moving=[new];point=world@b.co;anchor=predicted
+        face=_face(bm,[a,b,c,new]);moving=[new];point=world@b.co;anchor=predicted;front=moving
     for seq in (bm.verts,bm.edges,bm.faces):
         for elem in seq:elem.select=False
     bm.select_history.clear()
-    if moving:
-        if bpy.context.scene.tool_settings.mesh_select_mode[1] and len(moving)==2:
-            front=bm.edges.get(tuple(moving));front.select_set(True);bm.select_history.add(front)
+    if front:
+        if bpy.context.scene.tool_settings.mesh_select_mode[1] and len(front)==2:
+            edge=bm.edges.get(tuple(front));edge.select_set(True);bm.select_history.add(edge)
         else:
-            for vert in moving:vert.select_set(True);bm.select_history.add(vert)
+            for vert in front:vert.select_set(True);bm.select_history.add(vert)
     else:
         for vert in vertices:vert.select_set(True)
     bm.select_flush_mode();bm.verts.index_update();bm.faces.index_update();bm.normal_update()
@@ -191,11 +229,7 @@ def _place(pending,payload):
         delta=obj.matrix_world.inverted().to_3x3()@(target-pending['anchor'])
         for index in pending['moving']:bm.verts[index].co+=delta
     face=bm.faces[pending['face_index']]
-    points=[obj.matrix_world@v.co for v in face.verts]
-    lengths=[(points[(i+1)%4]-points[i]).length_squared for i in range(4)]
-    first=(points[1]-points[0]).cross(points[2]-points[0])
-    second=(points[2]-points[0]).cross(points[3]-points[0])
-    if min(lengths)<=max(lengths)*1e-12 or (first+second).length_squared <= max(lengths)**2*1e-12 or first.dot(second)<-max(lengths)**2*1e-12:
+    if _degenerate([obj.matrix_world@v.co for v in face.verts]):
         raise CommandError('Coloca los vértices sin cruzar ni aplastar la cara',code='topology_incompatible')
     bm.normal_update();bmesh.update_edit_mesh(obj.data,loop_triangles=True,destructive=True)
     if pending.get('valid_preview') is None:pending['valid_preview']=bpy.data.meshes.new('.remote_f2_valid')
