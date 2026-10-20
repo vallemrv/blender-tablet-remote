@@ -98,6 +98,8 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   corte comienza sin desplazamiento. La bandeja permite porcentaje o mm/cm/m desde
   el centro; mantener pulsada la Posición vuelve al centro. Las medidas físicas incluyen la escala del
   objeto y de escena; los cortes múltiples conservan su espaciado al desplazarse.
+- El toque de Loop Cut sondea la jaula viva del BMesh (no la malla evaluada, cuyos
+  índices cambian con Mirror/bisect u otros modificadores); otros objetos solo ocluyen.
 - Activar Corte de loop deselecciona la malla y solo arma la herramienta. El
   primer corte exige un toque válido en el visor; nunca usa una selección previa.
   Deslizar sobre Posición acumula pasos de 1 % sobre el valor local pendiente. La
@@ -1625,6 +1627,9 @@ no quedan archivos o referencias temporales.
   Cambiar la variante de Extruir ajusta la misma operación desde su baseline;
   no añade otra extrusión ni confirma una variante inválida.
 
+- El radio de captura del snap geométrico de Mover y herramientas es de un dedo:
+  Vértice 3 %, Centro arista/cara 2,8 % y Arista 2 % del ancho, en pantalla. Radios
+  mayores atrapaban casi toda la malla al alejar la vista y el elemento no se movía.
 - Mover/Rotar/Escalar ofrecen snap Arista (cualquier punto del segmento) separado
   de Centro arista. No se llama secante; reutiliza el candidato geométrico EDGE.
 

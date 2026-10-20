@@ -203,8 +203,10 @@ def query_candidate(payload: dict, previous: dict | None = None,
                 "screen": camera.project(_cursor().location, found[3]) or [], "distance": 0.0}
     if snap_type not in GEOMETRIC_TYPES:
         raise BadPayload("Unsupported geometric 'snap_type'")
-    default = {"VERTEX": 0.080, "EDGE_CENTER": 0.070, "FACE_CENTER": 0.065,
-               "EDGE": 0.042}.get(snap_type, 0.060)
+    # Radio de un dedo (~3 % del ancho): mayor atrapaba casi toda la malla al alejar
+    # la vista y el elemento movido saltaba siempre a otro vértice o arista.
+    default = {"VERTEX": 0.030, "EDGE_CENTER": 0.028, "FACE_CENTER": 0.028,
+               "EDGE": 0.020}.get(snap_type, 0.028)
     threshold = get_float(payload, "threshold", default)
     if not 0.0 < threshold <= 0.25:
         raise BadPayload("'threshold' must be in (0, 0.25]")
