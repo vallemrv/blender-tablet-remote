@@ -24,6 +24,13 @@ class OutlinerCollectionsTest {
         assertEquals(listOf("root", "a", "b", "child"),
             outlinerTreeRows(collections, collapsed = setOf("a")).map { it.collection?.id })
         assertEquals(listOf("root"), outlinerTreeRows(collections, collapsed = setOf("root")).map { it.collection?.id })
+        // Al abrir, todo plegado salvo la raíz; abrir «a» muestra solo su rama.
+        val closed = com.blendertablet.remote.ui.collapsedExcept(collections, emptySet())
+        assertEquals(listOf("root", "a", "b"), outlinerTreeRows(collections, collapsed = closed).map { it.collection?.id })
+        assertEquals(listOf("root", "a", "child", "b"), outlinerTreeRows(collections,
+            collapsed = com.blendertablet.remote.ui.collapsedExcept(collections, setOf("a"))).map { it.collection?.id })
+        assertEquals(listOf("root"), outlinerTreeRows(collections,
+            collapsed = com.blendertablet.remote.ui.collapsedExcept(collections, setOf("!root"))).map { it.collection?.id })
 
     }
     @Test fun searchRevealsObjectsInsideCollapsedBranchesAndKeepsEmptyCollectionMatches() {

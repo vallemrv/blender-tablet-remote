@@ -12,8 +12,8 @@ android {
         applicationId = "com.blendertablet.remote"
         minSdk = 26
         targetSdk = 36
-        versionCode = 34
-        versionName = "0.1.33"
+        versionCode = 35
+        versionName = "0.1.34"
     }
 
     buildFeatures { compose = true }

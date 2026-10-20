@@ -52,11 +52,13 @@ fun OutlinerMenu(
     var moveToCollection by remember { mutableStateOf<List<String>?>(null) }
     var createTargets by remember { mutableStateOf(emptyList<String>()) }
     var renameCollection by remember { mutableStateOf<OutlinerCollection?>(null) }
-    var collapsed by remember { mutableStateOf(emptySet<String>()) }
+    // Cada apertura empieza plegada (solo la raíz abierta): en la tablet un árbol
+    // desplegado entero obliga a desplazarse para encontrar nada.
+    var expanded by remember { mutableStateOf(emptySet<String>()) }
     val width = (LocalConfiguration.current.screenWidthDp - 32).coerceIn(280, 560).dp
     val maxHeight = (LocalConfiguration.current.screenHeightDp - 100).coerceAtLeast(140).dp
     Box {
-        PillButton("Outliner", selected = open, enabled = connected) { onOpen(); open = true }
+        PillButton("Outliner", selected = open, enabled = connected) { onOpen(); expanded = emptySet(); query = ""; open = true }
         DropdownMenu(open && connected, { open = false }, Modifier.width(width).heightIn(max = maxHeight),
             containerColor = Ink.PanelSolid) {
             Column(Modifier.padding(horizontal = 10.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -78,13 +80,13 @@ fun OutlinerMenu(
                     modifier = Modifier.fillMaxWidth().background(Color.White.copy(alpha = .06f), RoundedCornerShape(8.dp)).padding(10.dp),
                     decorationBox = { inner -> Box { if (query.isEmpty()) Text("Buscar objeto o colección…", color = Ink.Faint, fontSize = 13.sp); inner() } })
                 if (!editable) Text("Termina la herramienta y entra en Object para modificar objetos.", color = Ink.Muted, fontSize = 11.sp)
-                val rows = outlinerTreeRows(collections, objects, collapsed, query)
+                val rows = outlinerTreeRows(collections, objects, collapsedExcept(collections, expanded), query)
                 if (rows.isEmpty()) Text("No hay coincidencias.", color = Ink.Muted, fontSize = 12.sp)
                 rows.forEach { entry ->
                     val collection = entry.collection
                     if (collection != null) {
                         CollectionRow(collection, entry.depth, entry.expanded, entry.hasChildren,
-                            onToggle = { collapsed = if (collection.id in collapsed) collapsed - collection.id else collapsed + collection.id },
+                            onToggle = { expanded = toggled(expanded, collection) },
                             toggleEnabled = query.isBlank(),
                             onRename = if (editable && collection.editable && !collection.root) ({
                                 renameCollection = collection; open = false
@@ -158,7 +160,7 @@ fun OutlinerMenu(
         onDismiss = { createCollection = false; open = true },
         onCreate = { name, parent, ids ->
             onCollection("CREATE", mapOf("name" to name, "parent_id" to parent, "object_ids" to ids))
-            collapsed = emptySet(); query = ""; createCollection = false; open = true
+            expanded = emptySet(); query = ""; createCollection = false; open = true
         })
     moveToCollection?.let { target ->
         AlertDialog(onDismissRequest = { moveToCollection = null; open = true }, containerColor = Ink.PanelSolid,
@@ -170,7 +172,7 @@ fun OutlinerMenu(
                     }
                     CollectionPicker(collections, editable) { collection ->
                         onCollection("MOVE_OBJECTS", mapOf("collection_id" to collection.id, "object_ids" to target))
-                        collapsed = emptySet(); query = ""; moveToCollection = null; open = true
+                        expanded = emptySet(); query = ""; moveToCollection = null; open = true
                     }
                 }
             },
@@ -239,13 +241,23 @@ private fun CollectionRow(
     }
 }
 
+/** Plegadas todas salvo la raíz y las que el usuario ha abierto en esta apertura. */
+internal fun collapsedExcept(collections: List<OutlinerCollection>, expanded: Set<String>): Set<String> =
+    collections.filter { if (it.root) "!" + it.id in expanded else it.id !in expanded }.map { it.id }.toSet()
+
+/** La raíz se abre por defecto: tocarla la añade al conjunto para poder plegarla. */
+private fun toggled(expanded: Set<String>, collection: OutlinerCollection): Set<String> {
+    val key = if (collection.root) "!" + collection.id else collection.id
+    return if (key in expanded) expanded - key else expanded + key
+}
+
 @Composable
 private fun CollectionPicker(collections: List<OutlinerCollection>, enabled: Boolean, onChoose: (OutlinerCollection) -> Unit) {
-    var collapsed by remember { mutableStateOf(emptySet<String>()) }
-    outlinerTreeRows(collections, collapsed = collapsed).forEach { row ->
+    var expanded by remember { mutableStateOf(emptySet<String>()) }
+    outlinerTreeRows(collections, collapsed = collapsedExcept(collections, expanded)).forEach { row ->
         row.collection?.let { collection ->
             CollectionRow(collection, row.depth, row.expanded, row.hasChildren,
-                onToggle = { collapsed = if (collection.id in collapsed) collapsed - collection.id else collapsed + collection.id },
+                onToggle = { expanded = toggled(expanded, collection) },
                 onChoose = { onChoose(collection) }, chooseEnabled = enabled && collection.editable)
         }
     }

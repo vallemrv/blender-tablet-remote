@@ -76,18 +76,20 @@ fun ModifierPanel(state: BlenderState, actions: ModifierActions, modifier: Modif
     FloatingPanel(modifier.widthIn(max = 300.dp).heightIn(max = 560.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Header(state, actions)
+            // Cada apertura del panel (y cada objeto) empieza con todo plegado; solo se
+            // abre solo un modificador recién añadido.
+            val names = state.modifiers.map { it.name }
+            var open by remember(state.activeObject) { mutableStateOf<String?>(null) }
+            var known by remember(state.activeObject) { mutableStateOf(names) }
+            if (names != known) {
+                open = nextOpenModifier(open, known, names)
+                known = names
+            }
             Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (state.vertexGroupsAvailable) VertexGroupControls(state, actions.group)
                 if (state.modifiers.isEmpty()) Empty()
                 else {
-                    val names = state.modifiers.map { it.name }
-                    var open by remember { mutableStateOf(names.lastOrNull()) }
-                    var known by remember { mutableStateOf(names) }
-                    if (names != known) {
-                        open = nextOpenModifier(open, known, names)
-                        known = names
-                    }
                     state.modifiers.forEachIndexed { index, item ->
                         ModifierCard(item, index, state, actions, expanded = item.name == open) {
                             open = if (open == item.name) null else item.name

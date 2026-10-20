@@ -1597,7 +1597,10 @@ no quedan archivos o referencias temporales.
   usa la unidad del preset. Matriz ofrece «Unir primera y última» (cierra la vuelta
   circular) y lo acompaña de Fusionar, que Blender necesita para aplicarlo.
 - El panel de modificadores es un acordeón: un solo modificador desplegado; tocar
-  su nombre o la flecha lo abre/cierra y el recién añadido se abre solo.
+  su nombre o la flecha lo abre/cierra y el recién añadido se abre solo. Cada
+  apertura del panel o cambio de objeto empieza con todos plegados. El Outliner
+  (y su selector de colección) se abre también plegado, con solo la raíz abierta;
+  la búsqueda sigue revelando las ramas coincidentes.
 - Deformación simple vive en Modificadores: cuatro métodos nativos, eje, ángulo en
   grados o factor según método, límites 0–1, bloqueos y objeto de origen opcional.
   Angle/factor comparten almacenamiento nativo: se escribe solo el activo, tras
