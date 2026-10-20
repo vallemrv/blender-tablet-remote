@@ -7,7 +7,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -21,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -55,7 +55,7 @@ import kotlin.math.roundToInt
  * intensidad, trazo, borrar) queda al alcance sin abrir nada.
  */
 @Composable
-fun BoxScope.MaterialWorkspace(state: AppUiState, vm: MainViewModel) {
+fun BoxScope.MaterialWorkspace(state: AppUiState, vm: MainViewModel, onTrayHeight: (Int) -> Unit = {}) {
     val material = state.blender.material
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -118,7 +118,8 @@ fun BoxScope.MaterialWorkspace(state: AppUiState, vm: MainViewModel) {
         stylusOnly = state.materialStylusOnly,
         vm = vm,
         onColor = { colorInitial = material.layers.firstOrNull { it.id == material.activeLayer }?.color ?: material.color; colorsOpen = true },
-        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(Metrics.EdgeMargin),
+        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { onTrayHeight(it.height) }
+            .padding(Metrics.EdgeMargin),
     )
 
     if (colorsOpen) SimpleColorDialog(colorInitial, { colorsOpen = false }) {
@@ -474,80 +475,66 @@ private fun MaterialBrushTray(
         // restaurar. El ambiente elegido tiene su propio giro, así que 0° significa
         // el de ese ambiente, no mirar al eje X del mundo.
         val moved = material.lightRotation.roundToInt() != 0 || (material.lightEnergy * 100).roundToInt() != 100
-        FloatingPanel(modifier) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Icon(AppIcons.material("LIGHTS"), contentDescription = null, tint = Ink.Accent)
-                    Text(
-                        if (moved) "Luz · ${material.lightRotation.roundToInt()}° · ${(material.lightEnergy * 100).roundToInt()} %"
-                        else "Luz · original del ambiente",
-                        color = if (moved) Ink.OnPanel else Ink.Ok, fontSize = 13.sp,
-                    )
-                    PillButton("Restaurar luces", enabled = moved) {
-                        vm.materialCommand("material.lighting", mapOf("phase" to "reset"))
-                    }
-                }
-                Text("Arrastra en horizontal para girar la luz y en vertical para subirla o bajarla de intensidad. " +
-                    "Blender no permite elevar el foco del ambiente. Dos dedos navegan.",
-                    color = Ink.Faint, fontSize = 11.sp)
+        SingleLineTray("Luz", modifier = modifier, hintKey = "material.lights",
+            help = "Arrastra en horizontal para girar la luz y en vertical para cambiar su intensidad. " +
+                "Blender no permite elevar el foco del ambiente. Dos dedos navegan.") {
+            HoverHelp("Giro e intensidad", if (moved) "Giro e intensidad respecto al ambiente." else "Original del ambiente.") {
+                Text(if (moved) "${material.lightRotation.roundToInt()}° · ${(material.lightEnergy * 100).roundToInt()} %"
+                    else "0° · 100 %", color = if (moved) Ink.OnPanel else Ink.Ok, fontSize = 16.sp)
+            }
+            IconAction(AppIcons.Reset, "Restaurar luces", enabled = moved) {
+                vm.materialCommand("material.lighting", mapOf("phase" to "reset"))
             }
         }
         return
     }
     val activeLayer = material.layers.firstOrNull { it.id == material.activeLayer }
-    FloatingPanel(modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(
-                Modifier.horizontalScroll(rememberScrollState()),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                PillButton("Color", selected = material.paintKind == "COLOR") {
-                    vm.materialSettings(mapOf("paint_kind" to "COLOR", "erase" to false, "interaction" to "PAINT"))
-                }
-                PillButton("Material", selected = material.paintKind == "MATERIAL") {
-                    vm.materialSettings(mapOf("paint_kind" to "MATERIAL", "erase" to false, "interaction" to "PAINT"))
-                }
-                Row(
-                    Modifier.clip(RoundedCornerShape(9.dp)).clickableNoRipple(onColor).padding(horizontal = 4.dp, vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(Modifier.size(26.dp).background(parseColor(activeLayer?.color ?: material.color), CircleShape)
-                        .border(1.dp, Ink.Divider, CircleShape))
-                    Spacer(Modifier.width(8.dp))
-                    Column {
-                        Text(
-                            activeLayer?.label ?: if (material.paintKind == "COLOR") "Pintar color"
-                                else material.presets.firstOrNull { it.id == material.preset }?.label ?: "Material",
-                            color = if (material.erase) Ink.Warn else Ink.Accent, fontSize = 13.sp,
-                        )
-                        Text(if (material.paintKind == "COLOR") "Conserva brillo y relieve" else "Cambia el material completo", color = Ink.Faint, fontSize = 10.sp)
-                    }
-                }
-                MaterialSlider("Tamaño", material.radius, .005f.. .25f) { vm.materialSettings(mapOf("radius" to it)) }
-                MaterialSlider("Intensidad", material.strength, 0f..1f) { vm.materialSettings(mapOf("strength" to it)) }
-                Text(
-                    material.brushes.firstOrNull { it.id == material.brush }?.label.orEmpty(),
-                    color = Ink.Muted, fontSize = 12.sp,
-                )
-            }
-            Text(materialHint(material, stylusOnly), color = Ink.Faint, fontSize = 11.sp, maxLines = 2)
+    val (alert, help) = materialHint(material, stylusOnly)
+    SingleLineTray(
+        title = activeLayer?.label ?: if (material.erase) "Borrar" else if (material.paintKind == "COLOR") "Color"
+            else material.presets.firstOrNull { it.id == material.preset }?.label ?: "Material",
+        modifier = modifier, alert = alert, help = help, hintKey = "material.paint",
+    ) {
+        ChoiceIcon(listOf("COLOR", "MATERIAL"), if (material.paintKind == "MATERIAL") "MATERIAL" else "COLOR", "Pintar",
+            { if (it == "MATERIAL") AppIcons.PaintMaterial else AppIcons.PaintColor },
+            { if (it == "MATERIAL") "Material completo" else "Solo color" }, active = !material.erase) {
+            vm.materialSettings(mapOf("paint_kind" to it, "erase" to false, "interaction" to "PAINT"))
         }
+        HoverHelp("Color del pincel", "Toca para elegir otro color.") {
+            Box(Modifier.size(Metrics.Touch).clip(RoundedCornerShape(10.dp)).clickableNoRipple(onColor),
+                contentAlignment = Alignment.Center) {
+                Box(Modifier.size(28.dp).background(parseColor(activeLayer?.color ?: material.color), CircleShape)
+                    .border(1.dp, if (material.erase) Ink.Warn else Ink.Divider, CircleShape))
+            }
+        }
+        TrayNumber("Tamaño", material.radius.toDouble(), .005, .005, .25, { formatToolDistance(it * 100, 1) },
+            { text, current -> com.blendertablet.remote.model.NumericExpression.evaluate(text, current * 100)?.div(100) },
+            onValue = { vm.materialSettings(mapOf("radius" to it.toFloat())) }, suffix = "%", width = 136.dp,
+            help = "Tamaño del pincel · relativo a la altura del vídeo")
+        TrayNumber("Intensidad", material.strength.toDouble(), .01, 0.0, 1.0, { formatToolDistance(it * 100, 0) },
+            { text, current -> com.blendertablet.remote.model.NumericExpression.evaluate(text, current * 100)?.div(100) },
+            onValue = { vm.materialSettings(mapOf("strength" to it.toFloat())) }, suffix = "%", width = 150.dp)
     }
 }
 
-/** Una sola línea de ayuda: la del obstáculo actual, no la de todo el flujo. */
-private fun materialHint(material: MaterialState, stylusOnly: Boolean): String = when {
-    material.paintBlocked ->
-        "El pincel admite ${material.paintLimit} caras base. Puedes aplicar materiales completos o usar una base más ligera con Subdivisión sin aplicar."
-    material.targets.isEmpty() -> "Toca un objeto para elegirlo. La lista de arriba permite varios o piezas interiores."
-    material.interaction == "SELECT" -> "Modo selección: el toque elige objetos. Vuelve al pincel del rail para pintar."
-    !material.paintReady -> "Aplica una base a la selección para poder pintar encima."
-    material.layers.any { it.id == material.activeLayer && !it.visible } -> "La capa elegida está oculta. Muéstrala en Capas para pintar."
-    material.erase -> "Borrar retira pintura de la capa elegida en Capas; conserva las demás."
-    material.scope != "ALL" -> "El trazo queda dentro de la zona elegida. Puedes cambiarla en el icono Zona."
-    stylusOnly -> "Lápiz pinta · dedo gira · dos dedos navegan. La presión modula la intensidad."
-    else -> "Dedo o lápiz pintan · dos dedos navegan. El tinte se conserva al cambiar de material."
+/** Un aviso (lo que impide pintar ahora) y una ayuda de uso, cada uno en su línea. */
+private fun materialHint(material: MaterialState, stylusOnly: Boolean): Pair<String?, String> {
+    val alert = when {
+        material.paintBlocked ->
+            "El pincel admite ${material.paintLimit} caras base. Aplica materiales completos o usa una base más ligera."
+        material.targets.isEmpty() -> "Toca un objeto para elegirlo. La lista de arriba permite varios o piezas interiores."
+        material.interaction == "SELECT" -> "Modo selección: el toque elige objetos. Vuelve al pincel del rail para pintar."
+        !material.paintReady -> "Aplica una base a la selección para poder pintar encima."
+        material.layers.any { it.id == material.activeLayer && !it.visible } -> "La capa elegida está oculta. Muéstrala en Capas para pintar."
+        else -> null
+    }
+    val help = when {
+        material.erase -> "Borrar retira pintura de la capa elegida en Capas; conserva las demás."
+        material.scope != "ALL" -> "El trazo queda dentro de la zona elegida. Puedes cambiarla en el icono Zona."
+        stylusOnly -> "Lápiz pinta · dedo gira · dos dedos navegan. La presión modula la intensidad."
+        else -> "Dedo o lápiz pintan · dos dedos navegan. El tinte se conserva al cambiar de material."
+    }
+    return alert to help
 }
 
 @Composable
@@ -631,15 +618,6 @@ private fun ApplyButton(label: String, enabled: Boolean, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Text(label, color = if (enabled) Ink.Accent else Ink.Faint, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-private fun MaterialSlider(label: String, remote: Float, range: ClosedFloatingPointRange<Float>, choose: (Float) -> Unit) {
-    var value by remember(remote) { mutableFloatStateOf(remote.coerceIn(range)) }
-    Column(Modifier.width(150.dp)) {
-        Text("$label · ${(value * 100).roundToInt()} %", color = Ink.Muted, fontSize = 11.sp)
-        Slider(value, { value = it }, valueRange = range, onValueChangeFinished = { choose(value) }, modifier = Modifier.height(30.dp))
     }
 }
 

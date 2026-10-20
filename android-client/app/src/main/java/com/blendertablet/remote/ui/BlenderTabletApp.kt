@@ -269,7 +269,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
         toolSessionArmed = toolSession.armed,
     )
     val trayInset by animateDpAsState(
-        targetValue = if (objectPropertiesVisible) objectTrayHeight else if (materialActive) 104.dp else if (sculptActive) 132.dp else if (trayPresent) toolTrayHeight else 0.dp,
+        targetValue = if (objectPropertiesVisible) objectTrayHeight else if (trayPresent) toolTrayHeight else 0.dp,
         animationSpec = tween(160),
         label = "tray-inset",
     )
@@ -582,8 +582,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                 if (state.blender.cad.workspace) CadWorkspace(state, vm, cadStackOpen, { cadStackOpen = it },
                     stackBottom = cadTrayHeight + cadFooterHeight + Metrics.EdgeMargin * 2,
                     onTrayHeight = { cadTrayHeightPx = it })
-                if (sculptActive) SculptWorkspace(state, vm)
-                if (materialActive) MaterialWorkspace(state, vm)
+                if (sculptActive) SculptWorkspace(state, vm) { toolTrayHeightPx = it }
+                if (materialActive) MaterialWorkspace(state, vm) { toolTrayHeightPx = it }
 
                 ViewFooter(
                     contextKeys = if (state.blender.cad.workspace && state.blender.cad.activeSketchId != null) ({ CadViewActions(state, vm) }) else null,

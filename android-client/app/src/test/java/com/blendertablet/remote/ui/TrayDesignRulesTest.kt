@@ -80,7 +80,7 @@ class TrayDesignRulesTest {
     /** Controles directos de la fila de una bandeja: el bloque de contenido de SingleLineTray. */
     private fun rowControls(code: String, marker: String): List<String> {
         val row = code.substringAfter(marker).substringAfter(") {").substringBefore("\n}\n")
-        return Regex("""\b(TransformAxisInputs|IconAction|SnapControl|ConstraintChoice|ChoiceIcon|PillButton|FalloffChoice)\(""")
+        return Regex("""\b(TransformAxisInputs|IconAction|SnapControl|ConstraintChoice|ChoiceIcon|PillButton|FalloffChoice|TrayNumber)\(""")
             .findAll(row).map { it.groupValues[1] }.toList()
     }
 
@@ -109,5 +109,19 @@ class TrayDesignRulesTest {
         listOf("even", "flip", "clamp", "remove_loop", "boundary", "merge", "undo_point", "new_cut", "close_cut",
             "clear_inner", "clear_outer", "fill", "merge_loop", "caps", "rotate_source")
             .forEach { assertNotNull("Sin icono: $it", AppIcons.trayToggle(it)) }
+    }
+
+    @Test fun noTrayScrollsHorizontally() {
+        for (name in trays) assertFalse("$name desplaza su fila", source(name).contains(".horizontalScroll("))
+    }
+
+    @Test fun sculptAndMaterialsShowTheirTwoNumbersAndIconsWithDetailUnderMore() {
+        val sculpt = source("SculptWorkspace")
+        assertEquals(listOf("TrayNumber", "TrayNumber", "IconAction", "IconAction"), rowControls(sculpt, "hintKey = \"sculpt\""))
+        for (option in listOf("Simetría", "Presión", "Dyntopo", "Multires")) assertTrue(sculpt.contains("TrayOption(\"$option\""))
+        assertFalse(sculpt.contains("Slider("))
+        val material = source("MaterialWorkspace")
+        assertEquals(listOf("ChoiceIcon", "TrayNumber", "TrayNumber"), rowControls(material, "hintKey = \"material.paint\""))
+        assertFalse(material.contains("MaterialSlider("))
     }
 }

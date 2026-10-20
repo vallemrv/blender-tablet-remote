@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -21,6 +22,7 @@ import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlin.math.abs
 
 /** Recorrido del lápiz por cada paso al deslizar sobre un número. */
@@ -124,5 +126,50 @@ private suspend fun AwaitPointerEventScope.consumeUntilUp(id: PointerId) {
         val change = awaitPointerEvent().changes.firstOrNull { it.id == id } ?: return
         change.consume()
         if (!change.pressed) return
+    }
+}
+
+/**
+ * Número sencillo de bandeja (radio, fuerza, tamaño…): muestra su valor, desliza a
+ * pasos dentro de [min]..[max], se escribe con cuentas y, si hay neutro, se restablece.
+ * [toText]/[fromText] convierten entre el valor real y lo que se lee (p. ej. %).
+ */
+@Composable
+fun TrayNumber(
+    caption: String,
+    value: Double,
+    step: Double,
+    min: Double,
+    max: Double,
+    toText: (Double) -> String,
+    fromText: (String, Double) -> Double?,
+    onValue: (Double) -> Unit,
+    suffix: String = "",
+    help: String = caption,
+    neutral: Double? = null,
+    enabled: Boolean = true,
+    width: androidx.compose.ui.unit.Dp = 120.dp,
+) {
+    var pending by remember { mutableStateOf<Double?>(null) }
+    androidx.compose.runtime.LaunchedEffect(value) { pending = null }
+    val shown = pending ?: value
+    var draft by remember { mutableStateOf<String?>(null) }
+    var base by remember { mutableStateOf(shown) }
+    fun send(raw: Double) {
+        if (!raw.isFinite()) return
+        val next = raw.coerceIn(min, max)
+        pending = next; draft = null
+        onValue(next)
+    }
+    HoverHelp(help, numberHelp(neutral != null), enabled = enabled) {
+        ScrubNumber(enabled = enabled, onScrubStart = { base = shown },
+            onScrub = { steps -> send(base + steps * step) },
+            onReset = neutral?.let { { send(it) } }) { field ->
+            CompactNumericField(draft ?: toText(shown), { draft = it }, modifier = field.width(width),
+                fontSize = 16.sp, textAlign = androidx.compose.ui.text.style.TextAlign.End, selectAllOnFocus = true,
+                caption = caption, suffix = suffix,
+                textColor = if (enabled) Ink.OnPanel else Ink.Faint,
+                onDone = { draft?.let { fromText(it, shown) }?.let(::send); draft = null })
+        }
     }
 }
