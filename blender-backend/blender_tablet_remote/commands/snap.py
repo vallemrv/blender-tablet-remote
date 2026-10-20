@@ -137,7 +137,9 @@ def query_edit_surface_candidate(obj, u, v, enabled=True, mode="AUTO", previous=
                 break
         return choose_sticky_candidate(eligible, previous, max(thresholds.values()))
 
-    thresholds = ({"VERTEX": .035, "EDGE_CENTER": .028, "EDGE": .042} if mode == "AUTO"
+    # AUTO, como el cuchillo de Blender: vértice cercano, si no el punto de la arista
+    # bajo el dedo; el centro de arista solo casi encima, para poder dirigir el corte.
+    thresholds = ({"VERTEX": .035, "EDGE_CENTER": .010, "EDGE": .042} if mode == "AUTO"
                   else {mode: {"VERTEX": .080, "EDGE_CENTER": .070, "EDGE": .042}[mode]})
     if threshold is not None:
         thresholds = {kind: threshold for kind in thresholds}

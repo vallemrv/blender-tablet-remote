@@ -8,6 +8,24 @@ from ..errors import CommandError
 
 _EPS = 1e-6
 _EPS2 = _EPS * _EPS
+# Tolerancia geométrica relativa al tamaño de la malla: los puntos sondeados llegan
+# con error float32 proporcional a las coordenadas (≈1e-4 en piezas de 1400 mm),
+# y una tolerancia absoluta los dejaba fuera del plano y de las aristas.
+_RELATIVE_EPS = 1e-6
+# Las fracciones a lo largo de un segmento (0–1) no dependen del tamaño.
+_T_EPS = 1e-6
+
+
+def _use_mesh_scale(bm):
+    global _EPS, _EPS2
+    if bm.verts:
+        low = Vector([min(v.co[i] for v in bm.verts) for i in range(3)])
+        high = Vector([max(v.co[i] for v in bm.verts) for i in range(3)])
+        size = max((high - low).length, max(abs(c) for c in (*low, *high)))
+    else:
+        size = 1.0
+    _EPS = max(1e-6, size * _RELATIVE_EPS * 10)
+    _EPS2 = _EPS * _EPS
 
 
 def cut_polyline(bm, anchors, closed: bool) -> dict:
@@ -16,6 +34,7 @@ def cut_polyline(bm, anchors, closed: bool) -> dict:
     Los interiores se acumulan sin crear vértices hasta alcanzar otro borde. La
     cadena se integra en una sola división de la cara, conservando sus n-gons.
     """
+    _use_mesh_scale(bm)
     points = [Vector(p) for p in anchors]
     if closed and len(points) >= 3:
         points.append(points[0])
@@ -82,18 +101,18 @@ def _surface_spans(bm, a, b):
                     factors.append(t)
         factors = sorted(set(factors))
         for start, end in zip(factors, factors[1:]):
-            if end - start > _EPS and _point_in_face(face, a.lerp(b, (start + end) * .5)):
+            if end - start > _T_EPS and _point_in_face(face, a.lerp(b, (start + end) * .5)):
                 spans.append((start, end, face))
     covered = 0.0
     result = []
     for start, end, face in sorted(spans, key=lambda item: (item[0], -item[1])):
-        if end <= covered + _EPS:
+        if end <= covered + _T_EPS:
             continue
-        if start > covered + _EPS:
+        if start > covered + _T_EPS:
             break
         result.append((face, a.lerp(b, covered), a.lerp(b, end)))
         covered = end
-    if covered < 1.0 - _EPS:
+    if covered < 1.0 - _T_EPS:
         raise CommandError("El trazo sale de la superficie; marca un punto en el borde antes de continuar",
                            code="disconnected_surface")
     return result
@@ -117,7 +136,7 @@ def _resolve_boundary(face, point):
             return vert
     for edge in face.edges:
         t, distance = _closest_on_segment(point, edge)
-        if distance < _EPS2 and _EPS < t < 1 - _EPS:
+        if distance < _EPS2 and _T_EPS < t < 1 - _T_EPS:
             return bmesh.utils.edge_split(edge, edge.verts[0], t)[1]
     raise CommandError("Cut endpoint is not on the face boundary", code="disconnected_surface")
 
@@ -157,7 +176,7 @@ def _segment_edge_cross(a, b, edge):
         return None
     s = (p0 - a).cross(d2).dot(n) / n.length_squared
     t = (p0 - a).cross(d1).dot(n) / n.length_squared
-    if not (-_EPS <= s <= 1 + _EPS and -_EPS <= t <= 1 + _EPS):
+    if not (-_T_EPS <= s <= 1 + _T_EPS and -_T_EPS <= t <= 1 + _T_EPS):
         return None
     s, t = max(0.0, min(1.0, s)), max(0.0, min(1.0, t))
     if (a + d1 * s - p0 - d2 * t).length_squared > _EPS2:

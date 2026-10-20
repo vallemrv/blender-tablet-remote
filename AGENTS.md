@@ -124,6 +124,11 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
 - Knife acumula puntos interiores y divide una cara una sola vez en dos n-gons. No se
   sustituye por triangulación punto a punto. Sondea el BMesh vivo y admite n-gons
   cóncavos de cortes previos; cada segmento recorre la superficie y nunca el volumen.
+  Sus tolerancias de distancia son relativas al tamaño de la malla (1e-5): en piezas
+  milimétricas grandes el error float32 del sondeo superaba la tolerancia absoluta y
+  ningún trazo cortaba. Las fracciones a lo largo del segmento siguen siendo 1e-6.
+  Su snap Auto prefiere el vértice cercano y si no el punto de la arista bajo el dedo;
+  el centro de arista solo gana casi encima (1 % del ancho), para dirigir el corte.
 - El cierre de Tweak identifica `tweak_finished`; Android retira únicamente esa
   sesión MOVE interna y conserva cualquier transformación posterior.
 - Las respuestas UPDATE de Tweak describen una transformación (`mode: MOVE`), no

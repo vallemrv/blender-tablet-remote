@@ -37,6 +37,14 @@ class KnifeGeometryTests(unittest.TestCase):
         self.assertTrue(all(len(f.verts) == 6 for f in self.bm.faces))
         self.assertEqual(len(self.bm.verts), 8)
 
+    def test_millimetre_scale_cut_tolerates_probe_rounding(self):
+        # Coordenadas de ~1400 mm: el sondeo float32 deja los puntos ~1e-4 fuera
+        # del plano y de la arista; con tolerancia absoluta el trazo no cortaba.
+        self.face([(0,1300,0),(400,1300,0),(400,1400,0),(0,1400,0)])
+        self.cut([(120,1300.00008,.00012),(250,1399.99991,-.0001)])
+        self.assertEqual(len(self.bm.faces), 2)
+        self.assertEqual(len(self.bm.verts), 6)
+
     def test_concave_cut_accepts_next_stroke_at_created_vertex(self):
         self.face([(-1,-1,0),(1,-1,0),(1,1,0),(-1,1,0)])
         self.cut([(-1,0,0),(0,.5,0),(1,0,0)])
