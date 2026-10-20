@@ -259,9 +259,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   misma entrega, sin pedir aceptación entre puntos. En ese caso no aplican «una
   incidencia activa» ni «no rediseñar asuntos adyacentes» para lo que el documento
   describe; sí un commit por punto, tests en verde y un único APK al final.
-- Estado de encargos (2026-10-21): encargo por lotes vigente:
-  `~/proyectos/tareas-ui-norma-controles-blender.md` (aplicar la «Norma de controles y
-  gestos»: `AxisSelector`, pulsación larga solo para opciones, pie con iconos). Entregados:
+- Estado de encargos (2026-10-21): no hay ningún encargo por lotes vigente. Entregados:
+  `~/proyectos/tareas-ui-norma-controles-blender.md` (Norma de controles y gestos:
+  `AxisSelector`, pulsación larga solo para opciones, pie con iconos, 0.1.37; la
+  hacen cumplir `ControlNormTest`, `SurfaceCoherenceTest` y `TrayDesignRulesTest`),
   `~/proyectos/tareas-codex-cad-impresion3d.md` (las 6 herramientas CAD),
   `~/proyectos/tareas-ui-coherencia-blender.md` (A–E, 19-10),
   `~/proyectos/tareas-ui-bandejas-blender.md` (0.1.7) y
@@ -463,6 +464,11 @@ teclas del pie usan iconos; la letra de Blender puede ir como marca pequeña en 
 Todo control táctil ≥ 48 dp con 8 dp de separación. Color solo para estado; ejes
 rojo/verde/azul. Fila fija sin scroll: `[Nombre] [valor/ejes] [1–2 iconos] [⋯] [× ✓]`,
 como mucho 5 controles además de título y salidas (el `AxisSelector` cuenta como uno).
+
+Implementación (0.1.37): Plano aparece en Mover, Escalar (escalar en un plano, como
+Shift+Z S en Blender) y Extruir; en Rotar no tiene sentido. Tweak no restringe ejes,
+así que no muestra selector. Los ejes de esquema (X/Y/Z de Revolución) y el eje X/Y
+de la Revolución CAD usan el mismo `AxisSelector` sin Libre.
 
 **Al añadir una función nueva, comprobar:** zona (cuatro bordes), componente común,
 gestos de esta tabla, un único sitio por acción, ≤ 5 visibles, ayuda al acercar el lápiz,
