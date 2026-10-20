@@ -96,12 +96,12 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   deshacerlo conserva los Loop Cut ya confirmados.
 - El toque de Loop Cut elige el anillo y crea el corte a mitad de arista (Posición 0 %); cada nuevo
   corte comienza sin desplazamiento. La bandeja permite porcentaje o mm/cm/m desde
-  el centro, además de volver a Centro. Las medidas físicas incluyen la escala del
+  el centro; mantener pulsada la Posición vuelve al centro. Las medidas físicas incluyen la escala del
   objeto y de escena; los cortes múltiples conservan su espaciado al desplazarse.
 - Activar Corte de loop deselecciona la malla y solo arma la herramienta. El
   primer corte exige un toque válido en el visor; nunca usa una selección previa.
-  Los botones −/+ de Posición acumulan el valor local pendiente. La escritura y
-  los botones envían posición exacta incluso con Incremento; el arrastre conserva
+  Deslizar sobre Posición acumula pasos de 1 % sobre el valor local pendiente. La
+  escritura y el deslizamiento envían posición exacta incluso con Incremento; el arrastre conserva
   el snap y el paso métrico fino se adapta al recorrido del corte.
 - Al cambiar herramienta/modo, cancelar o pasar a segundo plano, Android retira
   las respuestas y colas de la interacción anterior. Cierra también herramientas
@@ -243,9 +243,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   describe; sí un commit por punto, tests en verde y un único APK al final.
 - Estado de encargos (2026-10-20): no hay ningún encargo por lotes vigente. Entregados:
   `~/proyectos/tareas-codex-cad-impresion3d.md` (las 6 herramientas CAD),
-  `~/proyectos/tareas-ui-coherencia-blender.md` (A–E, 19-10) y
-  `~/proyectos/tareas-ui-bandejas-blender.md` (0.1.7). Pendiente del usuario: probar en la
-  tablet la interfaz unificada y las bandejas. Al recibir un encargo nuevo, anotarlo aquí
+  `~/proyectos/tareas-ui-coherencia-blender.md` (A–E, 19-10),
+  `~/proyectos/tareas-ui-bandejas-blender.md` (0.1.7) y
+  `~/proyectos/tareas-ui-bandejas-calmadas-blender.md` (bandejas tranquilas para lápiz,
+  0.1.18). Pendiente del usuario: probar en la tablet las bandejas tranquilas. Al recibir un encargo nuevo, anotarlo aquí
   y moverlo a entregados al cerrarlo. La ficha de la wiki es
   `~/wiki-proyectos/proyectos/blender-remoto.md`.
 - Cada cambio debe ser pequeño y centrado en el comportamiento comunicado.
@@ -282,7 +283,7 @@ nuevas superficies y la adaptación gradual de las existentes.
 | Rail izquierdo | Herramientas de uso frecuente que cambian la intención del gesto: seleccionar, mover, rotar, escalar, Tweak y herramientas propias del modo. Permanece abierto; admite desplazamiento vertical cuando haga falta. |
 | Rail derecho | Columna común SELECCIÓN (RESTRICCIONES geométricas dentro del boceto CAD) y acceso a inspectores contextuales: modificadores, pila CAD, biblioteca de materiales y sus propiedades. Comparten posición, márgenes, apertura y cierre; respetan el selector de modos y el pie de vistas. |
 | Barra superior (top) | Archivo, Escena, Outliner, conexión y Diagnóstico a la izquierda; Wireframe, Deshacer, Rehacer y Ojo a la derecha. El selector de modos conserva su lugar bajo el ojo y deja CAD siempre al final. |
-| Barra inferior (bottom) | Parámetros de la herramienta activa o propiedades del objeto seleccionado. Una fila de controles con scroll horizontal y la ayuda debajo, usando `SingleLineTray` al adaptar una bandeja. |
+| Barra inferior (bottom) | Parámetros de la herramienta activa o propiedades del objeto seleccionado. Una fila fija sin scroll (`SingleLineTray`): valor principal o X/Y/Z, 1–2 iconos y «⋯ Más» con Precisión · Referencia · Forma. |
 
 - Una acción conserva nombre, icono y comportamiento en todos sus accesos. Se
   obtiene el símbolo por intención desde `AppIcons`; una intención distinta debe
@@ -297,13 +298,30 @@ nuevas superficies y la adaptación gradual de las existentes.
 - En bottom, el título es breve y no envuelve. Las secciones de propiedades se
   eligen con un desplegable y muestran únicamente sus campos; no mezclar todas
   las secciones como pestañas más controles en la misma fila.
-- Los números editables ofrecen los mismos `−/+`, repetición mantenida, unidades
-  y protección de borradores. Las propiedades inmediatas no muestran salidas;
-  las operaciones con preview mantienen Cancelar/Confirmar fijos a la derecha.
-- Por petición del usuario, las bandejas recuperan los parámetros directos en una
-  fila desplazable y sitúan la ayuda en una segunda fila bajo los controles. No se
-  intercala texto de instrucciones entre campos. Se conserva el tamaño táctil y
-  los paneles vecinos reservan la altura real de la bandeja.
+- Bandejas tranquilas (encargo 2026-10-20, sustituye a la fila desplazable anterior):
+  - Icono = acción o interruptor, de `AppIcons`, sin texto pegado; texto = solo
+    números, unidades y el título. Un estado con varias opciones es el icono de la
+    opción activa (`ChoiceIcon`): perfil de caída, esquinas, orientación, snap y la
+    restricción como trípode con los ejes activos en su color. No hay pastillas
+    «etiqueta: valor». Color = estado (acento activo, gris inactivo; ejes R/V/A).
+  - Todo control táctil mide 48 dp (`Metrics.Touch`): iconos, campos, pasos, ×/✓.
+  - Fila fija sin scroll: `[Nombre] [valor/ejes] [icono][icono] [⋯] … [×][✓]`.
+    `TrayRow` mide antes nombre, Más y salidas, que nunca se desplazan.
+    «⋯ Más» (`TrayMore`) es un panel vertical sobre la bandeja con los grupos fijos
+    Precisión (snap, paso, unidad), Referencia (centro, orientación, fuente, propio,
+    otra selección, destino, ejes) y Forma (proporcional, radio, perfil y opciones
+    propias); cada opción (`TrayOption`) tiene nombre, control y una frase.
+  - Números (`ScrubNumber`): deslizar en horizontal avanza pasos enteros del paso o
+    snap activo (14 dp por paso, el primero al superar el umbral táctil); tocar
+    escribe con cuentas; mantener restablece al neutro (0, 0°, 100 %, centro) si lo
+    hay. El nombre corto y la unidad van dentro del campo. Confirmar suelta el foco.
+    Los `−/+` quedan para los pasos de «⋯ Más» y los inspectores.
+  - Bajo la fila: un aviso de bloqueo/error (siempre), un estado vivo (medidas,
+    candidato de snap, qué señalar; siempre) y la ayuda solo las tres primeras
+    apariciones de cada bandeja (`TrayHints`); después queda en el hover del título
+    y en la cabecera de Más. Las propiedades inmediatas no muestran salidas; las
+    previews mantienen Cancelar/Confirmar fijos. Los paneles vecinos reservan la
+    altura medida de cada bandeja (Edit, Tweak, Escultura y Materiales incluidos).
 
 - La selección múltiple está siempre activa en Objeto, Edición, Materiales y CAD,
   sin conmutador «＋ Añadir»: tocar añade, tocar un elemento seleccionado lo quita
@@ -334,7 +352,7 @@ nuevas superficies y la adaptación gradual de las existentes.
 - Nuevo plano, Editar y Finalizar boceto pertenecen al rail izquierdo CAD. El pie
   de vistas permanece en el boceto con Girar 90°, Enderezar, proyección y Encuadrar.
   CAD no aísla automáticamente: Aislar del radial conserva/restaura la visibilidad.
-- Proporcional vive en la bandeja Tweak/Transformar; Auto Merge y Manipulador en
+- Proporcional vive en «⋯ Más» · Forma de Tweak/Transformar; Auto Merge y Manipulador en
   el rail derecho. Los atajos Edit no repiten Cuchillo ni acciones del radial.
 - Los rails izquierdos comparten centrado vertical y cabeceras contextuales:
   HERRAMIENTA/EDITAR, PINCEL, MODO/TRAZO y CROQUIS/OPERACIONES. Referencias se
@@ -348,23 +366,26 @@ nuevas superficies y la adaptación gradual de las existentes.
 - Todos los modos usan iconos y nombres españoles: Objeto, Edición, Materiales,
   Escultura y CAD al final. Dentro de CAD se conserva el selector completo;
   los modos incompatibles con la pieza paramétrica permanecen deshabilitados.
-- La bandeja CAD usa SingleLineTray y TrayExits, con ayuda breve y detalle al
-  acercar el lápiz o pulsar Ayuda. Finalizar boceto y Aplicar modificador tienen
-  iconos propios distintos de Confirmar. Los controles de plano ampliados se
-  desplazan horizontalmente en la misma fila.
+- La bandeja CAD usa SingleLineTray y TrayExits: la fila lleva medidas deslizables,
+  candados de cota (glifo propio `DIMENSION_LOCK`, distinto del candado del Outliner)
+  e iconos de acabado. Extensión, Hasta cara, Sentido, Lado, Medida radio/diámetro,
+  ejes, Destino, Planos guardados, Inclinar/Mover del plano, tipo de cota, Snap y
+  Paso viven en «⋯ Más». Los errores son el aviso fijo y las medidas el estado;
+  la ayuda contextual sigue en el hover del título. Finalizar boceto y Aplicar
+  modificador tienen iconos propios distintos de Confirmar.
 
-- Las bandejas Edit muestran controles directos en una fila desplazable, sin
-  chips numéricos duplicados; Snap sigue en Más. Se retira el límite anterior de
-  cinco grupos a petición expresa del usuario. `toolTrayContents` es el inventario
-  que dibuja y prueba los controles, sin listas paralelas. Las ayudas aparecen
-  debajo de la fila, y cada opción de Más conserva su ayuda debajo de su control.
+- Las bandejas Edit conservan su reparto de controles directos con el lenguaje de
+  las bandejas tranquilas: números deslizables e interruptores con dibujo propio
+  (`AppIcons.trayToggle`); Snap y Paso siguen en Más · Precisión. `toolTrayContents`
+  es el inventario que dibuja y prueba los controles, sin listas paralelas.
   Se mantienen los editores exactos con unidades/cuentas y protección del borrador.
 - Loop Cut muestra cortes, posición desde el centro, Seguir la arista, No salir
   de la cara y Suavidad; Perfil solo con Suavidad e Invertir solo con Seguir la
   arista. Bisel muestra Perfil solo con varios segmentos. Extruir muestra orientación
   solo con eje restringido. Inset y Bridge recuperan sus parámetros directos.
-- Las herramientas por esquema muestran todos sus campos directamente en la fila,
-  conservando ayuda, etiquetas y rangos anunciados por el backend.
+- Las herramientas por esquema muestran en la fila números, ejes X/Y/Z (trípode),
+  enums de valores numéricos e interruptores con dibujo propio (`SchemaIconControls`);
+  las opciones sin dibujo pasan a Más · Forma. Conservan ayuda, etiquetas y rangos.
 - Se recuerdan valores confirmados por herramienta/variante, convirtiendo las
   longitudes a metros al guardar preferencias. No se recuerdan IDs, referencias,
   caras elegidas ni la posición de Loop Cut: un nuevo corte empieza centrado.
@@ -423,8 +444,10 @@ nuevas superficies y la adaptación gradual de las existentes.
   si antes estaban desactivados; guardar y el viewport del PC conservan el estado.
 - Invertir y borrar la máscara viven en el menú Malla de Sculpt, sin pulsación
   larga del pincel. Ambas acciones usan el undo nativo.
-- La bandeja de propiedades Sculpt muestra el detalle de Dyntopo cuando está
-  activo, o el selector discreto de niveles Multires y Subdividir cuando existe.
+- La bandeja Sculpt muestra Radio y Fuerza deslizables, Suavizar e Invertir; en
+  «⋯ Más» quedan Presión y Solo lápiz (Precisión), Simetría (Referencia) y el
+  detalle de Dyntopo cuando está activo, o el nivel Multires y Subdividir cuando
+  existe, junto al acceso a Detalle de la malla (Forma).
   Comparte esos controles con Malla. Elegir nivel solo recorre los creados;
   Subdividir añade uno y se deshabilita al llegar a seis, sin salir de Sculpt.
 - En Sculpt sobre malla ordinaria, la superficie sólida se invalida tras aplicar,
@@ -494,7 +517,10 @@ nuevas superficies y la adaptación gradual de las existentes.
   con padres; la referencia activa también sirve de respaldo sin selección.
 - Object muestra una bandeja inferior de propiedades del activo cuando no hay
   herramientas ni sesiones: Posición XYZ, Rotación XYZ en grados y Tamaño.
-  Al principio de la bandeja, un icono alterna Mostrar delante. Ocultar/mostrar
+  El título es la sección y su icono desplegable la cambia; la fila lleva solo sus
+  números. En «⋯ Más» quedan el objeto y su selector (Referencia), Mostrar delante
+  y las opciones no numéricas de Imagen (Forma). Mantener pulsado un número vuelve
+  posición/giro a 0, escala a 1 y opacidad al 100 %. Ocultar/mostrar
   queda en el radial y Outliner, sin ojo duplicado en propiedades. No hay sección Visibilidad ni campos Visible en vista
   o Visible en render; las propiedades específicas de Imagen conservan su sección.
   Una única lista desplegable cambia de sección, sin pestañas mezcladas con campos.
@@ -627,10 +653,10 @@ nuevas superficies y la adaptación gradual de las existentes.
   `TrayTitle` (herramienta en mayúsculas, color de acento) y termina con `TrayExits`
   (Cancelar rojo y, si procede, Confirmar verde) fijos a la derecha; también los
   avisos de herramienta armada. Ninguna bandeja dibuja sus salidas a mano.
-- Regla de diseño para las barras inferiores: una única fila compacta, sin apilar
-  cabecera, pestañas, mensajes o campos en varias líneas. El contenido que no quepa
-  se recorre mediante un único scroll horizontal; no se encogen los controles ni
-  se reducen sus áreas táctiles para forzarlo a caber. Título breve fijo a la
+- Regla de diseño para las barras inferiores: una única fila fija, sin apilar
+  cabecera, pestañas, mensajes o campos en varias líneas y sin scroll horizontal
+  (ver Bandejas tranquilas). Lo que no es frecuente va a «⋯ Más»; no se encogen
+  los controles ni se reducen sus áreas táctiles para forzarlo a caber. Título breve fijo a la
   izquierda y Cancelar/Confirmar fijos a la derecha, siempre accesibles.
   Textos y nombres no envuelven: se abrevian o truncan y su detalle se ofrece en
   la ayuda. Los avisos se resumen en la misma fila. La vista y los paneles vecinos
@@ -655,7 +681,9 @@ nuevas superficies y la adaptación gradual de las existentes.
   el snap Incremento y el paso común. Los anillos vistos de canto se ocultan. Android
   lo activa con `gizmo.set` solo sin otra herramienta, forma ni sesión. Los tiradores
   empiezan desactivados al abrir la app y al crear/abrir otra escena; su botón los activa. Su sesión interna no abre la barra de transformación.
-- Mover usa un único `MovementControls` en Object y Edit sobre la misma sesión modal.
+- Mover, Rotar y Escalar usan un único `TransformAxisInputs` (X/Y/Z) en Object y Edit
+  sobre la misma sesión modal. Su fila muestra X/Y/Z, Snap, restricción (trípode) y,
+  en Escalar, la cadena; como mucho cinco controles además de título y ×/✓.
 - En Edit, Mover/Rotar/Escalar continúan por pasos al tocar otra selección. Un único
   `transform.select` sondea la preview viva, confirma el cambio anterior con un undo
   y abre otro baseline sin salir de la herramienta; conserva ejes, orientación y snap.
@@ -677,17 +705,17 @@ nuevas superficies y la adaptación gradual de las existentes.
   alteraciones funcionales; no se aprovecha ese cambio para "mejorarlo" o refactorizarlo.
 - Rotar se presenta y se edita exclusivamente en grados; los radianes quedan limitados
   al cálculo interno y nunca se ofrecen como unidad en la interfaz.
-- Mover, Rotar y Escalar ofrecen Reset dentro de la sesión: restauran la preview a
-  `0`, `0°` y `100 %` respectivamente sin cancelar ni reactivar la herramienta.
-- Los campos numéricos editables ofrecen `−/+` con la repetición mantenida común,
-  incluidos XYZ de Mover/Rotar/Escalar sin snap. El control para editar el paso de
-  esas transformaciones sigue apareciendo con Snap Incremento. No se duplican los
-  botones donde ya existen. En Propiedades las longitudes usan el paso métrico
-  común o el del preset, los ángulos 1° y la opacidad 1 % por pulsación.
-- En Mover, el selector de unidades va inmediatamente después del campo de incremento,
-  antes de `+`. En Escalar, mm/cm/m/% junto a XYZ gobierna dimensiones, paso,
-  botones y snap; `Paso` muestra la misma unidad. Cada botón cambia la dimensión de
-  su eje; con cadena conserva proporciones. El gesto métrico usa el eje restringido
+- Mover, Rotar y Escalar ofrecen Restablecer en Más · Precisión: restaura la preview a
+  `0`, `0°` y `100 %` sin cancelar ni reactivar la herramienta. Mantener pulsado un
+  eje restablece solo ese eje (en Escalar con cadena, los tres).
+- X/Y/Z de Mover/Rotar/Escalar se deslizan con el paso de la sesión, con o sin snap;
+  deslizar no aplana: el cero de Escalar se escribe. El paso y la unidad viven en
+  Más · Precisión aunque el snap esté desactivado. En Propiedades las longitudes usan
+  el paso métrico común o el del preset, los ángulos 1° y la opacidad 1 % por paso.
+- En Mover, la unidad va junto al paso en Más · Precisión y gobierna también X/Y/Z.
+  En Escalar, mm/cm/m/% gobierna dimensiones, paso,
+  deslizamiento y snap; `Paso` muestra la misma unidad. Cada eje cambia la dimensión
+  de su eje; con cadena conserva proporciones. El gesto métrico usa el eje restringido
   o la dimensión mayor de los ejes activos. Los valores escritos y Reset son exactos.
 - Escalar admite `0` exacto en % y mm/cm/m para aplanar, también con snap activo.
   Escribir y confirmar cero en el campo de un eje aplana solo ese eje, incluso con
@@ -1119,9 +1147,9 @@ no quedan archivos o referencias temporales.
   delante del número y lo tecleado se anteponía. Mover conserva su campo sin cambios.
 - Tocar cerca de la línea entre los centros de una ranura selecciona su eje (`AXIS`),
   que Android resalta; sirve para Ángulo y Punto sobre recta. Arrastrarlo mueve la ranura.
-- La bandeja inferior CAD usa `CompactNumericField`, `StepperButton` y el campo
-  de paso compartido de `SnapControl.kt`; mantener −/+ acelera la repetición
-  común de 180 a 80 ms después de 400 ms, sin multiplicar la cota elegida.
+- La bandeja inferior CAD usa `CompactNumericField` con `ScrubNumber` y el campo
+  de paso compartido de `SnapControl.kt`; cada paso deslizado acumula sobre el
+  pendiente local como un −/+ mantenido, sin multiplicar la cota elegida.
   Cancelar/aceptar permanecen fijos a la derecha con `RoundAction` rojo/verde.
   Las medidas del boceto se editan en borrador y se aplican juntas con un comando;
   Extruir/Vaciar conserva la preview inmediata y acumula pasos ante respuestas
@@ -1286,8 +1314,8 @@ no quedan archivos o referencias temporales.
   Abrir un boceto vacío encuadra esa misma extensión en vez de usar 20 cm fijos.
   Las flechas son tiradores: el lápiz agarra al bajar la roja/verde (Mover por su
   dirección real, también inclinado) o la azul/fuera de ellas (Separación); la activa
-  se dibuja amarilla. La bandeja muestra solo Separación; «Más opciones ▴» abre encima
-  Inclinar y Mover por números.
+  se dibuja amarilla. La bandeja muestra solo Separación; Inclinar y Mover por números
+  viven en «⋯ Más» · Forma y Planos guardados en Referencia.
   Los planos guardados se reutilizan o se recolocan con esa misma sesión (`plane_id`).
   Boceto en cara usa `_face_plane`, compartido con la base Cara de la sesión.
   La base Arista usa la única arista recta seleccionada del sólido: X sigue la
@@ -1376,7 +1404,8 @@ no quedan archivos o referencias temporales.
   aislar, zona, luz: iconos junto a Deshacer/Rehacer, sin franja propia bajo el menú,
   con el número de objetos como marca del icono), panel derecho con pestañas
   Material/Acabado/Grano/Capas y bandeja
-  inferior (Color/Material, tamaño, intensidad y una sola línea de ayuda, la del obstáculo actual).
+  inferior (Color/Material como icono, color, Tamaño e Intensidad deslizables; el
+  obstáculo actual es un aviso fijo y la ayuda de uso solo aparece las primeras veces).
   Lo que se usa durante el trazo vive en el rail, sin plegarse ni abrirse. El panel
   derecho ocupa el sitio, el margen y el gesto de apertura/cierre del inspector de
   modificadores: icono bajo el rail de modos, flecha de vuelta en su cabecera.
