@@ -912,6 +912,14 @@ vértice visible lo une con el extremo sin crear otro (`result.connected`) y con
 desde él; así se cierran formas o se empieza desde geometría existente.
 `tool.draw_break` suelta el extremo: el siguiente toque empieza una línea suelta.
 
+Unir J (`tool.begin`, `tool: CONNECT`, entrada `REPEAT_TAP`; Android lo arma al
+mantener J) fuerza Vértices y deselecciona al armarse. Cada `tool.extrude_cursor`
+alterna el vértice visible a menos de 0,03 de alto de vídeo (un fallo no cambia nada;
+`result.picked` cuenta los marcados). Con dos ejecuta `mesh.vert_connect_path`,
+registra un undo y deselecciona todo (`result.changed`, `picked: 0`); si Blender no
+puede unirlos responde `topology_incompatible`, también deseleccionando. La
+instrucción del estado armado indica si falta el primer o el segundo vértice.
+
 Extrude «A toque» se activa con `tool.begin`, `tool: EXTRUDE` y
 `parameters: {variant: CURSOR, rotate_source: true}`. El rail anuncia la variante
 `CURSOR` con entrada `REPEAT_TAP`. Permanece `armed: true`, `active: false` y no

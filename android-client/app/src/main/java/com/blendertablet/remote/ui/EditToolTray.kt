@@ -91,7 +91,7 @@ private fun specsFor(tool: EditTool): List<ParamSpec> = when (tool) {
     )
     EditTool.ALIGN -> emptyList()
     EditTool.REVOLVE, EditTool.SWEEP -> emptyList()
-    EditTool.F2, EditTool.DRAW -> emptyList()
+    EditTool.F2, EditTool.DRAW, EditTool.CONNECT -> emptyList()
     EditTool.KNIFE -> emptyList()
     EditTool.BISECT -> emptyList()
 }
@@ -117,7 +117,7 @@ fun EditToolTray(
     if (!session.active && session.controls.isEmpty()) {
         // Armada y sin controles: la instrucción es lo único que hay que leer, siempre visible.
         SingleLineTray(session.tool.label, onCancel = onCancel, modifier = modifier,
-            status = if (session.tool in setOf(EditTool.F2, EditTool.DRAW)) session.instruction
+            status = if (session.tool in setOf(EditTool.F2, EditTool.DRAW, EditTool.CONNECT)) session.instruction
                 else "Toca una arista para colocar el primer corte") {
             if (session.tool == EditTool.DRAW) IconAction(AppIcons.DrawNewStroke, "Nuevo trazo", onClick = onDrawBreak)
         }

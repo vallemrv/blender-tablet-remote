@@ -239,7 +239,7 @@ object AppIcons {
 
     fun editCatalog(id: String): ImageVector = when (id) {
         "MAKE_EDGE_FACE" -> StudioIcons["FILL"]
-        "CONNECT_VERTICES" -> StudioIcons["CONNECT"]
+        "CONNECT_VERTICES", "CONNECT" -> StudioIcons["CONNECT"]
         "SELECT_SHORTEST_PATH" -> StudioIcons["SHORTEST_PATH"]
         "SELECT_LOOP" -> action(ActionId.SELECT_LOOP)
         "SELECT_RING" -> action(ActionId.SELECT_RING)

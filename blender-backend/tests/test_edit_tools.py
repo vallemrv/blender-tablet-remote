@@ -323,6 +323,41 @@ class EditToolsTests(unittest.TestCase):
         self.assertEqual((len(bm.verts),len(bm.edges)),(4,3))
         tools.cancel({})
 
+    def test_connect_mode_joins_each_pair_and_leaves_nothing_selected(self):
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        bm.clear()
+        verts = [bm.verts.new(co) for co in ((0,0,0),(2,0,0),(2,2,0),(0,2,0))]
+        bm.faces.new(verts)
+        verts[0].select_set(True)
+        bmesh.update_edit_mesh(self.obj.data)
+        bpy.context.scene.tool_settings.mesh_select_mode = (False,False,True)
+        state = self.begin('CONNECT')
+        self.assertEqual(state['input'],'REPEAT_TAP')
+        self.assertEqual(tuple(bpy.context.scene.tool_settings.mesh_select_mode),(True,False,False))
+        self.assertFalse(any(v.select for v in bmesh.from_edit_mesh(self.obj.data).verts))
+        def tap(x,y):
+            u,v = camera.project(Vector((x,y,0)),self.rv3d)
+            return tools.extrude_cursor(dict(u=u,v=v))
+        from blender_tablet_remote.commands import extrude_cursor
+        view = patch.object(extrude_cursor,'find_view3d',return_value=tools.find_view3d())
+        view.start();self.addCleanup(view.stop)
+        with patch('blender_tablet_remote.commands.tools.undo_push') as push:
+            self.assertEqual(tap(0,0)['result']['picked'],1)
+            # Un toque lejos de cualquier vértice conserva el primero.
+            self.assertEqual(tap(1,1)['result']['picked'],1)
+            response = tap(2,2)
+            push.assert_called_once()
+        self.assertTrue(response['result']['changed'])
+        self.assertTrue(response['armed'])
+        self.assertEqual(response['instruction'],tools.CONNECT_INSTRUCTIONS[0])
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        self.assertEqual((len(bm.verts),len(bm.edges),len(bm.faces)),(4,5,2))
+        self.assertFalse(any(v.select for v in bm.verts))
+        # Tocar dos veces el mismo vértice lo desmarca.
+        tap(2,0)
+        self.assertEqual(tap(2,0)['result']['picked'],0)
+        tools.cancel({})
+
     def test_draw_starts_clean_even_with_a_previous_selection(self):
         self.begin('DRAW')
         bm = bmesh.from_edit_mesh(self.obj.data)

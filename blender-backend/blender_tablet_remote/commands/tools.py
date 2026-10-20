@@ -16,10 +16,11 @@ from . import knife as knife_commands
 from . import mesh as mesh_commands
 from . import profile_tools
 
-SUPPORTED = {"EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE", "BISECT", "ALIGN", "REVOLVE", "SWEEP", "F2", "DRAW"}
+SUPPORTED = {"EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE", "BISECT", "ALIGN", "REVOLVE", "SWEEP", "F2", "DRAW", "CONNECT"}
 
 DRAW_INSTRUCTION = ("Toca para poner un vértice · cada toque añade una arista desde el anterior · "
                     "toca un vértice existente para unirlo y cerrar la forma")
+CONNECT_INSTRUCTIONS = ("Toca el primer vértice", "Toca el segundo vértice para unirlos como J")
 
 # Herramientas cuya sesión puede quedar ARMED (elegidas pero sin backup ni preview
 # todavía) porque su primer dato lo da un toque/arrastre en el viewport, no la
@@ -196,6 +197,18 @@ class ToolSession:
             bm.select_history.clear()
             bmesh.update_edit_mesh(obj.data)
             self.arm(tool, owner, {})
+            return
+        if tool == "CONNECT":
+            # J continuo: siempre en Vértices y empezando sin selección.
+            if tuple(bpy.context.scene.tool_settings.mesh_select_mode) != (True, False, False):
+                bpy.context.scene.tool_settings.mesh_select_mode = (True, False, False)
+                bm.select_mode = {'VERT'}
+            for seq in (bm.verts, bm.edges, bm.faces):
+                for element in seq:
+                    element.select = False
+            bm.select_history.clear()
+            bmesh.update_edit_mesh(obj.data)
+            self.arm(tool, owner, {"picked": 0})
             return
         if tool == "LOOP_CUT" and "edge" not in params:
             # Elegir la herramienta nunca interpreta la selección como un corte.
@@ -431,6 +444,9 @@ class ToolSession:
                     instruction='Selecciona 1–3 vértices o una arista · fuera crea un quad y arrastra · 4 vértices completan la cara')
             if self.armed_tool == "DRAW":
                 result.update(input="REPEAT_TAP", can_confirm=False, instruction=DRAW_INSTRUCTION)
+            if self.armed_tool == "CONNECT":
+                result.update(input="REPEAT_TAP", can_confirm=False,
+                              instruction=CONNECT_INSTRUCTIONS[min(int(self.armed_params.get("picked", 0)), 1)])
             if self.armed_tool == "EXTRUDE" and self.armed_params.get("variant") == "CURSOR":
                 result.update(input="REPEAT_TAP", can_confirm=False,
                               instruction="Toca para extruir · cada toque crea un tramo · Deshacer retira el último",
@@ -462,13 +478,24 @@ def f2_gesture(payload):
 def extrude_cursor(payload):
     tool_session.require_armed_owner(payload.get("_client_id"))
     drawing = tool_session.armed_tool == "DRAW"
-    if not drawing and (tool_session.armed_tool != "EXTRUDE" or tool_session.armed_params.get("variant") != "CURSOR"):
+    connecting = tool_session.armed_tool == "CONNECT"
+    if not (drawing or connecting) and (tool_session.armed_tool != "EXTRUDE" or tool_session.armed_params.get("variant") != "CURSOR"):
         raise CommandError("Extruir A toque no está activo", code="wrong_tool")
     obj = active_object()
     if obj != tool_session.obj or obj.mode != "EDIT" or obj.type != "MESH":
         tool_session.disarm()
         raise CommandError("La selección de edición ha cambiado", code="session_invalidated")
     from . import extrude_cursor as cursor_commands
+    if connecting:
+        try:
+            result = cursor_commands.connect_tap(obj, payload)
+        except CommandError:
+            tool_session.armed_params["picked"] = 0
+            raise
+        tool_session.armed_params["picked"] = result["picked"]
+        if result["changed"]:
+            undo_push("Remote connect vertex path")
+        return dict(tool_session.status(), result=result)
     if drawing:
         result = cursor_commands.apply(obj, payload, rotate_source=False, connect=True)
         if result["changed"]:

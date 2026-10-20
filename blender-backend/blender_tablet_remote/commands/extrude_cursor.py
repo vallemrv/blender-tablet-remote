@@ -47,6 +47,51 @@ def _connect(bm, obj, tip, target):
             "position": list(obj.matrix_world @ target.co)}
 
 
+def connect_tap(obj, payload):
+    """J continuo: marca vértices y, al tener dos, los conecta como J y deselecciona."""
+    u, v = get_float(payload, "u", -1), get_float(payload, "v", -1)
+    if not all(math.isfinite(n) and 0 <= n <= 1 for n in (u, v)):
+        raise BadPayload("'u' and 'v' must be within the viewport")
+    found = find_view3d()
+    if found is None:
+        raise CommandError("No 3D viewport available", code="no_viewport")
+    rv3d = found[3]
+    camera.sync_from_region(rv3d)
+    bm = bmesh.from_edit_mesh(obj.data)
+    target = _vertex_under(bm, obj, u, v, rv3d, camera.projection_matrix(rv3d))
+    picked = [vert for vert in bm.verts if vert.select and not vert.hide]
+    if target is None:
+        # Un toque fallido no pierde el primer vértice.
+        return {"changed": False, "picked": len(picked)}
+    if target in picked:
+        picked.remove(target)
+    else:
+        picked.append(target)
+    for seq in (bm.verts, bm.edges, bm.faces):
+        for element in seq:
+            element.select = False
+    bm.select_history.clear()
+    for vert in picked:
+        vert.select_set(True)
+        bm.select_history.add(vert)
+    bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
+    if len(picked) < 2:
+        return {"changed": False, "picked": len(picked)}
+    try:
+        result = bpy.ops.mesh.vert_connect_path('EXEC_DEFAULT', False)
+    except RuntimeError:
+        result = set()
+    bm = bmesh.from_edit_mesh(obj.data)
+    for seq in (bm.verts, bm.edges, bm.faces):
+        for element in seq:
+            element.select = False
+    bm.select_history.clear()
+    bmesh.update_edit_mesh(obj.data, loop_triangles=True, destructive=True)
+    if "FINISHED" not in result:
+        raise CommandError("No se pueden conectar estos vértices", code="topology_incompatible")
+    return {"changed": True, "picked": 0}
+
+
 def apply(obj, payload, rotate_source=True, connect=False):
     u, v = get_float(payload, "u", -1), get_float(payload, "v", -1)
     if not all(math.isfinite(n) and 0 <= n <= 1 for n in (u, v)):

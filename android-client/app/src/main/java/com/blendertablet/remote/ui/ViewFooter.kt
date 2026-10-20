@@ -51,6 +51,8 @@ fun ViewFooter(
     onProjection: (Projection) -> Unit,
     onFrameSelected: () -> Unit,
     onEditAction: (EditFooterAction) -> Unit,
+    connectModeActive: Boolean = false,
+    onConnectMode: () -> Unit = {},
     contextKeys: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -83,7 +85,7 @@ fun ViewFooter(
                     if (contextKeys != null) {
                         contextKeys()
                     } else if (editPage && inEdit && showEditShortcuts) {
-                        EditKeys(selectionMode, connectVerticesEnabled, normalsPage, { normalsPage = it }, onEditAction)
+                        EditKeys(selectionMode, connectVerticesEnabled, connectModeActive, onConnectMode, normalsPage, { normalsPage = it }, onEditAction)
                     } else {
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         NumKey("7", "Superior / inferior", activeAxisView in setOf("TOP", "BOTTOM")) { opposite("TOP", "BOTTOM") }
@@ -140,6 +142,8 @@ fun ViewFooter(
 private fun EditKeys(
     selectionMode: SelectionMode,
     connectVerticesEnabled: Boolean,
+    connectModeActive: Boolean,
+    onConnectMode: () -> Unit,
     normalsPage: Boolean,
     setNormalsPage: (Boolean) -> Unit,
     onAction: (EditFooterAction) -> Unit,
@@ -161,8 +165,13 @@ private fun EditKeys(
             NumKey("Y", "Split") { onAction(EditFooterAction.SPLIT) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            NumKey("J", "Conectar vértices", enabled = connectVerticesEnabled && selectionMode == SelectionMode.VERTEX) {
-                onAction(EditFooterAction.CONNECT_VERTICES)
+            // Tocar une la selección; mantener deja J activo para unir pares seguidos.
+            NumKey("J", if (connectModeActive) "Unir J activo · toca para salir" else "Conectar vértices · mantener: unir pares seguidos",
+                selected = connectModeActive, onLongClick = onConnectMode) {
+                when {
+                    connectModeActive -> onConnectMode()
+                    connectVerticesEnabled && selectionMode == SelectionMode.VERTEX -> onAction(EditFooterAction.CONNECT_VERTICES)
+                }
             }
             NumKey("N", "Normales", enabled = selectionMode == SelectionMode.FACE) { setNormalsPage(true) }
         }
@@ -202,6 +211,7 @@ private fun NumKey(
     description: String,
     selected: Boolean = false,
     enabled: Boolean = true,
+    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val background = when {
@@ -220,7 +230,7 @@ private fun NumKey(
             .size(38.dp)
             .clip(RoundedCornerShape(9.dp))
             .background(background)
-            .then(if (enabled) Modifier.clickableNoRipple(onClick) else Modifier),
+            .then(if (!enabled) Modifier else if (onLongClick != null) Modifier.combinedClickableNoRipple(onClick, onLongClick) else Modifier.clickableNoRipple(onClick)),
         contentAlignment = Alignment.Center,
     ) {
         Text(label, color = content, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)

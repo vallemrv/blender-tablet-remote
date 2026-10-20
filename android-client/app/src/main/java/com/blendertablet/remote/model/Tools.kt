@@ -19,6 +19,7 @@ enum class EditTool(val wire: String, val label: String, val requirement: String
     KNIFE("KNIFE", "Cuchillo", "necesita una malla"),
     F2("F2", "Completar caras · F2", "selecciona vértices o aristas"),
     DRAW("DRAW", "Dibujar", "no necesita selección"),
+    CONNECT("CONNECT", "Unir J", "toca dos vértices"),
     BISECT("BISECT", "Bisect", "necesita una malla"),
     ALIGN("ALIGN", "Alinear caras", "necesita dos objetos");
 
@@ -138,7 +139,7 @@ data class ToolSession(
             EditTool.SUBDIVIDE -> "cuts"
             EditTool.LOOP_CUT -> "factor"
             EditTool.BRIDGE_EDGE_LOOPS -> if (flag("merge")) "merge_factor" else "twist_offset"
-            EditTool.KNIFE, EditTool.BISECT, EditTool.ALIGN, EditTool.REVOLVE, EditTool.SWEEP, EditTool.F2, EditTool.DRAW -> ""
+            EditTool.KNIFE, EditTool.BISECT, EditTool.ALIGN, EditTool.REVOLVE, EditTool.SWEEP, EditTool.F2, EditTool.DRAW, EditTool.CONNECT -> ""
         }
 
     fun double(key: String): Double? = (parameters[key] as? Number)?.toDouble()

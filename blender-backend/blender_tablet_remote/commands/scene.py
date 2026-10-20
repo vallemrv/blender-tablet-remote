@@ -78,6 +78,7 @@ def capabilities(payload: dict) -> dict:
     features['edit_tools']['tools'].append('F2')
     features['edit_toolbar']['families'].append(deepcopy(DRAW_TOOLBAR))
     features['edit_tools']['tools'].append('DRAW')
+    features['edit_tools']['tools'].append('CONNECT')
 
     return {
         "addon_version": ".".join(str(n) for n in VERSION),

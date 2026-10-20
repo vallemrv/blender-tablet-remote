@@ -655,6 +655,11 @@ nuevas superficies y la adaptación gradual de las existentes.
 - Los atajos de Edit incluyen J para conectar vértices con la operación nativa
   `mesh.vert_connect_path`; requiere modo Vértices y al menos dos seleccionados,
   divide las caras atravesadas y registra un único undo.
+  Mantener J arma «Unir J» (`tool.begin`, `tool: CONNECT`, entrada `REPEAT_TAP`):
+  pasa a Vértices y vacía la selección; cada toque marca el vértice visible más
+  cercano (repetirlo lo desmarca, fallar conserva el primero) y con dos los conecta
+  igual que J, con un undo, y deselecciona todo para el siguiente par. Sin encadenar.
+  Repetir J, ×, otra herramienta o cambiar de modo lo desarman.
 - Los parámetros viven en una bandeja común. Toda bandeja inferior empieza con
   `TrayTitle` (herramienta en mayúsculas, color de acento) y termina con `TrayExits`
   (Cancelar rojo y, si procede, Confirmar verde) fijos a la derecha; también los

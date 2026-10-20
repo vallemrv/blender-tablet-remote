@@ -3,6 +3,8 @@ package com.blendertablet.remote.ui
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
@@ -21,4 +23,11 @@ import androidx.compose.ui.composed
 fun Modifier.clickableNoRipple(onClick: () -> Unit): Modifier = composed {
     val interaction = remember { MutableInteractionSource() }
     clickable(interactionSource = interaction, indication = null, onClick = onClick)
+}
+
+/** Igual que [clickableNoRipple], con una pulsación larga que no repite el toque. */
+@OptIn(ExperimentalFoundationApi::class)
+fun Modifier.combinedClickableNoRipple(onClick: () -> Unit, onLongClick: () -> Unit): Modifier = composed {
+    val interaction = remember { MutableInteractionSource() }
+    combinedClickable(interactionSource = interaction, indication = null, onClick = onClick, onLongClick = onLongClick)
 }

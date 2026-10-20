@@ -1185,6 +1185,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun nudgeTool(delta: Double) = client.toolNudge(delta)
 
+    /** J continuo: mantener J lo arma; repetir J lo desarma. */
+    fun toggleConnectMode() {
+        val armed = client.toolSession.value
+        if (armed.armed && armed.tool == EditTool.CONNECT) selectTool() else beginEditTool(EditTool.CONNECT)
+    }
+
     /** Dibujar: suelta el último vértice; el siguiente toque empieza otra línea. */
     fun drawBreak() = client.editCatalogCommand("tool.draw_break")
 
@@ -1309,7 +1315,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
         EditTool.SUBDIVIDE -> mapOf("cuts" to 1.0)
         EditTool.REVOLVE, EditTool.SWEEP -> emptyMap()
-        EditTool.F2, EditTool.DRAW -> emptyMap()
+        EditTool.F2, EditTool.DRAW, EditTool.CONNECT -> emptyMap()
         EditTool.LOOP_CUT -> mapOf("cuts" to 1.0, "smoothness" to 0.0, "factor" to 0.0, "snap_type" to "NONE")
         EditTool.BRIDGE_EDGE_LOOPS -> mapOf("twist_offset" to 0.0, "merge_factor" to 0.0, "snap_type" to "NONE")
         EditTool.ALIGN -> emptyMap()

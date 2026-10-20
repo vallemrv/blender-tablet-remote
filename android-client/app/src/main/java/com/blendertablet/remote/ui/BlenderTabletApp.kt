@@ -348,7 +348,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             snapCandidate = if (state.blender.cad.workspace) null else toolSession.snapCandidate,
             cancelPickOnNavigation = toolSession.input == "FACE_PAIR",
             proportionalCircle = if (state.blender.cad.workspace) null else session.proportionalCircle,
-            navigationOrbitEnabled = ((toolSession.armed && toolSession.tool in setOf(EditTool.F2, EditTool.DRAW)) || materialActive || sculptActive || cadNavigationOrbit || navigationOrbitVisible(
+            navigationOrbitEnabled = ((toolSession.armed && toolSession.tool in setOf(EditTool.F2, EditTool.DRAW, EditTool.CONNECT)) || materialActive || sculptActive || cadNavigationOrbit || navigationOrbitVisible(
                 session.active,
                 toolSession.active,
                 state.activeTool,
@@ -604,6 +604,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                     onRotate180 = { vm.viewOrbitStep(1f, 0f) },
                     onProjection = vm::viewPerspective,
                     onEditAction = vm::editFooterAction,
+                    connectModeActive = toolSession.armed && toolSession.tool == EditTool.CONNECT,
+                    onConnectMode = vm::toggleConnectMode,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(Metrics.EdgeMargin)
@@ -1125,7 +1127,7 @@ private fun RailContent(
                 EditTool.SUBDIVIDE -> counts.selectionCounts.edges > 0
                 EditTool.REVOLVE -> counts.selectionCounts.verts > 0
                 EditTool.SWEEP -> counts.selectionCounts.edges > 0
-                EditTool.F2, EditTool.DRAW -> true
+                EditTool.F2, EditTool.DRAW, EditTool.CONNECT -> true
                 EditTool.LOOP_CUT -> true // sin arista queda armada y el próximo tap la elige
                 EditTool.BRIDGE_EDGE_LOOPS -> counts.selectionCounts.edges >= 6
                 EditTool.KNIFE -> true // no exige selección previa
