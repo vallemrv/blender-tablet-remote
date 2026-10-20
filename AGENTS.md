@@ -315,7 +315,9 @@ nuevas superficies y la adaptación gradual de las existentes.
     snap activo (14 dp por paso, el primero al superar el umbral táctil); tocar
     escribe con cuentas; mantener restablece al neutro (0, 0°, 100 %, centro) si lo
     hay. El nombre corto y la unidad van dentro del campo. Confirmar suelta el foco.
-    Los `−/+` quedan para los pasos de «⋯ Más» y los inspectores.
+    Ningún número de la app tiene botones `−/+`: pasos de «⋯ Más», modificadores,
+    grupos de vértices y diálogos también se deslizan (`ScrubNumber`, `ScrubRow`).
+    El puerto de conexión solo se escribe.
   - Bajo la fila: un aviso de bloqueo/error (siempre), un estado vivo (medidas,
     candidato de snap, qué señalar; siempre) y la ayuda solo las tres primeras
     apariciones de cada bandeja (`TrayHints`); después queda en el hover del título
@@ -592,7 +594,7 @@ nuevas superficies y la adaptación gradual de las existentes.
   Bisel e Inset comienzan en dos pasos. Los valores editados siguen siendo exactos.
   Bisel interpreta su ancho en mundo con escala sin aplicar, sin cambiar la matriz
   del objeto. Estos valores iniciales no cambian Mover ni Escalar.
-- Los botones del Paso de herramientas Edit siguen su orden de magnitud. Sculpt muestra el radio métrico aproximado
+- Deslizar el Paso de herramientas Edit avanza en su orden de magnitud. Sculpt muestra el radio métrico aproximado
   del plano del pivote; su parámetro de gesto continúa siendo relativo a la pantalla.
 - La selección de Object/Edit vive en el rail helper vertical derecho (`SelectionHelperRail`),
   con el mismo `ToolRail` que las restricciones CAD. Muestra solo las acciones aplicables:
@@ -614,7 +616,7 @@ nuevas superficies y la adaptación gradual de las existentes.
   loop de lo tocado (Alt+clic de Blender); en Vértices, la pieza enlazada. El segundo
   toque envía ADD sobre el elemento y después el loop/enlazado; no encuadra. Bisel permanece en el rail; Bridge vive en Malla para dejar visible
   Cortar. Las exclusiones se derivan del catálogo del rail, sin listas duplicadas.
-- En Extruir/Bisel/Inset, los botones de distancia y el arrastre libre usan el paso
+- En Extruir/Bisel/Inset, deslizar la distancia y el arrastre libre usan el paso
   físico de la sesión; sin snap conservan sus fracciones. La unidad elegida en Paso
   gobierna también sus distancias. Paso permanece accesible con snap desactivado.
 - CAD ofrece «Bocetos → Editar», «Editar boceto» desde un perfil/operación y
@@ -723,23 +725,18 @@ nuevas superficies y la adaptación gradual de las existentes.
   La cadena sigue siendo proporcional para valores distintos de cero; Reset recupera el baseline.
 - El selector y los pasos de snap viven en `ui/SnapControl.kt`; las bandejas declaran
   opciones y reciben valores, pero no vuelven a implementar su interfaz.
-- Los botones −/+ comparten pulsación mantenida: esperan 400 ms y aceleran de
-  180 a 80 ms entre incrementos, sin multiplicar el paso. Soltar no añade otro
-  incremento; cancelar, desplazar el panel, deshabilitar o retirar el control
-  detiene la repetición. Un toque corto sigue dando exactamente un paso.
-- El radio proporcional muestra y acepta la unidad del preset (mm/cm/m); sus −/+
-  acumulan el paso físico anunciado convertido por `scale_length` (1 mm en Pequeña).
+- El radio proporcional muestra y acepta la unidad del preset (mm/cm/m); deslizarlo
+  acumula el paso físico anunciado convertido por `scale_length` (1 mm en Pequeña).
   Cambiar radio, perfil o activación actualiza la influencia desde el baseline sin
   reiniciar la transformación, sus valores ni sus referencias. Reducir el radio
   restaura los vértices excluidos; confirmar sigue creando un único undo.
 - Extruir, Inset y Bisel comparten incremento editable y selector mm/cm/m; comienzan
   en la unidad del preset y convierten el paso según `scale_length`. Su arrastre con
   Incremento/Rejilla recorre un paso por el 4 % de altura, conserva fracciones y
-  publica el valor visual redondeado. Extruir muestra siempre Paso con −/+ que editan
+  publica el valor visual redondeado. Extruir muestra siempre Paso deslizable que edita
   el paso en la unidad elegida, conservando la distancia y la preview actuales;
-  el siguiente gesto usa ese paso. Distancia tiene sus propios −/+ que suman/restan
-  el paso, incluso sin snap. Los botones conservan su valor local entre pulsaciones
-  rápidas; Distancia numérica es exacta y no se vuelve a redondear por snap.
+  el siguiente gesto usa ese paso. Deslizar Distancia suma/resta el paso, incluso
+  sin snap, y acumula sobre su valor local; Distancia numérica es exacta y no se vuelve a redondear por snap.
   Editar Distancia sustituye al destino geométrico
   sondeado. Knife usa el mismo desplegable de Snap.
 - Paso común: el último paso métrico que el usuario escribe en Mover, Escalar (mm/cm/m),
@@ -748,8 +745,8 @@ nuevas superficies y la adaptación gradual de las existentes.
   conexión tras reiniciar la app adopta el paso de su preset. Con él
   Extruir/Bisel/Inset no usan el paso automático por tamaño. Cambiar solo la unidad lo
   expresa en ella sin alterarlo. Porcentajes, SLIDE de Tweak y CAD conservan su paso.
-- En Bisel, Ancho se muestra en la unidad elegida; con Incremento/Rejilla sus
-  botones −/+ restan/suman el paso activo y conservan las pulsaciones rápidas.
+- En Bisel, Ancho se muestra en la unidad elegida; deslizarlo resta/suma el
+  paso activo.
 - Extruir Región desplaza y selecciona únicamente los vértices nuevos. Los vértices
   originales de las aristas/caras de conexión permanecen fijos, también al continuar
   otra extrusión desde el extremo seleccionado.
@@ -1304,7 +1301,7 @@ no quedan archivos o referencias temporales.
   (`cad.plane.begin/update`, confirmar/cancelar con `cad.session.*`). El rail pasa a
   elegir la base (Superior/Frontal/Lateral con el trípode de colores de Blender, o
   la cara seleccionada) y la bandeja lleva Separación, Inclinar sobre dos ejes y
-  Mover dentro del plano, con −/+. La separación sigue la normal inclinada y el lápiz
+  Mover dentro del plano, deslizables. La separación sigue la normal inclinada y el lápiz
   la arrastra 1:1 (rayo contra la recta normal), con Incremento por pasos enteros.
   GPUOffScreen dibuja la preview (lámina translúcida del tamaño del resultado, borde,
   ejes y normal); el documento no cambia hasta ✓, que crea plano y croquis en un undo.

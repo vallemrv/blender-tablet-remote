@@ -219,11 +219,17 @@ private fun MoveStepInput(
     fun commit(raw: String = text) {
         NumericExpression.evaluate(raw, value)?.takeIf { it > 0.0 }?.let { onChange(it, unit) }
     }
-    PillButton("−", repeatOnHold = true) { onChange((value - 1.0).coerceAtLeast(0.001), unit) }
-    CompactNumericField(
-        value = text, onValueChange = { text = it }, modifier = Modifier.width(80.dp),
-        textAlign = TextAlign.End, placeholder = "Paso", onDone = { commit() },
-    )
+    var base by remember { mutableStateOf(value) }
+    HoverHelp("Paso", numberHelp(false)) {
+        ScrubNumber(onScrubStart = { base = value },
+            onScrub = { steps -> onChange((base + steps).coerceAtLeast(0.001), unit) }) { field ->
+            CompactNumericField(
+                value = text, onValueChange = { text = it }, modifier = field.width(104.dp), fontSize = 16.sp,
+                textAlign = TextAlign.End, placeholder = "Paso", caption = "Paso", selectAllOnFocus = true,
+                onDone = { commit() },
+            )
+        }
+    }
     Box {
         PillButton(unit.label) { expanded = true }
         DropdownMenu(expanded, { expanded = false }) {
@@ -236,7 +242,6 @@ private fun MoveStepInput(
             }
         }
     }
-    PillButton("+", repeatOnHold = true) { onChange(value + 1.0, unit) }
 }
 
 /**

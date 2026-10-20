@@ -36,6 +36,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextAlign
 import com.blendertablet.remote.model.BlenderMode
 import com.blendertablet.remote.model.BlenderState
 import com.blendertablet.remote.model.LengthUnit
@@ -64,7 +65,7 @@ data class ModifierActions(
  * Inspector de modificadores, generado exclusivamente desde `modifier.add_options`.
  *
  * Se construye con las primitivas de la app (`FloatingPanel`, `IconAction`,
- * `StepperRow`) y no con `Card`/`IconButton`/`TextButton` de Material: un panel con
+ * `ScrubRow`) y no con `Card`/`IconButton`/`TextButton` de Material: un panel con
  * otra familia de controles se lee como una segunda aplicación pegada encima.
  *
  * La lista tiene altura máxima y scroll propio. Sin eso, cuatro modificadores con sus
@@ -323,12 +324,12 @@ private fun ModifierParameter(
         "float3" -> {
             val vector = vectorOf(value)
             for (axis in 0..2) {
-                StepperRow(
+                ScrubRow(
                     label = "${spec.name} ${"XYZ"[axis]}",
-                    value = formatModifierValue(vector[axis], isInt = false, spec.step),
-                    onMinus = { set(item.name, spec.name, vector.stepped(axis, -step(spec), spec)) },
-                    onPlus = { set(item.name, spec.name, vector.stepped(axis, step(spec), spec)) },
-                )
+                    value = vector[axis],
+                    text = formatModifierValue(vector[axis], isInt = false, spec.step),
+                    step = step(spec),
+                ) { set(item.name, spec.name, vector.stepped(axis, it - vector[axis], spec)) }
             }
         }
 
@@ -339,17 +340,12 @@ private fun ModifierParameter(
                 EditableModifierScalar(item, spec, state, current) { set(item.name, spec.name, it) }
                 return
             }
-            fun apply(delta: Double) {
-                set(item.name, spec.name, stepModifierScalar(current, isInt, delta, spec))
-            }
-            StepperRow(
+            ScrubRow(
                 label = spec.label,
-                value = formatModifierValue(current, isInt, spec.step),
-                minusEnabled = spec.min == null || current > spec.min,
-                plusEnabled = spec.max == null || current < spec.max,
-                onMinus = { apply(-step(spec)) },
-                onPlus = { apply(step(spec)) },
-            )
+                value = current,
+                text = formatModifierValue(current, isInt, spec.step),
+                step = step(spec),
+            ) { set(item.name, spec.name, stepModifierScalar(it, isInt, 0.0, spec)) }
         }
     }
 }
@@ -374,26 +370,24 @@ private fun EditableModifierScalar(
         focus.clearFocus()
         draft = null
     }
-    fun nudge(direction: Int) {
-        val start = if (draft == null) current else typed?.toDouble() ?: return
-        val number = stepModifierScalar(start, spec.type == "int", direction * step(spec), spec)
-        draft = null
-        set(number)
-    }
+    var base by remember { mutableStateOf(current) }
     val valid = draft == null || typed != null
-    val value = typed?.toDouble() ?: current
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(spec.label + if (suffix.isEmpty()) "" else " · $suffix", color = Ink.Faint, fontSize = 11.sp,
+        Text(spec.label, color = Ink.Faint, fontSize = 11.sp,
             modifier = Modifier.weight(1f).padding(end = 4.dp))
-        StepperButton("−", valid && (spec.min == null || value > spec.min)) { nudge(-1) }
-        CompactNumericField(
-            value = draft ?: formatEditableModifierValue(current * factor),
-            onValueChange = { draft = it },
-            modifier = Modifier.width(80.dp),
-            textColor = if (valid) Ink.OnPanel else Ink.Bad,
-            onDone = ::commit,
-        )
-        StepperButton("+", valid && (spec.max == null || value < spec.max)) { nudge(1) }
+        HoverHelp(spec.label, numberHelp(false)) {
+            // Deslizar parte del valor al empezar (o del borrador válido) y avanza por el paso.
+            ScrubNumber(enabled = valid, onScrubStart = { base = typed?.toDouble() ?: current },
+                onScrub = { steps -> draft = null; set(stepModifierScalar(base, spec.type == "int", steps * step(spec), spec)) }) { field ->
+                CompactNumericField(
+                    value = draft ?: formatEditableModifierValue(current * factor),
+                    onValueChange = { draft = it },
+                    modifier = field.width(96.dp), fontSize = 16.sp, textAlign = TextAlign.End,
+                    textColor = if (valid) Ink.OnPanel else Ink.Bad, suffix = suffix.ifEmpty { null },
+                    onDone = ::commit,
+                )
+            }
+        }
         if (draft != null) ModifierHeaderButton(AppIcons.Confirm, "Confirmar ${spec.label}", enabled = typed != null) { commit() }
     }
 }

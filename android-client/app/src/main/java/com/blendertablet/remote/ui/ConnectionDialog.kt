@@ -57,7 +57,6 @@ fun ConnectionSettingsDialog(
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
-                    StepperButton("−", port.toIntOrNull() != null) { port = ((port.toIntOrNull() ?: 8765) - 1).coerceAtLeast(1).toString() }
                     OutlinedTextField(
                         value = port,
                         onValueChange = { port = it.filter(Char::isDigit) },
@@ -66,7 +65,6 @@ fun ConnectionSettingsDialog(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.width(110.dp),
                     )
-                    StepperButton("+", port.toIntOrNull() != null) { port = ((port.toIntOrNull() ?: 8765) + 1).coerceAtMost(65535).toString() }
                 }
                 OutlinedTextField(
                     value = token,

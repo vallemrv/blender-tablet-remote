@@ -1,5 +1,8 @@
 package com.blendertablet.remote.ui
 
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,9 +27,15 @@ fun DrawingMeshDialog(target: CadDrawingMeshTarget, current: Boolean, onDismiss:
                     Text("Vértices por círculo completo; los arcos usan la parte correspondiente.")
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         QuickToolValues(listOf(32,64,128), parsed ?: 64.0) { input = it.toInt().toString() }
-                        StepperButton("−", resolution != null && resolution > 3) { input = (resolution!!-1).toString() }
-                        CompactNumericField(input, { input = it }, Modifier.width(72.dp), selectAllOnFocus = true, onDone = ::create)
-                        StepperButton("+", resolution != null && resolution < 4096) { input = (resolution!!+1).toString() }
+                        var base by remember { mutableStateOf(64) }
+                        HoverHelp("Resolución", numberHelp(true)) {
+                            ScrubNumber(enabled = resolution != null, onScrubStart = { base = resolution ?: 64 },
+                                onScrub = { steps -> input = (base + steps).coerceIn(3, 4096).toString() },
+                                onReset = { input = "64" }) { field ->
+                                CompactNumericField(input, { input = it }, field.width(96.dp), fontSize = 16.sp,
+                                    textAlign = TextAlign.End, selectAllOnFocus = true, onDone = ::create)
+                            }
+                        }
                     }
                 }
                 Text("Las líneas y los polígonos conservan sus vértices originales.")

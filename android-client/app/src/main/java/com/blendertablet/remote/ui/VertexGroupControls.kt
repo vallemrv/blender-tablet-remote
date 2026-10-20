@@ -1,5 +1,8 @@
 package com.blendertablet.remote.ui
 
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -45,9 +48,15 @@ internal fun VertexGroupControls(state: BlenderState, command: (String, Map<Stri
         if (group.locked) Text("Grupo bloqueado en Blender", fontSize = 11.sp, color = Ink.Muted)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Peso (0–1)", fontSize = 12.sp, color = Ink.Muted)
-            StepperButton("−", parsedWeight != null) { weight = formatToolDistance(((parsedWeight ?: 0.0) - .1).coerceAtLeast(0.0), 2) }
-            CompactNumericField(weight, { weight = it }, Modifier.width(72.dp), onDone = {})
-            StepperButton("+", parsedWeight != null) { weight = formatToolDistance(((parsedWeight ?: 0.0) + .1).coerceAtMost(1.0), 2) }
+            var base by remember { mutableStateOf(1.0) }
+            HoverHelp("Peso", numberHelp(true)) {
+                ScrubNumber(enabled = parsedWeight != null, onScrubStart = { base = parsedWeight ?: 1.0 },
+                    onScrub = { steps -> weight = formatToolDistance((base + steps * .05).coerceIn(0.0, 1.0), 2) },
+                    onReset = { weight = "1" }) { field ->
+                    CompactNumericField(weight, { weight = it }, field.width(96.dp), fontSize = 16.sp,
+                        textAlign = TextAlign.End, selectAllOnFocus = true, onDone = {})
+                }
+            }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             PillButton("Asignar", enabled = editing && hasSelection && !group.locked && parsedWeight != null) {

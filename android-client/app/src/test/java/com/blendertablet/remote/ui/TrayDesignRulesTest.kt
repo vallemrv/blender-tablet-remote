@@ -22,7 +22,7 @@ class TrayDesignRulesTest {
     @Test fun everyTouchControlMeasuresAtLeast48dp() {
         assertTrue(Metrics.Touch.value >= 48f)
         val controls = source("Controls")
-        for (name in listOf("fun IconAction(", "fun PillButton(", "fun StepperButton(", "fun RoundAction(",
+        for (name in listOf("fun IconAction(", "fun PillButton(", "fun RoundAction(",
             "fun CompactNumericField(")) {
             val code = body(controls, name)
             assertTrue("$name no usa el objetivo táctil común", code.contains("Metrics.Touch"))
@@ -136,5 +136,16 @@ class TrayDesignRulesTest {
         val props = body(source("ObjectPropertiesTray"), "fun ObjectPropertiesTray(")
         assertEquals(listOf("IconAction"), rowControls(props, "hintKey = \"object.properties\""))
         assertTrue(props.contains("TrayOption(\"Mostrar delante\""))
+    }
+
+    @Test fun noNumericInputKeepsMinusPlusButtons() {
+        val ui = File(System.getProperty("btr.repoRoot"), "android-client/app/src/main/java/com/blendertablet/remote/ui")
+        ui.listFiles()!!.filter { it.extension == "kt" }.forEach { file ->
+            val text = file.readText()
+            for (pattern in listOf("StepperButton(", "StepperRow(", "PillButton(\"−\"", "PillButton(\"+\"", "repeatOnHold"))
+                assertFalse("${file.name} conserva $pattern", text.contains(pattern))
+        }
+        assertTrue(body(source("ModifierPanel"), "private fun EditableModifierScalar(").contains("ScrubNumber("))
+        assertTrue(body(source("SnapControl"), "internal fun DistanceSnapStepInput(").contains("ScrubNumber("))
     }
 }

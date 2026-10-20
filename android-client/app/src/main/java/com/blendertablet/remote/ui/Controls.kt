@@ -184,7 +184,6 @@ fun PillButton(
     modifier: Modifier = Modifier,
     selected: Boolean = false,
     enabled: Boolean = true,
-    repeatOnHold: Boolean = false,
     onClick: () -> Unit,
 ) {
     val background = if (selected) Ink.Accent.copy(alpha = .22f) else Color.White.copy(alpha = .05f)
@@ -199,8 +198,7 @@ fun PillButton(
             .clip(RoundedCornerShape(9.dp))
             .background(background)
             .then(if (selected) Modifier.border(1.dp, Ink.Accent.copy(alpha = .5f), RoundedCornerShape(9.dp)) else Modifier)
-            .then(if (repeatOnHold) Modifier.repeatingClick(enabled, onClick)
-                else if (enabled) Modifier.clickableNoRipple(onClick) else Modifier)
+            .then(if (enabled) Modifier.clickableNoRipple(onClick) else Modifier)
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -241,23 +239,31 @@ fun ToolRail(
 }
 
 /**
- * Botón cuadrado de un solo carácter (− y +), la mitad de ancho que un icono.
- *
- * Vive aquí y no en cada panel porque los steppers de la bandeja de Edit y los del
- * inspector de modificadores tienen que sentirse el mismo control: era justo lo que
- * se había perdido al escribir el inspector con `TextButton` de Material.
+ * Fila `etiqueta [valor]` de inspectores: el número se desliza a pasos de [step]
+ * desde el valor que tenía al empezar, y tocarlo permite escribirlo con cuentas.
+ * Quien llama acota y redondea en [onValue]; la etiqueta queda en gris pequeño.
  */
 @Composable
-fun StepperButton(label: String, enabled: Boolean = true, onClick: () -> Unit) {
-    Box(
-        Modifier
-            .size(Metrics.Touch)
-            .clip(RoundedCornerShape(9.dp))
-            .background(Color.White.copy(alpha = .05f))
-            .repeatingClick(enabled, onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(label, color = if (enabled) Ink.Muted else Ink.Faint, fontSize = 16.sp)
+fun ScrubRow(
+    label: String,
+    value: Double,
+    text: String,
+    step: Double,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onValue: (Double) -> Unit,
+) {
+    var draft by remember(label) { mutableStateOf<String?>(null) }
+    var base by remember { mutableStateOf(value) }
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.weight(1f).padding(end = 6.dp))
+        HoverHelp(label, numberHelp(false), enabled = enabled) {
+            ScrubNumber(enabled = enabled, onScrubStart = { base = value }, onScrub = { onValue(base + it * step) }) { field ->
+                CompactNumericField(draft ?: text, { draft = it }, field.width(96.dp), fontSize = 16.sp,
+                    textAlign = TextAlign.End, selectAllOnFocus = true,
+                    onDone = { draft?.let { com.blendertablet.remote.model.NumericExpression.evaluate(it, value) }?.let(onValue); draft = null })
+            }
+        }
     }
 }
 
@@ -293,41 +299,6 @@ fun <T> ChoiceIcon(
                 )
             }
         }
-    }
-}
-
-/**
- * Fila `etiqueta [−] valor [+]`: un número que se ajusta a pasos con el dedo.
- *
- * El valor se enseña centrado entre los dos botones para que el pulgar no lo tape al
- * repetir toques, y la etiqueta va en gris pequeño para que la cifra sea lo que se lee.
- */
-@Composable
-fun StepperRow(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier,
-    minusEnabled: Boolean = true,
-    plusEnabled: Boolean = true,
-    onMinus: () -> Unit,
-    onPlus: () -> Unit,
-) {
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            label,
-            color = Ink.Faint,
-            fontSize = 11.sp,
-            modifier = Modifier.weight(1f).padding(end = 6.dp),
-        )
-        StepperButton("−", minusEnabled, onMinus)
-        Text(
-            value,
-            color = Ink.OnPanel,
-            fontSize = 13.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.width(56.dp),
-        )
-        StepperButton("+", plusEnabled, onPlus)
     }
 }
 

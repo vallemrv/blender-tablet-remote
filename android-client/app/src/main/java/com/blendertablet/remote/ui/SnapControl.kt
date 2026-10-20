@@ -134,14 +134,21 @@ internal fun DistanceSnapStepInput(
         text = null
         onChange(wire)
     }
-    Text("Paso", color = Ink.Faint, fontSize = 11.sp)
-    PillButton("−", repeatOnHold = true) { adjustStep(-1.0) }
-    CompactNumericField(
-        value = text ?: formatToolDistance(displayed,
-            2),
-        onValueChange = { text = it }, modifier = Modifier.width(84.dp),
-        textAlign = TextAlign.End, placeholder = "Cantidad", onDone = { commit() },
-    )
+    var scrubbed by remember { mutableStateOf(0) }
+    HoverHelp("Paso", numberHelp(false)) {
+        // Cada paso deslizado avanza en el orden de magnitud del paso, como antes −/+.
+        ScrubNumber(onScrubStart = { scrubbed = 0 }, onScrub = { steps ->
+            repeat(abs(steps - scrubbed)) { adjustStep(if (steps > scrubbed) 1.0 else -1.0) }
+            scrubbed = steps
+        }) { field ->
+            CompactNumericField(
+                value = text ?: formatToolDistance(displayed, 2),
+                onValueChange = { text = it }, modifier = field.width(104.dp), fontSize = 16.sp,
+                textAlign = TextAlign.End, placeholder = "Cantidad", caption = "Paso", selectAllOnFocus = true,
+                onDone = { commit() },
+            )
+        }
+    }
     Box {
         PillButton(unit.label) { expanded = true }
         DropdownMenu(expanded, { expanded = false }) {
@@ -156,7 +163,6 @@ internal fun DistanceSnapStepInput(
             }
         }
     }
-    PillButton("+", repeatOnHold = true) { adjustStep(1.0) }
 }
 
 /** Opciones de Tweak derivadas por el mismo módulo que representa el snap. */
@@ -177,13 +183,17 @@ internal fun ScaleStepInput(value: Double, unit: TransformStepUnit, onChange: (D
                 onChange(it)
             }
     }
-    Text("Paso", color = Ink.Faint, fontSize = 11.sp)
-    PillButton("−", repeatOnHold = true) { onChange((value - 1.0).coerceAtLeast(0.001)) }
-    CompactNumericField(
-        value = text, onValueChange = { text = it }, modifier = Modifier.width(84.dp),
-        textAlign = TextAlign.End, placeholder = "Paso", onDone = { commit() },
-    )
-    PillButton("+", repeatOnHold = true) { onChange(value + 1.0) }
+    var base by remember { mutableStateOf(value) }
+    HoverHelp("Paso", numberHelp(false)) {
+        ScrubNumber(onScrubStart = { base = value },
+            onScrub = { steps -> onChange((base + steps).coerceAtLeast(0.001)) }) { field ->
+            CompactNumericField(
+                value = text, onValueChange = { text = it }, modifier = field.width(120.dp), fontSize = 16.sp,
+                textAlign = TextAlign.End, placeholder = "Paso", caption = "Paso", selectAllOnFocus = true,
+                onDone = { commit() },
+            )
+        }
+    }
 }
 
 @Composable
