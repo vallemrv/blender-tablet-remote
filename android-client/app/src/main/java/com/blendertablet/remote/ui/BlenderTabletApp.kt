@@ -269,7 +269,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
         toolSessionArmed = toolSession.armed,
     )
     val trayInset by animateDpAsState(
-        targetValue = if (objectPropertiesVisible) objectTrayHeight else if (materialActive) 104.dp else if (sculptActive) 132.dp else if (trayPresent && state.activeTool != ActiveTool.TWEAK) toolTrayHeight else if (trayPresent) Metrics.TrayInset else 0.dp,
+        targetValue = if (objectPropertiesVisible) objectTrayHeight else if (materialActive) 104.dp else if (sculptActive) 132.dp else if (trayPresent) toolTrayHeight else 0.dp,
         animationSpec = tween(160),
         label = "tray-inset",
     )
@@ -465,7 +465,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
                         onSnapType = vm::setTweakSnapType,
                         onSnapStep = vm::setTweakSnapStep,
                         onClamp = vm::toggleTweakClamp,
-                        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(Metrics.EdgeMargin),
+                        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                            .onSizeChanged { toolTrayHeightPx = it.height }.padding(Metrics.EdgeMargin),
                     )
                 }
 

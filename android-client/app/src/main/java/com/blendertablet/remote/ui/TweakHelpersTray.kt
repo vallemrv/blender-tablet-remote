@@ -1,9 +1,7 @@
 package com.blendertablet.remote.ui
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -44,45 +42,36 @@ fun TweakHelpersTray(
     val effective = settings.copy(motion = if (slide) TweakMotion.SLIDE else TweakMotion.FREE)
     val snapOptions = tweakSnapOptions(snapTypes, effective.motion).filterNot { it == SnapType.NONE }
     val snap = effective.effectiveSnapType.takeIf { it in snapOptions } ?: SnapType.NONE
-    FloatingPanel(modifier) {
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TrayTitle("Tweak")
-            PillButton(if (slide) "Proporcional (sin GG)" else "Proporcional",
-                selected = !slide && editSettings.proportional, enabled = !slide,
-                onClick = onProportional)
+    val more = TrayMore(
+        precision = if (snap != SnapType.INCREMENT) null else ({
+            TrayOption("Paso", if (slide) "Porcentaje de la arista por cada salto." else "Distancia de cada salto del arrastre.") {
+                if (slide) ScaleStepInput(settings.snapStep * 100.0, TransformStepUnit.PERCENT) { onSnapStep(it / 100.0) }
+                else DistanceSnapStepInput(settings.snapStep, unitScaleLength, lengthUnit, onChange = onSnapStep)
+            }
+        }),
+        shape = {
+            TrayOption(if (slide) "Proporcional (sin GG)" else "Proporcional",
+                "Mueve también los vecinos dentro del radio. GG desliza solo la selección.") {
+                IconAction(AppIcons.Proportional, "Edición proporcional", selected = !slide && editSettings.proportional,
+                    enabled = !slide, onClick = onProportional)
+            }
             if (!slide && editSettings.proportional) {
-                ProportionalRadiusInput(editSettings.radius, unitScaleLength, lengthUnit,
-                    proportionalRadiusStep, onProportionalRadius)
-                FalloffChoice(editSettings.falloff, onProportionalFalloff)
-            }
-            PillButton("GG", selected = slide, enabled = canSlide) {
-                onSlide(if (slide) TweakMotion.FREE else TweakMotion.SLIDE)
-            }
-            if (slide) {
-                PillButton("Prolongar arista · Alt", selected = !settings.clamp, onClick = onClamp)
-            }
-            if (snapOptions.isNotEmpty()) {
-                PillButton("Snap", selected = snap != SnapType.NONE) {
-                    onSnapType(if (snap != SnapType.NONE) SnapType.NONE
-                        else snapOptions.firstOrNull { it == SnapType.INCREMENT } ?: snapOptions.first())
+                TrayOption("Radio", "Alcance de la influencia.") {
+                    ProportionalRadiusInput(editSettings.radius, unitScaleLength, lengthUnit,
+                        proportionalRadiusStep, onProportionalRadius)
                 }
-                if (snap != SnapType.NONE) {
-                    SnapControl(snapOptions, snap, onSnapType)
-                    if (snap == SnapType.INCREMENT) {
-                        if (slide) {
-                            ScaleStepInput(settings.snapStep * 100.0, TransformStepUnit.PERCENT) {
-                                onSnapStep(it / 100.0)
-                            }
-                        } else {
-                            DistanceSnapStepInput(settings.snapStep, unitScaleLength, lengthUnit, onChange = onSnapStep)
-                        }
-                    }
+                TrayOption("Perfil", "Cómo cae la influencia hacia el borde del radio.") {
+                    FalloffChoice(editSettings.falloff, onProportionalFalloff)
                 }
             }
+        },
+    )
+    SingleLineTray("Tweak", modifier = modifier, more = more,
+        help = "Arrastra un elemento para moverlo · GG lo desliza por sus aristas · Snap ajusta el arrastre") {
+        IconAction(AppIcons.TweakSlide, "GG · deslizar por aristas", selected = slide, enabled = canSlide) {
+            onSlide(if (slide) TweakMotion.FREE else TweakMotion.SLIDE)
         }
+        if (slide) IconAction(AppIcons.EdgeExtend, "Prolongar arista · Alt", selected = !settings.clamp, onClick = onClamp)
+        if (snapOptions.isNotEmpty()) SnapControl(listOf(SnapType.NONE) + snapOptions, snap, onSnapType)
     }
 }

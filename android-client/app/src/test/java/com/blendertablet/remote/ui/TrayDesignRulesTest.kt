@@ -76,4 +76,29 @@ class TrayDesignRulesTest {
         assertTrue(tray.contains("TrayHints(context).consume(hintKey)"))
         assertTrue(tray.contains("firstTimes && help.isNotBlank()"))
     }
+
+    /** Controles directos de la fila de una bandeja: el bloque de contenido de SingleLineTray. */
+    private fun rowControls(code: String, marker: String): List<String> {
+        val row = code.substringAfter(marker).substringAfter(") {").substringBefore("\n}\n")
+        return Regex("""\b(TransformAxisInputs|IconAction|SnapControl|ConstraintChoice|ChoiceIcon|PillButton|FalloffChoice)\(""")
+            .findAll(row).map { it.groupValues[1] }.toList()
+    }
+
+    @Test fun transformShowsAxesSnapAndConstraintWithTheRestUnderMore() {
+        val bar = body(source("TransformBar"), "fun TransformBar(")
+        val controls = rowControls(bar, "hintKey = \"transform.")
+        assertEquals(listOf("TransformAxisInputs", "IconAction", "SnapControl", "ConstraintChoice"), controls)
+        assertTrue("Rotar no puede mostrar más de cinco controles", controls.size <= 5)
+        for (option in listOf("\"Paso\"", "\"Centro\"", "\"Fuente\"", "\"Propio\"", "\"Orientación\"",
+            "\"Otra selección\"", "\"Proporcional\"", "\"Perfil\""))
+            assertTrue("Falta $option en Más", bar.substringBefore("SingleLineTray(").contains("TrayOption($option"))
+        assertFalse(source("TransformBar").contains("IconAction(AppIcons.Reset, \"Restablecer rotación"))
+    }
+
+    @Test fun tweakKeepsGgSnapAndExtendInTheRowAndProportionalUnderShape() {
+        val tray = source("TweakHelpersTray")
+        assertTrue(tray.contains("SingleLineTray(\"Tweak\""))
+        assertEquals(listOf("IconAction", "IconAction", "SnapControl"), rowControls(tray, "SingleLineTray(\"Tweak\""))
+        assertTrue(tray.contains("TrayOption(if (slide) \"Proporcional (sin GG)\" else \"Proporcional\""))
+    }
 }
