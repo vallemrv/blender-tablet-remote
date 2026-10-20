@@ -79,9 +79,9 @@ def query_sketch_annotation(overlay, u, v, aspect, *, labels_only=True):
     return dict(kind='CONSTRAINT',id=min(candidates)[3],part='LABEL') if candidates else None
 
 
-def query_edit_surface_candidate(obj, u, v, enabled=True, mode="AUTO", previous=None):
+def query_edit_surface_candidate(obj, u, v, enabled=True, mode="AUTO", previous=None, *, threshold=None, view_context=None):
     """Ancla sobre la superficie editable viva, incluidas las caras de cortes previos."""
-    found = find_view3d()
+    found = view_context or find_view3d()
     if found is None:
         raise CommandError("No 3D viewport available", code="no_viewport")
     region, rv3d = found[2], found[3]
@@ -139,6 +139,8 @@ def query_edit_surface_candidate(obj, u, v, enabled=True, mode="AUTO", previous=
 
     thresholds = ({"VERTEX": .035, "EDGE_CENTER": .028, "EDGE": .042} if mode == "AUTO"
                   else {mode: {"VERTEX": .080, "EDGE_CENTER": .070, "EDGE": .042}[mode]})
+    if threshold is not None:
+        thresholds = {kind: threshold for kind in thresholds}
     ranked = []
     if enabled:
         for kind, acquire in thresholds.items():

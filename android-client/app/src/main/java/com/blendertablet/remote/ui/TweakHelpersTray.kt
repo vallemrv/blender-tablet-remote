@@ -63,7 +63,7 @@ fun TweakHelpersTray(
                 onSlide(if (slide) TweakMotion.FREE else TweakMotion.SLIDE)
             }
             if (slide) {
-                PillButton("Limitar a arista", selected = settings.clamp, onClick = onClamp)
+                PillButton("Prolongar arista · Alt", selected = !settings.clamp, onClick = onClamp)
             }
             if (snapOptions.isNotEmpty()) {
                 PillButton("Snap", selected = snap != SnapType.NONE) {

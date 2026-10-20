@@ -52,6 +52,12 @@ def finish_for_switch(owner=None):
     """Confirma el resultado estable al cambiar intención; los gestos incompletos se retiran."""
     from . import modal, tools
     session = modal.session
+    from . import selection
+    if session.active and session.session_id == selection._tweak_session_id:
+        session.require(owner)
+        session.restore_safely()
+        session.reset()
+        selection._reset_tweak()
     if session.active:
         session.require(owner)
         if session.motion == 'SLIDE' or session.mode in {'MOVE', 'ROTATE', 'SCALE'}:

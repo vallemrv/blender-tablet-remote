@@ -1579,3 +1579,11 @@ no quedan archivos o referencias temporales.
   órbita y roll desde gestos, navegador y comandos; mantiene zoom/pan. Elegir
   otra vista principal cambia explícitamente el plano sin quitar el candado.
   Desbloquear permite orbitar; nueva escena/carga reinicia el candado.
+
+- Tweak usa adquisición sobre toda la jaula visible, también justo fuera de su
+  silueta, con margen táctil propio. Seleccionado y no seleccionado tienen la misma
+  prioridad espacial; tocar uno seleccionado conserva el grupo. Xray no salta
+  automáticamente a otro elemento al empezar Tweak. GG ofrece Prolongar arista · Alt,
+  activo por defecto: extrapola el riel en ambas direcciones sin el tope anterior
+  de −1/2 longitudes. Desactivarlo limita al segmento. Un gesto Tweak pendiente
+  se cancela por identidad antes de abrir otra herramienta, incluso sin ACK.

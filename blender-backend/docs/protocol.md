@@ -479,7 +479,7 @@ El BEGIN configura el gesto entero y esos ajustes se conservan hasta END/CANCEL:
   (`VERTEX`, `EDGE`, `EDGE_CENTER`, `FACE`, `FACE_CENTER`).
 - `snap_step`: tamaño del incremento. Con `motion: FREE` son unidades de escena; con
   `SLIDE` es la fracción del riel (`0.1` = un décimo de arista).
-- `clamp` (solo `SLIDE`, por defecto `true`): impide que el vértice se salga del
+- `clamp` (solo `SLIDE`, por defecto `false`): impide que el vértice se salga del
   segmento; con `false` el riel extrapola más allá de sus dos extremos.
 
 Con `motion: SLIDE`, el riel de cada vértice se elige **una sola vez**, en el primer
@@ -2739,3 +2739,7 @@ El cliente elimina del radial las operaciones ya presentes en el rail.
 `view.plane_lock {enabled: bool}` requiere una vista principal para bloquear.
 Devuelve estado de cámara con `plane_locked`. La capacidad `view.plane_lock`
 lo anuncia. Fija ortográfica e impide órbita/roll; zoom y pan siguen disponibles.
+
+`selection.tweak` usa 0.055 de tolerancia por defecto y el candidato visible más
+cercano, sin prioridad por estar seleccionado. En `motion:SLIDE`, `clamp:false`
+(valor inicial) prolonga el riel sin limitar la fracción; `true` limita a [0,1].

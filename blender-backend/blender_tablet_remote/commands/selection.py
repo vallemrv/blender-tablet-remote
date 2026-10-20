@@ -189,6 +189,29 @@ def pick(payload: dict) -> dict:
     # evaluada, o a otro objeto de fondo. Raycast sobre la jaula original para que
     # cara/vértice/arista tocados sean los del BMesh editable y fuera de él sea vacío.
     if active is not None and active.mode == "EDIT" and active.type == "MESH":
+        if payload.get('_tweak') and not bpy.context.scene.tool_settings.mesh_select_mode[2]:
+            from .view import is_xray_wireframe
+            bm = edit_bmesh(active)
+            if is_xray_wireframe():
+                picked = _pick_through(active, bm, rv3d, Vector((u,v)), _touch_threshold(payload), mode,
+                                       bpy.context.scene.tool_settings.mesh_select_mode, prefer_nearest=True)
+                return _with_state(picked or {'hit':False})
+            from .snap import query_edit_surface_candidate
+            kind = 'VERTEX' if bpy.context.scene.tool_settings.mesh_select_mode[0] else 'EDGE'
+            candidate = query_edit_surface_candidate(active,u,v,True,kind,threshold=_touch_threshold(payload),
+                                                      view_context=found)
+            if not candidate.get('hit') or candidate.get('snap_type') != kind:
+                return _with_state({'hit':False})
+            if kind == 'VERTEX':
+                target=bm.verts[int(candidate['element'])];element='vert'
+            else:
+                ids={int(i) for i in str(candidate['element']).split('-')}
+                target=next(edge for edge in bm.edges if {v.index for v in edge.verts}==ids);element='edge'
+            if mode != 'PROBE':
+                _apply_op(target,mode)
+                if target.select:bm.select_history.add(target)
+                bm.select_flush_mode();flush_bmesh(active,bm,destructive=False)
+            return _with_state(dict(hit=True,object=active.name,element=element,index=target.index,distance=candidate['distance']))
         edit_hit = _edit_cage_raycast(active, origin, direction)
         if edit_hit is None:
             loose = _pick_loose_element(active,u,v,mode,payload,rv3d,_region,_area,depsgraph)
@@ -333,7 +356,7 @@ def _tweak_settings(payload: dict) -> tuple[str, str, float | None, bool]:
             raise BadPayload("'snap_step' must be positive")
     else:
         step = DEFAULT_TWEAK_SLIDE_STEP if motion == "SLIDE" else None
-    return motion, snap_type, step, bool(payload.get("clamp", True))
+    return motion, snap_type, step, bool(payload.get("clamp", False))
 
 
 @command("selection.tweak", mutating=True)
@@ -369,7 +392,7 @@ def tweak(payload: dict) -> dict:
                     for kind, seq in (("vert", bm.verts), ("edge", bm.edges), ("face", bm.faces))}
         # Un único picking. Tocar algo seleccionado arrastra el grupo; tocar otro
         # elemento lo selecciona en exclusiva. Un miss conserva la selección.
-        picked = pick(dict(payload, mode="ADD"))
+        picked = pick(dict(payload, mode="ADD", _tweak=True, threshold=payload.get("threshold", .055)))
         if picked.get("hit"):
             kind, index = picked["element"], picked["index"]
             if index not in selected[kind]:
@@ -475,7 +498,7 @@ def shortest_path(payload: dict) -> dict:
         source = selected[0] if len(selected) == 1 else None
 
     # ADD conserva el origen mientras reutilizamos exactamente el picking táctil.
-    picked = pick(dict(payload, mode="ADD"))
+    picked = pick(dict(payload, mode="ADD", _tweak=True, threshold=payload.get("threshold", .055)))
     if not picked.get("hit"):
         return picked
     target = bm.select_history.active
@@ -660,7 +683,7 @@ def _pick_element(obj, world_location, face_index: int, mode: str, payload: dict
             "distance": distance}
 
 
-def _pick_through(obj, bm, rv3d, touch: Vector, threshold: float, mode: str, sel_mode) -> dict | None:
+def _pick_through(obj, bm, rv3d, touch: Vector, threshold: float, mode: str, sel_mode, prefer_nearest=False) -> dict | None:
     """Pick en wireframe+xray: el candidato más próximo al punto tocado.
 
     Se ve (y se quiere tocar) el armazón entero, no solo la cara frontal del rayo:
@@ -699,7 +722,7 @@ def _pick_through(obj, bm, rv3d, touch: Vector, threshold: float, mode: str, sel
     # queda detrás. Hay que decidirlo antes de limpiar SET o se pierde esa memoria.
     nearest = min(scored, key=lambda item: item[0])
     selectable = [item for item in scored if not item[1].select]
-    chosen = min(selectable, key=lambda item: item[0]) if nearest[1].select and selectable else nearest
+    chosen = min(selectable, key=lambda item: item[0]) if not prefer_nearest and nearest[1].select and selectable else nearest
 
     if mode == "SET":
         bm.select_history.clear()

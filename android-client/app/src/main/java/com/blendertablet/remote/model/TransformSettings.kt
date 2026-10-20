@@ -88,7 +88,7 @@ enum class TransformStepUnit(val label: String) {
 /** Cómo se mueve el elemento arrastrado con Tweak. Viaja como `motion`. */
 enum class TweakMotion(val label: String) {
     FREE("Libre"),
-    /** El `GG` de Blender: el vértice no sale de una de sus aristas. */
+    /** El `GG` de Blender: desliza sobre la dirección de una arista. */
     SLIDE("Solo aristas"),
 }
 
@@ -103,7 +103,7 @@ data class TweakSettings(
     /** Fracción del riel con SLIDE; unidades de escena con FREE. */
     val snapStep: Double = 0.1,
     /** Con SLIDE, impide que el vértice se salga del segmento. */
-    val clamp: Boolean = true,
+    val clamp: Boolean = false,
 ) {
     /**
      * Deslizar por una arista ya decide el destino, así que el backend degrada ahí los

@@ -59,9 +59,6 @@ MOTIONS = ("FREE", "SLIDE")
 # cuál es. Es relativo a la malla a propósito: un umbral en metros elegiría rieles al
 # azar en una pieza de milímetros y no llegaría a fijarlos nunca en una de kilómetros.
 SLIDE_RAIL_FRACTION = 0.02
-# Sin clamp el riel extrapola, pero acotado: si no, un arrastre largo manda el vértice
-# al infinito y la malla desaparece del viewport.
-SLIDE_FREE_RANGE = (-1.0, 2.0)
 
 
 def _move_base_to_visible(point: Vector, orientation_basis: Matrix,
@@ -447,7 +444,6 @@ class _Session:
         """Desplazamiento local de cada vértice sobre su riel, siguiendo al dedo."""
         view = self._view_direction()
         offsets, factors = {}, []
-        low, high = (0.0, 1.0) if self.slide_clamp else SLIDE_FREE_RANGE
         for index, rail in self.slide_rails.items():
             projected = self._projected_rail(rail, view)
             denominator = projected.length_squared
@@ -458,7 +454,7 @@ class _Session:
             # deja el vértice en la mitad o el cuarto exactos de la arista.
             if self.snap and self.snap_type == "INCREMENT" and self.step > 0:
                 factor = round(factor / self.step) * self.step
-            factor = min(high, max(low, factor))
+            if self.slide_clamp: factor = min(1.0, max(0.0, factor))
             offsets[index] = rail * factor
             factors.append(factor)
         self.slide_factor = sum(factors) / len(factors) if factors else None

@@ -75,6 +75,31 @@ class TweakTests(unittest.TestCase):
                 self.assertFalse(response['active'])
                 self.assertFalse(modal.session.active)
 
+    def test_tweak_acquires_selected_corner_just_outside_silhouette(self):
+        self.select(range(8))
+        result=self.begin(position=(1.2,1.1,1))
+        self.assertTrue(result['hit'])
+        self.assertEqual(sum(v.select for v in self.bm.verts),8)
+        self.gesture('CANCEL')
+        self.assertUnmoved()
+
+    def test_xray_tweak_does_not_cycle_away_from_selected_nearest_vertex(self):
+        result=self.begin();index=result['index'];self.gesture('END')
+        with patch('blender_tablet_remote.commands.view.is_xray_wireframe',return_value=True):
+            again=self.begin()
+            self.assertEqual(again['index'],index)
+            self.gesture('CANCEL')
+
+    def test_slide_without_clamp_extends_beyond_two_edge_lengths_and_backwards(self):
+        self.begin(motion='SLIDE',clamp=False)
+        index=next(iter(modal.session.edit_coords))
+        modal.session.slide_rails={index:Vector((2,0,0))}
+        offsets=modal.session._slide_offsets(Vector((20,0,0)))
+        self.assertAlmostEqual(offsets[index].x,20)
+        self.assertAlmostEqual(modal.session._slide_offsets(Vector((-20,0,0)))[index].x,-20)
+        modal.session.slide_clamp=True
+        self.assertAlmostEqual(modal.session._slide_offsets(Vector((20,0,0)))[index].x,2)
+
     def test_tap_selects_without_moving_or_undo(self):
         with patch.object(modal,'undo_push') as undo:
             result=self.begin()
