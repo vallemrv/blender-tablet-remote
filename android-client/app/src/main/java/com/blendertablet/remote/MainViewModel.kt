@@ -887,6 +887,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Navegación por vistas estándar y proyección (footer de vistas). */
+    fun toggleViewPlaneLock() = client.viewPlaneLock(!client.state.value.view.planeLocked)
     fun viewAxis(name: String) = client.viewAxis(name)
     fun viewOrbitStep(dx: Float, dy: Float) {
         client.gesture(Gesture.ORBIT, GesturePhase.BEGIN)

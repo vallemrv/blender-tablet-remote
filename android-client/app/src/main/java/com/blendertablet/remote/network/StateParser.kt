@@ -219,6 +219,7 @@ object StateParser {
             outliner = f.optJSONObject("outliner")?.optInt("version") == 1,
             outlinerCollections = f.optJSONObject("outliner")?.optBoolean("collections") == true,
             fileMkdir = f.optJSONObject("files")?.optBoolean("mkdir") == true,
+            viewPlaneLock = view?.optBoolean("plane_lock") == true,
         )
     }
 
@@ -569,6 +570,7 @@ object StateParser {
         return ViewState(
             perspective = enum(json.optString("perspective"), Projection.PERSP),
             axisView = json.optString("axis_view").takeIf { it.isNotBlank() && it != "null" },
+            planeLocked = json.optBoolean("plane_locked"),
             shading = shading,
         )
     }

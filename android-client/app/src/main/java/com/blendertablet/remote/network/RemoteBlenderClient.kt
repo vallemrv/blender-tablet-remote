@@ -217,6 +217,7 @@ interface RemoteBlenderClient {
     fun frameSelected()
 
     /** Vista estándar: FRONT/BACK/LEFT/RIGHT/TOP/BOTTOM. */
+    fun viewPlaneLock(enabled: Boolean)
     fun viewAxis(name: String)
     fun viewFrameAll()
 

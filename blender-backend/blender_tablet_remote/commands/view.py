@@ -52,6 +52,7 @@ _sketch_peek = None
 
 def orbit_begin() -> None:
     global _sketch_peek
+    if camera.plane_locked: return
     if _sketch_locked() and _sketch_peek is None:
         _sketch_peek = (camera.location.copy(), camera.rotation.copy(), camera.distance,
                         camera.perspective, camera.axis_view, camera._ortho_depth)
@@ -68,6 +69,7 @@ def orbit_end() -> None:
 
 
 def orbit_delta(dx: float, dy: float) -> None:
+    if camera.plane_locked: return
     if _sketch_locked() and _sketch_peek is None:
         pan_delta(dx, dy)
         return
@@ -204,6 +206,19 @@ def axis(payload: dict) -> dict:
     return camera.as_dict()
 
 
+@command("view.plane_lock")
+def plane_lock(payload: dict) -> dict:
+    _region_view()
+    enabled = payload.get('enabled')
+    if type(enabled) is not bool: raise BadPayload('enabled debe ser verdadero o falso')
+    if enabled and camera.axis_view not in {'TOP','BOTTOM','FRONT','BACK','LEFT','RIGHT'}:
+        raise BadPayload('Elige primero una vista de plano: superior, frontal o lateral')
+    camera.plane_locked = enabled
+    if enabled: camera.perspective = 'ORTHO'
+    camera._invalidate()
+    return camera.as_dict()
+
+
 @command("view.perspective")
 def perspective(payload: dict) -> dict:
     """Cambia realmente la proyección usada por captura y picking."""
@@ -217,6 +232,7 @@ def perspective(payload: dict) -> dict:
         # The sketch view stays face-on; only its projection is a choice.
         from ..cad.runtime import runtime
         runtime.sketch_projection = mode
+    if camera.plane_locked: mode = "ORTHO"
     changed = camera.perspective != mode
     camera.perspective = mode
     return dict(camera.as_dict(), changed=changed)

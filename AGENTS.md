@@ -1574,3 +1574,8 @@ no quedan archivos o referencias temporales.
 
 - Mover/Rotar/Escalar ofrecen snap Arista (cualquier punto del segmento) separado
   de Centro arista. No se llama secante; reutiliza el candidato geométrico EDGE.
+
+- El candado del pie de vistas bloquea el plano elegido en ortográfica. Impide
+  órbita y roll desde gestos, navegador y comandos; mantiene zoom/pan. Elegir
+  otra vista principal cambia explícitamente el plano sin quitar el candado.
+  Desbloquear permite orbitar; nueva escena/carga reinicia el candado.

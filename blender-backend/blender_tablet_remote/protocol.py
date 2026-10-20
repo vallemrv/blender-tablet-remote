@@ -489,7 +489,7 @@ FEATURES = {
                     "commands": ["scene.scale", "scene.scale_set"],
                     "clipping": True, "grid": True, "proportional_radius": True,
                     "rescales_geometry": False},
-    "view": {"version": 4, "axis_views": ["FRONT", "BACK", "LEFT", "RIGHT", "TOP", "BOTTOM"],
+    "view": {"version": 4, "plane_lock": True, "axis_views": ["FRONT", "BACK", "LEFT", "RIGHT", "TOP", "BOTTOM"],
              "projections": ["PERSP", "ORTHO"], "independent_camera": True,
              "shading": ENUMS["shading"], "local_view": True, "overlays": True},
     "stream": {"version": 2, "preferred": "H264", "transports": ["H264", "MJPEG"],

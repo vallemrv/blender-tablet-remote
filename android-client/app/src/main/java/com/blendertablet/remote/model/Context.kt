@@ -23,6 +23,7 @@ enum class Shading { WIREFRAME, SOLID }
 data class ViewState(
     val perspective: Projection = Projection.PERSP,
     val axisView: String? = null,
+    val planeLocked: Boolean = false,
     val shading: Shading = Shading.SOLID,
 )
 

@@ -2735,3 +2735,7 @@ Spin · Revolución también se anuncia como familia `REVOLVE` de `edit_toolbar`
 con variante `REVOLVE`, comando `tool.begin` y selección mínima de un vértice.
 No envía coordenadas de centro por defecto; `tool.begin` toma el cursor 3D actual.
 El cliente elimina del radial las operaciones ya presentes en el rail.
+
+`view.plane_lock {enabled: bool}` requiere una vista principal para bloquear.
+Devuelve estado de cámara con `plane_locked`. La capacidad `view.plane_lock`
+lo anuncia. Fija ortográfica e impide órbita/roll; zoom y pan siguen disponibles.

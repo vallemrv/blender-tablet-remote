@@ -113,6 +113,7 @@ data class ServerFeatures(
     val outliner: Boolean = false,
     val outlinerCollections: Boolean = false,
     val fileMkdir: Boolean = false,
+    val viewPlaneLock: Boolean = false,
 )
 
 data class EditSettings(

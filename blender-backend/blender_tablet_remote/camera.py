@@ -50,6 +50,7 @@ class RemoteCamera:
         self._synced = False
         self.perspective = "PERSP"
         self.axis_view = None
+        self.plane_locked = False
         self.clip_start = DEFAULT_CLIP_START
         self.clip_end = DEFAULT_CLIP_END
         # Plano de sección (punto, normal) en el mundo: con la vista de frente a él,
@@ -77,6 +78,7 @@ class RemoteCamera:
         self._frame_cache = None
 
     def reset(self) -> None:
+        self.plane_locked = False
         self._synced = False
         self.axis_view = None
         self._frame_cache = None
@@ -228,6 +230,8 @@ class RemoteCamera:
 
         El signo del giro y las orientaciones BACK/BOTTOM dependen de esta convención.
         """
+        if self.plane_locked:
+            return
         right = self.rotation @ Vector((1.0, 0.0, 0.0))
         up = self.rotation @ Vector((0.0, 1.0, 0.0))
         yaw = Quaternion(up, -dx * sensitivity)
@@ -271,6 +275,8 @@ class RemoteCamera:
         de dos dedos en el sentido horario (ángulo positivo) la escena acompaña al
         dedo girando también en el sentido horario.
         """
+        if self.plane_locked:
+            return
         forward = self.rotation @ Vector((0.0, 0.0, -1.0))
         roll_q = Quaternion(forward, angle)
         self.rotation = (roll_q @ self.rotation).normalized()
@@ -349,18 +355,19 @@ class RemoteCamera:
             "distance": self.distance,
             "perspective": self.perspective,
             "axis_view": self.axis_view,
+            "plane_locked": self.plane_locked,
         }
 
     def apply(self, location=None, rotation=None, distance=None, perspective=None) -> None:
         if location is not None:
             self.location = Vector(location)
-        if rotation is not None:
+        if rotation is not None and not self.plane_locked:
             self.rotation = Quaternion(rotation).normalized()
             self.axis_view = None
         if distance is not None:
             self.distance = max(MIN_DISTANCE, min(MAX_DISTANCE, float(distance)))
         if perspective is not None:
-            self.perspective = perspective
+            self.perspective = "ORTHO" if self.plane_locked else perspective
         if location is not None or rotation is not None or distance is not None or perspective is not None:
             self._invalidate()
 

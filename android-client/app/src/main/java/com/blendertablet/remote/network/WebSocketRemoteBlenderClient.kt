@@ -632,6 +632,7 @@ class WebSocketRemoteBlenderClient(
     override fun redo() = command("history.redo")
     override fun repeatLast() = command("history.repeat_last")
     override fun frameSelected() = command("view.frame_selected")
+    override fun viewPlaneLock(enabled: Boolean) = command("view.plane_lock", JSONObject().put("enabled", enabled))
     override fun viewAxis(name: String) = command("view.axis", JSONObject().put("axis", name))
     override fun viewFrameAll() = command("view.frame_all")
     override fun viewPerspective(projection: Projection) =
@@ -1174,6 +1175,9 @@ class WebSocketRemoteBlenderClient(
                         command == "selection.more" || command == "selection.less" -> result?.let(::updateState)
                     // El toggle de wireframe responde con el shading nuevo: pintarlo ya,
                     // sin esperar al scene.get_state de seguimiento.
+                    command == "view.plane_lock" -> result?.let { r ->
+                        _state.value = _state.value.copy(view = StateParser.view(r, _state.value.view.shading.name))
+                    }
                     command == "view.shading" -> result?.let { r ->
                         val shading = if (r.optString("shading") == "WIREFRAME") Shading.WIREFRAME else Shading.SOLID
                         _state.value = _state.value.copy(view = _state.value.view.copy(shading = shading))

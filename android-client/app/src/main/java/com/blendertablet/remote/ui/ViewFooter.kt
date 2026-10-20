@@ -37,6 +37,9 @@ import com.blendertablet.remote.model.SelectionMode
 fun ViewFooter(
     projection: Projection,
     activeAxisView: String?,
+    planeLocked: Boolean,
+    planeLockAvailable: Boolean,
+    onPlaneLock: () -> Unit,
     inEdit: Boolean,
     selectionMode: SelectionMode,
     showEditShortcuts: Boolean,
@@ -84,23 +87,24 @@ fun ViewFooter(
                     } else {
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         NumKey("7", "Superior / inferior", activeAxisView in setOf("TOP", "BOTTOM")) { opposite("TOP", "BOTTOM") }
-                        NumKey("8", "Orbitar arriba") { onOrbit(0f, -0.06f) }
-                        NumKey("9", "Girar 180°") { onRotate180() }
+                        NumKey("8", "Orbitar arriba", enabled = !planeLocked) { onOrbit(0f, -0.06f) }
+                        NumKey("9", "Girar 180°", enabled = !planeLocked) { onRotate180() }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                        NumKey("4", "Orbitar izquierda") { onOrbit(-0.06f, 0f) }
+                        NumKey("4", "Orbitar izquierda", enabled = !planeLocked) { onOrbit(-0.06f, 0f) }
                         NumKey(
                             "5",
                             if (projection == Projection.PERSP) "Perspectiva" else "Ortográfica",
                             selected = projection == Projection.ORTHO,
+                            enabled = !planeLocked,
                         ) {
                             onProjection(if (projection == Projection.PERSP) Projection.ORTHO else Projection.PERSP)
                         }
-                        NumKey("6", "Orbitar derecha") { onOrbit(0.06f, 0f) }
+                        NumKey("6", "Orbitar derecha", enabled = !planeLocked) { onOrbit(0.06f, 0f) }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         NumKey("1", "Frontal / trasera", activeAxisView in setOf("FRONT", "BACK")) { opposite("FRONT", "BACK") }
-                        NumKey("2", "Orbitar abajo") { onOrbit(0f, 0.06f) }
+                        NumKey("2", "Orbitar abajo", enabled = !planeLocked) { onOrbit(0f, 0.06f) }
                         NumKey("3", "Derecha / izquierda", activeAxisView in setOf("RIGHT", "LEFT")) { opposite("RIGHT", "LEFT") }
                         PageKey(AppIcons.Frame, "Encuadrar objeto", selected = false, onClick = onFrameSelected)
                     }
@@ -109,6 +113,9 @@ fun ViewFooter(
                 }
             }
 
+            if (planeLockAvailable) IconAction(AppIcons.selectionLock(planeLocked),
+                if (planeLocked) "Desbloquear plano de vista" else "Bloquear plano · elige primero una vista",
+                selected = planeLocked, enabled = planeLocked || activeAxisView != null, onClick = onPlaneLock)
             HoverHelp(
                 title = if (expanded) "Plegar vistas" else "Desplegar vistas",
                 explanation = "Abre o recoge los controles de orientación, proyección y atajos.",
