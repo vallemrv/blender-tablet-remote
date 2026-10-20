@@ -21,6 +21,8 @@ class PlaneLockTests(unittest.TestCase):
             view.plane_lock({'enabled':True})
             rotation=self.camera.rotation.copy();distance=self.camera.distance;location=self.camera.location.copy()
             self.camera.orbit(.4,.2,2);self.camera.roll(.7)
+            self.camera.sync_from_region(object(),force=True)
+            self.assertEqual(view._sketch_projection(),'ORTHO')
             self.camera.apply(rotation=Quaternion((1,1,0,0)),perspective='PERSP')
             self.assertEqual(self.camera.rotation,rotation)
             self.assertEqual(self.camera.perspective,'ORTHO')

@@ -41,6 +41,7 @@ def _sketch_locked():
 
 
 def _sketch_projection():
+    if camera.plane_locked: return 'ORTHO'
     from ..cad.runtime import runtime
     return runtime.sketch_projection
 

@@ -67,7 +67,7 @@ class RemoteCamera:
 
     def sync_from_region(self, rv3d, force: bool = False) -> None:
         """Copia la vista del PC. Solo la primera vez, para arrancar donde él está."""
-        if self._synced and not force:
+        if self._synced and (not force or self.plane_locked):
             return
         self.location = rv3d.view_location.copy()
         self.rotation = rv3d.view_rotation.copy()
