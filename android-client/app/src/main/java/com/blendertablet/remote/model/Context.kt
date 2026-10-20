@@ -25,6 +25,8 @@ data class ViewState(
     val axisView: String? = null,
     val planeLocked: Boolean = false,
     val shading: Shading = Shading.SOLID,
+    /** Orientación de caras (normales azul/rojo); null si el servidor no la ofrece. */
+    val faceOrientation: Boolean? = null,
 )
 
 data class SceneContext(

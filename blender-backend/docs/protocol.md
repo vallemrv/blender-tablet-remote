@@ -628,6 +628,7 @@ y sesiones incompletas. Cada repetición crea su propio paso de undo.
 | `view.perspective` | `mode`: `PERSP`\|`ORTHO`\|`TOGGLE` |
 | `view.shading` | `mode`: `WIREFRAME`\|`SOLID`\|`TOGGLE` |
 | `view.overlays` | `show` (bool; por defecto toggle) |
+| `view.face_orientation` | `show` (bool; por defecto toggle) |
 | `view.local` | `enabled` (bool; por defecto toggle) |
 | `view.get` / `view.set` | `location`, `rotation` (quaternion wxyz), `distance` |
 
@@ -646,6 +647,11 @@ que `draw_view3d` dibuja. Sin `show` alterna. Devuelve `{"overlays": bool}` y el
 también en `scene.get_state` como `overlays` (top-level). Requiere viewport
 (`no_viewport` en background). Lo usa el botón del ojo de la tablet: ocultar los
 controles deja el vídeo limpio, sin interfaz encima y sin rejilla debajo.
+
+`view.face_orientation` alterna el overlay nativo Orientación de caras
+(`space.overlay.show_face_orientation`): azul hacia fuera, rojo hacia dentro. Devuelve
+`{"face_orientation": bool}` y viaja en `scene.get_state` como `face_orientation`
+(top-level); `features.view.face_orientation` lo anuncia. No crea undo ni toca la escena.
 
 `selection.linked` extiende la selección a las islas conectadas (la `L` / `Ctrl+L`):
 recorre por aristas desde lo ya seleccionado y se detiene en lo oculto. Sin selección

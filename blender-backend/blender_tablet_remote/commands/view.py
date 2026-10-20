@@ -348,6 +348,32 @@ def overlays(payload: dict) -> dict:
     return {"overlays": bool(space.overlay.show_overlays)}
 
 
+def face_orientation_state() -> bool:
+    """¿Se colorean las caras por su normal (azul fuera, rojo dentro)?"""
+    found = _shading_space()
+    if found is None:
+        return False
+    return bool(found[1].overlay.show_face_orientation)
+
+
+@command("view.face_orientation")
+def face_orientation(payload: dict) -> dict:
+    """Muestra las normales como Orientación de caras del overlay nativo.
+
+    Es un overlay del motor, así que GPUOffScreen lo dibuja igual que el PC; se guarda
+    en el viewport (no en la escena) y no crea undo. Sin `show` alterna.
+    """
+    show = payload.get("show")
+    if show is not None and not isinstance(show, bool):
+        raise BadPayload("'show' must be a boolean")
+    found = _shading_space()
+    if found is None:
+        raise CommandError("No 3D viewport available", code="no_viewport")
+    overlay = found[1].overlay
+    overlay.show_face_orientation = (not overlay.show_face_orientation) if show is None else show
+    return {"face_orientation": bool(overlay.show_face_orientation)}
+
+
 # ---------------------------------------------------------------- aislamiento
 
 # Objetos ocultados por `view.local`. Solo estos se restauran al salir: lo que ya

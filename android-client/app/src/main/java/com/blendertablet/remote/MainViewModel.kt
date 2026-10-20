@@ -908,6 +908,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (!client.state.value.material.active) client.viewShading("TOGGLE")
     }
 
+    /** Ver normales: orientación de caras del viewport (fila de Deshacer/Rehacer). */
+    fun toggleFaceOrientation() {
+        client.state.value.view.faceOrientation?.let { client.viewFaceOrientation(!it) }
+    }
+
     fun toggleProportional() {
         val enabled = !client.state.value.editSettings.proportional
         client.editSettings(mapOf("proportional" to enabled))

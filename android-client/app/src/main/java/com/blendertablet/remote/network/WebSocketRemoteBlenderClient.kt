@@ -641,6 +641,7 @@ class WebSocketRemoteBlenderClient(
         command("view.perspective", JSONObject().put("mode", projection.name))
 
     override fun viewShading(mode: String) = command("view.shading", JSONObject().put("mode", mode))
+    override fun viewFaceOrientation(show: Boolean) = command("view.face_orientation", JSONObject().put("show", show))
 
     override fun viewOverlays(show: Boolean) = command("view.overlays", JSONObject().put("show", show))
 
@@ -1204,7 +1205,10 @@ class WebSocketRemoteBlenderClient(
                     // El toggle de wireframe responde con el shading nuevo: pintarlo ya,
                     // sin esperar al scene.get_state de seguimiento.
                     command == "view.plane_lock" -> result?.let { r ->
-                        _state.value = _state.value.copy(view = StateParser.view(r, _state.value.view.shading.name))
+                        _state.value = _state.value.copy(view = StateParser.view(r, _state.value.view.shading.name, _state.value.view.faceOrientation))
+                    }
+                    command == "view.face_orientation" -> result?.let { r ->
+                        _state.value = _state.value.copy(view = _state.value.view.copy(faceOrientation = r.optBoolean("face_orientation")))
                     }
                     command == "view.shading" -> result?.let { r ->
                         val shading = if (r.optString("shading") == "WIREFRAME") Shading.WIREFRAME else Shading.SOLID

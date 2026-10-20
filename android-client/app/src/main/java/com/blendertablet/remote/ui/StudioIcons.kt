@@ -77,6 +77,7 @@ internal object StudioIcons {
         "OBJECT_MODE" to Glyph("Objeto", "Vista", "M3,7 L12,2 L21,7 L21,17 L12,22 L3,17 Z M3,7 L12,12 L21,7 M12,12 L12,22"),
         "EDIT_MODE" to Glyph("Edición", "Vista", "M3,4 L18,4 L18,9 M3,4 L3,19 L8,19 M3,10 L12,10 M9,4 L9,13 M11,21 L12,16 L19,9 L22,12 L15,19 Z"),
         "VIEWS" to Glyph("Vistas", "Vista", "M3,3 L9,3 L9,9 L3,9 Z M15,3 L21,3 L21,9 L15,9 Z M3,15 L9,15 L9,21 L3,21 Z M15,15 L21,15 L21,21 L15,21 Z M5,12 L19,12"),
+        "FACE_NORMALS" to Glyph("Normales", "Vista", "M3,15 L11,11 L21,15 L13,19 Z M12,15 L12,3 M9,6 L12,3 L15,6"),
         "WIREFRAME" to Glyph("Wireframe", "Vista", "M3,7 L12,2 L21,7 L21,17 L12,22 L3,17 Z M3,7 L21,17 M21,7 L3,17 M12,2 L12,22 M3,7 L12,12 L21,7 M3,17 L12,12 L21,17"),
         "PROPORTIONAL" to Glyph("Edición proporcional", "Vista", "M20,12 A8,8 0,1 1,4,12 A8,8 0,1 1,20,12 M16,12 A4,4 0,1 1,8,12 A4,4 0,1 1,16,12 M12,11 L12,13"),
         "AUTO_MERGE" to Glyph("Auto Merge", "Vista", "M3,3 L9,9 M21,3 L15,9 M6,9 L9,9 L9,6 M15,6 L15,9 L18,9 M9,12 L15,12 L15,18 L9,18 Z M12,18 L12,22"),

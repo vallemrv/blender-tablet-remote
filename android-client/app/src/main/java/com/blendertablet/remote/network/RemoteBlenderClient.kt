@@ -227,6 +227,9 @@ interface RemoteBlenderClient {
     /** Wireframe/sólido del viewport capturado. */
     fun viewShading(mode: String = "TOGGLE")
 
+    /** Orientación de caras del viewport: azul fuera, rojo dentro. */
+    fun viewFaceOrientation(show: Boolean)
+
     /** Rejilla, ejes y demás overlays del viewport capturado. */
     fun viewOverlays(show: Boolean)
 

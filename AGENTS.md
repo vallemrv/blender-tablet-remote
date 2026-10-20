@@ -300,7 +300,7 @@ nuevas superficies y la adaptación gradual de las existentes.
 | --- | --- |
 | Rail izquierdo | Herramientas de uso frecuente que cambian la intención del gesto: seleccionar, mover, rotar, escalar, Tweak y herramientas propias del modo. Permanece abierto; admite desplazamiento vertical cuando haga falta. |
 | Rail derecho | Columna común SELECCIÓN (RESTRICCIONES geométricas dentro del boceto CAD) y acceso a inspectores contextuales: modificadores, pila CAD, biblioteca de materiales y sus propiedades. Comparten posición, márgenes, apertura y cierre; respetan el selector de modos y el pie de vistas. |
-| Barra superior (top) | Archivo, Escena, Outliner, conexión y Diagnóstico a la izquierda; Wireframe, Deshacer, Rehacer y Ojo a la derecha. El selector de modos conserva su lugar bajo el ojo y deja CAD siempre al final. |
+| Barra superior (top) | Archivo, Escena, Outliner, conexión y Diagnóstico a la izquierda; Wireframe, Normales, Deshacer, Rehacer y Ojo a la derecha. El selector de modos conserva su lugar bajo el ojo y deja CAD siempre al final. |
 | Barra inferior (bottom) | Parámetros de la herramienta activa o propiedades del objeto seleccionado. Una fila fija sin scroll (`SingleLineTray`): valor principal o X/Y/Z, 1–2 iconos y «⋯ Más» con Precisión · Referencia · Forma. |
 
 - Una acción conserva nombre, icono y comportamiento en todos sus accesos. Se
@@ -1596,6 +1596,9 @@ no quedan archivos o referencias temporales.
 - Soldar (`WELD`) se genera por RNA como Lattice, sin acción de jaula; su distancia
   usa la unidad del preset. Matriz ofrece «Unir primera y última» (cierra la vuelta
   circular) y lo acompaña de Fusionar, que Blender necesita para aplicarlo.
+- Normales es un interruptor de la fila de Deshacer/Rehacer (`view.face_orientation`):
+  el overlay nativo Orientación de caras (azul fuera, rojo dentro), en todos los modos.
+  Vive en el viewport, sin undo; el snapshot lleva `face_orientation`.
 - El panel de modificadores es un acordeón: un solo modificador desplegado; tocar
   su nombre o la flecha lo abre/cierra y el recién añadido se abre solo. Cada
   apertura del panel o cambio de objeto empieza con todos plegados. El Outliner

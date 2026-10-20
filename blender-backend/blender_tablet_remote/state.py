@@ -89,6 +89,9 @@ def snapshot(include_view: bool = True) -> dict:
         from .commands.view import overlays_state
 
         state["overlays"] = overlays_state()
+        from .commands.view import face_orientation_state
+
+        state["face_orientation"] = face_orientation_state()
         # La escala de trabajo decide unidades, clipping y pasos: la tablet la necesita
         # para escribir las medidas y para que sus steppers avancen lo que toca.
         from .commands.units import current_scale

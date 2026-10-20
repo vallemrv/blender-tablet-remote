@@ -28,11 +28,12 @@ class SurfaceCoherenceTest {
         assertTrue(source("BlenderTabletApp").contains("RADIAL_TOP_LEVEL_CATALOG_IDS + EditFooterCatalog.ids"))
         assertFalse(footer.contains("onClick = onMore"));assertFalse(footer.contains("onClick = onLess"))
     }
-    @Test fun topToolbarHasOnlyTheFourGeneralControls() {
+    @Test fun topToolbarHasOnlyTheGeneralViewControls() {
         val top = source("TopToolbar").substringAfter("fun TopToolbar(").substringBefore("fun ModeRail(")
         val icons = Regex("AppIcons\\.(\\w+)").findAll(top).map { it.groupValues[1] }.toList()
-        assertEquals(setOf("Wireframe","Undo","Redo","visibility"),icons.toSet())
-        assertEquals(4,icons.size)
+        // Normales se añadió por petición del usuario junto a Wireframe.
+        assertEquals(setOf("Wireframe","Normals","Undo","Redo","visibility"),icons.toSet())
+        assertEquals(5,icons.size)
         assertFalse(top.contains("CadTopActions"));assertFalse(top.contains("MaterialTopActions"))
     }
     @Test fun cadAndMaterialsDoNotRepeatRadialOrViewActionsInTheirInspectorsAndTrays() {

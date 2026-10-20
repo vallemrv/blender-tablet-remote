@@ -91,7 +91,8 @@ object StateParser {
             selectionMode = enum(json.optString("selection_mode"), SelectionMode.VERTEX),
             transform = json.optJSONObject("active")?.let(::transform),
             context = context(json),
-            view = view(json.optJSONObject("view"), json.optString("shading")),
+            view = view(json.optJSONObject("view"), json.optString("shading"),
+                if (json.has("face_orientation")) json.optBoolean("face_orientation") else null),
             activeObjectType = json.optJSONObject("active")?.optString("type")?.takeIf(String::isNotBlank),
             objectProperties = objectProperties(json.optJSONObject("active")?.optJSONObject("properties")),
             activeShadeSmooth = json.optJSONObject("active")
@@ -565,14 +566,15 @@ object StateParser {
             }
         }
 
-    fun view(json: JSONObject?, shadingWire: String? = null): ViewState {
+    fun view(json: JSONObject?, shadingWire: String? = null, faceOrientation: Boolean? = null): ViewState {
         val shading = enum(shadingWire, Shading.SOLID)
-        if (json == null) return ViewState(shading = shading)
+        if (json == null) return ViewState(shading = shading, faceOrientation = faceOrientation)
         return ViewState(
             perspective = enum(json.optString("perspective"), Projection.PERSP),
             axisView = json.optString("axis_view").takeIf { it.isNotBlank() && it != "null" },
             planeLocked = json.optBoolean("plane_locked"),
             shading = shading,
+            faceOrientation = faceOrientation,
         )
     }
 

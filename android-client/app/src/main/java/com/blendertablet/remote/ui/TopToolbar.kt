@@ -52,6 +52,9 @@ fun TopToolbar(
                         selected = blender.view.shading == Shading.WIREFRAME,
                         enabled = blender.features.shading && !blender.material.active,
                     ) { vm.toggleShading() }
+                    blender.view.faceOrientation?.let { shown ->
+                        IconAction(AppIcons.Normals, "Normales", selected = shown) { vm.toggleFaceOrientation() }
+                    }
                     IconAction(AppIcons.Undo, "Deshacer") { vm.undo() }
                     IconAction(AppIcons.Redo, "Rehacer") { vm.redo() }
                 }
