@@ -236,6 +236,29 @@ def _place(pending,payload):
     bm.to_mesh(pending['valid_preview']);pending['face']=True;pending['error']=None
 
 
+# Recorrido mínimo del dedo (alto de vídeo) para que tocar un vértice pase a moverlo.
+TWEAK_THRESHOLD=.012
+
+
+def _tweak(pending,payload):
+    """Arrastrar desde un vértice lo mueve en el plano de la vista, como Tweak."""
+    u,v,_=_view(payload)
+    if not pending.get('tweaking'):
+        region=find_view3d()[2];aspect=max(1,region.width)/max(1,region.height)
+        su,sv=pending['tweak_start']
+        if math.hypot((u-su)*aspect,v-sv)<TWEAK_THRESHOLD:return
+        pending['tweaking']=True
+    obj=pending['object']
+    # Desde el baseline: el toque inicial no altera la selección al mover.
+    _restore_mesh(obj,pending['backup'])
+    bm=bmesh.from_edit_mesh(obj.data);bm.verts.ensure_lookup_table()
+    normal=(camera.rotation@Vector((0,0,1))).normalized()
+    target=_on_plane(payload,pending['tweak_origin'],normal)
+    bm.verts[pending['tweak_vertex']].co=obj.matrix_world.inverted()@target
+    bm.normal_update();bmesh.update_edit_mesh(obj.data,loop_triangles=True,destructive=False)
+    pending['moved']=True
+
+
 def _begin(pending,payload):
     from .snap import query_edit_surface_candidate
     obj=pending['object'];u,v,_=_view(payload)
@@ -245,6 +268,9 @@ def _begin(pending,payload):
         bm=bmesh.from_edit_mesh(obj.data)
         if hit['snap_type']=='VERTEX':
             bm.verts.ensure_lookup_table();target=bm.verts[int(hit['element'])]
+            # Si el gesto se arrastra en vez de tocar, mueve este vértice (Tweak).
+            pending.update(tweak_vertex=target.index,tweak_start=(u,v),
+                           tweak_origin=obj.matrix_world@target.co)
             target.select_set(not target.select)
         else:
             ids={int(i) for i in str(hit['element']).split('-')}
@@ -257,6 +283,7 @@ def _begin(pending,payload):
         if target.select:bm.select_history.add(target)
         bm.select_flush_mode();bmesh.update_edit_mesh(obj.data,loop_triangles=False,destructive=False)
         if sum(vert.select and not vert.hide for vert in bm.verts)!=4:return
+    pending.pop('tweak_vertex',None)
     _build(pending,payload)
     _place(pending,payload)
 
@@ -286,7 +313,11 @@ def gesture(payload,tool):
             if pending['error'] is not None and not pending['face']:
                 _restore(pending);raise pending['error']
             if pending['face']:undo_push('Remote F2 cuadrilátero')
+            elif pending.get('moved'):undo_push('Remote F2 mover vértice')
         finally:_dispose(pending)
+    elif phase=='UPDATE' and _pending.get('tweak_vertex') is not None and not _pending['placing']:
+        try:_tweak(_pending,payload)
+        except CommandError as exc:_pending['error']=exc
     elif phase=='BEGIN' or _pending['placing']:
         pending=_pending
         try:

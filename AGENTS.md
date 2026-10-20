@@ -196,6 +196,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   Con una arista cuyos extremos ya salen por aristas libres hacia dos vértices de
   enfrente (fuera de su cara), F2 solo crea la arista frontal y la cara, sin vértices
   nuevos; el toque elige el lado si hay varios y queda seleccionada esa arista.
+  Un gesto que empieza sobre un vértice y recorre más de 0,012 de alto de vídeo lo
+  mueve en el plano de la vista (Tweak dentro de F2): parte del baseline, conserva la
+  selección previa, no crea caras y registra un undo al soltar; cancelar lo restaura.
+  Un toque corto sobre el vértice sigue alternando su selección.
   Cada gesto congela su intención al comenzar. UP confirma el último candidato
   válido sin raycast ni nuevo movimiento, con un undo por cara. Una preview
   degenerada conserva la última válida. Repetir el botón o × desarma; dos dedos,

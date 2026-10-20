@@ -136,11 +136,28 @@ class RemoteF2Tests(unittest.TestCase):
         self.assertTrue(all(len(face.verts)==4 for face in bm.faces))
         self.assertEqual(sum(v.select for v in bm.verts),2)
 
-    def test_selection_gesture_does_not_create_when_dragged_into_empty_space(self):
+    def test_dragging_from_a_vertex_moves_it_like_tweak_without_creating(self):
+        obj=self.shape([(0,0,0),(1,0,0),(0,1,0)],[(0,1),(0,2)],selected_vertex=1)
+        with patch('blender_tablet_remote.bpy_utils.undo_push') as push:
+            self.gesture('BEGIN',(0,0,0));self.gesture('UPDATE',(.5,.5,0));self.gesture('UPDATE',(-.4,-.3,0))
+            self.gesture('END',(-.4,-.3,0))
+            push.assert_called_once()
+        bm=bmesh.from_edit_mesh(obj.data);bm.verts.ensure_lookup_table()
+        self.assertEqual((len(bm.verts),len(bm.faces)),(3,0))
+        self.assertLess((bm.verts[0].co-Vector((-.4,-.3,0))).length,1e-5)
+        # La selección previa se conserva para seguir creando caras.
+        self.assertEqual([v.index for v in bm.verts if v.select],[1])
+        self.assertEqual(tools.tool_session.armed_tool,'F2')
+    def test_small_jitter_on_a_vertex_is_still_a_tap(self):
         obj=self.shape([(0,0,0),(1,0,0),(0,1,0)],[(0,1),(0,2)])
-        self.gesture('BEGIN',(0,0,0));self.gesture('UPDATE',(1,1,0));self.gesture('END',(1,1,0))
-        bm=bmesh.from_edit_mesh(obj.data)
-        self.assertEqual(len(bm.faces),0);self.assertEqual(sum(v.select for v in bm.verts),1)
+        self.gesture('BEGIN',(0,0,0));self.gesture('UPDATE',(.001,0,0));self.gesture('END',(.001,0,0))
+        bm=bmesh.from_edit_mesh(obj.data);bm.verts.ensure_lookup_table()
+        self.assertEqual(bm.verts[0].co,Vector((0,0,0)));self.assertTrue(bm.verts[0].select)
+    def test_cancelled_vertex_drag_restores_its_position(self):
+        obj=self.shape([(0,0,0),(1,0,0),(0,1,0)],[(0,1),(0,2)])
+        self.gesture('BEGIN',(0,0,0));self.gesture('UPDATE',(.5,.5,0));self.gesture('CANCEL',(.5,.5,0))
+        bm=bmesh.from_edit_mesh(obj.data);bm.verts.ensure_lookup_table()
+        self.assertEqual(bm.verts[0].co,Vector((0,0,0)))
 
     def test_invalid_drag_keeps_last_visible_quad_until_release(self):
         obj=self.shape([(0,0,0),(1,0,0)],[(0,1)],selected_edge=0)

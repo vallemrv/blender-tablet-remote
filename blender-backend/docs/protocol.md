@@ -2710,6 +2710,9 @@ Si cada extremo de la arista ya continúa por una arista sin dos caras hacia un
 vértice de enfrente (fuera de la cara contigua), no se crean vértices: se añade
 solo la arista frontal y la cara, como el F2 de Blender. Con varios pares posibles
 gana el más cercano al toque y, a igualdad, el más paralelo; UPDATE no mueve nada.
+Un BEGIN sobre un vértice que no completa cara y cuyos UPDATE superan 0,012 de alto
+de vídeo pasa a moverlo (Tweak): restaura el baseline, lleva el vértice al plano de la
+vista por su posición inicial y END registra un undo «mover vértice» sin crear caras.
 
 END confirma el último candidato válido, sin raycast, con un undo por cara.
 Cada UPDATE reconstruye desde una plantilla privada, nunca sobre la preview

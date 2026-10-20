@@ -441,7 +441,7 @@ class ToolSession:
                       "owner": self.armed_owner, "parameters": self.armed_params}
             if self.armed_tool == 'F2':
                 result.update(input='F2_DRAW',can_confirm=False,
-                    instruction='Selecciona 1–3 vértices o una arista · fuera crea un quad y arrastra · 4 vértices completan la cara')
+                    instruction='Selecciona 1–3 vértices o una arista · fuera crea un quad y arrastra · 4 vértices completan la cara · arrastra un vértice para moverlo')
             if self.armed_tool == "DRAW":
                 result.update(input="REPEAT_TAP", can_confirm=False, instruction=DRAW_INSTRUCTION)
             if self.armed_tool == "CONNECT":
