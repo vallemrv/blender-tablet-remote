@@ -1153,6 +1153,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             objectShadingAvailable = blender.features.objectShading,
             shadeSmooth = blender.activeShadeSmooth,
             localView = local.value.localViewActive,
+            activeObjectType = blender.activeObjectType,
         )
     }
 

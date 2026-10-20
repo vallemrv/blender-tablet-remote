@@ -1219,7 +1219,10 @@ private fun quickActions(
         // scroll (plan 001), Malla no necesita paginarse aunque tenga diez primitivas.
         ActionId.ADD_OBJECT -> QuickAction(
             label, AppIcons.action(id), tint = Ink.Accent,
-            children = AddCategory.entries.map { category ->
+            // En Edición Blender solo funde mallas en la que se edita: van directas.
+            children = if (context.mode == BlenderMode.EDIT) AddObject.of(AddCategory.MESH).map { item ->
+                QuickAction(item.label, AppIcons.addCategory(AddCategory.MESH)) { vm.addPrimitive(item) }
+            } else AddCategory.entries.map { category ->
                 val items = AddObject.of(category)
                 // Texto y Cámara son categorías de un solo elemento: un subnivel con
                 // una entrada sería un clic de más para nada.

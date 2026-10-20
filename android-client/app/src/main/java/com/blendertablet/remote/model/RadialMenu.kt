@@ -24,6 +24,8 @@ data class TouchContext(
     val shadeSmooth: Boolean = false,
     /** La vista está aislada: el interruptor ofrecerá volver a verlo todo. */
     val localView: Boolean = false,
+    /** Tipo del objeto activo; en Edición de mallas se puede agregar otra malla. */
+    val activeObjectType: String? = null,
 )
 
 /**
@@ -106,6 +108,8 @@ object RadialMenu {
     // La selección vive en su barra fija (EditSelectionBar); el radial queda para la malla.
     private fun editActions(context: TouchContext): List<ActionId> = buildList {
         add(ActionId.EDIT_MESH_TOOLS)
+        // Como Shift+A en Blender: la primitiva se suma a la malla que se edita.
+        if (context.activeObjectType == "MESH") add(ActionId.ADD_OBJECT)
         if (context.hasSelection) {
             add(ActionId.HIDE_GEOMETRY)
             add(ActionId.VIEW_LOCAL)

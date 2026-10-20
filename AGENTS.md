@@ -634,7 +634,10 @@ nuevas superficies y la adaptación gradual de las existentes.
   bloqueo y oclusión. No cambia vértices ni convierte objetos.
   Modificadores (botón y panel), vistas/atajos y navegación reservan a su derecha
   `Metrics.HelperRailInset` (80 dp). Vértices/Aristas/Caras siguen bajo el ojo en mallas.
-  El radial conserva Malla y, con selección, Ocultar, Duplicar y Borrar.
+  El radial conserva Malla, Agregar (en mallas) y, con selección, Ocultar, Duplicar
+  y Borrar. Agregar en Edición ofrece directamente las primitivas de Malla, como
+  Shift+A en Blender: se funden en la malla que se edita, en el cursor 3D, sin
+  crear otro objeto ni salir de Edición; el resto de categorías requiere Objeto.
 - Mayús, Alt, ⇧R y Ring se han retirado de sus barras a petición del usuario. El doble toque
   conserva la selección de loop en Aristas/Caras y de enlazado en Vértices; no se
   sustituye por ring. Ctrl permanece para camino más corto.

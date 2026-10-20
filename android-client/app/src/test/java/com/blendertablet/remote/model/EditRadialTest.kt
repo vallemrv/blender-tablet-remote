@@ -20,6 +20,14 @@ class EditRadialTest {
         assertTrue(centre.intersect(EditSelectionBar.actions.toSet()).isEmpty())
     }
 
+    @Test fun editMeshRadialOffersAddingAnotherMesh() {
+        val mesh = RadialMenu.actionsFor(TouchContext(mode = BlenderMode.EDIT, activeObjectType = "MESH"))
+        assertEquals(ActionId.EDIT_MESH_TOOLS, mesh.first())
+        assertTrue(ActionId.ADD_OBJECT in mesh)
+        assertFalse(ActionId.ADD_OBJECT in RadialMenu.actionsFor(TouchContext(mode = BlenderMode.EDIT, activeObjectType = "CURVE")))
+        assertTrue(RadialMenu.actionsFor(TouchContext(mode = BlenderMode.EDIT, activeObjectType = "MESH", hasSelection = true)).size <= RadialMenu.MAX_ACTIONS)
+    }
+
     @Test fun ringAndSimilarAreAvailableFromTheSelectionRail() {
         assertTrue(ActionId.SELECT_RING in EditSelectionBar.actions)
         assertTrue(ActionId.SELECT_SIMILAR in EditSelectionBar.actions)
