@@ -69,7 +69,9 @@ class SurfaceCoherenceTest {
         assertFalse(modes.contains("PillButton(\"CAD\""))
         val cad = source("CadWorkspace")
         assertTrue(cad.contains("SingleLineTray("))
-        assertTrue(cad.contains("HoverHelp(title = \"Ayuda CAD\""))
+        // La ayuda CAD vive en el hover del rótulo y en «⋯ Más»; los errores, en el aviso fijo.
+        assertTrue(cad.contains("alert = listOfNotNull(cad.error, review)"))
+        assertFalse(cad.contains("PillButton(if (cad.error != null) \"Revisar\" else \"Ayuda\")"))
         assertFalse(cad.contains("top = 120.dp, bottom = 160.dp"))
     }
 

@@ -124,4 +124,17 @@ class TrayDesignRulesTest {
         assertEquals(listOf("ChoiceIcon", "TrayNumber", "TrayNumber"), rowControls(material, "hintKey = \"material.paint\""))
         assertFalse(material.contains("MaterialSlider("))
     }
+
+    @Test fun cadAndPropertiesKeepNamedChoicesUnderMore() {
+        val cad = source("CadWorkspace")
+        val row = cad.substringAfter("hintKey = \"cad.\" + guidance.take(24)").substringBefore("\ninternal fun cadHasProjectedCurves")
+        for (word in listOf("\"Una dirección\"", "\"Hasta cara\"", "\"Perforar todo\"", "\"Hacia fuera\"", "\"Planos guardados\"",
+            "\"Más opciones", "\"Radio\", selected", "\"Derecha\""))
+            assertFalse("$word sigue en la fila CAD", row.contains(word))
+        for (option in listOf("Paso", "Extensión", "Hasta cara", "Destino", "Lado", "Planos guardados", "Medida"))
+            assertTrue("Falta $option en Más CAD", cad.contains("TrayOption(\"$option\""))
+        val props = body(source("ObjectPropertiesTray"), "fun ObjectPropertiesTray(")
+        assertEquals(listOf("IconAction"), rowControls(props, "hintKey = \"object.properties\""))
+        assertTrue(props.contains("TrayOption(\"Mostrar delante\""))
+    }
 }

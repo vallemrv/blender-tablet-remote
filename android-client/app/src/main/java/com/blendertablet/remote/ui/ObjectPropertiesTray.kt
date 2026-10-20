@@ -70,34 +70,49 @@ fun ObjectPropertiesTray(
             onApply(target.id, target.revision, mapOf(field.id to wire), token)
         }
     }
-    val help = if (properties == null) "Elige un objeto o imagen."
+    val help = if (properties == null) "Elige un objeto o imagen en ⋯ Más."
         else "Los cambios se aplican directamente. Deshacer recupera el valor anterior."
-    SingleLineTray(
-        title = "Objeto",
-        modifier = modifier,
-    ) {
-        fields.firstOrNull { it.id == "in_front" }?.let { field ->
-            val inFront = (drafts[field.id] ?: properties?.values?.get(field.id)) == true
-            IconAction(AppIcons.InFront, "Mostrar delante", selected = inFront,
-                enabled = !field.readOnly) { edit(field, !inFront) }
-        }
-        Box {
-            var objectMenu by remember { mutableStateOf(false) }
-            IconAction(AppIcons.material("OBJECTS"), "Elegir objeto o imagen",
-                enabled = lastToken == null) { onOpenObjects(); objectMenu = true }
-            DropdownMenu(objectMenu, { objectMenu = false }, Modifier.heightIn(max = 320.dp)) {
-                objects.forEach { (name, type) -> DropdownMenuItem(
-                    text = { Text("$name · $type") },
-                    onClick = { objectMenu = false; onSelectObject(name) }) }
+    val section = sectionFields.filter { it.group == selectedGroup }
+    val (rowFields, optionFields) = section.partition { it.type == "number" }
+    val inFrontField = fields.firstOrNull { it.id == "in_front" }
+    val more = TrayMore(
+        reference = {
+            TrayOption(properties?.name ?: "Ningún objeto", "Elige otro objeto o una imagen de referencia de la escena.") {
+                Box {
+                    var objectMenu by remember { mutableStateOf(false) }
+                    IconAction(AppIcons.material("OBJECTS"), "Elegir objeto o imagen",
+                        enabled = lastToken == null) { onOpenObjects(); objectMenu = true }
+                    DropdownMenu(objectMenu, { objectMenu = false }, Modifier.heightIn(max = 320.dp)) {
+                        objects.forEach { (name, type) -> DropdownMenuItem(
+                            text = { Text("$name · $type") },
+                            onClick = { objectMenu = false; onSelectObject(name) }) }
+                    }
+                }
             }
-        }
-        HoverHelp(properties?.name ?: "Elegir objeto", help) {
-            Text(properties?.name ?: "Elige un objeto", color = Ink.Muted, fontSize = 12.sp,
-                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 160.dp))
-        }
-        if (groups.isNotEmpty()) Box {
+        },
+        shape = if (inFrontField == null && optionFields.isEmpty()) null else ({
+            inFrontField?.let { field ->
+                val inFront = (drafts[field.id] ?: properties?.values?.get(field.id)) == true
+                TrayOption("Mostrar delante", "Dibuja el objeto por delante del resto aunque quede detrás.") {
+                    IconAction(AppIcons.InFront, "Mostrar delante", selected = inFront,
+                        enabled = !field.readOnly) { edit(field, !inFront) }
+                }
+            }
+            optionFields.forEach { field ->
+                TrayOption(field.label, "") {
+                    PropertyControl(field, drafts[field.id] ?: properties?.values?.get(field.id),
+                        field.id in drafts, unit, !field.readOnly, stepMeters, onFocus = {}, onChange = { edit(field, it) })
+                }
+            }
+        }),
+    )
+    SingleLineTray(
+        title = selectedGroup ?: "Objeto",
+        modifier = modifier, help = help, hintKey = "object.properties", more = more,
+    ) {
+        if (groups.size > 1) Box {
             var sectionMenu by remember { mutableStateOf(false) }
-            PillButton("$selectedGroup ▾", selected = true) { sectionMenu = true }
+            IconAction(AppIcons.Dropdown, "Sección · ${selectedGroup.orEmpty()}") { sectionMenu = true }
             DropdownMenu(sectionMenu, { sectionMenu = false }) {
                 groups.forEach { name -> DropdownMenuItem(
                     text = { Text(name) },
@@ -105,7 +120,7 @@ fun ObjectPropertiesTray(
                     onClick = { properties?.let { onSelectSection(it.id, name) }; sectionMenu = false }) }
             }
         }
-        sectionFields.filter { it.group == selectedGroup }.forEach { field ->
+        rowFields.forEach { field ->
             PropertyControl(field, drafts[field.id] ?: properties?.values?.get(field.id),
                 field.id in drafts, unit, !field.readOnly, stepMeters,
                 onFocus = { active ->
@@ -113,7 +128,6 @@ fun ObjectPropertiesTray(
                     if (!active && lastToken == null) drafts = drafts - field.id
                 }, onChange = { edit(field, it) })
         }
-
     }
 }
 
@@ -154,7 +168,7 @@ private fun PropertyControl(field: ObjectPropertyField, value: Any?, draft: Bool
                 }
             }
         }
-        "bool" -> PillButton(field.label,
+        "bool" -> PillButton(if (value == true) "Activado" else "Desactivado",
             selected = value == true, enabled = enabled) { onChange(value != true) }
         "enum" -> {
             var open by remember(field.id) { mutableStateOf(false) }

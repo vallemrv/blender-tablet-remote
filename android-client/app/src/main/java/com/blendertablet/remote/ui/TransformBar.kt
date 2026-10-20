@@ -194,7 +194,7 @@ fun TransformBar(
         title = session.mode.label, onCancel = onCancel, onConfirm = onConfirm, modifier = modifier,
         help = "Arrastra para ${session.mode.label.lowercase()} · desliza un número para afinarlo, tócalo para escribir " +
             "y mantenlo para restablecer · cambiar de herramienta aplica el resultado",
-        hintKey = "transform.${session.mode.name}", alert = picking ?: candidate, more = more,
+        hintKey = "transform.${session.mode.name}", status = picking ?: candidate, more = more,
     ) {
         TransformAxisInputs(session, unitScaleLength, moveStepValue, moveStepUnit, scaleStepValue, stepIndex,
             scaleUnit, scaleLinked, onValue, onFlatten)

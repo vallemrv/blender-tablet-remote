@@ -443,6 +443,8 @@ fun SingleLineTray(
     modifier: Modifier = Modifier,
     help: String = "",
     alert: String? = null,
+    /** Información viva (medidas, candidato de snap, qué señalar): siempre visible. */
+    status: String? = null,
     more: TrayMore? = null,
     /** La ayuda bajo la fila solo acompaña las primeras veces; después queda en el hover. */
     hintKey: String = title,
@@ -462,7 +464,9 @@ fun SingleLineTray(
                 exits = { if (onCancel != null) Row(verticalAlignment = Alignment.CenterVertically) {
                     TrayExits(onCancel, onConfirm, confirmEnabled) } },
             )
-            if (!alert.isNullOrBlank()) Text(alert, color = Ink.Warn, fontSize = 11.sp, maxLines = 1,
+            if (!alert.isNullOrBlank()) Text(alert, color = Ink.Warn, fontSize = 11.sp, maxLines = 2,
+                overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 4.dp))
+            if (!status.isNullOrBlank()) Text(status, color = Ink.Ok, fontSize = 11.sp, maxLines = 1,
                 overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 4.dp))
             if (firstTimes && help.isNotBlank()) Text(help, color = Ink.Muted, fontSize = 11.sp,
                 maxLines = 2, overflow = TextOverflow.Ellipsis,
