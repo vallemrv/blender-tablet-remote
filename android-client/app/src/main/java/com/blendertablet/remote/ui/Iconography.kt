@@ -50,6 +50,15 @@ object AppIcons {
     val Normals: ImageVector get() = StudioIcons["FACE_NORMALS"]
     val AxisPlane: ImageVector get() = StudioIcons["AXIS_PLANE"]
     val ConnectPairs: ImageVector get() = StudioIcons["CONNECT_PAIRS"]
+    val PenPressure: ImageVector get() = StudioIcons["PEN_PRESSURE"]
+    val HistoryBack: ImageVector get() = StudioIcons["HISTORY_BACK"]
+    val HistoryForward: ImageVector get() = StudioIcons["HISTORY_FORWARD"]
+    val HistoryEnd: ImageVector get() = StudioIcons["HISTORY_END"]
+    val SavedPlanes: ImageVector get() = StudioIcons["SAVED_PLANES"]
+    val GoToSource: ImageVector get() = StudioIcons["GO_TO_SOURCE"]
+    fun cadExtent(id: String): ImageVector = StudioIcons[when (id) {
+        "BOTH" -> "EXTENT_BOTH"; "THROUGH_ALL" -> "EXTENT_THROUGH"; "TO_FACE" -> "EXTENT_TO_FACE"; else -> "EXTENT_ONE"
+    }]
     val Proportional: ImageVector get() = StudioIcons["PROPORTIONAL"]
     val AutoMerge: ImageVector get() = StudioIcons["AUTO_MERGE"]
     val ModeObject: ImageVector get() = StudioIcons["OBJECT_MODE"]

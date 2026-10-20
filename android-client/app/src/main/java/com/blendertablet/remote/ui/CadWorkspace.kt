@@ -2,7 +2,6 @@ package com.blendertablet.remote.ui
 
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
@@ -353,13 +352,13 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             if (!editing) {
                 HorizontalDivider(Modifier.padding(top = 6.dp))
                 Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    PillButton("Atrás", enabled = connected && !cad.sessionActive && viewIndex > 1) {
+                    IconAction(AppIcons.HistoryBack, "Paso anterior de la pila", enabled = connected && !cad.sessionActive && viewIndex > 1) {
                         command("cad.history.rollback", "node_id" to bodyHistory[viewIndex - 2].id)
                     }
-                    PillButton("Adelante", enabled = connected && !cad.sessionActive && viewIndex < bodyHistory.size) {
+                    IconAction(AppIcons.HistoryForward, "Paso siguiente de la pila", enabled = connected && !cad.sessionActive && viewIndex < bodyHistory.size) {
                         command("cad.history.rollback", "node_id" to bodyHistory[viewIndex].id)
                     }
-                    PillButton("Final", enabled = connected && !cad.sessionActive && barPos != null) {
+                    IconAction(AppIcons.HistoryEnd, "Ir al modelo completo", enabled = connected && !cad.sessionActive && barPos != null) {
                         command("cad.history.rollback")
                     }
                     Text(if (cad.sketchReview) "Fallo en este paso" else if (barPos == null) "Modelo completo" else "Hasta ${bodyHistory.getOrNull(viewIndex - 1)?.name.orEmpty()}",
@@ -587,7 +586,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                 "Reutiliza un plano anterior para el nuevo croquis o recolócalo.") {
                 var savedOpen by remember { mutableStateOf(false) }
                 Box {
-                    PillButton("Elegir ▾", enabled = connected) { savedOpen = true }
+                    IconAction(AppIcons.SavedPlanes, "Elegir un plano guardado", enabled = connected) { savedOpen = true }
                     DropdownMenu(savedOpen, onDismissRequest = { savedOpen = false }) {
                         if (capabilities.planePurge) DropdownMenuItem(text = { Text("Limpiar planos sin usar") }, onClick = {
                             savedOpen = false; command("cad.session.cancel"); command("cad.plane.purge")
@@ -617,7 +616,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
                     }
                 }
                 TrayOption("Operación fuente", "Selecciona la operación que se refleja.") {
-                    PillButton("Ir", enabled = connected) { command("cad.select", "kind" to "FEATURE", "id" to feature.mirrorSourceId) }
+                    IconAction(AppIcons.GoToSource, "Ir a la operación fuente", enabled = connected) {
+                        command("cad.select", "kind" to "FEATURE", "id" to feature.mirrorSourceId)
+                    }
                 }
             }
             revolveLike?.let { selected ->
@@ -700,15 +701,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             }
             if (depthPreview) {
                 TrayOption("Extensión", "Una dirección, a los dos lados del croquis o, al vaciar, a través de todo.") {
-                    PillButton("Una", selected = cad.extent == "ONE" && state.cadFacePick == null, enabled = connected) {
-                        command("cad.extrude.update", "extent" to "ONE")
-                    }
-                    PillButton(if (cad.operation == "EXTRUDE") "Simetría" else "Dos", selected = cad.extent == "BOTH" && state.cadFacePick == null, enabled = connected) {
-                        command("cad.extrude.update", "extent" to "BOTH")
-                    }
-                    if (cad.operation == "CUT") PillButton("Todo", selected = cad.extent == "THROUGH_ALL" && state.cadFacePick == null, enabled = connected) {
-                        focusManager.clearFocus(); drafts.remove("depth")
-                        command("cad.extrude.update", "extent" to "THROUGH_ALL")
+                    CadExtentChoice(cad.extent.takeIf { state.cadFacePick == null }, cad.operation == "CUT", connected) { extent ->
+                        if (extent == "THROUGH_ALL") { focusManager.clearFocus(); drafts.remove("depth") }
+                        command("cad.extrude.update", "extent" to extent)
                     }
                 }
                 if (cad.operation == "EXTRUDE" && cad.extent !in listOf("BOTH", "TO_FACE", "THROUGH_ALL") && cad.positiveDirection.isNotEmpty())
@@ -724,15 +719,9 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             }
             extentOwner?.let { selected ->
                 TrayOption("Extensión", "Una dirección, a los dos lados del croquis o, al vaciar, a través de todo.") {
-                    PillButton("Una", selected = selected.extent == "ONE" && state.cadFacePick == null, enabled = connected) {
-                        command("cad.feature.set", "feature_id" to selected.id, "extent" to "ONE")
-                    }
-                    PillButton(if (selected.type == "EXTRUDE") "Simetría" else "Dos", selected = selected.extent == "BOTH" && state.cadFacePick == null, enabled = connected) {
-                        command("cad.feature.set", "feature_id" to selected.id, "extent" to "BOTH")
-                    }
-                    if (selected.type == "CUT") PillButton("Todo", selected = selected.extent == "THROUGH_ALL" && state.cadFacePick == null, enabled = connected) {
-                        focusManager.clearFocus(); drafts.remove("depth")
-                        command("cad.feature.set", "feature_id" to selected.id, "extent" to "THROUGH_ALL")
+                    CadExtentChoice(selected.extent.takeIf { state.cadFacePick == null }, selected.type == "CUT", connected) { extent ->
+                        if (extent == "THROUGH_ALL") { focusManager.clearFocus(); drafts.remove("depth") }
+                        command("cad.feature.set", "feature_id" to selected.id, "extent" to extent)
                     }
                 }
             }
@@ -1428,4 +1417,20 @@ private fun CadOperationOptions(controls: CadOperationControls, enabled: Boolean
             }
         }
     } }
+}
+
+
+/**
+ * Extensión de Extruir/Vaciar como icono de la opción activa (norma: sin pastillas
+ * «Una/Todo»): una dirección, a los dos lados o, al vaciar, a través de todo.
+ */
+@Composable
+private fun CadExtentChoice(selected: String?, cut: Boolean, enabled: Boolean, onSelect: (String) -> Unit) {
+    val options = listOf("ONE", "BOTH") + if (cut) listOf("THROUGH_ALL") else emptyList()
+    // «Hasta cara» o un toque de cara pendiente no son opciones de esta lista: se muestran
+    // como tal para que elegir cualquiera de las tres sí se envíe.
+    ChoiceIcon(options, selected?.takeIf { it in options } ?: "TO_FACE", "Extensión", AppIcons::cadExtent,
+        { when (it) { "ONE" -> "Una dirección"; "BOTH" -> if (cut) "A los dos lados" else "Simetría"
+            "THROUGH_ALL" -> "A través de todo"; else -> "Hasta cara" } },
+        active = selected in options, enabled = enabled, onSelect = onSelect)
 }

@@ -588,7 +588,7 @@ private fun LabeledSlider(
 private fun SwatchChip(label: String, color: Color?, selected: Boolean, onClick: () -> Unit) {
     Row(
         Modifier
-            .height(32.dp)
+            .height(Metrics.Touch)
             .clip(RoundedCornerShape(9.dp))
             .background(if (selected) Ink.Accent.copy(alpha = .22f) else Color.White.copy(alpha = .05f))
             .then(if (selected) Modifier.border(1.dp, Ink.Accent.copy(alpha = .5f), RoundedCornerShape(9.dp)) else Modifier)
@@ -610,7 +610,7 @@ private fun ApplyButton(label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
-            .height(38.dp)
+            .height(Metrics.Touch)
             .clip(RoundedCornerShape(10.dp))
             .background(if (enabled) Ink.Accent.copy(alpha = .22f) else Color.White.copy(alpha = .04f))
             .then(if (enabled) Modifier.border(1.dp, Ink.Accent.copy(alpha = .6f), RoundedCornerShape(10.dp)) else Modifier)
@@ -636,10 +636,11 @@ private fun SimpleColorDialog(initial: String, dismiss: () -> Unit, choose: (Str
             listOf(listOf("#FFFFFF", "#B8B8B8", "#555555", "#141414", "#805133", "#E8C29C"),
                 listOf("#E84B40", "#EF8C30", "#F2D34F", "#55AD65", "#428CD9", "#925BCD")).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    row.forEach { swatch -> Box(Modifier.size(36.dp).background(parseColor(swatch), CircleShape).clickableNoRipple {
+                    // 48 dp de objetivo táctil; el círculo de color sigue siendo de 36 dp.
+                    row.forEach { swatch -> Box(Modifier.size(Metrics.Touch).clickableNoRipple {
                         android.graphics.Color.colorToHSV(parseColor(swatch).toArgb(), hsv)
                         hue = hsv[0]; saturation = hsv[1]; brightness = hsv[2]
-                    }) }
+                    }, contentAlignment = Alignment.Center) { Box(Modifier.size(36.dp).background(parseColor(swatch), CircleShape)) } }
                 }
             }
             Text("Color"); Slider(hue, { hue = it }, valueRange = 0f..359.9f)

@@ -48,9 +48,17 @@ fun BoxScope.SculptWorkspace(state: AppUiState, vm: MainViewModel, onTrayHeight:
     }
     val more = TrayMore(
         precision = {
-            TrayOption("Presión", "Qué modula la presión del lápiz: la fuerza, el radio o ambos.") {
-                PillButton("Fuerza", selected = sculpt.pressureStrength) { vm.sculptSettings(mapOf("pressure_strength" to !sculpt.pressureStrength)) }
-                PillButton("Radio", selected = sculpt.pressureSize) { vm.sculptSettings(mapOf("pressure_size" to !sculpt.pressureSize)) }
+            // Un interruptor con icono por número: no se repite «Fuerza»/«Radio» como pastilla
+            // junto a los números del mismo nombre.
+            TrayOption("Presión en la fuerza", "Apretar el lápiz da más fuerza al trazo.") {
+                IconAction(AppIcons.PenPressure, "Presión en la fuerza", selected = sculpt.pressureStrength) {
+                    vm.sculptSettings(mapOf("pressure_strength" to !sculpt.pressureStrength))
+                }
+            }
+            TrayOption("Presión en el radio", "Apretar el lápiz agranda el pincel.") {
+                IconAction(AppIcons.PenPressure, "Presión en el radio", selected = sculpt.pressureSize) {
+                    vm.sculptSettings(mapOf("pressure_size" to !sculpt.pressureSize))
+                }
             }
             TrayOption("Solo lápiz", "Con Solo lápiz el dedo orbita; si no, el dedo también esculpe.") {
                 IconAction(AppIcons.material("STYLUS"), "Solo lápiz", selected = state.sculptStylusOnly,

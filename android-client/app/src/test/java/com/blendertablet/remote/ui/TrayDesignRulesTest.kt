@@ -128,11 +128,25 @@ class TrayDesignRulesTest {
     @Test fun sculptAndMaterialsShowTheirTwoNumbersAndIconsWithDetailUnderMore() {
         val sculpt = source("SculptWorkspace")
         assertEquals(listOf("TrayNumber", "TrayNumber", "IconAction", "IconAction"), rowControls(sculpt, "hintKey = \"sculpt\""))
-        for (option in listOf("Simetría", "Presión", "Dyntopo", "Multires")) assertTrue(sculpt.contains("TrayOption(\"$option\""))
+        for (option in listOf("Simetría", "Presión en la fuerza", "Presión en el radio", "Dyntopo", "Multires"))
+            assertTrue(sculpt.contains("TrayOption(\"$option\""))
+        // Norma: la presión es un icono por número, no pastillas con su mismo nombre.
+        assertFalse(sculpt.contains("PillButton(\"Fuerza\"")); assertFalse(sculpt.contains("PillButton(\"Radio\""))
         assertFalse(sculpt.contains("Slider("))
         val material = source("MaterialWorkspace")
         assertEquals(listOf("ChoiceIcon", "TrayNumber", "TrayNumber"), rowControls(material, "hintKey = \"material.paint\""))
         assertFalse(material.contains("MaterialSlider("))
+        // Norma: 48 dp también en fichas, Aplicar y muestras de color.
+        for (small in listOf("height(32.dp)", "height(38.dp)", "Modifier.size(36.dp).background(parseColor(swatch), CircleShape).clickableNoRipple"))
+            assertFalse("Control pequeño en Materiales: $small", material.contains(small))
+    }
+
+    /** Norma: CAD sin pastillas de texto para extensión, historial, planos guardados ni «Ir». */
+    @Test fun cadUsesIconsInsteadOfTextPills() {
+        val cad = source("CadWorkspace")
+        for (pill in listOf("\"Una\"", "\"Todo\"", "\"Atrás\"", "\"Adelante\"", "\"Final\"", "\"Elegir ▾\"", "\"Ir\""))
+            assertFalse("Pastilla de texto en CAD: $pill", cad.contains("PillButton($pill"))
+        for (name in listOf("EditToolTray", "CadWorkspace")) assertFalse(source(name).contains("import androidx.compose.foundation.horizontalScroll"))
     }
 
     @Test fun cadAndPropertiesKeepNamedChoicesUnderMore() {

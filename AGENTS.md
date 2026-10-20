@@ -397,7 +397,10 @@ nuevas superficies y la adaptación gradual de las existentes.
   candados de cota (glifo propio `DIMENSION_LOCK`, distinto del candado del Outliner)
   e iconos de acabado. Extensión, Hasta cara, Sentido, Lado, Medida radio/diámetro,
   ejes, Destino, Planos guardados, Inclinar/Mover del plano, tipo de cota, Snap y
-  Paso viven en «⋯ Más». Los errores son el aviso fijo y las medidas el estado;
+  Paso viven en «⋯ Más»; Extensión es un `ChoiceIcon` (una dirección, dos lados,
+  a través, hasta cara), Planos guardados e «Ir a la fuente» son iconos y la pila
+  navega con iconos Anterior/Siguiente/Modelo completo, sin pastillas de texto.
+  Los errores son el aviso fijo y las medidas el estado;
   la ayuda contextual sigue en el hover del título. Finalizar boceto y Aplicar
   modificador tienen iconos propios distintos de Confirmar.
 
@@ -527,7 +530,8 @@ pase: si no cabe, va a «⋯ Más»).
 - Invertir y borrar la máscara viven en el menú Malla de Sculpt, sin pulsación
   larga del pincel. Ambas acciones usan el undo nativo.
 - La bandeja Sculpt muestra Radio y Fuerza deslizables, Suavizar e Invertir; en
-  «⋯ Más» quedan Presión y Solo lápiz (Precisión), Simetría (Referencia) y el
+  «⋯ Más» quedan Presión en la fuerza y Presión en el radio (un icono de presión
+  del lápiz cada una, sin pastillas con el nombre del número) y Solo lápiz (Precisión), Simetría (Referencia) y el
   detalle de Dyntopo cuando está activo, o el nivel Multires y Subdividir cuando
   existe, junto al acceso a Detalle de la malla (Forma).
   Comparte esos controles con Malla. Elegir nivel solo recorre los creados;
