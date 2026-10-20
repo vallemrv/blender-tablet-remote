@@ -44,6 +44,21 @@ class ArrayModifierTests(unittest.TestCase):
         modifiers.set_params(dict(name=name, parameters=dict(offset_object=None)))
         self.assertIsNone(mod.offset_object)
 
+    def test_choosing_the_object_alone_enables_the_circular_array(self):
+        name = modifiers.add(dict(type='ARRAY'))['modifier']
+        modifiers.set_params(dict(name=name, parameters=dict(count=8)))
+        modifiers.set_params(dict(name=name, parameters=dict(offset_object=self.empty.name)))
+        mod = self.obj.modifiers[name]
+        self.assertTrue(mod.use_object_offset); self.assertFalse(mod.use_relative_offset)
+        before = [v.co.copy() for v in self.evaluated().vertices]
+        # Girar el Empty después redistribuye las copias.
+        self.empty.rotation_euler.z = math.radians(30)
+        after = [v.co.copy() for v in self.evaluated().vertices]
+        self.assertGreater(max((a - b).length for a, b in zip(before, after)), 0.1)
+        # Un interruptor explícito sigue mandando.
+        modifiers.set_params(dict(name=name, parameters=dict(offset_object=self.empty.name, use_relative_offset=True)))
+        self.assertTrue(mod.use_relative_offset)
+
     def test_array_cannot_use_itself_as_offset_object(self):
         name = modifiers.add(dict(type='ARRAY'))['modifier']
         with self.assertRaises(BadPayload):

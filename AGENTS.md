@@ -1588,7 +1588,11 @@ no quedan archivos o referencias temporales.
 - Matriz (Array) ofrece además Desplazamiento relativo activable, Desplazamiento de
   objeto y el objeto de desplazamiento (cualquiera salvo el propio, normalmente un
   Empty): con el Empty en el eje y girado 360°/n se obtiene la matriz circular nativa.
-  Editar otro campo conserva el objeto y ambos interruptores.
+  Editar otro campo conserva el objeto y ambos interruptores. Elegir el objeto, si
+  la petición no fija los interruptores, enciende el de objeto y apaga el relativo:
+  sin ello el Empty no hacía nada y el usuario no encontraba la causa.
+- El panel de modificadores es un acordeón: un solo modificador desplegado; tocar
+  su nombre o la flecha lo abre/cierra y el recién añadido se abre solo.
 - Deformación simple vive en Modificadores: cuatro métodos nativos, eje, ángulo en
   grados o factor según método, límites 0–1, bloqueos y objeto de origen opcional.
   Angle/factor comparten almacenamiento nativo: se escribe solo el activo, tras

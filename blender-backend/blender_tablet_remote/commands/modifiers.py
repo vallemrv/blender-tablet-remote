@@ -265,6 +265,13 @@ def _write(mod, kind: str, params: dict, obj, preserve_current: bool = False) ->
             if not isinstance(data[key], bool):
                 raise BadPayload(f"'{key}' must be a boolean")
         offset_object = _mirror_object(obj, data["offset_object"])
+        if offset_object is not None and "offset_object" in params:
+            # Elegir el objeto es pedir la matriz circular: sin estos interruptores el
+            # Empty no hace nada y el desplazamiento relativo deforma el círculo.
+            if "use_object_offset" not in params:
+                data["use_object_offset"] = True
+            if "use_relative_offset" not in params:
+                data["use_relative_offset"] = False
         mod.use_relative_offset = data["use_relative_offset"]
         mod.relative_offset_displace = Vector((float(offset[0]), float(offset[1]), float(offset[2])))
         mod.use_object_offset = data["use_object_offset"]
