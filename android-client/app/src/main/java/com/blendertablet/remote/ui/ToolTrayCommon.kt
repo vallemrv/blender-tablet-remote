@@ -58,5 +58,5 @@ fun ToolNumericInput(
 
 /** La misma frase para todos los números: así se aprende una vez. */
 internal fun numberHelp(resettable: Boolean) =
-    "Desliza en horizontal para ajustarlo a pasos · toca para escribir un valor exacto" +
-        if (resettable) " · mantén pulsado para restablecerlo" else ""
+    "Arrastra a izquierda o derecha para ajustarlo a pasos (también tras mantenerlo pulsado) · toca para escribir un valor exacto" +
+        if (resettable) " · mantén pulsado y suelta sin mover para restablecerlo" else ""

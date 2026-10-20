@@ -62,6 +62,13 @@ class TrayDesignRulesTest {
         assertEquals(1, scrubSteps(27f, 8f, 20f))
         assertEquals(2, scrubSteps(29f, 8f, 20f))
         assertEquals(-3, scrubSteps(-50f, 8f, 20f))
+        // Un trazo inclinado también desliza; uno claramente vertical no.
+        assertTrue(scrubStarts(10f, 15f, 8f, held = false))
+        assertFalse(scrubStarts(5f, 30f, 8f, held = false))
+        assertFalse(scrubStarts(6f, 0f, 8f, held = false))
+        // Tras mantener pulsado basta un movimiento menor y en cualquier dirección.
+        assertTrue(scrubStarts(5f, 0f, 8f, held = true))
+        assertTrue(scrubStarts(0f, 9f, 8f, held = true))
     }
 
     @Test fun trayNumbersScrubTypeAndResetWithoutSteppersAndHelpOnlyFirstTimes() {

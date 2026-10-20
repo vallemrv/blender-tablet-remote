@@ -21,6 +21,11 @@ import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.abs
@@ -34,7 +39,9 @@ internal val ScrubStep = 14.dp
  * - Deslizar en horizontal lo ajusta a pasos enteros ([onScrub] recibe los pasos
  *   acumulados desde que empezó el gesto; quien llama suma su paso o snap activo).
  * - Tocar abre la edición exacta del campo que se dibuja en [field].
- * - Mantener pulsado lo restablece con [onReset], si existe un valor neutro.
+ * - Mantener pulsado lo «agarra» (se resalta): arrastrar después desliza y soltar
+ *   quieto lo restablece con [onReset], si existe un valor neutro.
+ * - Dos flechitas en los bordes indican que se arrastra; cada paso da un toque háptico.
  *
  * Mientras no se edita, una capa encima del campo recibe el gesto: el campo de
  * texto nunca empieza a seleccionar ni a desplazar su texto por un arrastre.
@@ -53,6 +60,8 @@ fun ScrubNumber(
     val keyboard = LocalSoftwareKeyboardController.current
     var editing by remember { mutableStateOf(false) }
     var scrubbing by remember { mutableStateOf(false) }
+    var grabbed by remember { mutableStateOf(false) }
+    val haptics = LocalHapticFeedback.current
     val start by rememberUpdatedState(onScrubStart)
     val scrub by rememberUpdatedState(onScrub)
     val end by rememberUpdatedState(onScrubEnd)
@@ -62,8 +71,9 @@ fun ScrubNumber(
         field(Modifier.focusRequester(focus).onFocusChanged { editing = it.isFocused })
         if (!editing) Box(
             Modifier.matchParentSize()
-                .then(if (scrubbing) Modifier.background(Ink.Accent.copy(alpha = .12f), shape)
+                .then(if (scrubbing || grabbed) Modifier.background(Ink.Accent.copy(alpha = .12f), shape)
                     .border(1.dp, Ink.Accent.copy(alpha = .6f), shape) else Modifier)
+                .then(if (scrubbing || !enabled) Modifier else Modifier.drawBehind { drawScrubHint() })
                 .pointerInput(enabled) {
                     val stepPx = ScrubStep.toPx()
                     awaitEachGesture {
@@ -71,23 +81,32 @@ fun ScrubNumber(
                         down.consume()
                         if (!enabled) { consumeUntilUp(down.id); return@awaitEachGesture }
                         val slop = viewConfiguration.touchSlop
-                        val outcome = withTimeoutOrNull(
-                            if (reset != null) viewConfiguration.longPressTimeoutMillis else Long.MAX_VALUE / 2,
-                        ) {
-                            var result = ScrubOutcome.TAP
-                            while (true) {
-                                val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
-                                if (change == null) { result = ScrubOutcome.IGNORE; break }
-                                if (!change.pressed) { change.consume(); break }
-                                val d = change.position - down.position
-                                if (scrub != null && abs(d.x) > slop && abs(d.x) >= abs(d.y)) { result = ScrubOutcome.SCRUB; break }
-                                if (d.getDistance() > slop) { result = ScrubOutcome.IGNORE; break }
+                        val holdMs = viewConfiguration.longPressTimeoutMillis
+                        // Mantener pulsado ya no restablece al instante: solo «agarra» el
+                        // número. Si después se arrastra, desliza; si se suelta quieto,
+                        // restablece. Antes, apoyar el lápiz y esperar antes de moverlo
+                        // borraba el valor y perdía el arrastre.
+                        var held = false
+                        var outcome = ScrubOutcome.TAP
+                        while (true) {
+                            val event = if (held) awaitPointerEvent()
+                                else withTimeoutOrNull(holdMs) { awaitPointerEvent() }
+                            if (event == null) { held = true; grabbed = true; continue }
+                            val change = event.changes.firstOrNull { it.id == down.id }
+                            if (change == null) { outcome = ScrubOutcome.IGNORE; break }
+                            if (!change.pressed) {
                                 change.consume()
+                                outcome = if (held && reset != null) ScrubOutcome.RESET else ScrubOutcome.TAP
+                                break
                             }
-                            result
+                            val d = change.position - down.position
+                            if (scrub != null && scrubStarts(d.x, d.y, slop, held)) { outcome = ScrubOutcome.SCRUB; break }
+                            if (!held && abs(d.y) > slop && abs(d.y) > 2 * abs(d.x)) { outcome = ScrubOutcome.IGNORE; break }
+                            change.consume()
                         }
+                        grabbed = false
                         when (outcome) {
-                            null -> { reset?.invoke(); consumeUntilUp(down.id) }
+                            ScrubOutcome.RESET -> { reset?.invoke(); haptics.performHapticFeedback(HapticFeedbackType.LongPress) }
                             ScrubOutcome.TAP -> { focus.requestFocus(); keyboard?.show() }
                             ScrubOutcome.IGNORE -> consumeUntilUp(down.id)
                             ScrubOutcome.SCRUB -> {
@@ -98,7 +117,10 @@ fun ScrubNumber(
                                     val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
                                     if (!change.pressed) { change.consume(); break }
                                     val next = scrubSteps(change.position.x - down.position.x, slop, stepPx)
-                                    if (next != steps) { steps = next; scrub?.invoke(steps) }
+                                    if (next != steps) {
+                                        steps = next; scrub?.invoke(steps)
+                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    }
                                     change.consume()
                                 }
                                 scrubbing = false
@@ -111,7 +133,27 @@ fun ScrubNumber(
     }
 }
 
-private enum class ScrubOutcome { TAP, SCRUB, IGNORE }
+private enum class ScrubOutcome { TAP, SCRUB, RESET, IGNORE }
+
+/**
+ * ¿Empieza el deslizamiento? Basta con superar el umbral en horizontal aunque el
+ * trazo vaya algo inclinado (hasta ~63°); tras mantener pulsado, cualquier dirección.
+ * Solo un trazo claramente vertical se deja pasar al panel que lo contiene.
+ */
+internal fun scrubStarts(dx: Float, dy: Float, slop: Float, held: Boolean): Boolean =
+    if (held) abs(dx) > slop / 2 || abs(dy) > slop
+    else abs(dx) > slop && abs(dx) * 2 >= abs(dy)
+
+/** Dos flechitas tenues en los bordes: el número se arrastra a izquierda/derecha. */
+private fun DrawScope.drawScrubHint() {
+    val h = 3.5.dp.toPx(); val inset = 3.dp.toPx(); val cy = size.height / 2
+    val color = Ink.Faint.copy(alpha = .55f)
+    fun arrow(tipX: Float, baseX: Float) = Path().apply {
+        moveTo(tipX, cy); lineTo(baseX, cy - h); lineTo(baseX, cy + h); close()
+    }
+    drawPath(arrow(inset, inset + h), color)
+    drawPath(arrow(size.width - inset, size.width - inset - h), color)
+}
 
 /** Pasos enteros recorridos, contando desde que el gesto superó el umbral táctil. */
 internal fun scrubSteps(dx: Float, slop: Float, stepPx: Float): Int {

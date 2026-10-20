@@ -332,9 +332,13 @@ nuevas superficies y la adaptación gradual de las existentes.
     otra selección, destino, ejes) y Forma (proporcional, radio, perfil y opciones
     propias); cada opción (`TrayOption`) tiene nombre, control y una frase.
   - Números (`ScrubNumber`): deslizar en horizontal avanza pasos enteros del paso o
-    snap activo (14 dp por paso, el primero al superar el umbral táctil); tocar
-    escribe con cuentas; mantener restablece al neutro (0, 0°, 100 %, centro) si lo
-    hay. El nombre corto y la unidad van dentro del campo. Confirmar suelta el foco.
+    snap activo (14 dp por paso, el primero al superar el umbral táctil; admite trazo
+    inclinado hasta ~63° y solo cede al panel un trazo claramente vertical); tocar
+    escribe con cuentas. Mantener pulsado «agarra» el número (se resalta): arrastrar
+    después desliza en cualquier dirección y soltar quieto restablece al neutro
+    (0, 0°, 100 %, centro) si lo hay; apoyar y esperar nunca pierde el arrastre.
+    Dos flechitas tenues en los bordes anuncian que se arrastra y cada paso da un
+    toque háptico. El nombre corto y la unidad van dentro del campo. Confirmar suelta el foco.
     Ningún número de la app tiene botones `−/+`: pasos de «⋯ Más», modificadores,
     grupos de vértices y diálogos también se deslizan (`ScrubNumber`, `ScrubRow`).
     El puerto de conexión solo se escribe.
