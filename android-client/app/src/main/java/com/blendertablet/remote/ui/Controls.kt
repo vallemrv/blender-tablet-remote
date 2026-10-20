@@ -73,6 +73,8 @@ fun CompactNumericField(
     suffix: String? = null,
     onDone: () -> Unit,
 ) {
+    // Confirmar suelta el foco: el número vuelve a poder deslizarse sin otro toque.
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val decoration: @Composable (@Composable () -> Unit) -> Unit = { inner ->
         NumericFieldBox(value, placeholder, textAlign, caption, captionColor, suffix, inner)
     }
@@ -84,7 +86,7 @@ fun CompactNumericField(
             textStyle = TextStyle(color = textColor, fontSize = fontSize, textAlign = textAlign),
             cursorBrush = SolidColor(Ink.Accent),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { onDone() }),
+            keyboardActions = KeyboardActions(onDone = { onDone(); focusManager.clearFocus() }),
             modifier = modifier
                 .onFocusChanged { onFocusChange(it.isFocused) }
                 .height(Metrics.Touch)
@@ -110,7 +112,7 @@ fun CompactNumericField(
         textStyle = TextStyle(color = textColor, fontSize = fontSize, textAlign = textAlign),
         cursorBrush = SolidColor(Ink.Accent),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { onDone() }),
+        keyboardActions = KeyboardActions(onDone = { onDone(); focusManager.clearFocus() }),
         modifier = modifier
             .onFocusChanged { focused = it.isFocused; onFocusChange(it.isFocused) }
             .height(Metrics.Touch)

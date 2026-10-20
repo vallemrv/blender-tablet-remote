@@ -114,8 +114,9 @@ fun EditToolTray(
         else session.instruction.ifBlank { if (session.tool == EditTool.EXTRUDE) "Arrastra para extruir · escribe una medida, por ejemplo 5mm"
             else "Arrastra sobre la malla y toca el número para afinar" }
     if (!session.active && session.controls.isEmpty()) {
+        // Armada y sin controles: la instrucción es lo único que hay que leer, siempre visible.
         SingleLineTray(session.tool.label, onCancel = onCancel, modifier = modifier,
-            help = if (session.tool == EditTool.F2) session.instruction else "Toca una arista para colocar el primer corte") {}
+            status = if (session.tool == EditTool.F2) session.instruction else "Toca una arista para colocar el primer corte") {}
         return
     }
     val contents = com.blendertablet.remote.model.toolTrayContents(session, selectionMode)
