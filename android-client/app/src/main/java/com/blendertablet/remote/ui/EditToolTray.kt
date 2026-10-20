@@ -215,7 +215,7 @@ private fun ToolControl(id: String, session: ToolSession, scale: Double, unit: L
         "constraint" -> {
             val current = com.blendertablet.remote.model.Constraint.entries
                 .firstOrNull { it.name == (session.parameters[id] ?: "FREE") } ?: com.blendertablet.remote.model.Constraint.FREE
-            AxisConstraintButtons(current, onSelect = { change(id, it.name) })
+            AxisSelector(current, onSelect = { change(id, it.name) }, planes = true)
         }
         "orientation" -> ChoiceIcon(listOf("GLOBAL", "LOCAL", "VIEW"), (session.parameters[id] as? String) ?: "GLOBAL",
             "Orientación", AppIcons::orientation, ::orientationLabel, active = true) { change(id, it) }

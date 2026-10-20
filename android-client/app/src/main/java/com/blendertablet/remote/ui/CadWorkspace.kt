@@ -10,6 +10,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
+import com.blendertablet.remote.model.Constraint
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -622,9 +623,15 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             revolveLike?.let { selected ->
                 TrayOption("Eje", "Eje del croquis o línea de construcción alrededor de la que gira el perfil.") {
                     val lines = cad.sketches.firstOrNull { it.id == selected.sketchId }?.entities.orEmpty().filter { it.type == "LINE" && it.construction }
-                    (listOf("Y" to "Y", "X" to "X") + lines.mapIndexed { i, line -> line.id to "L${i + 1}" }).forEach { (axis, label) ->
-                        PillButton(label, selected = selected.axis == axis, enabled = connected && drafts.isEmpty()) {
-                            command("cad.feature.set", "feature_id" to selected.id, "axis" to axis)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        AxisSelector(when (selected.axis) { "X" -> Constraint.X; "Y" -> Constraint.Y; else -> Constraint.FREE },
+                            onSelect = { command("cad.feature.set", "feature_id" to selected.id, "axis" to it.name) },
+                            axes = listOf(com.blendertablet.remote.model.Axis.X, com.blendertablet.remote.model.Axis.Y),
+                            allowFree = false, enabled = connected && drafts.isEmpty())
+                        lines.forEachIndexed { i, line ->
+                            PillButton("L${i + 1}", selected = selected.axis == line.id, enabled = connected && drafts.isEmpty()) {
+                                command("cad.feature.set", "feature_id" to selected.id, "axis" to line.id)
+                            }
                         }
                     }
                 }

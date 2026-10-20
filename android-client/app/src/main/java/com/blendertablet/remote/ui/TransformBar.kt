@@ -1,8 +1,6 @@
 package com.blendertablet.remote.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,7 +58,6 @@ import com.blendertablet.remote.model.scaleValuesAfterAxisEdit
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-private val AxisColors = mapOf(Axis.X to Ink.AxisX, Axis.Y to Ink.AxisY, Axis.Z to Ink.AxisZ)
 
 /**
  * Bandeja de la transformación modal (Mover/Rotar/Escalar).
@@ -147,7 +144,7 @@ fun TransformBar(
             }
             TrayOption("Restablecer", "Devuelve la vista previa a " + when (session.mode) {
                 TransformMode.MOVE -> "0"; TransformMode.ROTATE -> "0°"; TransformMode.SCALE -> "100 %" } +
-                " sin cerrar la herramienta. Mantener pulsado un número restablece solo ese eje.") {
+                " sin cerrar la herramienta. Un doble toque en un número restablece solo ese eje.") {
                 IconAction(AppIcons.Reset, "Restablecer") { onValue(List(3) { neutral }, null, null) }
             }
         },
@@ -168,7 +165,7 @@ fun TransformBar(
                     }
                 }
             }
-            if (constraint == Constraint.FREE) TrayOption("Orientación", "Ejes con los que se interpretan X, Y y Z.") {
+            TrayOption("Orientación", "Ejes con los que se interpretan X, Y y Z.") {
                 OrientationPicker(availableOrientations, orientation, onOrientation)
             }
             if (canChangeSelection) TrayOption("Otra selección", "Confirma este paso y continúa con otra selección.") {
@@ -198,17 +195,19 @@ fun TransformBar(
             "y mantenlo para restablecer · cambiar de herramienta aplica el resultado",
         hintKey = "transform.${session.mode.name}", status = picking ?: candidate, more = more,
     ) {
-        TransformAxisInputs(session, unitScaleLength, moveStepValue, moveStepUnit, scaleStepValue, stepIndex,
-            scaleUnit, scaleLinked, onValue, onFlatten)
-        if (session.mode == TransformMode.SCALE) IconAction(AppIcons.chain(scaleLinked),
-            if (scaleLinked) "Dimensiones vinculadas" else "Dimensiones independientes", selected = scaleLinked) {
-            scaleLinked = !scaleLinked
-        }
-        // Misma disposición que Extruir: ejes tras los valores y, si hay restricción,
-        // su orientación al lado; el snap queda a continuación.
-        AxisConstraintButtons(constraint, onSelect = onConstraint)
-        if (constraint != Constraint.FREE) ChoiceIcon(availableOrientations, orientation, "Orientación",
-            { AppIcons.orientation(it.name) }, { it.label }, active = true, onSelect = onOrientation)
+        // Un único selector de ejes: cada celda une la restricción (pestaña de color) y
+        // el valor deslizable de ese eje. Plano tiene sentido al mover y al escalar.
+        AxisSelector(constraint, onConstraint, planes = session.mode != TransformMode.ROTATE,
+            value = { axis ->
+                TransformAxisValue(axis, session, unitScaleLength, moveStepValue, moveStepUnit, scaleStepValue,
+                    stepIndex, scaleUnit, scaleLinked, onValue, onFlatten)
+            },
+            trailing = if (session.mode != TransformMode.SCALE) null else ({
+                IconAction(AppIcons.chain(scaleLinked),
+                    if (scaleLinked) "Dimensiones vinculadas" else "Dimensiones independientes", selected = scaleLinked) {
+                    scaleLinked = !scaleLinked
+                }
+            }))
         SnapControl(snapOptions, snapType, onSnapType)
     }
 }
@@ -251,11 +250,12 @@ private fun MoveStepInput(
 }
 
 /**
- * X, Y y Z de cualquier transformación: deslizar avanza por el paso de la sesión,
- * tocar escribe el valor exacto y mantener restablece ese eje.
+ * Valor de un eje dentro de su celda del [AxisSelector]: deslizar avanza por el paso de
+ * la sesión, tocar escribe el valor exacto y el doble toque restablece ese eje.
  */
 @Composable
-private fun TransformAxisInputs(
+private fun TransformAxisValue(
+    axis: Axis,
     session: TransformSession,
     unitScaleLength: Double,
     stepValue: Double,
@@ -281,7 +281,7 @@ private fun TransformAxisInputs(
         TransformMode.ROTATE -> "°"
         TransformMode.SCALE -> scaleUnit.label
     }
-    Axis.entries.forEach { axis ->
+    run {
         val index = axis.ordinal
         val current = session.values.getOrElse(index) { neutral }
         val displayed = when (session.mode) {
@@ -334,9 +334,8 @@ private fun TransformAxisInputs(
                 },
             ) { field ->
                 CompactNumericField(
-                    value = text, onValueChange = { text = it }, modifier = field.width(112.dp),
-                    textAlign = TextAlign.End, placeholder = axis.name, fontSize = 16.sp,
-                    caption = axis.name, captionColor = AxisColors.getValue(axis), suffix = suffix,
+                    value = text, onValueChange = { text = it }, modifier = field.width(96.dp),
+                    textAlign = TextAlign.End, placeholder = axis.name, fontSize = 16.sp, suffix = suffix,
                     selectAllOnFocus = true,
                     onFocusChange = { editing = it },
                     onDone = {
@@ -409,64 +408,6 @@ internal fun ProportionalRadiusInput(
     }
 }
 
-
-/**
- * Restricción con los botones Libre · X · Y · Z siempre a la vista. Tocar un eje lo
- * deja solo (otra vez, vuelve a Libre); mantenerlo pulsado bloquea los otros dos,
- * como Shift+Z en Blender: mantener Z deja el plano XY. [planes] falso solo admite ejes.
- */
-@Composable
-internal fun AxisConstraintButtons(selected: Constraint, enabled: Boolean = true, planes: Boolean = true,
-                                   onSelect: (Constraint) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-        val free = selected == Constraint.FREE
-        HoverHelp("Libre", "Sin restricción: sigue al dedo.", enabled = enabled) {
-            Box(Modifier.height(Metrics.Touch).clip(RoundedCornerShape(10.dp))
-                .background(if (free) Ink.Accent.copy(alpha = .22f) else Color.Transparent)
-                .then(if (enabled) Modifier.clickableNoRipple { onSelect(Constraint.FREE) } else Modifier)
-                .padding(horizontal = 10.dp), contentAlignment = Alignment.Center) {
-                Text("Libre", color = if (!enabled) Ink.Faint else if (free) Ink.Accent else Ink.Muted,
-                    fontSize = 13.sp, fontWeight = if (free) FontWeight.SemiBold else FontWeight.Normal)
-            }
-        }
-        Axis.entries.forEach { axis ->
-            val active = axis in selected.axes
-            val color = AxisColors.getValue(axis)
-            HoverHelp("Eje ${axis.name}", "Toca para mover solo en ${axis.name}" +
-                if (planes) "; mantén pulsado para bloquear los otros dos ejes (como Shift+${axis.name})." else ".",
-                enabled = enabled) {
-                Box(Modifier.size(Metrics.Touch).clip(RoundedCornerShape(10.dp))
-                    .background(if (active) color.copy(alpha = .28f) else Color.Transparent)
-                    .then(if (!enabled) Modifier else Modifier.combinedClickable(
-                        interactionSource = remember { MutableInteractionSource() }, indication = null,
-                        onClick = { onSelect(constraintAfterTap(selected, axis)) },
-                        onLongClick = if (planes) ({ onSelect(constraintAfterHold(selected, axis)) }) else null)),
-                    contentAlignment = Alignment.Center) {
-                    Text(axis.name, color = if (enabled) color else Ink.Faint, fontSize = 15.sp,
-                        fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
-                }
-            }
-        }
-    }
-}
-
-/** Tocar un eje lo deja solo; tocar el eje que ya está solo vuelve a Libre. */
-internal fun constraintAfterTap(current: Constraint, axis: Axis): Constraint {
-    val only = Constraint.ofAxes(setOf(axis))
-    return if (current == only) Constraint.FREE else only
-}
-
-/** Mantener un eje bloquea los otros dos (Shift+eje); repetirlo vuelve a Libre. */
-internal fun constraintAfterHold(current: Constraint, axis: Axis): Constraint {
-    val plane = Constraint.ofAxes(Axis.entries.toSet() - axis)
-    return if (current == plane) Constraint.FREE else plane
-}
-
-internal fun constraintLabel(value: Constraint) = when (value) {
-    Constraint.FREE -> "Libre"
-    Constraint.X, Constraint.Y, Constraint.Z -> "Solo eje ${value.name}"
-    else -> "Plano ${value.name}"
-}
 
 internal fun orientationLabel(wire: String) = when (wire) {
     "LOCAL" -> "Local"; "VIEW" -> "Vista"; "NORMAL" -> "Normal"; else -> "Global"

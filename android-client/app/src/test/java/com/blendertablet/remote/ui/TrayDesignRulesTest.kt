@@ -89,14 +89,15 @@ class TrayDesignRulesTest {
     /** Controles directos de la fila de una bandeja: el bloque de contenido de SingleLineTray. */
     private fun rowControls(code: String, marker: String): List<String> {
         val row = code.substringAfter(marker).substringAfter(") {").substringBefore("\n}\n")
-        return Regex("""\b(TransformAxisInputs|IconAction|SnapControl|AxisConstraintButtons|ChoiceIcon|PillButton|FalloffChoice|TrayNumber)\(""")
+        return Regex("""\b(AxisSelector|IconAction|SnapControl|ChoiceIcon|PillButton|FalloffChoice|TrayNumber)\(""")
             .findAll(row).map { it.groupValues[1] }.toList()
     }
 
     @Test fun transformShowsAxesSnapAndConstraintWithTheRestUnderMore() {
         val bar = body(source("TransformBar"), "fun TransformBar(")
         val controls = rowControls(bar, "hintKey = \"transform.")
-        assertEquals(listOf("TransformAxisInputs", "IconAction", "AxisConstraintButtons", "ChoiceIcon", "SnapControl"), controls)
+        // Norma: [Mover] [AxisSelector (con la cadena de Escalar dentro)] [Snap] [⋯] [× ✓].
+        assertEquals(listOf("AxisSelector", "IconAction", "SnapControl"), controls)
         assertTrue("Rotar no puede mostrar más de cinco controles", controls.size <= 5)
         for (option in listOf("\"Paso\"", "\"Centro\"", "\"Fuente\"", "\"Propio\"", "\"Orientación\"",
             "\"Otra selección\"", "\"Proporcional\"", "\"Perfil\""))
@@ -158,13 +159,18 @@ class TrayDesignRulesTest {
         assertTrue(body(source("SnapControl"), "internal fun DistanceSnapStepInput(").contains("ScrubNumber("))
     }
 
-    @Test fun axisButtonsTapOneAxisAndHoldLocksTheOtherTwoLikeBlenderShift() {
-        assertEquals(Constraint.Z, constraintAfterTap(Constraint.FREE, Axis.Z))
-        assertEquals(Constraint.FREE, constraintAfterTap(Constraint.Z, Axis.Z))
-        assertEquals(Constraint.X, constraintAfterTap(Constraint.XY, Axis.X))
-        assertEquals(Constraint.XY, constraintAfterHold(Constraint.FREE, Axis.Z))
-        assertEquals(Constraint.YZ, constraintAfterHold(Constraint.Z, Axis.X))
-        assertEquals(Constraint.FREE, constraintAfterHold(Constraint.XZ, Axis.Y))
-        assertTrue(body(source("EditToolTray"), "private fun ToolControl(").contains("AxisConstraintButtons("))
+    @Test fun axisSelectorTapsAnAxisAndThePlaneToggleExcludesIt() {
+        assertEquals(Constraint.Z, axisSelectorTap(Constraint.FREE, Axis.Z, planeMode = false))
+        assertEquals(Constraint.FREE, axisSelectorTap(Constraint.Z, Axis.Z, planeMode = false))
+        assertEquals(Constraint.X, axisSelectorTap(Constraint.XY, Axis.X, planeMode = false))
+        // Con Plano activo, tocar un eje lo excluye (como Shift+eje); otra vez vuelve a Libre.
+        assertEquals(Constraint.XY, axisSelectorTap(Constraint.FREE, Axis.Z, planeMode = true))
+        assertEquals(Constraint.FREE, axisSelectorTap(Constraint.XY, Axis.Z, planeMode = true))
+        // El interruptor conserva el eje y cambia su sentido.
+        assertEquals(Constraint.YZ, axisSelectorTogglePlane(Constraint.X))
+        assertEquals(Constraint.X, axisSelectorTogglePlane(Constraint.YZ))
+        // Sin Libre (ejes de un esquema) siempre queda un eje elegido.
+        assertEquals(Constraint.Y, axisSelectorTap(Constraint.Y, Axis.Y, planeMode = false, allowFree = false))
+        assertTrue(body(source("EditToolTray"), "private fun ToolControl(").contains("AxisSelector("))
     }
 }

@@ -48,6 +48,7 @@ object AppIcons {
     val SelectTool: ImageVector get() = StudioIcons["SELECT"]
     val Wireframe: ImageVector get() = StudioIcons["WIREFRAME"]
     val Normals: ImageVector get() = StudioIcons["FACE_NORMALS"]
+    val AxisPlane: ImageVector get() = StudioIcons["AXIS_PLANE"]
     val Proportional: ImageVector get() = StudioIcons["PROPORTIONAL"]
     val AutoMerge: ImageVector get() = StudioIcons["AUTO_MERGE"]
     val ModeObject: ImageVector get() = StudioIcons["OBJECT_MODE"]

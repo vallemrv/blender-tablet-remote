@@ -69,6 +69,7 @@ internal object IconHelp {
         "OBJECT_MODE" to "Trabaja con objetos completos: selecciona, coloca y transforma cada pieza.",
         "EDIT_MODE" to "Edita los vértices, aristas y caras del objeto activo.",
         "VIEWS" to "Abre los controles para cambiar la orientación y la proyección de la vista.",
+        "AXIS_PLANE" to "Con Plano activo, tocar un eje lo excluye: el gesto se mueve en el plano de los otros dos (como Shift+eje en Blender).",
         "FACE_NORMALS" to "Colorea cada cara según su normal: azul hacia fuera y rojo hacia dentro. Sirve para ver caras giradas.",
         "WIREFRAME" to "Alterna la visualización de la estructura de aristas del modelo.",
         "PROPORTIONAL" to "Al transformar una selección, influye también en los vértices cercanos según el radio y el perfil elegidos.",

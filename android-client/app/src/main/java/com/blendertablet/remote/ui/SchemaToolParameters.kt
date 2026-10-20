@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.blendertablet.remote.model.EditCatalogParameter
+import com.blendertablet.remote.model.Axis
 import com.blendertablet.remote.model.Constraint
 import com.blendertablet.remote.model.LengthUnit
 import com.blendertablet.remote.model.TransformMode
@@ -49,8 +50,9 @@ fun SchemaToolParameters(
                 val label = { value: String -> spec.labels[value] ?: value }
                 when {
                     spec.values.isNotEmpty() && spec.values.all { it in setOf("X", "Y", "Z") } ->
-                        ChoiceIcon(spec.values, current, spec.label, { AppIcons.constraint(Constraint.valueOf(it)) },
-                            { "Eje $it" }, multicolor = true) { onParameter(spec.id, it) }
+                        AxisSelector(Constraint.entries.firstOrNull { it.name == current } ?: Constraint.FREE,
+                            onSelect = { onParameter(spec.id, it.name) }, axes = spec.values.map { Axis.valueOf(it) },
+                            allowFree = false)
                     spec.values.isNotEmpty() && spec.values.all { AppIcons.trayChoice(spec.id, it) != null } ->
                         ChoiceIcon(spec.values, current, spec.label, { AppIcons.trayChoice(spec.id, it)!! }, label, active = true) {
                             onParameter(spec.id, it)

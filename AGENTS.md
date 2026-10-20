@@ -322,9 +322,8 @@ nuevas superficies y la adaptación gradual de las existentes.
   - Icono = acción o interruptor, de `AppIcons`, sin texto pegado; texto = solo
     números, unidades y el título. Un estado con varias opciones es el icono de la
     opción activa (`ChoiceIcon`): perfil de caída, esquinas, orientación y snap. La
-    restricción usa los botones Libre · X · Y · Z siempre visibles (`AxisConstraintButtons`,
-    por petición del usuario): tocar un eje lo deja solo (otra vez, Libre) y mantenerlo
-    bloquea los otros dos, como Shift+Z en Blender (mantener Z = plano XY). No hay pastillas
+    restricción usa el `AxisSelector` común (ver Norma de controles): cada celda une
+    pestaña de eje y valor, y el plano es el interruptor visible «Plano». No hay pastillas
     «etiqueta: valor». Color = estado (acento activo, gris inactivo; ejes R/V/A).
   - Todo control táctil mide 48 dp (`Metrics.Touch`): iconos, campos, pasos, ×/✓.
   - Fila fija sin scroll: `[Nombre] [valor/ejes] [icono][icono] [⋯] … [×][✓]`.
@@ -774,11 +773,10 @@ pase: si no cabe, va a «⋯ Más»).
   el snap Incremento y el paso común. Los anillos vistos de canto se ocultan. Android
   lo activa con `gizmo.set` solo sin otra herramienta, forma ni sesión. Los tiradores
   empiezan desactivados al abrir la app y al crear/abrir otra escena; su botón los activa. Su sesión interna no abre la barra de transformación.
-- Mover, Rotar y Escalar usan un único `TransformAxisInputs` (X/Y/Z) en Object y Edit
-  sobre la misma sesión modal. Su fila sigue la disposición de Extruir: X/Y/Z (y en
-  Escalar la cadena), Libre·X·Y·Z, el icono de orientación junto a los ejes solo
-  con restricción (si no, en Más · Referencia) y Snap; como mucho cinco controles
-  además de título y ×/✓.
+- Mover, Rotar y Escalar usan el `AxisSelector` común en Object y Edit sobre la misma
+  sesión modal: `[Mover] [Libre · X|valor · Y|valor · Z|valor · Plano] [Snap] [⋯] [×✓]`.
+  Plano aparece en Mover y Escalar (en Rotar no tiene sentido); la cadena de Escalar va
+  dentro del selector, al final. La orientación vive en Más · Referencia.
 - En Edit, Mover/Rotar/Escalar continúan por pasos al tocar otra selección. Un único
   `transform.select` sondea la preview viva, confirma el cambio anterior con un undo
   y abre otro baseline sin salir de la herramienta; conserva ejes, orientación y snap.
@@ -841,8 +839,8 @@ pase: si no cabe, va a «⋯ Más»).
   expresa en ella sin alterarlo. Porcentajes, SLIDE de Tweak y CAD conservan su paso.
 - En Bisel, Ancho se muestra en la unidad elegida; deslizarlo resta/suma el
   paso activo.
-- Extruir Región/Manifold admite restricción a eje o a plano (XY/XZ/YZ) con los mismos
-  botones Libre·X·Y·Z que Mover (mantener un eje = plano de los otros dos). Libre sobre caras sigue su normal (como E en Blender); Libre
+- Extruir Región/Manifold admite restricción a eje o a plano (XY/XZ/YZ) con el mismo
+  `AxisSelector` que Mover (interruptor Plano + eje = plano de los otros dos). Libre sobre caras sigue su normal (como E en Blender); Libre
   sobre aristas/vértices sigue al dedo en el plano de la vista, y un plano elegido
   sigue al dedo dentro de él (`planar_drag`, `tool.extrude_drag`). Así un perfil
   plano en XY con la vista superior se extruye en XY, nunca hacia la cámara.
