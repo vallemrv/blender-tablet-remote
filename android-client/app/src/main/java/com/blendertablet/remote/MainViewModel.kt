@@ -1086,7 +1086,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val session = client.toolSession.value
         if (phase == GesturePhase.BEGIN) f2GestureId = java.util.UUID.randomUUID().toString()
         val id = f2GestureId ?: return
-        if (session.armed && session.tool == EditTool.F2) client.editCatalogCommand("tool.f2_gesture",
+        val command = when (session.tool) { EditTool.F2 -> "tool.f2_gesture"; EditTool.DRAW -> "tool.draw_gesture"; else -> null }
+        if (session.armed && command != null) client.editCatalogCommand(command,
             mapOf("phase" to phase.name, "gesture_id" to id, "u" to u, "v" to v))
         if (phase == GesturePhase.END || phase == GesturePhase.CANCEL) f2GestureId = null
     }

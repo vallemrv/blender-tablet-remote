@@ -796,6 +796,9 @@ nuevas superficies y la adaptación gradual de las existentes.
   selección (pasa de Caras a Vértices), cada toque es un undo, tocar un vértice
   existente lo une y cierra la forma, y «Nuevo trazo» (`tool.draw_break`) empieza
   otra línea suelta. Reutiliza el plano de la cámara de Extruir «A toque».
+  Usa el gesto de F2 (`tool.draw_gesture`): tocar dibuja en el punto inicial y
+  arrastrar desde un vértice lo mueve (Tweak), lo selecciona como extremo y crea un
+  undo; cancelar o desarmar lo restauran.
 - Extruir «A toque» reproduce Ctrl+clic derecho en el plano de la cámara remota,
   a la profundidad de la selección (del cursor 3D si no hay selección). Cada toque
   crea y confirma un tramo, selecciona el extremo nuevo y registra un undo; salir

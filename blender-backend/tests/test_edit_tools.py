@@ -312,9 +312,13 @@ class EditToolsTests(unittest.TestCase):
         state = self.begin('DRAW')
         self.assertTrue(state['armed'])
         self.assertEqual(state['input'],'REPEAT_TAP')
+        from blender_tablet_remote.commands import extrude_cursor
+        view = patch.object(extrude_cursor,'find_view3d',return_value=tools.find_view3d())
+        view.start();self.addCleanup(view.stop)
         def tap(x,y):
             u,v = camera.project(Vector((x,y,0)),self.rv3d)
-            return tools.extrude_cursor(dict(u=u,v=v))['result']
+            tools.draw_gesture(dict(phase='BEGIN',u=u,v=v,gesture_id='tap'))
+            return tools.draw_gesture(dict(phase='END',u=u,v=v,gesture_id='tap'))['result']
         for x,y in ((1,0),(1,1),(0,1)):
             self.assertTrue(tap(x,y)['changed'])
         bm = bmesh.from_edit_mesh(self.obj.data)
@@ -364,6 +368,41 @@ class EditToolsTests(unittest.TestCase):
         # Tocar dos veces el mismo vértice lo desmarca.
         tap(2,0)
         self.assertEqual(tap(2,0)['result']['picked'],0)
+        tools.cancel({})
+
+    def test_draw_gesture_taps_draw_and_dragging_a_vertex_moves_it(self):
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        bm.clear()
+        bmesh.update_edit_mesh(self.obj.data)
+        bpy.context.scene.cursor.location = (0,0,0)
+        self.begin('DRAW')
+        from blender_tablet_remote.commands import extrude_cursor
+        view = patch.object(extrude_cursor,'find_view3d',return_value=tools.find_view3d())
+        view.start();self.addCleanup(view.stop)
+        def gesture(phase, x, y, ident):
+            u,v = camera.project(Vector((x,y,0)),self.rv3d)
+            return tools.draw_gesture(dict(phase=phase,u=u,v=v,gesture_id=ident))
+        for i,(x,y) in enumerate(((0,0),(1,0),(1,1))):
+            gesture('BEGIN',x,y,f't{i}'); gesture('END',x,y,f't{i}')
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        self.assertEqual((len(bm.verts),len(bm.edges)),(3,2))
+        # Arrastrar el primer vértice lo mueve y lo deja como extremo seleccionado.
+        with patch('blender_tablet_remote.commands.tools.undo_push') as push:
+            gesture('BEGIN',0,0,'drag'); gesture('UPDATE',-.5,-.5,'drag'); gesture('END',-.5,-.5,'drag')
+            push.assert_called_once()
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        self.assertEqual((len(bm.verts),len(bm.edges)),(3,2))
+        moved = [v for v in bm.verts if v.select]
+        self.assertEqual(len(moved),1)
+        self.assertLess((moved[0].co.xy-Vector((-.5,-.5))).length,1e-4)
+        # El siguiente toque dibuja desde el vértice movido.
+        gesture('BEGIN',-1,0,'next'); gesture('END',-1,0,'next')
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        self.assertEqual((len(bm.verts),len(bm.edges)),(4,3))
+        # Cancelar a mitad de arrastre lo devuelve a su sitio.
+        gesture('BEGIN',1,1,'cancel'); gesture('UPDATE',2,2,'cancel'); gesture('CANCEL',2,2,'cancel')
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        self.assertTrue(any((v.co.xy-Vector((1,1))).length<1e-4 for v in bm.verts))
         tools.cancel({})
 
     def test_draw_starts_clean_even_with_a_previous_selection(self):

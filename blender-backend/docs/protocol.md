@@ -905,12 +905,16 @@ con la base no incluyen sus vértices originales en el desplazamiento ni la sele
 
 Dibujar · polilínea (`tool.begin`, `tool: DRAW`; familia `DRAW` de `edit_toolbar`,
 entrada `REPEAT_TAP`) deselecciona la malla y pasa de Caras a Vértices al armarse.
-Cada `tool.extrude_cursor` añade un vértice en el plano de la vista, a la profundidad
+Cada toque de `tool.draw_gesture {phase, gesture_id, u, v}` (BEGIN y END sin arrastre) añade un vértice en el plano de la vista, a la profundidad
 del extremo (o del cursor 3D al empezar), unido al anterior por una arista, con un
 undo por toque y sin girar el origen. Un toque a menos de 0,03 de alto de vídeo de un
 vértice visible lo une con el extremo sin crear otro (`result.connected`) y continúa
 desde él; así se cierran formas o se empieza desde geometría existente.
 `tool.draw_break` suelta el extremo: el siguiente toque empieza una línea suelta.
+Si el BEGIN cae a menos de 0,03 de un vértice visible y los UPDATE superan 0,012 de
+alto de vídeo, el gesto mueve ese vértice en el plano de la vista (Tweak), lo deja como
+único seleccionado (extremo del siguiente toque) y END registra un undo; CANCEL o
+desarmar lo devuelven a su sitio con la selección previa.
 
 Unir J (`tool.begin`, `tool: CONNECT`, entrada `REPEAT_TAP`; Android lo arma al
 mantener J) fuerza Vértices y deselecciona al armarse. Cada `tool.extrude_cursor`

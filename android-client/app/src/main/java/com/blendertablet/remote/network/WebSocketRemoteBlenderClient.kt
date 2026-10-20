@@ -132,7 +132,7 @@ class WebSocketRemoteBlenderClient(
             "tool.loop_pick", "tool.loop_pop", "tool.knife_drag", "tool.knife_point", "tool.knife_pop",
             "tool.knife_new_stroke", "tool.knife_close",
             "tool.drag_line", "tool.snap_candidate", "tool.face_pick",
-            "tool.extrude_cursor", "tool.f2_gesture", "tool.draw_break",
+            "tool.extrude_cursor", "tool.f2_gesture", "tool.draw_break", "tool.draw_gesture",
         )
     }
 

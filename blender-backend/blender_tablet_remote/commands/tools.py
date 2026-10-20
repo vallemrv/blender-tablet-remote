@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import uuid
 
 import bmesh
@@ -19,7 +20,7 @@ from . import profile_tools
 SUPPORTED = {"EXTRUDE", "BEVEL", "INSET", "SUBDIVIDE", "LOOP_CUT", "BRIDGE_EDGE_LOOPS", "KNIFE", "BISECT", "ALIGN", "REVOLVE", "SWEEP", "F2", "DRAW", "CONNECT"}
 
 DRAW_INSTRUCTION = ("Toca para poner un vértice · cada toque añade una arista desde el anterior · "
-                    "toca un vértice existente para unirlo y cerrar la forma")
+                    "toca un vértice existente para unirlo y cerrar la forma · arrástralo para moverlo")
 CONNECT_INSTRUCTIONS = ("Toca el primer vértice", "Toca el segundo vértice para unirlos como J")
 
 # Herramientas cuya sesión puede quedar ARMED (elegidas pero sin backup ni preview
@@ -106,6 +107,8 @@ class ToolSession:
         if self.armed_tool == 'F2':
             from . import f2
             f2.cancel()
+        if self.armed_tool == 'DRAW':
+            cancel_draw_gesture()
         self.armed_tool, self.armed_owner, self.armed_params = None, None, {}
 
     def begin(self, tool, owner, params):
@@ -477,9 +480,8 @@ def f2_gesture(payload):
 @command("tool.extrude_cursor", mutating=True)
 def extrude_cursor(payload):
     tool_session.require_armed_owner(payload.get("_client_id"))
-    drawing = tool_session.armed_tool == "DRAW"
     connecting = tool_session.armed_tool == "CONNECT"
-    if not (drawing or connecting) and (tool_session.armed_tool != "EXTRUDE" or tool_session.armed_params.get("variant") != "CURSOR"):
+    if not connecting and (tool_session.armed_tool != "EXTRUDE" or tool_session.armed_params.get("variant") != "CURSOR"):
         raise CommandError("Extruir A toque no está activo", code="wrong_tool")
     obj = active_object()
     if obj != tool_session.obj or obj.mode != "EDIT" or obj.type != "MESH":
@@ -496,14 +498,110 @@ def extrude_cursor(payload):
         if result["changed"]:
             undo_push("Remote connect vertex path")
         return dict(tool_session.status(), result=result)
-    if drawing:
-        result = cursor_commands.apply(obj, payload, rotate_source=False, connect=True)
-        if result["changed"]:
-            undo_push("Remote draw polyline")
-        return dict(tool_session.status(), result=result)
     result = cursor_commands.apply(obj, payload, bool(tool_session.armed_params.get("rotate_source", True)))
     if result["changed"]:
         undo_push("Remote extrude to cursor")
+    return dict(tool_session.status(), result=result)
+
+
+# Dibujar: un gesto que arrastra desde un vértice lo mueve (Tweak); un toque dibuja.
+DRAW_TWEAK_THRESHOLD = .012
+_draw_gesture = None
+
+
+def cancel_draw_gesture():
+    """Devuelve el vértice arrastrado a su sitio y la selección previa."""
+    global _draw_gesture
+    gesture, _draw_gesture = _draw_gesture, None
+    if not gesture or not gesture.get("moved"):
+        return
+    try:
+        obj = gesture["object"]
+        bm = bmesh.from_edit_mesh(obj.data)
+        bm.verts.ensure_lookup_table()
+        bm.verts[gesture["vertex"]].co = gesture["co"]
+        for vert in bm.verts:
+            vert.select = vert.index in gesture["selected"]
+        bm.select_flush_mode()
+        bmesh.update_edit_mesh(obj.data, loop_triangles=True, destructive=False)
+    except (ReferenceError, IndexError):
+        pass
+
+
+@command("tool.draw_gesture", mutating=True)
+def draw_gesture(payload):
+    global _draw_gesture
+    tool_session.require_armed_owner(payload.get("_client_id"))
+    if tool_session.armed_tool != "DRAW":
+        raise CommandError("Dibujar no está activo", code="wrong_tool")
+    identifier = payload.get("gesture_id")
+    phase = str(payload.get("phase", "")).upper()
+    if not isinstance(identifier, str) or phase not in {"BEGIN", "UPDATE", "END", "CANCEL"}:
+        raise BadPayload("Dibujar necesita gesture_id y una fase BEGIN/UPDATE/END/CANCEL")
+    obj = active_object()
+    if obj != tool_session.obj or obj.mode != "EDIT" or obj.type != "MESH":
+        cancel_draw_gesture()
+        tool_session.disarm()
+        raise CommandError("La selección de edición ha cambiado", code="session_invalidated")
+    from . import extrude_cursor as cursor_commands
+    if phase == "BEGIN":
+        cancel_draw_gesture()
+        u, v = float(payload.get("u", -1)), float(payload.get("v", -1))
+        found = find_view3d()
+        if found is None:
+            raise CommandError("No 3D viewport available", code="no_viewport")
+        rv3d = found[3]
+        camera.sync_from_region(rv3d)
+        bm = bmesh.from_edit_mesh(obj.data)
+        vert = cursor_commands._vertex_under(bm, obj, u, v, rv3d, camera.projection_matrix(rv3d))
+        _draw_gesture = dict(id=identifier, object=obj, u=u, v=v, moved=False,
+                             aspect=max(1, found[2].width) / max(1, found[2].height),
+                             vertex=vert.index if vert else None, co=vert.co.copy() if vert else None,
+                             selected={x.index for x in bm.verts if x.select})
+        return tool_session.status()
+    gesture = _draw_gesture
+    if gesture is None or gesture["id"] != identifier:
+        return tool_session.status()
+    if phase == "CANCEL":
+        cancel_draw_gesture()
+        return tool_session.status()
+    if phase == "UPDATE":
+        if gesture["vertex"] is None:
+            return tool_session.status()
+        u, v = float(payload.get("u", gesture["u"])), float(payload.get("v", gesture["v"]))
+        if not gesture["moved"] and math.hypot((u - gesture["u"]) * gesture["aspect"], v - gesture["v"]) < DRAW_TWEAK_THRESHOLD:
+            return tool_session.status()
+        rv3d = find_view3d()[3]
+        world = obj.matrix_world
+        origin, direction = camera.ray(u, v, rv3d)
+        normal = (camera.rotation @ Vector((0.0, 0.0, 1.0))).normalized()
+        anchor = world @ gesture["co"]
+        denominator = direction.dot(normal)
+        if abs(denominator) < 1e-9:
+            return tool_session.status()
+        target = origin + direction * ((anchor - origin).dot(normal) / denominator)
+        bm = bmesh.from_edit_mesh(obj.data)
+        bm.verts.ensure_lookup_table()
+        vert = bm.verts[gesture["vertex"]]
+        vert.co = world.inverted() @ target
+        # El vértice movido pasa a ser el extremo: el siguiente toque dibuja desde él.
+        for seq in (bm.verts, bm.edges, bm.faces):
+            for element in seq:
+                element.select = False
+        vert.select_set(True)
+        bm.select_history.clear()
+        bm.select_history.add(vert)
+        bmesh.update_edit_mesh(obj.data, loop_triangles=True, destructive=False)
+        gesture["moved"] = True
+        return tool_session.status()
+    _draw_gesture = None
+    if gesture["moved"]:
+        undo_push("Remote draw mover vértice")
+        return dict(tool_session.status(), result={"changed": True, "moved": True})
+    # Un toque (sin arrastre) dibuja en el punto donde empezó el gesto.
+    result = cursor_commands.apply(obj, dict(u=gesture["u"], v=gesture["v"]), rotate_source=False, connect=True)
+    if result["changed"]:
+        undo_push("Remote draw polyline")
     return dict(tool_session.status(), result=result)
 
 

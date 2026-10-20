@@ -341,8 +341,9 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             tweakActive = !state.blender.cad.workspace && state.activeTool == ActiveTool.TWEAK &&
                 state.blender.mode == BlenderMode.EDIT,
             longPressEnabled = (!cad.sessionActive || (cad.operation == "DRAG" && state.cadTool == null)) && toolSession.input != "REPEAT_TAP" && viewportLongPressEnabled(session.active, toolSession.active),
-            f2Enabled = toolSession.armed && toolSession.tool == EditTool.F2,
-            repeatTap = toolSession.armed && toolSession.input == "REPEAT_TAP",
+            // Dibujar usa el mismo gesto que F2: tocar dibuja, arrastrar un vértice lo mueve.
+            f2Enabled = toolSession.armed && toolSession.tool in setOf(EditTool.F2, EditTool.DRAW),
+            repeatTap = toolSession.armed && toolSession.input == "REPEAT_TAP" && toolSession.tool != EditTool.DRAW,
             independentTaps = materialActive || state.blender.mode == BlenderMode.EDIT || state.blender.cad.workspace,
             // Los marcadores de transformación ya forman parte del fotograma.
             snapCandidate = if (state.blender.cad.workspace) null else toolSession.snapCandidate,
