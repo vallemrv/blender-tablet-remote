@@ -259,7 +259,9 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   misma entrega, sin pedir aceptación entre puntos. En ese caso no aplican «una
   incidencia activa» ni «no rediseñar asuntos adyacentes» para lo que el documento
   describe; sí un commit por punto, tests en verde y un único APK al final.
-- Estado de encargos (2026-10-20): no hay ningún encargo por lotes vigente. Entregados:
+- Estado de encargos (2026-10-21): encargo por lotes vigente:
+  `~/proyectos/tareas-ui-norma-controles-blender.md` (aplicar la «Norma de controles y
+  gestos»: `AxisSelector`, pulsación larga solo para opciones, pie con iconos). Entregados:
   `~/proyectos/tareas-codex-cad-impresion3d.md` (las 6 herramientas CAD),
   `~/proyectos/tareas-ui-coherencia-blender.md` (A–E, 19-10),
   `~/proyectos/tareas-ui-bandejas-blender.md` (0.1.7) y
@@ -415,6 +417,54 @@ nuevas superficies y la adaptación gradual de las existentes.
 - Se recuerdan valores confirmados por herramienta/variante, convirtiendo las
   longitudes a metros al guardar preferencias. No se recuerdan IDs, referencias,
   caras elegidas ni la posición de Loop Cut: un nuevo corte empieza centrado.
+
+### Norma de controles y gestos (obligatoria para todo lo nuevo)
+
+Pedida por el usuario el 2026-10-21: la app debe ser lo más cómoda posible con lápiz y
+dedo, y **toda función nueva debe seguir esta norma**. Si algo no encaja, se adapta la
+función, no la norma; un cambio de norma lo decide el usuario y se anota aquí.
+
+**Gramática de gestos, igual en toda la app:**
+
+| Gesto | Significa siempre | Nunca |
+| --- | --- | --- |
+| Tocar | La acción del control, o alternar si es un interruptor | — |
+| Tocar otra vez una herramienta/eje activo | Desactivarlo (volver a Seleccionar / Libre) | — |
+| Mantener pulsado | **Solo «más opciones de esto»**: variantes del botón del rail, menú de un elemento, radial en el viewport | Cambiar un valor, restablecer, bloquear ejes, armar modos |
+| Deslizar sobre un número | Ajustarlo a pasos del snap/paso activo | — |
+| Tocar un número | Escribir el valor exacto (unidades y cuentas) | — |
+| Doble toque | Volver a lo neutro: número a su valor por defecto, viewport encuadra | — |
+| Dos dedos | Navegar la vista; cancela el gesto pendiente | — |
+
+Un botón con opciones al mantenerlo muestra un triángulo pequeño en su esquina. Los modos
+que se quedan armados (Tweak, F2, Unir J, Dibujar…) son herramientas del rail: se arman
+tocando y se desarman tocando otra vez o con ×, nunca con pulsación larga.
+
+**Componentes únicos (no se crean variantes a mano):**
+- `ToolButton` (rail): icono de 48 dp, ayuda al acercar el lápiz.
+- `AxisSelector`: el único control de ejes de la app (Mover, Rotar, Escalar, Extruir,
+  Tweak, CAD y esquemas). Una celda por eje que **une el eje y su valor**:
+  `[Libre] [X | valor] [Y | valor] [Z | valor] [Plano]`. Tocar la pestaña de color del
+  eje restringe a ese eje (otra vez → Libre); el valor es un número deslizable. «Plano» es
+  un interruptor visible: con él activo, tocar un eje lo excluye (mueve en el plano de los
+  otros dos). Solo aparece donde los planos tienen sentido. No hay otra fila de letras
+  X/Y/Z ni pulsación larga en los ejes.
+- `ScrubNumber`: todo número editable.
+- `IconToggle` (interruptor) e `IconChoice` (icono de la opción activa; tocar abre su
+  selector). Sin pastillas «etiqueta: valor».
+- `MoreSheet` («⋯ Más», grupos Precisión · Referencia · Forma) y `TrayExits` (× ✓).
+
+**Reglas visuales:** icono = acción; texto = números, unidades y título. Las palabras
+completas solo dentro de «⋯ Más», menús y diálogos, sin abreviaturas («Ext», «Vol»). Las
+teclas del pie usan iconos; la letra de Blender puede ir como marca pequeña en la esquina.
+Todo control táctil ≥ 48 dp con 8 dp de separación. Color solo para estado; ejes
+rojo/verde/azul. Fila fija sin scroll: `[Nombre] [valor/ejes] [1–2 iconos] [⋯] [× ✓]`,
+como mucho 5 controles además de título y salidas (el `AxisSelector` cuenta como uno).
+
+**Al añadir una función nueva, comprobar:** zona (cuatro bordes), componente común,
+gestos de esta tabla, un único sitio por acción, ≤ 5 visibles, ayuda al acercar el lápiz,
+48 dp, y tests de `SurfaceCoherenceTest` actualizados (no relajar los límites para que
+pase: si no cabe, va a «⋯ Más»).
 
 ### Distribución y comportamiento por contexto
 
