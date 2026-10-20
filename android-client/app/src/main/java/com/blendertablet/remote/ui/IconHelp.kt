@@ -43,7 +43,7 @@ internal object IconHelp {
         "NORMALS_INSIDE" to "Recalcula la orientación de las caras seleccionadas hacia el interior.",
         "NORMALS_FLIP" to "Invierte la dirección de las normales de las caras seleccionadas.",
         "SPACE_VERTICES" to "Distribuye uniformemente los vértices del contorno con Espaciado de LoopTools.",
-        "F2_COMPLETE" to "Activa F2: toca vértices o aristas para seleccionar y toca fuera para crear una cara al soltar. Dos dedos o el navegador azul permiten cambiar la vista.",
+        "F2_COMPLETE" to "F2 crea cuadriláteros: selecciona una esquina, dos o tres vértices o una arista; toca fuera y arrastra los vértices nuevos hasta soltar. El cuarto vértice completa la cara.",
         "MAKE_CIRCLE" to "Coloca la selección en forma de círculo mediante LoopTools.",
         "REVOLVE" to "Spin: gira el perfil alrededor del cursor 3D inicial. Ajusta ángulo, pasos y eje; el centro se puede editar en Más.",
         "SWEEP" to "Extiende un perfil a lo largo de un recorrido.",

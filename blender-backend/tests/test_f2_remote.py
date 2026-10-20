@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 import bpy
 import bmesh
-from mathutils import Vector, Quaternion
+from mathutils import Vector, Quaternion, Matrix
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from blender_tablet_remote.commands import tools, f2, history, sessions, snap
 from blender_tablet_remote.camera import camera
@@ -48,7 +48,7 @@ class RemoteF2Tests(unittest.TestCase):
         with patch('blender_tablet_remote.bpy_utils.undo_push') as push:self.run_f2((1,1,0))
         bm=bmesh.from_edit_mesh(obj.data)
         self.assertEqual((len(bm.verts),len(bm.faces)),(4,1));push.assert_called_once()
-        self.assertTrue(any((v.co-Vector((1,1,0))).length<1e-7 for v in bm.verts))
+        self.assertTrue(any((v.co-Vector((1,1,0))).length<1e-6 for v in bm.verts))
         self.assertEqual(obj.mode,'EDIT');self.assertEqual(obj.matrix_world,matrix)
         self.assertEqual((tuple(self.rv.view_location),tuple(self.rv.view_rotation),self.rv.view_distance,self.rv.view_perspective),self.pc)
     def test_edge_uses_the_tablet_side_of_the_selected_border(self):
@@ -56,6 +56,97 @@ class RemoteF2Tests(unittest.TestCase):
         self.run_f2((.5,1,0))
         face=list(bmesh.from_edit_mesh(obj.data).faces)[0]
         self.assertTrue(all(v.co.y>=0 for v in face.verts))
+    def test_two_unconnected_vertices_create_two_new_vertices_and_drag_in_same_gesture(self):
+        obj=self.shape([(0,0,0),(1,0,0)],[])
+        bpy.ops.mesh.select_all(action='SELECT')
+        with patch('blender_tablet_remote.bpy_utils.undo_push') as push:
+            self.gesture('BEGIN',(.5,1,0))
+            self.gesture('UPDATE',(.5,1.2,0))
+            self.gesture('UPDATE',(.5,1.4,0))
+            self.gesture('END',(.5,100,0))
+            push.assert_called_once()
+        bm=bmesh.from_edit_mesh(obj.data)
+        self.assertEqual((len(bm.verts),len(bm.faces)),(4,1))
+        self.assertEqual(len(list(bm.faces)[0].verts),4)
+        selected=[v for v in bm.verts if v.select]
+        self.assertEqual(len(selected),2)
+        self.assertTrue(all(abs(v.co.y-1.4)<1e-6 for v in selected))
+        self.assertFalse(__import__('blender_tablet_remote.commands.modal',fromlist=['session']).session.active)
+
+    def test_three_vertices_create_fourth_and_leave_only_it_selected(self):
+        obj=self.shape([(0,0,0),(1,0,0),(1,1,0)],[(0,1),(1,2)])
+        bpy.ops.mesh.select_all(action='SELECT')
+        self.gesture('BEGIN',(0,1,0));self.gesture('UPDATE',(-.5,1.2,0));self.gesture('END',(-.5,1.2,0))
+        bm=bmesh.from_edit_mesh(obj.data)
+        self.assertEqual((len(bm.verts),len(bm.faces)),(4,1))
+        selected=[v for v in bm.verts if v.select]
+        self.assertEqual(len(selected),1)
+        self.assertLess((selected[0].co-Vector((-.5,1.2,0))).length,1e-6)
+
+    def test_fourth_vertex_tap_automatically_closes_quad(self):
+        obj=self.shape([(0,0,0),(1,0,0),(1,1,0),(0,1,0)],[(0,1),(1,2),(2,3)])
+        for point in [(0,0,0),(1,0,0),(1,1,0)]:self.run_f2(point)
+        self.assertEqual(len(bmesh.from_edit_mesh(obj.data).faces),0)
+        self.run_f2((0,1,0))
+        bm=bmesh.from_edit_mesh(obj.data)
+        self.assertEqual((len(bm.verts),len(bm.faces)),(4,1))
+        self.assertEqual(len(list(bm.faces)[0].verts),4)
+
+    def test_edge_mode_selects_only_new_front_edge_for_continuation(self):
+        obj=self.shape([(0,0,0),(1,0,0)],[(0,1)],selected_edge=0)
+        self.run_f2((.5,1,0))
+        bm=bmesh.from_edit_mesh(obj.data)
+        selected=[e for e in bm.edges if e.select]
+        self.assertEqual(len(selected),1)
+        self.assertTrue(all(abs(v.co.y-1)<1e-6 for v in selected[0].verts))
+        self.run_f2((.5,1.4,0))
+        bm=bmesh.from_edit_mesh(obj.data)
+        self.assertEqual((len(bm.verts),len(bm.faces)),(6,2))
+        self.assertTrue(all(len(f.verts)==4 for f in bm.faces))
+
+    def test_existing_quad_extends_nearest_border_without_duplicate_face(self):
+        obj=self.shape([(0,0,0),(1,0,0),(1,1,0),(0,1,0)],[(0,1),(1,2),(2,3),(3,0)])
+        bm=bmesh.from_edit_mesh(obj.data);bm.verts.ensure_lookup_table()
+        bm.faces.new(list(bm.verts));bmesh.update_edit_mesh(obj.data)
+        for point in [(0,0,0),(1,0,0),(1,1,0)]:self.run_f2(point)
+        self.gesture('BEGIN',(0,1,0));self.gesture('UPDATE',(-1,2,0));self.gesture('END',(-1,2,0))
+        bm=bmesh.from_edit_mesh(obj.data)
+        self.assertEqual((len(bm.verts),len(bm.faces)),(6,2))
+        self.assertTrue(all(len(face.verts)==4 for face in bm.faces))
+        self.assertEqual(sum(v.select for v in bm.verts),2)
+
+    def test_selection_gesture_does_not_create_when_dragged_into_empty_space(self):
+        obj=self.shape([(0,0,0),(1,0,0),(0,1,0)],[(0,1),(0,2)])
+        self.gesture('BEGIN',(0,0,0));self.gesture('UPDATE',(1,1,0));self.gesture('END',(1,1,0))
+        bm=bmesh.from_edit_mesh(obj.data)
+        self.assertEqual(len(bm.faces),0);self.assertEqual(sum(v.select for v in bm.verts),1)
+
+    def test_invalid_drag_keeps_last_visible_quad_until_release(self):
+        obj=self.shape([(0,0,0),(1,0,0)],[(0,1)],selected_edge=0)
+        self.gesture('BEGIN',(.5,1,0))
+        self.gesture('UPDATE',(.5,0,0))
+        self.gesture('END',(.5,0,0))
+        bm=bmesh.from_edit_mesh(obj.data)
+        self.assertEqual(len(bm.faces),1)
+        self.assertTrue(all(abs(v.co.y-1)<1e-6 for v in bm.verts if v.select))
+        self.assertFalse(any(m.name.startswith('.remote_f2_') for m in bpy.data.meshes))
+
+    def test_placement_respects_rotated_scaled_object_and_cancel_restores_selection(self):
+        obj=self.shape([(0,0,0),(1,0,0)],[(0,1)],selected_edge=0)
+        obj.matrix_world=Matrix.Translation((.1,0,0)) @ Matrix.Rotation(.2,4,'Z') @ Matrix.Diagonal((1.2,.7,1,1))
+        bpy.context.view_layer.update();matrix=obj.matrix_world.copy()
+        target=matrix@Vector((.5,1,0))
+        self.gesture('BEGIN',target)
+        bm=bmesh.from_edit_mesh(obj.data)
+        selected=[obj.matrix_world@v.co for v in bm.verts if v.select]
+        self.assertLess((sum(selected,Vector())/2-target).length,1e-6)
+        self.gesture('UPDATE',matrix@Vector((.5,1.4,0)))
+        self.gesture('CANCEL',target)
+        bm=bmesh.from_edit_mesh(obj.data)
+        self.assertEqual((len(bm.verts),len(bm.faces),sum(e.select for e in bm.edges)),(2,0,1))
+        self.assertEqual(obj.matrix_world,matrix)
+        self.assertFalse(any(m.name.startswith('.remote_f2_') for m in bpy.data.meshes))
+
     def test_invalid_corner_restores_without_undo(self):
         obj=self.shape([(0,0,0),(1,0,0)],[(0,1)],selected_vertex=0)
         with patch('blender_tablet_remote.bpy_utils.undo_push') as push:
@@ -143,7 +234,6 @@ class RemoteF2Tests(unittest.TestCase):
         history.redo({});self.assertEqual(len(bmesh.from_edit_mesh(bpy.data.objects[name].data).faces),1)
 
 def run():
-    bpy.ops.preferences.addon_enable(module='bl_ext.blender_org.f2')
     result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(RemoteF2Tests))
     if not result.wasSuccessful():
         import os

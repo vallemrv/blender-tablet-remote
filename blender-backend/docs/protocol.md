@@ -2667,24 +2667,25 @@ Sale del workspace, selecciona la copia y registra un undo. Devuelve estado CAD,
 
 ### F2 como herramienta táctil continua
 
-Si el add-on está habilitado, `edit_toolbar` anuncia la familia `F2`, disponible
-con selección Vertex/Edge. `tool.begin {tool:"F2"}` arma sin modificar geometría
-ni selección y devuelve `input:"F2_DRAW", armed:true, active:false`.
+`edit_toolbar` anuncia `F2` con selección Vertex/Edge, sin requerir un add-on
+externo. `tool.begin {tool:"F2"}` arma sin modificar geometría ni selección y
+responde `input:"F2_DRAW", armed:true, active:false`.
 
-`tool.f2_gesture {phase:"BEGIN|UPDATE|END|CANCEL", gesture_id, u, v}` controla cada
-toque. BEGIN/UPDATE reconstruyen desde un baseline privado: los candidatos
-visibles de vértice/arista usan la política común de snap y alternan selección;
-fuera de ellos se prepara la cara con los helpers nativos de F2 o con
-`mesh.edge_face_add` para tres o más vértices. END no hace raycast: confirma el
-último candidato estable, con un undo solo si creó una cara. Repetir END o un ID
-antiguo no crea nada. El resultado incluye un snapshot explícito `state`.
+`tool.f2_gesture {phase:"BEGIN|UPDATE|END|CANCEL", gesture_id, u, v}` congela la
+intención en BEGIN. Tocar un vértice alterna su selección; tocar arista elige sus
+extremos. Con 1–3 vértices, tocar fuera crea un cuadrilátero y UPDATE mueve solo
+los vértices nuevos en el plano de colocación: uno para esquina/3 vértices y dos
+para arista/2 vértices. Se requieren dos aristas de borde vecinas para una esquina.
+La selección queda en los nuevos vértices o en su arista frontal en modo Edge.
+Tocar el cuarto vértice completa una cara; si ya existe, prolonga su arista de
+borde más cercana al toque con otros dos vértices y un quad contiguo.
 
-CANCEL, desarmar, cambiar herramienta, desconectar y guardar restauran el
-baseline pendiente. F2 conserva las caras ya confirmadas. Un error mantiene
-la geometría y permite otro toque; no abre un modal del PC ni escribe en rv3d.
-El navegador azul y los dos dedos navegan sin crear caras. La acción discreta
-`mesh.f2` del protocolo remoto se ha retirado; `bpy.ops.mesh.f2` sigue siendo el
-operador nativo cuya disponibilidad habilita esta herramienta.
+END confirma el último candidato válido, sin raycast, con un undo por cara.
+Cada UPDATE reconstruye desde una plantilla privada, nunca sobre la preview
+anterior. Un candidato degenerado conserva la última geometría válida. CANCEL,
+desarmar, navegar, desconectar o guardar restaura el baseline y la selección.
+IDs de gesto y propietario invalidan cierres ajenos o atrasados. Las respuestas
+incluyen `state` explícito. No hay `mesh.f2` remoto ni modal nativo de autograb.
 
 `REVOLVE` conserva su identificador wire y motor `bmesh.ops.spin`; Android lo
 presenta como «Spin · Revolución», con ángulo/pasos/eje y centro desde el cursor.

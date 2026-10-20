@@ -178,14 +178,20 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   como familia REVOLVE de `edit_toolbar`, para vértices/aristas/caras; el filtro
   común evita duplicarlo en radial → Malla. El rail no envía centros por defecto
   que sustituyan el cursor 3D.
-- F2 es una herramienta continua del rail izquierdo de Edición, disponible con
-  el add-on nativo. Tocar vértices/aristas alterna selección sin crear caras;
-  tocar fuera prepara la cara con F2 (o relleno nativo con tres o más vértices).
-  UP confirma el último candidato, sin sondear otra vez, y crea un undo por cara.
-  F2 sigue armado al terminar. Repetir su botón o × lo desactiva. Dos dedos,
-  navegador azul, cambio de herramienta, desconexión y guardado cancelan el gesto
-  pendiente y restauran su baseline. IDs de gesto y propietario bloquean cierres
-  atrasados o ajenos. No inicia autograb ni modifica rv3d; ya no vive en el radial.
+- F2 es una herramienta continua de cuadriláteros del rail izquierdo de Edición,
+  construida con BMesh y sin depender del add-on externo. Tocar vértices alterna
+  selección; tocar una arista elige sus extremos. Tocar fuera con una esquina
+  válida añade un vértice, con dos vértices/arista añade dos y con tres añade uno:
+  siempre una cara de cuatro vértices. El mismo gesto coloca los vértices nuevos
+  hasta soltar; después quedan seleccionados esos vértices, o su arista frontal
+  en submodo Aristas. Tocar el cuarto vértice completa automáticamente la cara;
+  si ya existe, extiende su arista de borde más cercana al toque con un quad nuevo.
+  Cada gesto congela su intención al comenzar. UP confirma el último candidato
+  válido sin raycast ni nuevo movimiento, con un undo por cara. Una preview
+  degenerada conserva la última válida. Repetir el botón o × desarma; dos dedos,
+  navegador, cambio de herramienta, desconexión y guardado restauran el baseline
+  pendiente. IDs y propietario impiden cierres atrasados/ajenos. No abre un modal
+  de transformación del PC ni modifica rv3d.
 - CAD es un workspace; Blender permanece en Object. Sus longitudes son metros y
   se convierten a unidades Blender al materializar. IDs y revisión pertenecen al
   documento; la malla evaluada no es la fuente ni admite Edit sin conversión explícita.

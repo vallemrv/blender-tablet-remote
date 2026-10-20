@@ -74,12 +74,8 @@ def capabilities(payload: dict) -> dict:
             action["requirements"]["selection_modes"] = [mode]
             catalog[mode].insert(1, action)
 
-    try:
-        bpy.ops.mesh.f2.get_rna_type()
-        features['edit_toolbar']['families'].append(deepcopy(F2_TOOLBAR))
-        features['edit_tools']['tools'].append('F2')
-    except (AttributeError,KeyError,RuntimeError):
-        pass
+    features['edit_toolbar']['families'].append(deepcopy(F2_TOOLBAR))
+    features['edit_tools']['tools'].append('F2')
 
     return {
         "addon_version": ".".join(str(n) for n in VERSION),

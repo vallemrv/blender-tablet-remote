@@ -308,9 +308,9 @@ LOOPTOOLS_SPACE_ACTION = dict(LOOPTOOLS_CIRCLE_ACTION,
     requirements={"mode": "EDIT", "selection_modes": ["VERTEX", "EDGE"], "selection": {"verts": {"min": 2}}})
 
 
-F2_TOOLBAR = _toolbar_family("F2", "Completar caras · F2", "F2", input="F2_DRAW",
+F2_TOOLBAR = _toolbar_family("F2", "Cuadriláteros · F2", "F2", input="F2_DRAW",
     requirements={"selection_modes": ["VERTEX", "EDGE"]},
-    variants=[_toolbar_variant("F2", "Completar caras", input="F2_DRAW", requirements={"selection_modes": ["VERTEX", "EDGE"]})])
+    variants=[_toolbar_variant("F2", "Cuadriláteros", input="F2_DRAW", requirements={"selection_modes": ["VERTEX", "EDGE"]})])
 
 
 SELECTION_SIMILAR = {

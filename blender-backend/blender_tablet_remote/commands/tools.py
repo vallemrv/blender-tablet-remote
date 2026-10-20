@@ -164,9 +164,6 @@ class ToolSession:
         if tool == 'F2':
             if bpy.context.scene.tool_settings.mesh_select_mode[2]:
                 raise CommandError('F2 usa selección de vértices o aristas',code='incompatible_selection')
-            try: bpy.ops.mesh.f2.get_rna_type()
-            except (AttributeError,KeyError,RuntimeError) as exc:
-                raise CommandError('El add-on F2 no está habilitado',code='dependency_unavailable') from exc
             self.arm(tool, owner, {})
             return
         if tool == "EXTRUDE" and params.get("variant") == "CURSOR":
@@ -401,7 +398,7 @@ class ToolSession:
                       "owner": self.armed_owner, "parameters": self.armed_params}
             if self.armed_tool == 'F2':
                 result.update(input='F2_DRAW',can_confirm=False,
-                    instruction='Toca vértices o aristas para seleccionar · toca fuera para crear una cara')
+                    instruction='Selecciona 1–3 vértices o una arista · fuera crea un quad y arrastra · 4 vértices completan la cara')
             if self.armed_tool == "EXTRUDE" and self.armed_params.get("variant") == "CURSOR":
                 result.update(input="REPEAT_TAP", can_confirm=False,
                               instruction="Toca para extruir · cada toque crea un tramo · Deshacer retira el último",
