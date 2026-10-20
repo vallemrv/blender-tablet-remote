@@ -1593,6 +1593,9 @@ no quedan archivos o referencias temporales.
   Editar otro campo conserva el objeto y ambos interruptores. Elegir el objeto, si
   la petición no fija los interruptores, enciende el de objeto y apaga el relativo:
   sin ello el Empty no hacía nada y el usuario no encontraba la causa.
+- Soldar (`WELD`) se genera por RNA como Lattice, sin acción de jaula; su distancia
+  usa la unidad del preset. Matriz ofrece «Unir primera y última» (cierra la vuelta
+  circular) y lo acompaña de Fusionar, que Blender necesita para aplicarlo.
 - El panel de modificadores es un acordeón: un solo modificador desplegado; tocar
   su nombre o la flecha lo abre/cierra y el recién añadido se abre solo.
 - Deformación simple vive en Modificadores: cuatro métodos nativos, eje, ángulo en

@@ -85,6 +85,7 @@ object AppIcons {
     fun modifier(type: String): ImageVector = when (type) {
         "MULTIRES", "SUBSURF", "ARRAY", "BEVEL", "SOLIDIFY", "BOOLEAN", "MIRROR", "LATTICE" -> StudioIcons[type]
         "SIMPLE_DEFORM" -> StudioIcons["DEFORM"]
+        "WELD" -> StudioIcons["WELD_MODIFIER"]
         else -> Fallback
     }
     fun material(intent: String): ImageVector = when (intent.uppercase()) {

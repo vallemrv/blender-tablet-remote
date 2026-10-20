@@ -108,6 +108,7 @@ internal object IconHelp {
         "MIRROR" to "Genera una copia simétrica respecto a un eje o plano.",
         "DEFORM" to "Tuerce, dobla, estrecha o estira el objeto; puede limitarse a un grupo de vértices.",
         "LATTICE" to "Deforma el objeto mediante una jaula de control. Los puntos de la jaula se editan desde el PC.",
+        "WELD_MODIFIER" to "Une los vértices más cercanos que la distancia elegida, por ejemplo las copias de una matriz.",
         "MESH" to "Añade un objeto formado por vértices, aristas y caras.",
         "CURVE" to "Añade una curva editable mediante puntos de control.",
         "SURFACE" to "Añade una superficie controlada por una cuadrícula de puntos.",

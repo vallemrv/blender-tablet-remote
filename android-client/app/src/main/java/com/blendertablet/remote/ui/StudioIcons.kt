@@ -112,6 +112,7 @@ internal object StudioIcons {
         "MIRROR" to Glyph("Simetría", "Modificadores", "M12,2 L12,6 M12,9 L12,15 M12,18 L12,22 M3,18 L9,18 L9,5 Z M21,18 L15,18 L15,5 Z"),
         "DEFORM" to Glyph("Deformación simple", "Modificadores", "M4,3 L17,3 C9,9 23,15 18,21 L5,21 C10,15 1,9 4,3 Z M4,8 L15,8 M6,16 L19,16"),
         "LATTICE" to Glyph("Lattice · jaula", "Modificadores", "M3,4 L21,4 L19,20 L5,20 Z M9,4 L10,20 M15,4 L14,20 M4,10 L20,10 M4,15 L20,15 M2,3 L5,3 L5,6 L2,6 Z M18,18 L21,18 L21,21 L18,21 Z"),
+        "WELD_MODIFIER" to Glyph("Soldar · Weld", "Modificadores", "M3,12 L9,12 M15,12 L21,12 M9,12 A3,3 0,1 1,15,12 A3,3 0,1 1,9,12 M5,4 L10,9 M19,4 L14,9 M5,20 L10,15 M19,20 L14,15"),
         "MESH" to Glyph("Añadir malla", "Añadir", "M4,7 L12,3 L20,7 L20,17 L12,21 L4,17 Z M4,7 L12,12 L20,7 M12,12 L12,21 M17,2 L23,2 M20,0.5 L20,4"),
         "CURVE" to Glyph("Curva", "Añadir", "M3,19 C4,-5 20,29 21,5 M2,17 L5,17 L5,21 L2,21 Z M19,3 L22,3 L22,7 L19,7 Z"),
         "SURFACE" to Glyph("Superficie", "Añadir", "M3,7 Q8,2 13,6 T21,5 L21,18 Q17,22 12,18 T3,19 Z M8,5 L8,17 M16,7 L16,20 M3,13 Q8,8 13,12 T21,11"),

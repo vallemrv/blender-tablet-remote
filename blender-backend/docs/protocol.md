@@ -1184,7 +1184,7 @@ Pila no destructiva del objeto activo. No confundir `modifier.add type=BEVEL` co
 | Comando | Payload |
 |---|---|
 | `modifier.add_options` | `object?` — catálogo con descriptores tipados |
-| `modifier.add` | `object?`, `type`: `SUBSURF`\|`MULTIRES`\|`ARRAY`\|`BEVEL`\|`SOLIDIFY`\|`BOOLEAN`\|`MIRROR`\|`SIMPLE_DEFORM`\|`LATTICE`, `name?`, `parameters?` |
+| `modifier.add` | `object?`, `type`: `SUBSURF`\|`MULTIRES`\|`ARRAY`\|`BEVEL`\|`SOLIDIFY`\|`BOOLEAN`\|`MIRROR`\|`SIMPLE_DEFORM`\|`LATTICE`\|`WELD`, `name?`, `parameters?` |
 | `modifier.remove` | `object?`, `name` |
 | `modifier.move` | `object?`, `name`, `index` |
 | `modifier.set` | `object?`, `name`, `parameters{}` |
@@ -1197,7 +1197,7 @@ Tipos y parámetros:
 |---|---|---|
 | `SUBSURF` | `levels`, `render_levels`, `subdivision_type` (`CATMULL_CLARK`\|`SIMPLE`) | 1, 2, `CATMULL_CLARK` |
 | `MULTIRES` | `levels`, `sculpt_levels`, `render_levels`; `total_levels` de solo lectura; acción `subdivide:true` | Se crea con un nivel nativo; no duplica uno existente |
-| `ARRAY` | `count`, `relative_offset` `[x,y,z]`, `use_merge`, `merge_threshold`, `use_relative_offset`, `use_object_offset`, `offset_object` (nombre, nunca el propio objeto; elegirlo sin enviar los interruptores activa `use_object_offset` y desactiva `use_relative_offset`) | 2, `[1,0,0]`, false, 0.01, true, false, null |
+| `ARRAY` | `count`, `relative_offset` `[x,y,z]`, `use_merge`, `merge_threshold`, `use_relative_offset`, `use_object_offset`, `use_merge_first_last`, `offset_object` (nombre, nunca el propio objeto; elegirlo sin enviar los interruptores activa `use_object_offset` y desactiva `use_relative_offset`) | 2, `[1,0,0]`, false, 0.01, true, false, null |
 | `BEVEL` | `width`, `segments`, `affect` (`EDGES`\|`VERTICES`), `limit_method` (`NONE`\|`ANGLE`), `angle_limit` (grados), `profile` | 0.1, 1, `EDGES`, `ANGLE`, 30, 0.5 |
 | `SOLIDIFY` | `thickness`, `offset`, `use_even_offset`, `use_rim` | 0.1, −1, true, true |
 | `BOOLEAN` | `operation` (`DIFFERENCE`\|`UNION`\|`INTERSECT`), `object` (nombre), `solver` (`EXACT`\|`FAST`) | `DIFFERENCE`, ninguno, `EXACT` |
@@ -2558,6 +2558,12 @@ mismo camino RNA; valida todos los parámetros antes de modificar el nativo.
 `modifier.set {name,parameters:{create_cage:true}}` crea y vincula una jaula 4×4×4
 ajustada a los límites evaluados del objeto, con su transformación y sin deformar
 inicialmente. Rechaza una segunda jaula y no mezcla esta acción con parámetros.
+
+`WELD` (Soldar) usa el mismo camino RNA sin acción de jaula: `mode` (`ALL`/`CONNECTED`),
+`merge_threshold` (`unit:"LENGTH"`, unidades Blender), `loose_edges`, `vertex_group`
+e `invert_vertex_group`. `ARRAY` añade `use_merge_first_last` (`use_merge_vertices_cap`):
+une la última copia con la primera para cerrar una matriz circular; activarlo sin
+enviar `use_merge` enciende también Fusionar, sin el cual Blender no lo aplica.
 Es una acción con undo, no una propiedad RNA. Aplicar/borrar el modificador no
 borra la jaula. Mover sus puntos desde la tablet no forma parte de este cambio.
 

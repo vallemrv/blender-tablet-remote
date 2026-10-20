@@ -43,7 +43,7 @@ def _rna_schema(rna_type):
     return result
 
 
-RNA_TYPES={'LATTICE':bpy.types.LatticeModifier}
+RNA_TYPES={'LATTICE':bpy.types.LatticeModifier,'WELD':bpy.types.WeldModifier}
 
 
 SCHEMA = {
@@ -61,6 +61,8 @@ SCHEMA = {
         "relative_offset": {"type": "float3", "default": [1.0, 0.0, 0.0], "min": -1000.0, "max": 1000.0, "step": 0.1},
         "use_merge": {"type": "bool", "default": False},
         "merge_threshold": {"type": "float", "default": 0.01, "min": 0.0, "max": 1000.0, "step": 0.001},
+        # En una matriz circular la última copia toca a la primera: unirlas cierra la vuelta.
+        "use_merge_first_last": {"type": "bool", "default": False, "label": "Unir primera y última"},
         # Matriz circular: el desplazamiento de objeto copia la transformación de un Empty.
         "use_relative_offset": {"type": "bool", "default": True, "label": "Desplazamiento relativo"},
         "use_object_offset": {"type": "bool", "default": False, "label": "Desplazamiento de objeto"},
@@ -124,6 +126,11 @@ SCHEMA['LATTICE']['object'].update(label='Jaula Lattice',object_filter=dict(type
 SCHEMA['LATTICE']['strength']['label']='Intensidad'
 SCHEMA['LATTICE']['vertex_group']['label']='Grupo de vértices'
 SCHEMA['LATTICE']['invert_vertex_group']['label']='Invertir grupo'
+SCHEMA['WELD']['mode'].update(label='Modo',value_labels=dict(ALL='Todos',CONNECTED='Conectados'))
+SCHEMA['WELD']['merge_threshold']['label']='Distancia'
+SCHEMA['WELD']['loose_edges']['label']='Solo aristas sueltas'
+SCHEMA['WELD']['vertex_group']['label']='Grupo de vértices'
+SCHEMA['WELD']['invert_vertex_group']['label']='Invertir grupo'
 
 
 CATALOG = {
@@ -136,6 +143,7 @@ CATALOG = {
     "BOOLEAN": {"blender": "BOOLEAN", "default_name": "Boolean"},
     "MIRROR": {"blender": "MIRROR", "default_name": "Mirror"},
     "LATTICE": {"blender":"LATTICE", "default_name":"Lattice"},
+    "WELD": {"blender":"WELD", "default_name":"Soldar"},
 }
 
 
@@ -276,8 +284,13 @@ def _write(mod, kind: str, params: dict, obj, preserve_current: bool = False) ->
         mod.relative_offset_displace = Vector((float(offset[0]), float(offset[1]), float(offset[2])))
         mod.use_object_offset = data["use_object_offset"]
         mod.offset_object = offset_object
+        if data.get("use_merge_first_last") is True and "use_merge_first_last" in params and "use_merge" not in params:
+            data["use_merge"] = True  # Blender solo une primera y última con Fusionar activo.
         mod.use_merge_vertices = bool(data["use_merge"])
         mod.merge_threshold = _bounded_float(data["merge_threshold"], "merge_threshold", 0.0, 1000.0)
+        if not isinstance(data["use_merge_first_last"], bool):
+            raise BadPayload("'use_merge_first_last' must be a boolean")
+        mod.use_merge_vertices_cap = data["use_merge_first_last"]
     elif kind == "BEVEL":
         mod.width = _bounded_float(data["width"], "width", 0.0, 1000.0)
         mod.segments = _bounded_int(data["segments"], "segments", 1, 1000)
@@ -388,6 +401,7 @@ def _read(mod) -> dict:
             "relative_offset": list(mod.relative_offset_displace),
             "use_merge": bool(mod.use_merge_vertices),
             "merge_threshold": float(mod.merge_threshold),
+            "use_merge_first_last": bool(mod.use_merge_vertices_cap),
             "use_relative_offset": bool(mod.use_relative_offset),
             "use_object_offset": bool(mod.use_object_offset),
             "offset_object": mod.offset_object.name if mod.offset_object else None,
@@ -461,6 +475,7 @@ def add_options(payload: dict) -> dict:
         }},
         "SUBSURF": {"parameters": {"levels": _number("int", 1, 0, 6, 1), "render_levels": _number("int", 2, 0, 6, 1), "subdivision_type": _enum("CATMULL_CLARK", ["CATMULL_CLARK", "SIMPLE"])}},
         "ARRAY": {"parameters": {"count": _number("int", 2, 1, 1000, 1), "relative_offset": _number("float3", [1.0, 0.0, 0.0], -1000.0, 1000.0, 0.1), "use_merge": {"type": "bool", "default": False}, "merge_threshold": _number("float", 0.01, 0.0, 1000.0, 0.001),
+            "use_merge_first_last": SCHEMA["ARRAY"]["use_merge_first_last"],
             "use_relative_offset": SCHEMA["ARRAY"]["use_relative_offset"], "use_object_offset": SCHEMA["ARRAY"]["use_object_offset"],
             "offset_object": SCHEMA["ARRAY"]["offset_object"]}},
         "BEVEL": {"parameters": {
@@ -471,7 +486,7 @@ def add_options(payload: dict) -> dict:
             "profile": dict(_number("float", 0.5, 0.0, 1.0, 0.05), label="Perfil", editable=True),
         }},
         "SIMPLE_DEFORM": {"parameters": SCHEMA["SIMPLE_DEFORM"]},
-        **{kind:{"parameters":dict(SCHEMA[kind], create_cage=dict(type='action',label='Crear jaula ajustada',max=1,max_parameter='cage_count')),
+        **{kind:{"parameters":dict(SCHEMA[kind], **(dict(create_cage=dict(type='action',label='Crear jaula ajustada',max=1,max_parameter='cage_count')) if kind=='LATTICE' else {})),
                  "source":"RNA"} for kind in RNA_TYPES},
         "SOLIDIFY": {"parameters": {"thickness": _number("float", 0.1, -1000.0, 1000.0, 0.01), "offset": _number("float", -1.0, -1.0, 1.0, 0.1), "use_even_offset": {"type": "bool", "default": True}, "use_rim": {"type": "bool", "default": True}}},
         "BOOLEAN": {"parameters": {"operation": _enum("DIFFERENCE", ["DIFFERENCE", "UNION", "INTERSECT"]), "object": {"type": "object", "default": None, "object_filter": {"type": "MESH", "exclude_self": True}}, "solver": _enum("EXACT", ["EXACT", "FAST"])}},
@@ -486,7 +501,7 @@ def add_options(payload: dict) -> dict:
     }
     native={item.identifier:item.name for item in bpy.types.Modifier.bl_rna.properties['type'].enum_items}
     labels=dict(SUBSURF='Subdivisión',MULTIRES='Multiresolución',ARRAY='Matriz',BEVEL='Bisel',
-                SOLIDIFY='Solidificar',BOOLEAN='Booleano',MIRROR='Espejo',SIMPLE_DEFORM='Deformación simple',LATTICE='Lattice · Jaula')
+                SOLIDIFY='Solidificar',BOOLEAN='Booleano',MIRROR='Espejo',SIMPLE_DEFORM='Deformación simple',LATTICE='Lattice · Jaula',WELD='Soldar · Weld')
     for kind,spec in types.items():spec['label']=labels.get(kind,native.get(kind,kind))
     return dict(types=types)
 

@@ -59,6 +59,28 @@ class ArrayModifierTests(unittest.TestCase):
         modifiers.set_params(dict(name=name, parameters=dict(offset_object=self.empty.name, use_relative_offset=True)))
         self.assertTrue(mod.use_relative_offset)
 
+    def test_merge_first_and_last_turns_on_merge(self):
+        name = modifiers.add(dict(type='ARRAY'))['modifier']
+        modifiers.set_params(dict(name=name, parameters=dict(use_merge_first_last=True)))
+        mod = self.obj.modifiers[name]
+        self.assertTrue(mod.use_merge_vertices_cap); self.assertTrue(mod.use_merge_vertices)
+        read = next(m for m in modifiers.describe(self.obj) if m['name'] == name)['parameters']
+        self.assertTrue(read['use_merge_first_last'])
+
+    def test_weld_welds_coincident_vertices_with_an_undoable_rna_schema(self):
+        options = modifiers.add_options({})['types']['WELD']
+        self.assertEqual(options['label'], 'Soldar · Weld')
+        self.assertNotIn('create_cage', options['parameters'])
+        self.assertEqual(options['parameters']['merge_threshold']['unit'], 'LENGTH')
+        name = modifiers.add(dict(type='ARRAY'))['modifier']
+        modifiers.set_params(dict(name=name, parameters=dict(relative_offset=[1.0, 0, 0])))
+        overlapping = len(self.evaluated().vertices)
+        weld = modifiers.add(dict(type='WELD'))['modifier']
+        modifiers.set_params(dict(name=weld, parameters=dict(merge_threshold=0.01, mode='ALL')))
+        self.assertLess(len(self.evaluated().vertices), overlapping)
+        read = next(m for m in modifiers.describe(self.obj) if m['name'] == weld)['parameters']
+        self.assertAlmostEqual(read['merge_threshold'], 0.01)
+
     def test_array_cannot_use_itself_as_offset_object(self):
         name = modifiers.add(dict(type='ARRAY'))['modifier']
         with self.assertRaises(BadPayload):
