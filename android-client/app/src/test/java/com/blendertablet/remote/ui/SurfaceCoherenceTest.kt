@@ -35,6 +35,18 @@ class SurfaceCoherenceTest {
                 assertEquals(actions.size,actions.toSet().size)
             }
     }
+    /** Norma: el pie de Edición usa iconos de 48 dp; la letra de Blender es solo una marca. */
+    @Test fun footerEditKeysAreIconsAt48dpWithoutLetterLabels() {
+        val footer = source("ViewFooter")
+        val numKeys = Regex("""NumKey\("([^"]*)"""").findAll(footer).map { it.groupValues[1] }.toList()
+        assertTrue("NumKey solo para el teclado numérico: $numKeys", numKeys.all { it.length == 1 && it[0].isDigit() })
+        val edit = footer.substringAfter("private fun EditKeys(").substringBefore("private val KeyGap")
+        assertFalse(edit.contains("NumKey("))
+        for (abbreviation in listOf("\"Ext\"", "\"Int\"", "\"Vol\"")) assertFalse(footer.contains(abbreviation))
+        assertFalse(footer.contains("38.dp"))
+        assertTrue(footer.contains("private val KeyGap = 8.dp"))
+    }
+
     @Test fun footerInventoryComesFromRenderedCallbacksAndIsExcludedFromRadial() {
         val footer = source("ViewFooter")
         val rendered = Regex("onAction\\(EditFooterAction\\.(\\w+)\\)").findAll(footer)

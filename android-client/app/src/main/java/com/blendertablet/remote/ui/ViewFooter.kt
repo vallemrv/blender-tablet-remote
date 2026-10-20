@@ -71,9 +71,9 @@ fun ViewFooter(
                 enter = fadeIn(tween(120)) + expandVertically(tween(140)),
                 exit = fadeOut(tween(100)) + shrinkVertically(tween(120)),
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(KeyGap)) {
                     if (inEdit && showEditShortcuts) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
                             PageKey(AppIcons.Views, "Página de vistas", selected = !editPage) {
                                 editPage = false
                             }
@@ -87,7 +87,7 @@ fun ViewFooter(
                     } else if (editPage && inEdit && showEditShortcuts) {
                         EditKeys(selectionMode, connectVerticesEnabled, connectModeActive, onConnectMode, normalsPage, { normalsPage = it }, onEditAction)
                     } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
                         NumKey("7", "Superior / inferior", activeAxisView in setOf("TOP", "BOTTOM")) { opposite("TOP", "BOTTOM") }
                         NumKey("8", "Orbitar arriba", enabled = !planeLocked) { onOrbit(0f, -0.06f) }
                         NumKey("9", "Girar 180°", enabled = !planeLocked) { onRotate180() }
@@ -96,7 +96,7 @@ fun ViewFooter(
                             if (planeLocked) "Desbloquear plano de vista" else "Bloquear plano · elige primero una vista",
                             selected = planeLocked, enabled = planeLocked || activeAxisView != null, onClick = onPlaneLock)
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
                         NumKey("4", "Orbitar izquierda", enabled = !planeLocked) { onOrbit(-0.06f, 0f) }
                         NumKey(
                             "5",
@@ -108,7 +108,7 @@ fun ViewFooter(
                         }
                         NumKey("6", "Orbitar derecha", enabled = !planeLocked) { onOrbit(0.06f, 0f) }
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
                         NumKey("1", "Frontal / trasera", activeAxisView in setOf("FRONT", "BACK")) { opposite("FRONT", "BACK") }
                         NumKey("2", "Orbitar abajo", enabled = !planeLocked) { onOrbit(0f, 0.06f) }
                         NumKey("3", "Derecha / izquierda", activeAxisView in setOf("RIGHT", "LEFT")) { opposite("RIGHT", "LEFT") }
@@ -148,33 +148,72 @@ private fun EditKeys(
     setNormalsPage: (Boolean) -> Unit,
     onAction: (EditFooterAction) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(KeyGap)) {
         if (normalsPage) {
-            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                NumKey("←", "Volver a atajos") { setNormalsPage(false) }
-                NumKey("Ext", "Recalcular exterior") { onAction(EditFooterAction.NORMALS_OUTSIDE) }
-                NumKey("Int", "Recalcular interior") { onAction(EditFooterAction.NORMALS_INSIDE) }
-                NumKey("Vol", "Voltear normales") { onAction(EditFooterAction.NORMALS_FLIP) }
+            Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
+                PageKey(AppIcons.Back, "Volver a atajos", selected = false) { setNormalsPage(false) }
+                EditKey(AppIcons.editCatalog("RECALCULATE_NORMALS_OUTSIDE"), "⇧N", "Recalcular exterior") {
+                    onAction(EditFooterAction.NORMALS_OUTSIDE)
+                }
+                EditKey(AppIcons.editCatalog("RECALCULATE_NORMALS_INSIDE"), null, "Recalcular interior") {
+                    onAction(EditFooterAction.NORMALS_INSIDE)
+                }
+                EditKey(AppIcons.editCatalog("FLIP_NORMALS"), null, "Voltear normales") {
+                    onAction(EditFooterAction.NORMALS_FLIP)
+                }
             }
             return
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            NumKey("F", if (selectionMode == SelectionMode.EDGE) "Rellenar" else "Crear arista/cara",
+        Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
+            EditKey(AppIcons.editCatalog("MAKE_EDGE_FACE"), "F",
+                if (selectionMode == SelectionMode.EDGE) "Rellenar" else "Crear arista/cara",
                 enabled = selectionMode != SelectionMode.FACE) { onAction(EditFooterAction.MAKE_EDGE_FACE) }
-            NumKey("P", "Separar a objeto") { onAction(EditFooterAction.SEPARATE) }
-            NumKey("Y", "Split") { onAction(EditFooterAction.SPLIT) }
+            EditKey(AppIcons.editCatalog("SEPARATE"), "P", "Separar a objeto") { onAction(EditFooterAction.SEPARATE) }
+            EditKey(AppIcons.editCatalog("SPLIT"), "Y", "Split") { onAction(EditFooterAction.SPLIT) }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(KeyGap)) {
             // J une la selección; «Unir J» es una herramienta armable aparte: tocar la
             // arma, tocar otra vez (o ×) la desarma. Ninguna depende de mantener pulsado.
-            NumKey("J", "Conectar vértices",
+            EditKey(AppIcons.editCatalog("CONNECT_VERTICES"), "J", "Conectar vértices",
                 enabled = connectVerticesEnabled && selectionMode == SelectionMode.VERTEX) {
                 onAction(EditFooterAction.CONNECT_VERTICES)
             }
-            PageKey(AppIcons.ConnectPairs, if (connectModeActive) "Unir J activo · toca para salir" else "Unir J · pares seguidos",
+            EditKey(AppIcons.ConnectPairs, "J", if (connectModeActive) "Unir J activo · toca para salir" else "Unir J · pares seguidos",
                 selected = connectModeActive, onClick = onConnectMode)
-            NumKey("N", "Normales", enabled = selectionMode == SelectionMode.FACE) { setNormalsPage(true) }
+            EditKey(AppIcons.editCatalog("NORMALS"), "N", "Normales", enabled = selectionMode == SelectionMode.FACE) { setNormalsPage(true) }
         }
+    }
+}
+
+/** Separación entre teclas del pie (norma: 48 dp con 8 dp de separación). */
+private val KeyGap = 8.dp
+
+/**
+ * Tecla de atajo del pie: el icono de la acción a 48 dp y la letra de Blender como
+ * marca pequeña en la esquina, nunca como contenido principal.
+ */
+@Composable
+private fun EditKey(
+    icon: ImageVector,
+    letter: String?,
+    description: String,
+    selected: Boolean = false,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    val content = if (!enabled) Ink.Faint else if (selected) Ink.Accent else Ink.OnPanel
+    HoverHelp(
+        title = description, explanation = IconHelp.explanation(icon, description), enabled = enabled,
+        modifier = Modifier
+            .size(Metrics.Touch)
+            .clip(RoundedCornerShape(9.dp))
+            .background(if (!enabled) Color.Transparent else if (selected) Ink.Accent.copy(alpha = .24f) else Color.White.copy(alpha = .05f))
+            .then(if (enabled) Modifier.clickableNoRipple(onClick) else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, description, Modifier.size(Metrics.IconSize), tint = content)
+        if (letter != null) Text(letter, color = if (enabled) Ink.Muted else Ink.Faint, fontSize = 9.sp,
+            fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.TopEnd).padding(top = 2.dp, end = 4.dp))
     }
 }
 
@@ -195,13 +234,13 @@ private fun PageKey(
     HoverHelp(
         title = description, explanation = IconHelp.explanation(icon, description), enabled = enabled,
         modifier = Modifier
-            .size(38.dp)
+            .size(Metrics.Touch)
             .clip(RoundedCornerShape(9.dp))
             .background(background)
             .then(if (enabled) Modifier.clickableNoRipple(onClick) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, description, Modifier.size(19.dp), tint = content)
+        Icon(icon, description, Modifier.size(Metrics.IconSize), tint = content)
     }
 }
 
@@ -226,12 +265,12 @@ private fun NumKey(
     HoverHelp(
         title = description, enabled = enabled,
         modifier = Modifier
-            .size(38.dp)
+            .size(Metrics.Touch)
             .clip(RoundedCornerShape(9.dp))
             .background(background)
             .then(if (!enabled) Modifier else Modifier.clickableNoRipple(onClick)),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = content, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text(label, color = content, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
     }
 }
