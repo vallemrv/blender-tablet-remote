@@ -1,13 +1,29 @@
 package com.blendertablet.remote.model
 
-/** Inventario único de controles directos, en una fila desplazable; Snap queda en Más. */
+/** Inventario único de la fila fija de controles directos; Snap y lo que no es icono o número van a Más. */
 data class ToolTrayContents(val visible: List<String>, val advanced: List<String>) {
     init { require(visible.toSet().size == visible.size) }
 }
 
+/** Interruptores y opciones de esquema con dibujo propio en la bandeja. */
+val SchemaIconControls = setOf("merge", "caps", "rotate_source", "pick_role", "mode")
+
+/**
+ * Un control de esquema cabe en la fila si se dibuja como número o como icono: números,
+ * ejes X/Y/Z, enums de valores numéricos (90°) e interruptores con dibujo propio.
+ */
+fun schemaControlInRow(spec: EditCatalogParameter): Boolean = when (spec.type) {
+    "float", "int" -> true
+    "enum" -> spec.id in SchemaIconControls || spec.values.isNotEmpty() && spec.values.all { it in setOf("X", "Y", "Z") } ||
+        spec.values.isNotEmpty() && spec.values.all { (spec.labels[it] ?: it).firstOrNull()?.isDigit() == true }
+    "bool" -> spec.id in SchemaIconControls
+    else -> false
+}
+
 fun toolTrayContents(session: ToolSession, selection: SelectionMode = SelectionMode.EDGE): ToolTrayContents {
     if (session.controls.isNotEmpty()) {
-        return ToolTrayContents(session.controls.map { it.id }, emptyList())
+        val (row, more) = session.controls.partition(::schemaControlInRow)
+        return ToolTrayContents(row.map { it.id }, more.map { it.id })
     }
     val direct = when (session.tool) {
         EditTool.LOOP_CUT -> listOf("cuts", "position") +

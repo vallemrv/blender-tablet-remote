@@ -311,6 +311,19 @@ object AppIcons {
         "clear_inner" -> StudioIcons["BISECT_CLEAR_INNER"]
         "clear_outer" -> StudioIcons["BISECT_CLEAR_OUTER"]
         "fill" -> StudioIcons["BISECT_FILL"]
+        "merge_loop" -> StudioIcons["REVOLVE_MERGE"]
+        "caps" -> StudioIcons["SWEEP_CAPS"]
+        "rotate_source" -> StudioIcons["EXTRUDE_ROTATE_SOURCE"]
+        else -> null
+    }
+
+    /** Opciones de un enum de esquema con dibujo propio; null si no tiene icono. */
+    fun trayChoice(id: String, value: String): ImageVector? = when (id) {
+        "pick_role" -> StudioIcons[if (value == "TARGET") "ALIGN_PICK_TARGET" else "ALIGN_PICK_SOURCE"]
+        "mode" -> when (value) {
+            "CONTACT" -> StudioIcons["ALIGN_CONTACT"]; "ORIENT" -> StudioIcons["ALIGN_ORIENT"]
+            "COPY_ROTATION" -> StudioIcons["ALIGN_COPY_ROTATION"]; else -> null
+        }
         else -> null
     }
     val TweakSlide: ImageVector get() = StudioIcons["TWEAK_SLIDE"]

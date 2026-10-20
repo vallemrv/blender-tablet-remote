@@ -207,6 +207,14 @@ internal object StudioIcons {
         "EDGE_EXTEND" to Glyph("Prolongar arista", "Bandejas", "M8,16 L16,8 M2,22 L4,20 M20,4 L22,2 M5.5,18.5 L6,18 M18,6 L18.5,5.5"),
         "SCULPT_INVERT" to Glyph("Invertir pincel", "Bandejas", "M2,6 Q12,18 22,6 M4,21 L9,21 M15,21 L20,21 M17.5,18.5 L17.5,23.5"),
         "PAINT_COLOR" to Glyph("Pintar color", "Bandejas", "M12,3 C16,9 19,12 19,15 A7,7 0,0 1,5,15 C5,12 8,9 12,3 Z"),
+        "ALIGN_PICK_SOURCE" to Glyph("Elegir cara de origen", "Bandejas", "M3,4 L9,4 L9,20 L3,20 Z M12,12 L21,12 M18,9 L21,12 L18,15"),
+        "ALIGN_PICK_TARGET" to Glyph("Elegir cara de destino", "Bandejas", "M15,4 L21,4 L21,20 L15,20 Z M3,12 L12,12 M9,9 L12,12 L9,15"),
+        "ALIGN_CONTACT" to Glyph("Juntar caras", "Bandejas", "M2,7 L12,7 L12,17 L2,17 Z M12,9 L21,9 L21,15 L12,15"),
+        "ALIGN_ORIENT" to Glyph("Orientar caras", "Bandejas", "M3,21 L10,21 L10,14 L3,14 Z M6.5,14 L6.5,6 M4,8.5 L6.5,6 L9,8.5 M14,10 L21,10 L21,17 L14,17 Z M17.5,10 L17.5,2 M15,4.5 L17.5,2 L20,4.5"),
+        "ALIGN_COPY_ROTATION" to Glyph("Copiar rotación", "Bandejas", "M2,10 L10,10 L10,18 L2,18 Z M15,6 L21,12 L15,18 L9,12 Z M5,6 A7,7 0,0 1,13,3 M13,3 L11,1 M13,3 L11,5"),
+        "REVOLVE_MERGE" to Glyph("Cerrar vuelta", "Bandejas", "M19,8 A8,8 0,1 0,20,13 M20,13 L20,8 L15,8 M10,12 L14,12"),
+        "SWEEP_CAPS" to Glyph("Tapar extremos", "Bandejas", "M5,8 L19,8 M5,16 L19,16 M5,8 A2,4 0,1 0,5,16 A2,4 0,1 0,5,8 Z M19,8 A2,4 0,1 1,19,16 A2,4 0,1 1,19,8 Z"),
+        "EXTRUDE_ROTATE_SOURCE" to Glyph("Girar origen", "Bandejas", "M3,18 L9,18 L9,12 L3,12 Z M6,12 Q8,4 17,5 M14,2 L17,5 L14,8 M15,15 L21,15 L21,21 L15,21 Z"),
         "PAINT_MATERIAL" to Glyph("Pintar material", "Bandejas", "M20,12 A8,8 0,1 1,4,12 A8,8 0,1 1,20,12 M8,9 A5,5 0,0 1,12,6 M4,12 C8,15 16,15 20,12"),
     )
 

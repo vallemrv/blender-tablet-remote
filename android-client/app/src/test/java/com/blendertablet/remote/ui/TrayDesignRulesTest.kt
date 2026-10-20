@@ -101,4 +101,13 @@ class TrayDesignRulesTest {
         assertEquals(listOf("IconAction", "IconAction", "SnapControl"), rowControls(tray, "SingleLineTray(\"Tweak\""))
         assertTrue(tray.contains("TrayOption(if (slide) \"Proporcional (sin GG)\" else \"Proporcional\""))
     }
+
+    @Test fun editToolRowsUseIconsAndNumbersOnly() {
+        val control = body(source("EditToolTray"), "private fun ToolControl(")
+        assertFalse("Los interruptores de Edit no son pastillas de texto", control.contains("PillButton("))
+        for (tray in listOf("fun KnifeTray(", "fun BisectTray(")) assertFalse(body(source("EditToolTray"), tray).contains("PillButton("))
+        listOf("even", "flip", "clamp", "remove_loop", "boundary", "merge", "undo_point", "new_cut", "close_cut",
+            "clear_inner", "clear_outer", "fill", "merge_loop", "caps", "rotate_source")
+            .forEach { assertNotNull("Sin icono: $it", AppIcons.trayToggle(it)) }
+    }
 }

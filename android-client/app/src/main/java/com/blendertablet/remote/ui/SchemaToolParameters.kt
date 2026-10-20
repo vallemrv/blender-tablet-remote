@@ -1,11 +1,9 @@
 package com.blendertablet.remote.ui
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
@@ -15,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.blendertablet.remote.model.EditCatalogParameter
+import com.blendertablet.remote.model.Constraint
 import com.blendertablet.remote.model.LengthUnit
 import com.blendertablet.remote.model.TransformMode
 import com.blendertablet.remote.model.NumericExpression
@@ -22,7 +21,11 @@ import com.blendertablet.remote.model.ValueParser
 import java.util.Locale
 import kotlin.math.round
 
-/** Controles descritos por la herramienta: la bandeja comparte unidades y edición. */
+/**
+ * Controles descritos por la herramienta: números deslizables, ejes como trípode,
+ * enums numéricos con su valor e interruptores con su dibujo. En «⋯ Más»
+ * ([labelled] falso) el nombre lo pone la fila de la opción.
+ */
 @Composable
 fun SchemaToolParameters(
     specs: List<EditCatalogParameter>,
@@ -38,18 +41,30 @@ fun SchemaToolParameters(
         for (spec in specs) key(spec.id) {
             if (spec.type == "bool") {
                 val selected = (parameters[spec.id] ?: spec.default) as? Boolean ?: false
-                PillButton(if (labelled) spec.label else if (selected) "Activado" else "Desactivado", selected = selected) {
-                    onParameter(spec.id, !selected)
-                }
+                val icon = AppIcons.trayToggle(if (spec.id == "merge") "merge_loop" else spec.id)
+                if (icon != null) IconAction(icon, spec.label, selected = selected) { onParameter(spec.id, !selected) }
+                else PillButton(if (selected) "Activado" else "Desactivado", selected = selected) { onParameter(spec.id, !selected) }
             } else if (spec.type == "enum") {
-                var expanded by remember { mutableStateOf(false) }
                 val current = (parameters[spec.id] ?: spec.default)?.toString().orEmpty()
-                Box {
-                    PillButton("${spec.labels[current] ?: current} ▾") { expanded = true }
-                    DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
-                        spec.values.forEach { value ->
-                            DropdownMenuItem(text = { Text(spec.labels[value] ?: value) },
-                                onClick = { expanded = false; onParameter(spec.id, value) })
+                val label = { value: String -> spec.labels[value] ?: value }
+                when {
+                    spec.values.isNotEmpty() && spec.values.all { it in setOf("X", "Y", "Z") } ->
+                        ChoiceIcon(spec.values, current, spec.label, { AppIcons.constraint(Constraint.valueOf(it)) },
+                            { "Eje $it" }, multicolor = true) { onParameter(spec.id, it) }
+                    spec.values.isNotEmpty() && spec.values.all { AppIcons.trayChoice(spec.id, it) != null } ->
+                        ChoiceIcon(spec.values, current, spec.label, { AppIcons.trayChoice(spec.id, it)!! }, label, active = true) {
+                            onParameter(spec.id, it)
+                        }
+                    else -> {
+                        var expanded by remember { mutableStateOf(false) }
+                        Box {
+                            HoverHelp(spec.label, spec.help) { PillButton("${label(current)} ▾") { expanded = true } }
+                            DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
+                                spec.values.forEach { value ->
+                                    DropdownMenuItem(text = { Text(label(value)) },
+                                        onClick = { expanded = false; onParameter(spec.id, value) })
+                                }
+                            }
                         }
                     }
                 }

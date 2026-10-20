@@ -74,4 +74,17 @@ class ToolTrayContentsTest {
         val loop=reusableToolValues(EditTool.LOOP_CUT,mapOf("factor" to .5,"slide_distance" to .003,"cuts" to 3,"edge" to 44),1.0,true)
         assertEquals(mapOf("cuts" to 3),loop)
     }
+
+    @Test fun schemaToolsKeepNumbersAxesAndIconTogglesInTheRowAndSendTheRestToMore() {
+        val revolve = ToolSession(controls = listOf(
+            EditCatalogParameter("angle", "Ángulo", "float"), EditCatalogParameter("steps", "Pasos", "int"),
+            EditCatalogParameter("axis", "Eje global", "enum", values = listOf("X", "Y", "Z")),
+            EditCatalogParameter("center_x", "Centro X", "float"), EditCatalogParameter("merge", "Cerrar vuelta", "bool"),
+            EditCatalogParameter("twist", "Giro", "enum", values = listOf("0", "90"), labels = mapOf("0" to "0°", "90" to "90°")),
+            EditCatalogParameter("future", "Opción nueva", "bool"),
+            EditCatalogParameter("style", "Estilo", "enum", values = listOf("A", "B"))))
+        val row = toolTrayContents(revolve)
+        assertEquals(listOf("angle", "steps", "axis", "center_x", "merge", "twist"), row.visible)
+        assertEquals(listOf("future", "style"), row.advanced)
+    }
 }

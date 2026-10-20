@@ -202,6 +202,14 @@ internal object IconHelp {
         "EDGE_EXTEND" to "Permite pasar del final de la arista y seguir en su misma dirección (Alt).",
         "SCULPT_INVERT" to "Invierte el efecto del pincel: lo que levanta pasa a hundir.",
         "PAINT_COLOR" to "Pinta solo el color base; conserva brillo, metal y relieve.",
+        "ALIGN_PICK_SOURCE" to "El próximo toque fija la cara de la pieza que se mueve.",
+        "ALIGN_PICK_TARGET" to "El próximo toque fija la cara de la pieza que se queda quieta.",
+        "ALIGN_CONTACT" to "Junta las dos caras enfrentando sus normales y haciendo coincidir sus centros.",
+        "ALIGN_ORIENT" to "Gira la pieza para que su cara mire en la misma dirección que la otra.",
+        "ALIGN_COPY_ROTATION" to "Copia la rotación del objeto destino sin mover el origen.",
+        "REVOLVE_MERGE" to "Une los extremos al completar una vuelta entera.",
+        "SWEEP_CAPS" to "Cierra con caras los dos extremos del barrido.",
+        "EXTRUDE_ROTATE_SOURCE" to "Orienta el tramo de origen hacia el siguiente toque.",
         "PAINT_MATERIAL" to "Pinta el material completo con todos sus ajustes.",
     )
 
