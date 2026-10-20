@@ -1581,6 +1581,10 @@ no quedan archivos o referencias temporales.
   frontal de los ejes del croquis. Conserva exactamente zoom/distancia, posición
   desplazada y proyección. El encuadre inicial al abrir un boceto sigue separado.
 
+- Matriz (Array) ofrece además Desplazamiento relativo activable, Desplazamiento de
+  objeto y el objeto de desplazamiento (cualquiera salvo el propio, normalmente un
+  Empty): con el Empty en el eje y girado 360°/n se obtiene la matriz circular nativa.
+  Editar otro campo conserva el objeto y ambos interruptores.
 - Deformación simple vive en Modificadores: cuatro métodos nativos, eje, ángulo en
   grados o factor según método, límites 0–1, bloqueos y objeto de origen opcional.
   Angle/factor comparten almacenamiento nativo: se escribe solo el activo, tras

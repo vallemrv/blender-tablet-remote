@@ -61,6 +61,11 @@ SCHEMA = {
         "relative_offset": {"type": "float3", "default": [1.0, 0.0, 0.0], "min": -1000.0, "max": 1000.0, "step": 0.1},
         "use_merge": {"type": "bool", "default": False},
         "merge_threshold": {"type": "float", "default": 0.01, "min": 0.0, "max": 1000.0, "step": 0.001},
+        # Matriz circular: el desplazamiento de objeto copia la transformación de un Empty.
+        "use_relative_offset": {"type": "bool", "default": True, "label": "Desplazamiento relativo"},
+        "use_object_offset": {"type": "bool", "default": False, "label": "Desplazamiento de objeto"},
+        "offset_object": {"type": "object", "default": None, "label": "Objeto de desplazamiento",
+                          "object_filter": {"exclude_self": True}},
     },
     "BEVEL": {
         "width": {"type": "float", "default": 0.1, "min": 0.0, "max": 1000.0, "step": 0.01},
@@ -178,13 +183,14 @@ def _operand(obj, name):
 
 
 def _mirror_object(obj, name):
+    """Otro objeto de referencia (Espejo, Matriz): nunca el propio objeto."""
     if name is None or name == "":
         return None
     other = bpy.data.objects.get(str(name))
     if other is None:
         raise CommandError(f"Object not found: {name}", code="not_found")
     if other == obj:
-        raise BadPayload("Mirror object cannot be the same object")
+        raise BadPayload("El objeto de referencia debe ser otro objeto")
     return other
 
 
@@ -255,8 +261,14 @@ def _write(mod, kind: str, params: dict, obj, preserve_current: bool = False) ->
         offset = data["relative_offset"]
         if not isinstance(offset, (list, tuple)) or len(offset) != 3:
             raise BadPayload("'relative_offset' must be [x, y, z]")
-        mod.use_relative_offset = True
+        for key in ("use_relative_offset", "use_object_offset"):
+            if not isinstance(data[key], bool):
+                raise BadPayload(f"'{key}' must be a boolean")
+        offset_object = _mirror_object(obj, data["offset_object"])
+        mod.use_relative_offset = data["use_relative_offset"]
         mod.relative_offset_displace = Vector((float(offset[0]), float(offset[1]), float(offset[2])))
+        mod.use_object_offset = data["use_object_offset"]
+        mod.offset_object = offset_object
         mod.use_merge_vertices = bool(data["use_merge"])
         mod.merge_threshold = _bounded_float(data["merge_threshold"], "merge_threshold", 0.0, 1000.0)
     elif kind == "BEVEL":
@@ -369,6 +381,9 @@ def _read(mod) -> dict:
             "relative_offset": list(mod.relative_offset_displace),
             "use_merge": bool(mod.use_merge_vertices),
             "merge_threshold": float(mod.merge_threshold),
+            "use_relative_offset": bool(mod.use_relative_offset),
+            "use_object_offset": bool(mod.use_object_offset),
+            "offset_object": mod.offset_object.name if mod.offset_object else None,
         }
     elif kind == "BEVEL":
         params = {
@@ -438,7 +453,9 @@ def add_options(payload: dict) -> dict:
             'subdivide': {'type':'action', 'label':'Subdividir (+1 nivel)', 'max':6, 'max_parameter':'total_levels'},
         }},
         "SUBSURF": {"parameters": {"levels": _number("int", 1, 0, 6, 1), "render_levels": _number("int", 2, 0, 6, 1), "subdivision_type": _enum("CATMULL_CLARK", ["CATMULL_CLARK", "SIMPLE"])}},
-        "ARRAY": {"parameters": {"count": _number("int", 2, 1, 1000, 1), "relative_offset": _number("float3", [1.0, 0.0, 0.0], -1000.0, 1000.0, 0.1), "use_merge": {"type": "bool", "default": False}, "merge_threshold": _number("float", 0.01, 0.0, 1000.0, 0.001)}},
+        "ARRAY": {"parameters": {"count": _number("int", 2, 1, 1000, 1), "relative_offset": _number("float3", [1.0, 0.0, 0.0], -1000.0, 1000.0, 0.1), "use_merge": {"type": "bool", "default": False}, "merge_threshold": _number("float", 0.01, 0.0, 1000.0, 0.001),
+            "use_relative_offset": SCHEMA["ARRAY"]["use_relative_offset"], "use_object_offset": SCHEMA["ARRAY"]["use_object_offset"],
+            "offset_object": SCHEMA["ARRAY"]["offset_object"]}},
         "BEVEL": {"parameters": {
             "width": dict(_number("float", 0.1, 0.0, 1000.0, 0.01), label="Ancho", editable=True, unit="LENGTH"),
             "segments": dict(_number("int", 1, 1, 1000, 1), label="Segmentos", editable=True),
