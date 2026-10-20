@@ -264,6 +264,12 @@ def _object_hit(u,v,origin,direction,rv3d,region,area,depsgraph,threshold):
     wire=query_wire_object(u,v,rv3d,region,viewport,depsgraph,threshold)
     if wire is not None:
         obj,location=wire;hit,face_index=True,-1
+    else:
+        # Los Empty no tienen caras ni aristas: se tocan por las líneas que dibujan.
+        from .snap import query_empty_object
+        empty=query_empty_object(u,v,rv3d,region,viewport,depsgraph,threshold)
+        if empty is not None:
+            obj,location=empty;hit,face_index=True,-1
     from .reference import pick_image
     image=pick_image(origin,direction,rv3d,area,location if hit else None)
     if image is not None:

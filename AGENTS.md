@@ -588,6 +588,10 @@ nuevas superficies y la adaptación gradual de las existentes.
   Los contornos de mallas sin caras y curvas sin grosor se seleccionan por sus
   aristas evaluadas mediante la proyección y oclusión comunes de `commands/snap.py`;
   respetan ocultación y bloqueo. El centro vacío no se trata como una cara rellena.
+  Los Empty (salvo Imagen, que tiene su rectángulo) se tocan en Objeto por las líneas
+  que dibujan —cubo, ejes, flechas, círculo, esfera, cono— o por su centro
+  (`query_empty_object` en `commands/snap.py`), con el mismo radio táctil, oclusión,
+  ocultación y bloqueo que los contornos sin caras.
 - Outliner sustituye a «Ocultos» en la barra superior. Lista todos los objetos de
   la escena, incluidos ocultos y los de colecciones excluidas, con buscador, nombre,
   colección/padre, selección, ojo y candado. Las acciones usan identidad efímera,

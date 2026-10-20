@@ -324,6 +324,70 @@ def _query_geometric(payload, thresholds, previous=None, release_threshold=None)
     return {k: value for k, value in chosen.items() if k != "acquire_threshold"}
 
 
+def _empty_segments(obj):
+    """Trazos locales que dibuja un Empty (sin IMAGE), para tocarlo como en Blender."""
+    size = obj.empty_display_size
+    axes = [Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))]
+    kind = obj.empty_display_type
+    def circle(u_axis, v_axis):
+        points = [(u_axis * math.cos(a) + v_axis * math.sin(a)) * size
+                  for a in (i * math.tau / 24 for i in range(24))]
+        return [(points[i], points[(i + 1) % 24]) for i in range(24)]
+    if kind == 'ARROWS':
+        return [(Vector(), axis * size) for axis in axes]
+    if kind == 'SINGLE_ARROW':
+        return [(Vector(), axes[2] * size)]
+    if kind == 'CUBE':
+        corners = [Vector((x, y, z)) * size for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)]
+        return [(a, b) for i, a in enumerate(corners) for b in corners[i + 1:]
+                if sum(1 for k in range(3) if a[k] != b[k]) == 1]
+    if kind == 'CIRCLE':
+        return circle(axes[0], axes[1]) + circle(axes[0], axes[2])
+    if kind == 'SPHERE':
+        return circle(axes[0], axes[1]) + circle(axes[0], axes[2]) + circle(axes[1], axes[2])
+    if kind == 'CONE':
+        return circle(axes[0], axes[2]) + circle(axes[0], axes[1]) + [(Vector(), axes[1] * size * 2)]
+    return [(-axis * size, axis * size) for axis in axes]
+
+
+def query_empty_object(u, v, rv3d, region, viewport, depsgraph, threshold):
+    """Empty visible cuyo dibujo (o centro) queda bajo el dedo; respeta oclusión y bloqueo."""
+    aspect = max(1, region.width) / max(1, region.height)
+    def metric(point):
+        return Vector((point[0], point[1] / aspect))
+    touch = metric((u, v))
+    candidates = []
+    for obj in bpy.context.view_layer.objects:
+        if (obj.type != 'EMPTY' or obj.empty_display_type == 'IMAGE' or obj.hide_select
+                or not obj.visible_get(viewport=viewport)):
+            continue
+        if viewport is not None and not getattr(viewport, 'show_object_viewport_empty', True):
+            continue
+        matrix = obj.matrix_world
+        best = None
+        origin = camera.project(matrix.translation, rv3d)
+        if origin is not None:
+            best = ((metric(origin) - touch).length, matrix.translation.copy())
+        for a, b in _empty_segments(obj):
+            wa, wb = matrix @ a, matrix @ b
+            pa, pb = camera.project(wa, rv3d), camera.project(wb, rv3d)
+            if pa is None or pb is None:
+                continue
+            start, segment = metric(pa), metric(pb) - metric(pa)
+            t = 0.0 if segment.length_squared <= 1e-12 else max(
+                0.0, min(1.0, (touch - start).dot(segment) / segment.length_squared))
+            distance = (touch - (start + segment * t)).length
+            if best is None or distance < best[0]:
+                best = (distance, wa.lerp(wb, t))
+        if best is not None and best[0] <= threshold:
+            candidates.append((best[0], obj, best[1]))
+    for _, obj, position in sorted(candidates, key=lambda c: c[0]):
+        screen = camera.project(position, rv3d)
+        if obj.show_in_front or _visible(position, screen, depsgraph, rv3d, set(), viewport):
+            return obj, position
+    return None
+
+
 def query_wire_object(u, v, rv3d, region, viewport, depsgraph, threshold):
     """Picking de contornos sin caras usando la proyección y oclusión comunes."""
     if viewport is not None and not viewport.overlay.show_overlays:

@@ -74,6 +74,8 @@ class ReferencePickTests(unittest.TestCase):
         parent = bpy.data.objects.new('Padre', None)
         bpy.context.scene.collection.objects.link(parent)
         parent.location = (1, 2, 0)
+        # Los Empty también se tocan; oculto, el padre solo transforma la imagen.
+        parent.hide_set(True)
         self.image.parent = parent
         bpy.context.view_layer.update()
         self.assertTrue(self.tap(self.image.matrix_world @ Vector((1, 1, 0)))['hit'])
