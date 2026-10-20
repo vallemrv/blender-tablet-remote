@@ -64,6 +64,8 @@ fun InputSurface(
     repeatTap: Boolean = false,
     f2Enabled: Boolean = false,
     onF2Gesture: (GesturePhase, Float, Float) -> Unit = { _,_,_ -> },
+    loopHoverEnabled: Boolean = false,
+    onLoopHover: (Float?, Float?) -> Unit = { _, _ -> },
     independentTaps: Boolean = false,
     sculptEnabled: Boolean = false,
     sculptStylusOnly: Boolean = true,
@@ -112,6 +114,8 @@ fun InputSurface(
                 view.onLongPress = onLongPress
                 view.f2Touch.dispatch = onF2Gesture
                 view.f2Enabled = f2Enabled
+                view.onLoopHover = onLoopHover
+                view.loopHoverEnabled = loopHoverEnabled
                 view.repeatTap = repeatTap
                 view.independentTaps = independentTaps
                 view.shapeTool = shapeTool
@@ -157,6 +161,8 @@ private const val DISPATCH_MS = 33L
 // Knife solo sondea el candidato durante UPDATE; 15 Hz basta visualmente y evita
 // reconstrucciones/estado innecesarios mientras Blender también codifica el viewport.
 internal const val KNIFE_DISPATCH_MS = 66L
+/** Ritmo de la preselección de Corte de loop (~15 por segundo). */
+internal const val LOOP_HOVER_MS = 66L
 
 /** Knife ignora el jitter de ACTION_UP y confirma la última muestra DOWN/MOVE. */
 internal fun stableKnifeRelease(lastStableX: Float, lastStableY: Float) =
@@ -837,7 +843,26 @@ private class GestureView(
         sculptPointerId = -1
     }
 
+    // Corte de loop: el lápiz que flota pide la preselección del anillo bajo su punta.
+    var onLoopHover: (Float?, Float?) -> Unit = { _, _ -> }
+    var loopHoverEnabled = false
+        set(value) {
+            if (field && !value && loopHoverShown) { loopHoverShown = false; onLoopHover(null, null) }
+            field = value
+        }
+    private var loopHoverShown = false
+    private var loopHoverAt = 0L
+
     override fun onHoverEvent(event: MotionEvent): Boolean {
+        if (loopHoverEnabled && event.pointerCount > 0 && isStylus(event.getToolType(0))) {
+            if (event.actionMasked == MotionEvent.ACTION_HOVER_EXIT) {
+                if (loopHoverShown) { loopHoverShown = false; onLoopHover(null, null) }
+            } else if (event.eventTime - loopHoverAt >= LOOP_HOVER_MS) {
+                loopHoverAt = event.eventTime; loopHoverShown = true
+                onLoopHover(nx(event.x), ny(event.y))
+            }
+            return true
+        }
         if (lightCursorEnabled) {
             onLightPointer(if (event.actionMasked == MotionEvent.ACTION_HOVER_EXIT) null else Offset(event.x, event.y))
             return true

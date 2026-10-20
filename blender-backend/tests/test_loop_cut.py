@@ -96,6 +96,30 @@ class LoopCutTests(unittest.TestCase):
                 checked += 1
         self.assertGreater(checked, 20)
 
+    def test_pen_hover_previews_the_ring_without_touching_the_mesh(self):
+        from mathutils import Quaternion
+        from blender_tablet_remote.camera import camera
+        from blender_tablet_remote.bpy_utils import find_view3d
+        obj = bpy.context.object
+        rv = find_view3d()[3]
+        camera.reset(); camera._synced = True; camera.perspective = 'PERSP'
+        camera.location = Vector((0, 0, 0)); camera.rotation = Quaternion((1, 0, 0, 0)); camera.distance = 30
+        tools.begin({'tool':'LOOP_CUT', 'parameters':{'cuts':1}})
+        before = self.coords()
+        top = max(bmesh.from_edit_mesh(obj.data).faces, key=lambda f: f.calc_center_median().z)
+        u, v = camera.project(obj.matrix_world @ top.calc_center_median(), rv)
+        result = tools.loop_hover({'u': u, 'v': v})
+        self.assertTrue(result['hover'])
+        # El anillo de un cubo recorre sus cuatro caras: cuatro tramos del corte central.
+        self.assertEqual(len(tools.loop_hover_segments()), 4)
+        self.assertEqual(self.coords(), before)
+        self.assertFalse(tools.tool_session.active)
+        tools.loop_hover({})
+        self.assertIsNone(tools.loop_hover_segments())
+        tools.loop_hover({'u': u, 'v': v})
+        tools.cancel({})
+        self.assertIsNone(tools.loop_hover_segments())
+
     def test_selected_edge_does_not_start_cut_and_cancel_is_idempotent(self):
         bm=bmesh.from_edit_mesh(bpy.context.object.data)
         bm.edges.ensure_lookup_table(); bm.edges[self.edge].select_set(True)

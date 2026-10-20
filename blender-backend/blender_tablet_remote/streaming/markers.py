@@ -134,6 +134,26 @@ def gizmo_paths(gizmo, height, active=None):
     return paths
 
 
+LOOP_HOVER_COLOR = (1.0, 0.85, 0.25, 0.95)
+
+
+def draw_loop_hover(rv3d, width, height):
+    """Preselección amarilla de Corte de loop, como el aviso del cursor en Blender."""
+    from ..commands.tools import loop_hover_segments
+
+    segments = loop_hover_segments()
+    if not segments:
+        return
+    points = []
+    for start, end in segments:
+        a, b = camera.project(start, rv3d), camera.project(end, rv3d)
+        if a is None or b is None:
+            continue
+        points += [(a[0] * width, (1 - a[1]) * height), (b[0] * width, (1 - b[1]) * height)]
+    if points:
+        _polylines([(LOOP_HOVER_COLOR, 2.0, points)], width, height)
+
+
 def draw_gizmo(rv3d, width, height):
     from ..commands import gizmo as module
     from ..commands.modal import session

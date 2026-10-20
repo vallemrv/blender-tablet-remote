@@ -100,6 +100,10 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   objeto y de escena; los cortes múltiples conservan su espaciado al desplazarse.
 - El toque de Loop Cut sondea la jaula viva del BMesh (no la malla evaluada, cuyos
   índices cambian con Mirror/bisect u otros modificadores); otros objetos solo ocluyen.
+- Con Corte de loop armado o activo, el lápiz que flota (sin tocar) envía
+  `tool.loop_hover` ~15 veces por segundo: Blender sondea igual que el toque y dibuja
+  en GPUOffScreen el corte central del anillo en amarillo. No cambia malla, selección
+  ni undo; alejar el lápiz, tocar, cerrar o desarmar retiran la preselección.
 - Activar Corte de loop deselecciona la malla y solo arma la herramienta. El
   primer corte exige un toque válido en el visor; nunca usa una selección previa.
   Deslizar sobre Posición acumula pasos de 1 % sobre el valor local pendiente. La

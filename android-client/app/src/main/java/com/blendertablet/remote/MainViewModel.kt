@@ -1192,6 +1192,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (armed.armed && armed.tool == EditTool.CONNECT) selectTool() else beginEditTool(EditTool.CONNECT)
     }
 
+    /** Corte de loop: preselección del anillo bajo el lápiz que flota; null la retira. */
+    fun loopHover(u: Float?, v: Float?) {
+        val tool = client.toolSession.value
+        if (tool.tool != EditTool.LOOP_CUT || !(tool.armed || tool.active)) return
+        client.editCatalogCommand("tool.loop_hover", if (u == null || v == null) emptyMap() else mapOf("u" to u, "v" to v))
+    }
+
     /** Dibujar: suelta el último vértice; el siguiente toque empieza otra línea. */
     fun drawBreak() = client.editCatalogCommand("tool.draw_break")
 

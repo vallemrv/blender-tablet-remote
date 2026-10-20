@@ -295,6 +295,7 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             onDragStart = vm::dragStart,
             onKnifeDrag = vm::knifeDrag,
             onF2Gesture = vm::f2Gesture,
+            onLoopHover = vm::loopHover,
             onTweakDrag = vm::tweakGesture,
             onCadGesture = vm::cadGesture,
             onSculptStroke = vm::sculptStroke,
@@ -343,6 +344,8 @@ private fun Workspace(state: AppUiState, vm: MainViewModel, host: String, openCo
             longPressEnabled = (!cad.sessionActive || (cad.operation == "DRAG" && state.cadTool == null)) && toolSession.input != "REPEAT_TAP" && viewportLongPressEnabled(session.active, toolSession.active),
             // Dibujar usa el mismo gesto que F2: tocar dibuja, arrastrar un vértice lo mueve.
             f2Enabled = toolSession.armed && toolSession.tool in setOf(EditTool.F2, EditTool.DRAW),
+            loopHoverEnabled = !state.blender.cad.workspace && toolSession.tool == EditTool.LOOP_CUT &&
+                (toolSession.armed || toolSession.active),
             repeatTap = toolSession.armed && toolSession.input == "REPEAT_TAP" && toolSession.tool != EditTool.DRAW,
             independentTaps = materialActive || state.blender.mode == BlenderMode.EDIT || state.blender.cad.workspace,
             // Los marcadores de transformación ya forman parte del fotograma.
@@ -823,6 +826,8 @@ class ViewportInput(
     val onDragStart: (Float, Float) -> Unit,
     val onKnifeDrag: (GesturePhase, Float, Float) -> Unit,
     val onF2Gesture: (GesturePhase, Float, Float) -> Unit,
+    /** Lápiz flotando con Corte de loop: posición o null al alejarlo. */
+    val onLoopHover: (Float?, Float?) -> Unit,
     val onTweakDrag: (GesturePhase, Float, Float, Float, Float) -> Unit,
     val onCadGesture: (GesturePhase, Float, Float) -> Unit,
     val onSculptStroke: (GesturePhase, List<com.blendertablet.remote.model.SculptPoint>, Boolean, Boolean) -> Unit,
@@ -868,6 +873,7 @@ private fun ViewportLayer(
     longPressEnabled: Boolean,
     repeatTap: Boolean,
     f2Enabled: Boolean,
+    loopHoverEnabled: Boolean,
     independentTaps: Boolean,
     knifePoints: List<List<Pair<Float, Float>>>,
     snapCandidate: com.blendertablet.remote.model.SnapCandidate?,
@@ -900,6 +906,7 @@ private fun ViewportLayer(
                     onTap = input.onTap,
                     onDoubleTap = input.onDoubleTap,
                     f2Enabled = f2Enabled, onF2Gesture = input.onF2Gesture,
+                    loopHoverEnabled = loopHoverEnabled, onLoopHover = input.onLoopHover,
                     repeatTap = repeatTap,
                     independentTaps = independentTaps,
                     sculptEnabled = sculptEnabled,
@@ -945,6 +952,7 @@ private fun ViewportLayer(
                 onTap = input.onTap,
                 onDoubleTap = input.onDoubleTap,
                 f2Enabled = f2Enabled, onF2Gesture = input.onF2Gesture,
+                    loopHoverEnabled = loopHoverEnabled, onLoopHover = input.onLoopHover,
                 repeatTap = repeatTap,
                 independentTaps = independentTaps,
                 sculptEnabled = sculptEnabled,
@@ -1005,6 +1013,7 @@ private fun ViewportLayer(
                 onTap = input.onTap,
                 onDoubleTap = input.onDoubleTap,
                 f2Enabled = f2Enabled, onF2Gesture = input.onF2Gesture,
+                    loopHoverEnabled = loopHoverEnabled, onLoopHover = input.onLoopHover,
                 repeatTap = repeatTap,
                 independentTaps = independentTaps,
                 sculptEnabled = sculptEnabled,

@@ -859,6 +859,12 @@ preview — el primer toque/arrastre en el viewport (`tool.loop_pick` o
 mientras algo está armado o activo lo cancela/restaura primero: nunca confirma
 geometría implícitamente.
 
+`tool.loop_hover {u, v}` (Corte de loop armado o activo, mismo propietario) es la
+preselección del lápiz que flota: sondea como `tool.loop_pick` y el vídeo dibuja en
+amarillo el corte central del anillo resultante. Sin `u`/`v` la retira. No es una
+mutación: no cambia malla, selección ni undo, y responde `{hover, edge}`, no el
+estado de la herramienta. Tocar, cerrar o desarmar también la retiran.
+
 `LOOP_CUT` corta el anillo de la arista semilla (`edge` o la seleccionada). El
 parámetro primario de `tool.nudge` es `factor` (deslizamiento; ±0.999, o ±1.999 si la
 sesión lleva `clamp: false`). No es `mesh.subdivide` (eso corta la selección) ni

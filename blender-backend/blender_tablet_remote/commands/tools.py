@@ -109,6 +109,7 @@ class ToolSession:
             f2.cancel()
         if self.armed_tool == 'DRAW':
             cancel_draw_gesture()
+        clear_loop_hover()
         self.armed_tool, self.armed_owner, self.armed_params = None, None, {}
 
     def begin(self, tool, owner, params):
@@ -1119,6 +1120,66 @@ def knife_close(payload):
     return tool_session.status()
 
 
+# Preselección de Corte de loop: anillo bajo el lápiz que flota, solo para el vídeo.
+_loop_hover = None
+
+
+def loop_hover_segments():
+    return _loop_hover
+
+
+def clear_loop_hover():
+    global _loop_hover
+    _loop_hover = None
+
+
+def _loop_ring_segments(obj, seed):
+    """Tramos del corte central del anillo: unen los puntos medios de sus aristas."""
+    from .selection import _edge_ring
+    ring = _edge_ring(seed)
+    world = obj.matrix_world
+    middle = {edge: world @ ((edge.verts[0].co + edge.verts[1].co) * .5) for edge in ring}
+    segments, seen = [], set()
+    for edge in ring:
+        for face in edge.link_faces:
+            if face.hide or len(face.edges) != 4 or face in seen:
+                continue
+            other = next((e for e in face.edges if e in ring and e is not edge), None)
+            if other is not None:
+                seen.add(face)
+                segments.append((middle[edge], middle[other]))
+    if not segments:
+        # Arista suelta o de borde sin quads: se marca la propia arista.
+        segments.append((world @ seed.verts[0].co, world @ seed.verts[1].co))
+    return segments
+
+
+@command("tool.loop_hover")
+def loop_hover(payload):
+    """Calcula el anillo que cortaría un toque en (u,v); sin u/v lo retira."""
+    global _loop_hover
+    owner = payload.get("_client_id")
+    if tool_session.active and tool_session.tool == "LOOP_CUT":
+        tool_session.require(owner)
+    elif tool_session.armed_tool == "LOOP_CUT":
+        tool_session.require_armed_owner(owner)
+    else:
+        _loop_hover = None
+        return {"hover": False}
+    if payload.get("u") is None or payload.get("v") is None:
+        _loop_hover = None
+        return {"hover": False}
+    probe = mesh_commands.loop_probe(dict(payload))
+    if not probe.get("hit"):
+        _loop_hover = None
+        return {"hover": False}
+    obj = tool_session.obj or active_object()
+    bm = bmesh.from_edit_mesh(obj.data)
+    bm.edges.ensure_lookup_table()
+    _loop_hover = _loop_ring_segments(obj, bm.edges[probe["edge"]])
+    return {"hover": True, "edge": probe["edge"]}
+
+
 @command("tool.loop_pick", mutating=True)
 def loop_pick(payload):
     """Coloca o re-ubica el corte de Loop Cut tocando la malla.
@@ -1132,6 +1193,7 @@ def loop_pick(payload):
     que ya no existen al reconstruir. Así que restore → sondeo → parámetros →
     preview, todo en un paso atómico.
     """
+    clear_loop_hover()
     owner = payload.get("_client_id")
     if tool_session.active:
         tool_session.require(owner)
