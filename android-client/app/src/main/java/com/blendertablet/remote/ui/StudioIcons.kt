@@ -172,6 +172,7 @@ internal object StudioIcons {
         "DEBUG" to Glyph("Diagnóstico", "Controles", "M7,7 L17,7 L17,17 L7,17 Z M10,10 L14,10 L14,14 L10,14 Z M10,3 L10,7 M14,3 L14,7 M10,17 L10,21 M14,17 L14,21 M3,10 L7,10 M3,14 L7,14 M17,10 L21,10 M17,14 L21,14"),
         "MORE" to Glyph("Más acciones", "Controles", "M13,5 A1,1 0,1 1,11,5 A1,1 0,1 1,13,5 M13,12 A1,1 0,1 1,11,12 A1,1 0,1 1,13,12 M13,19 A1,1 0,1 1,11,19 A1,1 0,1 1,13,19"),
         "LOCK" to Glyph("Bloquear selección", "Controles", "M5,11 L19,11 L19,21 L5,21 Z M8,11 L8,7 A4,4 0,0 1,16,7 L16,11 M12,15 L12,18"),
+        "DIMENSION_LOCK" to Glyph("Fijar medida", "CAD", "M3,2 L3,8 M21,2 L21,8 M3,5 L21,5 M6,3.5 L3,5 L6,6.5 M18,3.5 L21,5 L18,6.5 M7,14 L17,14 L17,22 L7,22 Z M9.5,14 L9.5,12 A2.5,2.5 0,0 1,14.5,12 L14.5,14 M12,17 L12,19"),
         "NEW_FOLDER" to Glyph("Nueva carpeta", "Archivo", "M3,20 L21,20 L21,7 L11,7 L8,4 L3,4 Z M8,14 L16,14 M12,10 L12,18"),
         "COLLECTION" to Glyph("Mover a colección", "Controles", "M3,20 L21,20 L21,7 L11,7 L8,4 L3,4 Z M7,13 L17,13 M14,10 L17,13 L14,16"),
         "UNLOCK" to Glyph("Desbloquear selección", "Controles", "M5,11 L19,11 L19,21 L5,21 Z M8,11 L8,7 A4,4 0,0 1,16,7 M12,15 L12,18"),

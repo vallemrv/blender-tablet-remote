@@ -193,7 +193,7 @@ object AppIcons {
     fun cad(intent: String): ImageVector = when (intent) {
         "VERTEX", "EDGE", "FACE", "SELECT_ALL", "DESELECT_ALL", "SELECT", "DELETE", "VISIBLE",
         "EXTRUDE", "REVOLVE", "SWEEP", "MIRROR", "SCENE" -> StudioIcons[intent]
-        "DIMENSION_LOCK" -> StudioIcons["LOCK"]
+        "DIMENSION_LOCK" -> StudioIcons["DIMENSION_LOCK"]
         "FINISH" -> Confirm
         "CANCEL" -> Cancel
         "MODEL" -> StudioIcons["STACK"]

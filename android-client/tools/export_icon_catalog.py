@@ -11,7 +11,7 @@ OUT = ROOT / "dist/iconos"
 
 
 def main():
-    glyphs = re.findall(r'"([A-Z_]+)" to Glyph\("([^"]+)", "([^"]+)", "([^"]+)"\)', SOURCE.read_text())
+    glyphs = re.findall(r'"([A-Z0-9_]+)" to Glyph\("([^"]+)", "([^"]+)", "([^"]+)"\)', SOURCE.read_text())
     if len(glyphs) != SOURCE.read_text().count(' to Glyph('):
         raise ValueError("Algún dibujo no tiene el formato de exportación esperado")
     if len({key for key, *_ in glyphs}) != len(glyphs):

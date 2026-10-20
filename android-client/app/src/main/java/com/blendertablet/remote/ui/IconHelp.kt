@@ -172,6 +172,7 @@ internal object IconHelp {
         "LOCK" to "El objeto está protegido contra la selección. Toca para desbloquearlo.",
         "UNLOCK" to "Bloquea la selección del objeto para evitar moverlo o editarlo por accidente.",
         "FALLBACK" to "Abre las propiedades de este elemento.",
+        "DIMENSION_LOCK" to "Fija esta medida con una cota del croquis; si ya está fijada, quita la cota y conserva el dibujo.",
         "FALLOFF_SMOOTH" to "La influencia cae de forma suave y gradual desde el centro.",
         "FALLOFF_SPHERE" to "La influencia se mantiene alta y cae como el borde de una esfera.",
         "FALLOFF_ROOT" to "La influencia cae despacio al principio y deprisa cerca del borde.",

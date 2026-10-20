@@ -53,4 +53,20 @@ class IconographyTest {
         assertSame(AppIcons.editCatalog("BEVEL"), AppIcons.modifier("BEVEL"))
         assertSame(AppIcons.editCatalog("EXTRUDE"), AppIcons.cad("EXTRUDE"))
     }
+
+    @Test fun dimensionLockHasItsOwnGlyphApartFromTheOutlinerLock() {
+        val dimension = drawing(AppIcons.cad("DIMENSION_LOCK"))
+        assertNotEquals(drawing(AppIcons.selectionLock(true)), dimension)
+        assertNotEquals(drawing(AppIcons.selectionLock(false)), dimension)
+        assertTrue(IconHelp.explanation(AppIcons.cad("DIMENSION_LOCK"), "Fijar medida").contains("cota"))
+    }
+
+    @Test fun trayOptionsAreRecognisableByShape() {
+        val falloffs = com.blendertablet.remote.model.ProportionalFalloffs.map { drawing(AppIcons.falloff(it)) }
+        assertEquals(falloffs.size, falloffs.toSet().size)
+        val orientations = listOf("GLOBAL", "LOCAL", "VIEW", "NORMAL").map { drawing(AppIcons.orientation(it)) }
+        assertEquals(4, orientations.toSet().size)
+        val constraints = com.blendertablet.remote.model.Constraint.entries.map(AppIcons::constraint)
+        assertEquals(constraints.size, constraints.map { it.name }.toSet().size)
+    }
 }
