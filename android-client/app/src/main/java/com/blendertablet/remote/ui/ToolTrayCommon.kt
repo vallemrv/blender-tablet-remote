@@ -19,7 +19,8 @@ fun ToolNumericInput(
     label: String, value: Double, step: Double, mode: com.blendertablet.remote.model.TransformMode,
     scale: Double, unit: com.blendertablet.remote.model.LengthUnit? = null,
     integer: Boolean = false, min: Double? = null, max: Double? = null,
-    quickValues: List<Int> = emptyList(), onCommit: (Double) -> Unit,
+    /** Valor al mantener pulsado; null si la magnitud no tiene un neutro evidente. */
+    neutral: Double? = null, onCommit: (Double) -> Unit,
 ) {
     var draft by remember(label, unit, scale) { mutableStateOf<String?>(null) }
     var pending by remember(label, unit, scale) { mutableStateOf<Double?>(null) }
@@ -31,22 +32,31 @@ fun ToolNumericInput(
         else -> 1.0
     }
     val display = if (unit != null) shown * scale / metres else shown
-    val suffix = unit?.let { " ${it.short}" }.orEmpty()
     fun read() = if (draft == null) shown else com.blendertablet.remote.model.parseToolValue(draft!!, shown, mode, unit, scale)
     fun send(raw: Double) {
         if (!raw.isFinite()) return
         val next = (if(integer) kotlin.math.round(raw) else raw).coerceIn(min ?: -Double.MAX_VALUE, max ?: Double.MAX_VALUE)
         pending = next; draft = null; onCommit(next)
     }
-    val candidate = read()
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = Ink.Faint, fontSize = 11.sp, modifier = Modifier.padding(end = 4.dp))
-        QuickToolValues(quickValues, shown, ::send)
-        StepperButton("−", candidate != null && candidate > (min ?: -Double.MAX_VALUE)) { read()?.let { send(it-step) } }
-        CompactNumericField(value = draft ?: (if(integer) kotlin.math.round(display).toLong().toString() else
-            formatToolDistance(display, detailDecimalPlaces(display, 3))) + suffix,
-            onValueChange = { draft = it }, onDone = { read()?.let(::send) },
-            modifier = Modifier.width(78.dp), fontSize = 13.sp, selectAllOnFocus = true)
-        StepperButton("+", candidate != null && candidate < (max ?: Double.MAX_VALUE)) { read()?.let { send(it+step) } }
+    var base by remember { mutableStateOf(shown) }
+    val text = if (integer) kotlin.math.round(display).toLong().toString()
+        else formatToolDistance(display, detailDecimalPlaces(display, 3))
+    HoverHelp(label.ifBlank { "Valor" }, numberHelp(neutral != null)) {
+        ScrubNumber(
+            onScrubStart = { base = read() ?: shown },
+            onScrub = { steps -> send(base + steps * step) },
+            onReset = neutral?.let { { send(it) } },
+        ) { field ->
+            CompactNumericField(value = draft ?: text, onValueChange = { draft = it }, onDone = { read()?.let(::send) },
+                modifier = field.width(if (label.length > 6) 128.dp else 104.dp), fontSize = 16.sp,
+                selectAllOnFocus = true, textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                caption = label.takeIf { it.isNotBlank() }, suffix = unit?.short ?: if (mode ==
+                    com.blendertablet.remote.model.TransformMode.ROTATE) "°" else null)
+        }
     }
 }
+
+/** La misma frase para todos los números: así se aprende una vez. */
+internal fun numberHelp(resettable: Boolean) =
+    "Desliza en horizontal para ajustarlo a pasos · toca para escribir un valor exacto" +
+        if (resettable) " · mantén pulsado para restablecerlo" else ""

@@ -1164,25 +1164,40 @@ private fun CadDimension(
     val input = remember(identity, factor) { CadNumberDraft() }
     SideEffect { input.acknowledge(meters) }
     val value = input.read(meters, factor, minimum, maximum)
-    fun nudge(direction: Int) {
-        val next = input.nudge(meters, factor, step, direction, minimum, maximum) ?: return
-        if (onNudge != null) onNudge(next) else onDraft(next)
+    val suffix = if (scalar) "" else if (degrees) "°" else unit.short
+    val decimals = if (degrees || unit == LengthUnit.MILLIMETERS) 2 else 4
+    val width = if (label.length > 7) 150.dp else 120.dp
+    if (readOnly) {
+        // Medida en vivo durante un gesto: se lee, todavía no se edita.
+        val live = meters * factor
+        Row(Modifier.width(width).height(Metrics.Touch).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, color = Ink.Faint, fontSize = 11.sp, maxLines = 1, modifier = Modifier.padding(end = 6.dp))
+            Text(formatToolDistance(live, detailDecimalPlaces(live, decimals)), color = Ink.OnPanel, fontSize = 16.sp,
+                maxLines = 1, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
+            Text(suffix, color = Ink.Muted, fontSize = 11.sp, modifier = Modifier.padding(start = 3.dp))
+        }
+        return
     }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, color = Ink.Faint, fontSize = 11.sp)
-        StepperButton("−", enabled && !readOnly && value != null && value > minimum) { nudge(-1) }
-        val displayed = (input.pending ?: meters) * factor
-        if (readOnly) Box(Modifier.width(84.dp).height(34.dp).padding(horizontal = 6.dp), contentAlignment = Alignment.CenterEnd) {
-            val live = meters * factor
-            Text(formatToolDistance(live, detailDecimalPlaces(live, if (degrees || unit == LengthUnit.MILLIMETERS) 2 else 4)),
-                color = Ink.OnPanel, fontSize = 13.sp, maxLines = 1)
-        } else CompactNumericField(value = input.text ?: formatToolDistance(displayed, detailDecimalPlaces(displayed, if (degrees || unit == LengthUnit.MILLIMETERS) 2 else 4)),
-            onValueChange = { if (enabled) { input.text = it; onDraft(input.read(meters, factor, minimum, maximum)) } },
-            modifier = Modifier.width(84.dp), textAlign = TextAlign.End, placeholder = if (scalar) "" else if (degrees) "°" else unit.short,
-            textColor = if (value == null) Ink.Bad else if (enabled) Ink.OnPanel else Ink.Faint, selectAllOnFocus = true,
-            onDone = { if (enabled && value != null) { input.pending = value; input.text = null; onDone() } })
-        Text(if (scalar) "" else if (degrees) "°" else unit.short, color = Ink.Muted, fontSize = 12.sp)
-        StepperButton("+", enabled && !readOnly && value != null && value < maximum) { nudge(1) }
+    var scrubbed by remember(identity) { mutableStateOf(0) }
+    val displayed = (input.pending ?: meters) * factor
+    HoverHelp(label, numberHelp(false), enabled = enabled) {
+        // Cada paso deslizado acumula sobre el pendiente local, igual que un −/+ mantenido:
+        // los acuses atrasados del servidor no lo devuelven atrás.
+        ScrubNumber(enabled = enabled, onScrubStart = { scrubbed = 0 }, onScrub = { steps ->
+            var next: Double? = null
+            repeat(kotlin.math.abs(steps - scrubbed)) {
+                next = input.nudge(meters, factor, step, if (steps > scrubbed) 1 else -1, minimum, maximum) ?: next
+            }
+            scrubbed = steps
+            next?.let { if (onNudge != null) onNudge(it) else onDraft(it) }
+        }) { field ->
+            CompactNumericField(value = input.text ?: formatToolDistance(displayed, detailDecimalPlaces(displayed, decimals)),
+                onValueChange = { if (enabled) { input.text = it; onDraft(input.read(meters, factor, minimum, maximum)) } },
+                modifier = field.width(width), textAlign = TextAlign.End, placeholder = suffix, fontSize = 16.sp,
+                textColor = if (value == null) Ink.Bad else if (enabled) Ink.OnPanel else Ink.Faint, selectAllOnFocus = true,
+                caption = label, suffix = suffix,
+                onDone = { if (enabled && value != null) { input.pending = value; input.text = null; onDone() } })
+        }
     }
 }
 
@@ -1280,11 +1295,16 @@ private fun CadSidesControl(sides: Int, enabled: Boolean, onChange: (Int) -> Uni
 /** Cantidad discreta (lados, segmentos) con −/+ compartidos; nunca usa unidades. */
 @Composable
 private fun CadCountControl(label: String, value: Int, range: IntRange, enabled: Boolean, onChange: (Int) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, color = Ink.Muted, fontSize = 12.sp)
-        StepperButton("−", enabled && value > range.first) { onChange(value - 1) }
-        Text("$value", fontSize = 14.sp)
-        StepperButton("+", enabled && value < range.last) { onChange(value + 1) }
+    var base by remember { mutableStateOf(value) }
+    var text by remember(value) { mutableStateOf<String?>(null) }
+    HoverHelp(label, numberHelp(false), enabled = enabled) {
+        ScrubNumber(enabled = enabled, onScrubStart = { base = value },
+            onScrub = { steps -> (base + steps).coerceIn(range).let { if (it != value) onChange(it) } }) { field ->
+            CompactNumericField(text ?: "$value", { text = it }, modifier = field.width(112.dp), fontSize = 16.sp,
+                textAlign = TextAlign.End, selectAllOnFocus = true, caption = label,
+                onDone = { text?.let { com.blendertablet.remote.model.NumericExpression.evaluate(it, value.toDouble()) }
+                    ?.let { kotlin.math.round(it).toInt().coerceIn(range) }?.let(onChange); text = null })
+        }
     }
 }
 

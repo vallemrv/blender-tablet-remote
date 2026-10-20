@@ -59,33 +59,35 @@ private data class ParamSpec(
     /** Rango cerrado, cuando el backend solo acepta una franja (perfil del bisel). */
     val min: Double? = null,
     val max: Double? = null,
+    /** Valor al mantener pulsado el número, si la magnitud tiene un neutro claro. */
+    val neutral: Double? = null,
 )
 
 private fun specsFor(tool: EditTool): List<ParamSpec> = when (tool) {
-    EditTool.EXTRUDE -> listOf(ParamSpec("offset", "Distancia", 0.01, false, TransformMode.MOVE))
+    EditTool.EXTRUDE -> listOf(ParamSpec("offset", "Distancia", 0.01, false, TransformMode.MOVE, neutral = 0.0))
     // Los cuatro controles que deciden la forma del bisel. `profile` es un factor
     // 0..1: 0,5 traza el arco circular, por debajo hunde la esquina y 1,0 la remata
     // en pico. El remate exterior va aparte, en su propio botón.
     EditTool.BEVEL -> listOf(
         ParamSpec("offset", "Ancho", 0.1, false, TransformMode.MOVE, min = 0.0),
-        ParamSpec("segments", "Segmentos", 1.0, true, TransformMode.SCALE, default = 1.0),
+        ParamSpec("segments", "Segmentos", 1.0, true, TransformMode.SCALE, default = 1.0, neutral = 1.0),
         ParamSpec("profile", "Perfil", 0.05, false, TransformMode.SCALE,
-                  default = 0.5, min = 0.0, max = 1.0),
+                  default = 0.5, min = 0.0, max = 1.0, neutral = 0.5),
     )
     EditTool.INSET -> listOf(
         ParamSpec("thickness", "Grosor", 0.01, false, TransformMode.MOVE),
-        ParamSpec("depth", "Profundidad", 0.01, false, TransformMode.MOVE),
+        ParamSpec("depth", "Profundidad", 0.01, false, TransformMode.MOVE, neutral = 0.0),
     )
-    EditTool.SUBDIVIDE -> listOf(ParamSpec("cuts", "Cortes", 1.0, true, TransformMode.SCALE))
+    EditTool.SUBDIVIDE -> listOf(ParamSpec("cuts", "Cortes", 1.0, true, TransformMode.SCALE, neutral = 1.0))
     // Loop Cut: la posición es un stepper propio (porcentaje) y añade falloff y
     // toggles del modal; aquí solo los steppers numéricos que comparte con el resto.
     EditTool.LOOP_CUT -> listOf(
-        ParamSpec("cuts", "Cortes", 1.0, true, TransformMode.SCALE),
-        ParamSpec("smoothness", "Suavidad", 0.01, false, TransformMode.SCALE),
+        ParamSpec("cuts", "Cortes", 1.0, true, TransformMode.SCALE, neutral = 1.0),
+        ParamSpec("smoothness", "Suavidad", 0.01, false, TransformMode.SCALE, neutral = 0.0),
     )
     EditTool.BRIDGE_EDGE_LOOPS -> listOf(
-        ParamSpec("twist_offset", "Desfase", 1.0, true, TransformMode.SCALE, min = -100000.0),
-        ParamSpec("merge_factor", "Posición de fusión", 0.01, false, TransformMode.SCALE, min = 0.0, max = 1.0),
+        ParamSpec("twist_offset", "Desfase", 1.0, true, TransformMode.SCALE, min = -100000.0, neutral = 0.0),
+        ParamSpec("merge_factor", "Fusión", 0.01, false, TransformMode.SCALE, min = 0.0, max = 1.0, neutral = 0.5),
     )
     EditTool.ALIGN -> emptyList()
     EditTool.REVOLVE, EditTool.SWEEP -> emptyList()
@@ -280,16 +282,15 @@ private fun PositionStepper(session: ToolSession, onParameter: (String, Any?) ->
         pending = bounded; draft = null
         onParameter("factor", bounded)
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        HoverHelp("Posición desde el centro", "0 % es el centro. Escribe un porcentaje o una distancia, por ejemplo 5mm.") {
-            Text("Posición", color = Ink.Faint, fontSize = 11.sp)
+    var base by remember { mutableStateOf(shown) }
+    HoverHelp("Posición desde el centro", "0 % es el centro. Escribe un porcentaje o una distancia, por ejemplo 5mm. " +
+        "Desliza para moverlo de 1 % en 1 % · mantén pulsado para volver al centro.") {
+        ScrubNumber(onScrubStart = { base = read() ?: shown }, onScrub = { send(base + it * .01) }, onReset = { send(0.0) }) { field ->
+            CompactNumericField(value = draft ?: "${formatToolDistance(shown * 100, 3)} %",
+                onValueChange = { draft = it }, onDone = { read()?.let(::send) },
+                modifier = field.width(128.dp), fontSize = 16.sp, selectAllOnFocus = true,
+                textAlign = TextAlign.End, caption = "Posición")
         }
-        StepperButton("−") { read()?.let { send(it - .01) } }
-        CompactNumericField(value = draft ?: "${formatToolDistance(shown * 100, 3)} %",
-            onValueChange = { draft = it }, onDone = { read()?.let(::send) },
-            modifier = Modifier.width(90.dp), fontSize = 16.sp, selectAllOnFocus = true)
-        StepperButton("+") { read()?.let { send(it + .01) } }
-        PillButton("Centro") { send(0.0) }
     }
 }
 
@@ -301,12 +302,11 @@ private fun ParamStepper(
     unitScaleLength: Double,
     stepSize: Double? = null,
     lengthUnit: LengthUnit? = null,
-    quickValues: List<Int> = emptyList(),
     onCommit: (Double) -> Unit,
 ) {
     ToolNumericInput(spec.label, value, stepSize ?: spec.step, spec.mode, unitScaleLength, lengthUnit,
         integer = spec.isInt, min = spec.min ?: if (spec.isInt) 1.0 else null, max = spec.max,
-        quickValues = quickValues, onCommit = onCommit)
+        neutral = spec.neutral, onCommit = onCommit)
 }
 
 /** Interruptor de herramienta: su dibujo propio, coloreado solo si está activo. */

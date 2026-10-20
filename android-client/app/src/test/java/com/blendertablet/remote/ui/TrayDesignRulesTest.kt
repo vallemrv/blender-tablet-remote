@@ -53,4 +53,27 @@ class TrayDesignRulesTest {
         assertTrue(TrayMore().isEmpty)
         for (name in trays) assertFalse("$name usa el menú Más antiguo", source(name).contains("ToolMoreMenu("))
     }
+
+    @Test fun scrubbingCountsWholeStepsAfterTheTouchSlop() {
+        assertEquals(0, scrubSteps(5f, 8f, 20f))
+        assertEquals(1, scrubSteps(9f, 8f, 20f))
+        assertEquals(1, scrubSteps(27f, 8f, 20f))
+        assertEquals(2, scrubSteps(29f, 8f, 20f))
+        assertEquals(-3, scrubSteps(-50f, 8f, 20f))
+    }
+
+    @Test fun trayNumbersScrubTypeAndResetWithoutSteppersAndHelpOnlyFirstTimes() {
+        val numbers = mapOf("ToolTrayCommon" to "fun ToolNumericInput(", "EditToolTray" to "private fun PositionStepper(",
+            "TransformBar" to "internal fun ProportionalRadiusInput(", "CadWorkspace" to "private fun CadDimension(",
+            "ObjectPropertiesTray" to "private fun PropertyControl(")
+        for ((file, signature) in numbers) {
+            val code = body(source(file), signature)
+            assertTrue("$signature no desliza", code.contains("ScrubNumber("))
+            assertFalse("$signature mantiene −/+ en la fila", code.contains("StepperButton(") || code.contains("PillButton(\"−\""))
+        }
+        assertTrue(body(source("EditToolTray"), "private fun PositionStepper(").contains("onReset = { send(0.0) }"))
+        val tray = body(source("Controls"), "fun SingleLineTray(")
+        assertTrue(tray.contains("TrayHints(context).consume(hintKey)"))
+        assertTrue(tray.contains("firstTimes && help.isNotBlank()"))
+    }
 }

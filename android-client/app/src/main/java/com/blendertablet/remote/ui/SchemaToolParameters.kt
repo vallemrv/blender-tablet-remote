@@ -60,7 +60,6 @@ fun SchemaToolParameters(
                 ToolNumericInput(if (labelled) spec.label else "", value, if (length) spec.step.takeIf { it > 0 } ?: metres / unitScaleLength else spec.step,
                     if (length) TransformMode.MOVE else if (spec.unit == "angle") TransformMode.ROTATE else TransformMode.SCALE,
                     unitScaleLength, if (length) lengthUnit else null, integer = spec.type == "int", min = spec.min, max = spec.max,
-                    quickValues = if (spec.type == "int" && spec.id == "steps") listOf(8,16,32) else emptyList(),
                     onCommit = { onParameter(spec.id, if(spec.type == "int") it.toInt() else it) })
             }
         }

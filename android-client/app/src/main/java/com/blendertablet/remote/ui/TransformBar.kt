@@ -467,22 +467,24 @@ internal fun ProportionalRadiusInput(
     fun commit() {
         if (text != null) ProportionalRadius.parse(text!!, unit, unitScaleLength, shown)?.let(::send)
     }
-    fun adjust(direction: Int) {
-        val current = readDraft() ?: return
-        send(ProportionalRadius.step(current, direction, stepMeters, unitScaleLength))
+    var base by remember { mutableStateOf(shown) }
+    HoverHelp("Radio proporcional", numberHelp(false)) {
+        ScrubNumber(onScrubStart = { base = readDraft() ?: shown }, onScrub = { steps ->
+            var next = base
+            repeat(abs(steps)) { next = ProportionalRadius.step(next, if (steps < 0) -1 else 1, stepMeters, unitScaleLength) }
+            send(next)
+        }) { field ->
+            CompactNumericField(
+                value = text ?: formatToolDistance(displayed, 3),
+                onValueChange = { text = it },
+                placeholder = unit.short,
+                textAlign = TextAlign.End,
+                onDone = ::commit,
+                fontSize = 16.sp, selectAllOnFocus = true, caption = "Radio", suffix = unit.short,
+                modifier = field.width(120.dp),
+            )
+        }
     }
-    Text("Radio", color = Ink.Muted, fontSize = 11.sp)
-    PillButton("−", repeatOnHold = true) { adjust(-1) }
-    CompactNumericField(
-        value = text ?: formatToolDistance(displayed, 3),
-        onValueChange = { text = it },
-        placeholder = unit.short,
-        textAlign = TextAlign.End,
-        onDone = ::commit,
-        modifier = Modifier.width(64.dp),
-    )
-    Text(unit.short, color = Ink.Muted, fontSize = 11.sp)
-    PillButton("+", repeatOnHold = true) { adjust(1) }
 }
 
 internal val ExtrudeConstraints = listOf(Constraint.FREE, Constraint.X, Constraint.Y, Constraint.Z)

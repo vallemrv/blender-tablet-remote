@@ -66,8 +66,16 @@ fun CompactNumericField(
     onFocusChange: (Boolean) -> Unit = {},
     /** Tocar el campo selecciona todo su contenido: lo que se escribe sustituye al valor. */
     selectAllOnFocus: Boolean = false,
+    /** Nombre corto dentro del propio campo (eje o magnitud), nunca una pastilla aparte. */
+    caption: String? = null,
+    captionColor: Color = Ink.Faint,
+    /** Unidad tras el número, en pequeño; no forma parte del texto editable. */
+    suffix: String? = null,
     onDone: () -> Unit,
 ) {
+    val decoration: @Composable (@Composable () -> Unit) -> Unit = { inner ->
+        NumericFieldBox(value, placeholder, textAlign, caption, captionColor, suffix, inner)
+    }
     if (!selectAllOnFocus) {
         BasicTextField(
             value = value,
@@ -82,7 +90,7 @@ fun CompactNumericField(
                 .height(Metrics.Touch)
                 .clip(RoundedCornerShape(7.dp))
                 .background(Color.White.copy(alpha = .07f)),
-            decorationBox = { inner -> NumericFieldBox(value, placeholder, textAlign, inner) },
+            decorationBox = decoration,
         )
         return
     }
@@ -108,20 +116,25 @@ fun CompactNumericField(
             .height(Metrics.Touch)
             .clip(RoundedCornerShape(7.dp))
             .background(Color.White.copy(alpha = .07f)),
-        decorationBox = { inner -> NumericFieldBox(value, placeholder, textAlign, inner) },
+        decorationBox = decoration,
     )
 }
 
 @Composable
-private fun NumericFieldBox(value: String, placeholder: String?, textAlign: TextAlign, inner: @Composable () -> Unit) {
-    Box(
-        Modifier.fillMaxSize().padding(horizontal = 6.dp),
-        contentAlignment = if (textAlign == TextAlign.End) Alignment.CenterEnd else Alignment.Center,
-    ) {
-        if (value.isEmpty() && placeholder != null) {
-            Text(placeholder, color = Ink.Faint, fontSize = 11.sp, maxLines = 1)
+private fun NumericFieldBox(value: String, placeholder: String?, textAlign: TextAlign, caption: String?,
+                            captionColor: Color, suffix: String?, inner: @Composable () -> Unit) {
+    Row(Modifier.fillMaxSize().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (!caption.isNullOrBlank()) Text(caption, color = captionColor, fontSize = 11.sp, maxLines = 1,
+            fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(end = 6.dp))
+        Box(Modifier.weight(1f),
+            contentAlignment = if (textAlign == TextAlign.End) Alignment.CenterEnd else Alignment.Center) {
+            if (value.isEmpty() && placeholder != null) {
+                Text(placeholder, color = Ink.Faint, fontSize = 11.sp, maxLines = 1)
+            }
+            inner()
         }
-        inner()
+        if (!suffix.isNullOrBlank()) Text(suffix, color = Ink.Muted, fontSize = 11.sp, maxLines = 1,
+            modifier = Modifier.padding(start = 3.dp))
     }
 }
 
@@ -431,8 +444,12 @@ fun SingleLineTray(
     help: String = "",
     alert: String? = null,
     more: TrayMore? = null,
+    /** La ayuda bajo la fila solo acompaña las primeras veces; después queda en el hover. */
+    hintKey: String = title,
     content: @Composable RowScope.() -> Unit,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val firstTimes = remember(hintKey) { com.blendertablet.remote.data.TrayHints(context).consume(hintKey) }
     FloatingPanel(modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             TrayRow(
@@ -447,7 +464,7 @@ fun SingleLineTray(
             )
             if (!alert.isNullOrBlank()) Text(alert, color = Ink.Warn, fontSize = 11.sp, maxLines = 1,
                 overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 4.dp))
-            if (help.isNotBlank()) Text(help, color = Ink.Muted, fontSize = 11.sp,
+            if (firstTimes && help.isNotBlank()) Text(help, color = Ink.Muted, fontSize = 11.sp,
                 maxLines = 2, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 3.dp))
         }

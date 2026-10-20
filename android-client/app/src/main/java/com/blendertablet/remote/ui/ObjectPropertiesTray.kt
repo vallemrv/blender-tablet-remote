@@ -123,32 +123,36 @@ private fun PropertyControl(field: ObjectPropertyField, value: Any?, draft: Bool
                             onChange: (Any?) -> Unit) {
     val suffix = when (field.unit) { "length" -> unit.short; "percent" -> "%"; "factor" -> "×"; "angle" -> "°"; else -> "" }
     when (field.type) {
-        "number" -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        "number" -> {
             val text = if (draft) value as? String ?: "" else (value as? Number)?.let {
                 val shown = objectPropertyDisplay(it, field, unit)
                 formatToolDistance(shown, if (field.unit == "count") 0 else detailDecimalPlaces(shown, 4))
             }.orEmpty()
-            Text(field.label, color = Ink.Muted, fontSize = 12.sp)
             val step = when (field.unit) {
                 "length" -> stepMeters / unit.transformStepUnit().meters
                 "percent", "angle", "count" -> 1.0
                 else -> .1
             }
-            fun nudge(direction: Int) {
-                val current = com.blendertablet.remote.model.NumericExpression.evaluate(text) ?: return
-                val raw = current.toBigDecimal().add(step.toBigDecimal().multiply(direction.toBigDecimal())).toDouble()
-                val min = field.min?.let { objectPropertyDisplay(it, field, unit) } ?: -Double.MAX_VALUE
-                val max = field.max?.let { objectPropertyDisplay(it, field, unit) } ?: Double.MAX_VALUE
-                onChange(formatToolDistance(raw.coerceIn(min, max), null))
+            val min = field.min?.let { objectPropertyDisplay(it, field, unit) } ?: -Double.MAX_VALUE
+            val max = field.max?.let { objectPropertyDisplay(it, field, unit) } ?: Double.MAX_VALUE
+            var base by remember(field.id) { mutableStateOf<Double?>(null) }
+            val neutral = objectPropertyNeutral(field)?.let { objectPropertyDisplay(it, field, unit) }
+            val axis = field.label.takeIf { it.length == 1 }?.let { axisColor(it) }
+            HoverHelp(field.label, numberHelp(neutral != null), enabled = enabled) {
+                ScrubNumber(enabled = enabled,
+                    onScrubStart = { base = com.blendertablet.remote.model.NumericExpression.evaluate(text) },
+                    onScrub = { steps -> base?.let { start ->
+                        val raw = start.toBigDecimal().add(step.toBigDecimal().multiply(steps.toBigDecimal())).toDouble()
+                        onChange(formatToolDistance(raw.coerceIn(min, max), null))
+                    } },
+                    onReset = neutral?.let { { onChange(formatToolDistance(it, null)) } }) { box ->
+                    CompactNumericField(text, { if (enabled) onChange(it) }, modifier = box.width(if (field.label.length > 1) 136.dp else 112.dp),
+                        textColor = if (!enabled) Ink.Faint else if (draft && objectPropertyNumber(text, field, unit) == null) Ink.Bad else Ink.OnPanel,
+                        fontSize = 16.sp, textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                        caption = field.label, captionColor = axis ?: Ink.Faint, suffix = suffix,
+                        selectAllOnFocus = true, onFocusChange = onFocus, onDone = {})
+                }
             }
-            StepperButton("−", enabled) { nudge(-1) }
-            if (enabled) CompactNumericField(text, { onChange(it) }, modifier = Modifier.width(104.dp),
-                textColor = if (draft && objectPropertyNumber(text, field, unit) == null) Ink.Bad else Ink.OnPanel,
-                selectAllOnFocus = true, onFocusChange = onFocus, onDone = {})
-            else Text(text, color = Ink.Faint, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.width(104.dp).padding(6.dp))
-            StepperButton("+", enabled) { nudge(1) }
-            Text(suffix, color = Ink.Muted, fontSize = 12.sp)
         }
         "bool" -> PillButton(field.label,
             selected = value == true, enabled = enabled) { onChange(value != true) }
@@ -163,4 +167,17 @@ private fun PropertyControl(field: ObjectPropertyField, value: Any?, draft: Bool
             }
         }
     }
+}
+
+/** Valor al mantener pulsado: posición y giro a cero, escala a 1 y opacidad completa. */
+internal fun objectPropertyNeutral(field: ObjectPropertyField): Double? = when {
+    field.id.startsWith("location_") || field.id.startsWith("rotation_") -> 0.0
+    field.id.startsWith("scale_") -> 1.0
+    field.id == "opacity" -> 1.0
+    else -> null
+}
+
+/** Ejes con el color de Blender también en los campos de propiedades. */
+internal fun axisColor(letter: String): androidx.compose.ui.graphics.Color? = when (letter) {
+    "X" -> Ink.AxisX; "Y" -> Ink.AxisY; "Z" -> Ink.AxisZ; else -> null
 }
