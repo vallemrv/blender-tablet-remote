@@ -42,4 +42,15 @@ class TrayDesignRulesTest {
         }
         assertFalse(source("SnapControl").contains("\"Snap: "))
     }
+
+    @Test fun sharedTrayIsOneFixedRowWithTheThreeMoreGroups() {
+        val tray = body(source("Controls"), "fun SingleLineTray(")
+        assertFalse(tray.contains("horizontalScroll"))
+        assertTrue(tray.contains("TrayMoreButton"))
+        assertEquals(listOf("Precisión", "Referencia", "Forma"),
+            TrayMore(precision = {}, reference = {}, shape = {}).groups.map { it.first })
+        assertEquals(listOf("Forma"), TrayMore(shape = {}).groups.map { it.first })
+        assertTrue(TrayMore().isEmpty)
+        for (name in trays) assertFalse("$name usa el menú Más antiguo", source(name).contains("ToolMoreMenu("))
+    }
 }

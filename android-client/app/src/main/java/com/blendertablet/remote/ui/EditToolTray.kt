@@ -117,20 +117,48 @@ fun EditToolTray(
         return
     }
     val contents = com.blendertablet.remote.model.toolTrayContents(session, selectionMode)
+    val precision = contents.advanced.filter { it == "snap" }
+    val shape = contents.advanced - precision.toSet()
+    val more = TrayMore(
+        precision = if (precision.isEmpty()) null else ({
+            ToolSnapOptions(session, unitScaleLength, lengthUnit, onParameter)
+        }),
+        shape = if (shape.isEmpty()) null else ({
+            shape.forEach { id -> ToolShapeOption(id, session, unitScaleLength, lengthUnit, onParameter, onLoopPop) }
+        }),
+    )
     SingleLineTray(trayTitle(session.tool, variantLabel ?: "Región"), onCancel,
-        if (session.active) onConfirm else null, session.canConfirm, modifier, help = instruction) {
+        if (session.active) onConfirm else null, session.canConfirm, modifier, help = instruction, more = more) {
         key(session.sessionId, session.tool) {
-            contents.visible.forEach { id ->
-                if (id == "more") ToolMoreMenu(instruction) {
-                    contents.advanced.forEach { advanced ->
-                        AdvancedToolOption(toolOptionHelp(advanced, session)) {
-                            ToolControl(advanced, session, unitScaleLength, lengthUnit, onParameter, onLoopPop)
-                        }
-                    }
-                } else ToolControl(id, session, unitScaleLength, lengthUnit, onParameter, onLoopPop)
+            contents.visible.filter { it != "more" }.forEach { id ->
+                ToolControl(id, session, unitScaleLength, lengthUnit, onParameter, onLoopPop)
             }
         }
     }
+}
+
+/** Precisión de las herramientas Edit: tipo de snap y su paso, en «⋯ Más». */
+@Composable
+private fun ToolSnapOptions(session: ToolSession, scale: Double, unit: LengthUnit, change: (String, Any?) -> Unit) {
+    if (session.availableSnapTypes.isEmpty()) return
+    TrayOption("Snap", toolOptionHelp("snap", session)) {
+        SnapControl(session.availableSnapTypes, session.snapType, onSelect = { change("snap_type", it.name) })
+    }
+    if (session.snapType in setOf(SnapType.INCREMENT, SnapType.GRID)) {
+        TrayOption("Paso", "Cuánto avanza cada salto del gesto y de los botones.") {
+            if (session.tool in setOf(EditTool.EXTRUDE, EditTool.BEVEL, EditTool.INSET))
+                DistanceSnapStepInput(session.snapStep, scale, unit) { change("snap_step", it) }
+            else SnapStepControl(session.snapStep, FactorSnapSteps) { change("snap_step", it) }
+        }
+    }
+}
+
+/** Opción de forma descrita por la herramienta: nombre, control y su frase. */
+@Composable
+private fun ToolShapeOption(id: String, session: ToolSession, scale: Double, unit: LengthUnit,
+                            change: (String, Any?) -> Unit, pop: () -> Unit) {
+    val label = session.controls.firstOrNull { it.id == id }?.label ?: id
+    TrayOption(label, toolOptionHelp(id, session)) { ToolControl(id, session, scale, unit, change, pop, labelled = false) }
 }
 
 private fun toolOptionHelp(id: String, session: ToolSession): String = session.controls.firstOrNull { it.id == id }?.help?.takeIf { it.isNotBlank() } ?: when (id) {
@@ -153,9 +181,9 @@ private fun toolOptionHelp(id: String, session: ToolSession): String = session.c
 
 @Composable
 private fun ToolControl(id: String, session: ToolSession, scale: Double, unit: LengthUnit,
-    change: (String, Any?) -> Unit, pop: () -> Unit) {
+    change: (String, Any?) -> Unit, pop: () -> Unit, labelled: Boolean = true) {
     session.controls.firstOrNull { it.id == id }?.let { spec ->
-        SchemaToolParameters(listOf(spec), session.parameters, unit, scale, change)
+        SchemaToolParameters(listOf(spec), session.parameters, unit, scale, change, labelled = labelled)
         return
     }
     val spec = specsFor(session.tool).firstOrNull { it.key == id }
@@ -186,14 +214,6 @@ private fun ToolControl(id: String, session: ToolSession, scale: Double, unit: L
             "Orientación", AppIcons::orientation, ::orientationLabel, active = true) { change(id, it) }
         "boundary" -> ToolToggle(id, "Conservar borde abierto", !session.flag(id, true)) { change(id, !session.flag(id, true)) }
         "merge" -> ToolToggle(id, "Fusionar", session.flag(id)) { change(id, !session.flag(id)) }
-        "snap" -> Column {
-            SnapControl(session.availableSnapTypes, session.snapType, onSelect = { change("snap_type", it.name) })
-            if (session.snapType in setOf(SnapType.INCREMENT, SnapType.GRID)) {
-                if (session.tool in setOf(EditTool.EXTRUDE, EditTool.BEVEL, EditTool.INSET))
-                    DistanceSnapStepInput(session.snapStep, scale, unit) { change("snap_step", it) }
-                else SnapStepControl(session.snapStep, FactorSnapSteps) { change("snap_step", it) }
-            }
-        }
     }
 }
 
@@ -203,20 +223,20 @@ fun KnifeTray(session: ToolSession, onKnifePop: () -> Unit, onKnifeNewStroke: ()
     onConfirm: () -> Unit, onCancel: () -> Unit, modifier: Modifier = Modifier) {
     if (!session.active || session.tool != EditTool.KNIFE) return
     val contents = com.blendertablet.remote.model.toolTrayContents(session)
+    val more = TrayMore(precision = {
+        TrayOption("Snap", "Atrae el corte a puntos y aristas cercanos al lápiz.") {
+            KnifeSnapControl(session.flag("snap", true), (session.parameters["snap_mode"] as? String ?: "AUTO").uppercase()) { mode ->
+                if (mode == "NONE") onKnifeSnap(false) else { onKnifeSnapMode(mode); if (!session.flag("snap", true)) onKnifeSnap(true) }
+            }
+        }
+    })
     SingleLineTray("Cuchillo", onCancel, onConfirm, session.points.size >= 2 || session.strokes.isNotEmpty(), modifier,
-        help = knifeInstruction(session.points.size)) {
+        help = knifeInstruction(session.points.size), more = more) {
         contents.visible.forEach { id -> when (id) {
             "undo_point" -> IconAction(AppIcons.trayToggle(id)!!, "Deshacer punto",
                 enabled = session.points.isNotEmpty() || session.strokes.isNotEmpty(), onClick = onKnifePop)
             "new_cut" -> IconAction(AppIcons.trayToggle(id)!!, "Nuevo corte", enabled = session.points.size >= 2, onClick = onKnifeNewStroke)
             "close_cut" -> ToolToggle(id, "Cerrar corte", session.closed, onClick = onKnifeClose)
-            "more" -> ToolMoreMenu(knifeInstruction(session.points.size)) {
-                AdvancedToolOption("Atrae el corte a puntos y aristas cercanos al lápiz.") {
-                    KnifeSnapControl(session.flag("snap", true), (session.parameters["snap_mode"] as? String ?: "AUTO").uppercase()) { mode ->
-                        if (mode == "NONE") onKnifeSnap(false) else { onKnifeSnapMode(mode); if (!session.flag("snap", true)) onKnifeSnap(true) }
-                    }
-                }
-            }
         } }
     }
 }
@@ -230,16 +250,16 @@ fun BisectTray(session: ToolSession, onParameter: (String, Any?) -> Unit, onConf
     if (session.tool != EditTool.BISECT || (!session.active && !session.armed)) return
     val help = "Arrastra una línea sobre la malla para cortar"
     val contents = com.blendertablet.remote.model.toolTrayContents(session)
-    SingleLineTray(session.tool.label, onCancel, if (session.active) onConfirm else null, modifier = modifier, help = help) {
+    val more = if (!session.active) null else TrayMore(precision = {
+        TrayOption("Snap", "Atrae los extremos de la línea a la geometría cercana.") {
+            IconAction(AppIcons.SnapAuto, "Snap", selected = session.flag("snap", true)) { onParameter("snap", !session.flag("snap", true)) }
+        }
+    })
+    SingleLineTray(session.tool.label, onCancel, if (session.active) onConfirm else null, modifier = modifier, help = help, more = more) {
         if (session.active) contents.visible.forEach { id -> when (id) {
             "clear_inner", "clear_outer" -> ToolToggle(id, if (id == "clear_inner") "Vaciar interior" else "Vaciar exterior",
                 session.flag(id)) { onParameter(id, !session.flag(id)) }
             "fill" -> ToolToggle(id, "Rellenar", session.flag("fill")) { onParameter("fill", !session.flag("fill")) }
-            "more" -> ToolMoreMenu(help) {
-                AdvancedToolOption("Atrae los extremos de la línea a la geometría cercana.") {
-                    PillButton("Snap", selected = session.flag("snap", true)) { onParameter("snap", !session.flag("snap", true)) }
-                }
-            }
         } }
     }
 }

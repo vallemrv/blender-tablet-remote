@@ -31,13 +31,16 @@ fun SchemaToolParameters(
     unitScaleLength: Double,
     onParameter: (String, Any?) -> Unit,
     modifier: Modifier = Modifier,
+    labelled: Boolean = true,
 ) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically) {
         for (spec in specs) key(spec.id) {
             if (spec.type == "bool") {
                 val selected = (parameters[spec.id] ?: spec.default) as? Boolean ?: false
-                PillButton(spec.label, selected = selected) { onParameter(spec.id, !selected) }
+                PillButton(if (labelled) spec.label else if (selected) "Activado" else "Desactivado", selected = selected) {
+                    onParameter(spec.id, !selected)
+                }
             } else if (spec.type == "enum") {
                 var expanded by remember { mutableStateOf(false) }
                 val current = (parameters[spec.id] ?: spec.default)?.toString().orEmpty()
@@ -54,7 +57,7 @@ fun SchemaToolParameters(
                 val value = (parameters[spec.id] as? Number)?.toDouble() ?: (spec.default as? Number)?.toDouble() ?: 0.0
                 val length = spec.unit == "length"
                 val metres = when(lengthUnit) { LengthUnit.MILLIMETERS -> .001; LengthUnit.CENTIMETERS -> .01; else -> 1.0 }
-                ToolNumericInput(spec.label, value, if (length) spec.step.takeIf { it > 0 } ?: metres / unitScaleLength else spec.step,
+                ToolNumericInput(if (labelled) spec.label else "", value, if (length) spec.step.takeIf { it > 0 } ?: metres / unitScaleLength else spec.step,
                     if (length) TransformMode.MOVE else if (spec.unit == "angle") TransformMode.ROTATE else TransformMode.SCALE,
                     unitScaleLength, if (length) lengthUnit else null, integer = spec.type == "int", min = spec.min, max = spec.max,
                     quickValues = if (spec.type == "int" && spec.id == "steps") listOf(8,16,32) else emptyList(),

@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -38,6 +38,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -396,7 +399,28 @@ fun TrayTitle(text: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** Controles en una fila; la ayuda vive debajo y no compite con botones ni campos. */
+/**
+ * Opciones de nivel 3 de una bandeja, siempre en los mismos tres grupos y orden:
+ * Precisión (snap, paso, unidad), Referencia (centro, orientación, fuente…) y Forma
+ * (proporcional, perfil y opciones propias). Un grupo nulo no se muestra.
+ */
+class TrayMore(
+    val precision: (@Composable ColumnScope.() -> Unit)? = null,
+    val reference: (@Composable ColumnScope.() -> Unit)? = null,
+    val shape: (@Composable ColumnScope.() -> Unit)? = null,
+) {
+    internal val groups get() = listOf("Precisión" to precision, "Referencia" to reference, "Forma" to shape)
+        .mapNotNull { (name, content) -> content?.let { name to it } }
+    val isEmpty get() = groups.isEmpty()
+}
+
+/**
+ * Bandeja inferior común: `[Nombre] [valor/ejes] [icono][icono] [⋯] … [×][✓]`.
+ *
+ * Una sola fila fija, sin scroll horizontal: el nombre, «⋯ Más» y las salidas se
+ * miden primero y nunca se desplazan; el contenido directo ocupa el resto. Lo poco
+ * frecuente vive en [more]. Debajo, como mucho, un aviso de estado y la ayuda.
+ */
 @Composable
 fun SingleLineTray(
     title: String,
@@ -405,21 +429,93 @@ fun SingleLineTray(
     confirmEnabled: Boolean = true,
     modifier: Modifier = Modifier,
     help: String = "",
+    alert: String? = null,
+    more: TrayMore? = null,
     content: @Composable RowScope.() -> Unit,
 ) {
     FloatingPanel(modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                HoverHelp(title, help) { TrayTitle(title) }
-                Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    content = content)
-                if (onCancel != null) TrayExits(onCancel, onConfirm, confirmEnabled)
-            }
+            TrayRow(
+                title = { HoverHelp(title, help) { TrayTitle(title) } },
+                content = {
+                    Row(Modifier.clipToBounds(), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp), content = content)
+                },
+                more = { if (more != null && !more.isEmpty) TrayMoreButton(more, help) },
+                exits = { if (onCancel != null) Row(verticalAlignment = Alignment.CenterVertically) {
+                    TrayExits(onCancel, onConfirm, confirmEnabled) } },
+            )
+            if (!alert.isNullOrBlank()) Text(alert, color = Ink.Warn, fontSize = 11.sp, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 4.dp))
             if (help.isNotBlank()) Text(help, color = Ink.Muted, fontSize = 11.sp,
                 maxLines = 2, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 3.dp))
         }
+    }
+}
+
+/** Mide nombre, Más y salidas antes que el contenido; las salidas quedan a la derecha. */
+@Composable
+private fun TrayRow(
+    title: @Composable () -> Unit,
+    content: @Composable () -> Unit,
+    more: @Composable () -> Unit,
+    exits: @Composable () -> Unit,
+) {
+    val gap = with(LocalDensity.current) { 8.dp.roundToPx() }
+    Layout(contents = listOf(title, content, more, exits)) { (titles, contents, mores, exit), constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val t = titles.map { it.measure(loose) }
+        val e = exit.map { it.measure(loose) }
+        val m = mores.map { it.measure(loose) }
+        fun width(list: List<androidx.compose.ui.layout.Placeable>) = list.sumOf { it.width }
+        val fixed = width(t) + width(e) + width(m) + gap * 3
+        val total = if (constraints.hasBoundedWidth) constraints.maxWidth else fixed + 2000
+        val c = contents.map { it.measure(loose.copy(maxWidth = (total - fixed).coerceAtLeast(0))) }
+        val height = (t + e + m + c).maxOfOrNull { it.height } ?: 0
+        layout(total, height) {
+            var x = 0
+            t.forEach { it.placeRelative(x, (height - it.height) / 2); x += it.width }
+            x += gap
+            c.forEach { it.placeRelative(x, (height - it.height) / 2); x += it.width }
+            if (width(c) > 0) x += gap
+            m.forEach { it.placeRelative(x, (height - it.height) / 2); x += it.width }
+            var right = total - width(e)
+            e.forEach { it.placeRelative(right, (height - it.height) / 2); right += it.width }
+        }
+    }
+}
+
+/** «⋯ Más»: panel vertical sobre la bandeja, por grupos, con una frase por opción. */
+@Composable
+private fun TrayMoreButton(more: TrayMore, help: String) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconAction(AppIcons.More, "Más opciones", selected = open) { open = true }
+        androidx.compose.material3.DropdownMenu(open, onDismissRequest = { open = false }) {
+            Column(Modifier.widthIn(min = 300.dp, max = 400.dp).padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (help.isNotBlank()) Text(help, color = Ink.Muted, fontSize = 11.sp)
+                more.groups.forEach { (name, group) ->
+                    Text(name.uppercase(), color = Ink.Accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(top = 4.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { group() }
+                }
+            }
+        }
+    }
+}
+
+/** Una opción de «⋯ Más»: nombre, su control a la derecha y una frase debajo. */
+@Composable
+fun TrayOption(label: String, help: String, content: @Composable RowScope.() -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(label, color = Ink.OnPanel, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f))
+            content()
+        }
+        if (help.isNotBlank()) Text(help, color = Ink.Muted, fontSize = 11.sp)
     }
 }
 
