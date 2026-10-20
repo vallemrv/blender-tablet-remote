@@ -138,3 +138,6 @@ enum class ValueMode(val label: String) {
 /** Una sesión MOVE interna de Tweak no selecciona otra herramienta en el rail. */
 fun isTransformToolSelected(activeTool: ActiveTool, session: TransformSession, mode: TransformMode): Boolean =
     activeTool != ActiveTool.TWEAK && session.active && session.mode == mode
+
+/** Perfiles de la edición proporcional, en el orden de Blender. */
+val ProportionalFalloffs = listOf("SMOOTH", "SPHERE", "ROOT", "SHARP", "LINEAR", "CONSTANT", "INVERSE_SQUARE")

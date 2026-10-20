@@ -13,6 +13,8 @@ import com.blendertablet.remote.model.ActionId
 import com.blendertablet.remote.model.AddCategory
 import com.blendertablet.remote.model.EditTool
 import com.blendertablet.remote.model.SnapType
+import com.blendertablet.remote.model.Axis
+import com.blendertablet.remote.model.Constraint
 
 /**
  * Vocabulario visual único de la aplicación.
@@ -283,4 +285,62 @@ object AppIcons {
     // El parámetro describe el estado actual: se dibuja la acción ofrecida al tocar.
     fun shading(smooth: Boolean): ImageVector = StudioIcons[if (smooth) "SHADE_FLAT" else "SHADE_SMOOTH"]
     fun localView(active: Boolean): ImageVector = StudioIcons[if (active) "ISOLATE_EXIT" else "ISOLATE"]
+
+    /** Perfil de caída activo: el dibujo es la curva, sin texto «Perfil: …». */
+    fun falloff(wire: String): ImageVector = StudioIcons["FALLOFF_" + when (wire) {
+        "SPHERE", "ROOT", "SHARP", "LINEAR", "CONSTANT", "INVERSE_SQUARE" -> wire
+        else -> "SMOOTH"
+    }]
+    fun miter(wire: String): ImageVector = StudioIcons["MITER_" + if (wire in setOf("PATCH", "ARC")) wire else "SHARP"]
+    fun orientation(wire: String): ImageVector = StudioIcons["ORIENT_" + when (wire) {
+        "LOCAL", "VIEW", "NORMAL" -> wire
+        else -> "GLOBAL"
+    }]
+
+    /** Interruptores de bandeja con identidad propia; null si el control no es un icono. */
+    fun trayToggle(id: String): ImageVector? = when (id) {
+        "even" -> StudioIcons["LOOP_EVEN"]
+        "flip" -> StudioIcons["LOOP_FLIP"]
+        "clamp" -> StudioIcons["LOOP_CLAMP"]
+        "remove_loop" -> StudioIcons["LOOP_REMOVE"]
+        "boundary" -> StudioIcons["INSET_BOUNDARY"]
+        "merge" -> StudioIcons["BRIDGE_MERGE"]
+        "undo_point" -> StudioIcons["KNIFE_UNDO"]
+        "new_cut" -> StudioIcons["KNIFE_NEW_CUT"]
+        "close_cut" -> StudioIcons["KNIFE_CLOSE"]
+        "clear_inner" -> StudioIcons["BISECT_CLEAR_INNER"]
+        "clear_outer" -> StudioIcons["BISECT_CLEAR_OUTER"]
+        "fill" -> StudioIcons["BISECT_FILL"]
+        else -> null
+    }
+    val TweakSlide: ImageVector get() = StudioIcons["TWEAK_SLIDE"]
+    val EdgeExtend: ImageVector get() = StudioIcons["EDGE_EXTEND"]
+    val SculptInvert: ImageVector get() = StudioIcons["SCULPT_INVERT"]
+    val SculptSmooth: ImageVector get() = StudioIcons["SMOOTH"]
+    val PaintColor: ImageVector get() = StudioIcons["PAINT_COLOR"]
+    val PaintMaterial: ImageVector get() = StudioIcons["PAINT_MATERIAL"]
+
+    /**
+     * Restricción de ejes como trípode con los colores de Blender: los ejes activos
+     * se dibujan en su color y los libres en gris. Multicolor: no se tiñe.
+     */
+    private val constraintVectors = mutableMapOf<Constraint, ImageVector>()
+    fun constraint(value: Constraint): ImageVector = constraintVectors.getOrPut(value) {
+        val axes = listOf(
+            Triple(Axis.X, "M10,14 L21,19", Ink.AxisX),
+            Triple(Axis.Y, "M10,14 L20,7", Ink.AxisY),
+            Triple(Axis.Z, "M10,14 L10,2", Ink.AxisZ),
+        )
+        ImageVector.Builder("Constraint ${value.name}", 24.dp, 24.dp, 24f, 24f).apply {
+            axes.forEach { (axis, data, color) ->
+                val active = axis in value.axes
+                addPath(PathParser().parsePathString(data).toNodes(),
+                    stroke = SolidColor(if (active) color else Color(0xFF8A8F98)),
+                    strokeLineWidth = if (active) 2.4f else 1.4f, strokeLineCap = StrokeCap.Round)
+            }
+            if (value == Constraint.FREE) addPath(PathParser().parsePathString(
+                "M3,21 L6,18 M3,21 L3,17.5 M3,21 L6.5,21").toNodes(),
+                stroke = SolidColor(Color.White), strokeLineWidth = 1.6f, strokeLineCap = StrokeCap.Round)
+        }.build()
+    }
 }

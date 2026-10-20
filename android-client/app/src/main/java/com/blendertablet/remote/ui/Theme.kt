@@ -32,8 +32,8 @@ object Ink {
 }
 
 object Metrics {
-    /** Objetivo táctil mínimo (§83). El icono se dibuja más pequeño dentro. */
-    val Touch = 44.dp
+    /** Objetivo táctil mínimo de Android (48 dp). El icono se dibuja más pequeño dentro. */
+    val Touch = 48.dp
     val IconSize = 20.dp
     val Radius = 14.dp
     val PanelPadding = 8.dp
@@ -42,7 +42,7 @@ object Metrics {
 
     /**
      * Hueco que reserva una bandeja horizontal inferior (una línea de controles
-     * ~44 dp + el padding del panel). Con una bandeja presente, el teclado de
+     * de 48 dp + el padding del panel). Con una bandeja presente, el teclado de
      * vistas se eleva esta altura para no quedar tapado ni taparla.
      */
     val TrayInset = 64.dp

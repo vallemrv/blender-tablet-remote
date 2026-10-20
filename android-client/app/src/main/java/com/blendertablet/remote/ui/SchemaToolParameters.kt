@@ -42,7 +42,7 @@ fun SchemaToolParameters(
                 var expanded by remember { mutableStateOf(false) }
                 val current = (parameters[spec.id] ?: spec.default)?.toString().orEmpty()
                 Box {
-                    PillButton("${spec.label}: ${spec.labels[current] ?: current}") { expanded = true }
+                    PillButton("${spec.labels[current] ?: current} ▾") { expanded = true }
                     DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
                         spec.values.forEach { value ->
                             DropdownMenuItem(text = { Text(spec.labels[value] ?: value) },

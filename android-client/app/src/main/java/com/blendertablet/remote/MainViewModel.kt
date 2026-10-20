@@ -11,6 +11,7 @@ import com.blendertablet.remote.data.ConnectionPreferences
 import com.blendertablet.remote.data.ConnectionSettings
 import com.blendertablet.remote.data.SnapPreferences
 import com.blendertablet.remote.data.SnapSettings
+import com.blendertablet.remote.model.ProportionalFalloffs
 import com.blendertablet.remote.model.ActiveTool
 import com.blendertablet.remote.model.Axis
 import com.blendertablet.remote.model.AppUiState
@@ -920,11 +921,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (value.isFinite() && value > 0.0) client.editSettings(mapOf("radius" to value))
     }
 
-    fun cycleProportionalFalloff() {
-        val options = listOf("SMOOTH", "SPHERE", "ROOT", "SHARP", "LINEAR", "CONSTANT", "INVERSE_SQUARE")
-        val current = client.state.value.editSettings.falloff
-        val next = options[(options.indexOf(current).coerceAtLeast(0) + 1) % options.size]
-        client.editSettings(mapOf("falloff" to next))
+    fun setProportionalFalloff(value: String) {
+        if (value in ProportionalFalloffs) client.editSettings(mapOf("falloff" to value))
     }
 
     /** Aísla la selección (el `/` del footer de vistas). Optimista: no hay push. */

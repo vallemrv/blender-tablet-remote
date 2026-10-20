@@ -62,35 +62,8 @@ private fun <T> SnapOptions(
     modifier: Modifier = Modifier,
 ) {
     if (options.isEmpty()) return
-    var expanded by remember(options) { mutableStateOf(false) }
-    Box(modifier) {
-        PillButton("Snap: ${label(selected)}", selected = active) {
-            expanded = true
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { option ->
-                HoverHelp(label(option), IconHelp.explanation(icon(option), label(option))) {
-                    DropdownMenuItem(
-                        text = { Text(label(option)) },
-                        leadingIcon = {
-                            Icon(
-                                icon(option),
-                                null,
-                                tint = if (option == selected) Ink.Accent else Ink.Muted,
-                            )
-                        },
-                        trailingIcon = {
-                            if (option == selected) Icon(AppIcons.Checked, null, tint = Ink.Accent)
-                        },
-                        onClick = {
-                            expanded = false
-                            onSelect(option)
-                        },
-                    )
-                }
-            }
-        }
-    }
+    // El icono es el del tipo activo: el estado se lee por su forma, sin «Snap: …».
+    Box(modifier) { ChoiceIcon(options, selected, "Snap", icon, label, active = active, onSelect = onSelect) }
 }
 
 /** Pasos del mismo sistema de snap; distancia y factor solo cambian sus presets. */

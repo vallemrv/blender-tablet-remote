@@ -50,7 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** Campo exacto de 34 dp: Material TextField impone 56 dp y se recorta en las trays. */
+/** Campo exacto de 48 dp: Material TextField impone 56 dp y se recorta en las trays. */
 @Composable
 fun CompactNumericField(
     value: String,
@@ -76,7 +76,7 @@ fun CompactNumericField(
             keyboardActions = KeyboardActions(onDone = { onDone() }),
             modifier = modifier
                 .onFocusChanged { onFocusChange(it.isFocused) }
-                .height(34.dp)
+                .height(Metrics.Touch)
                 .clip(RoundedCornerShape(7.dp))
                 .background(Color.White.copy(alpha = .07f)),
             decorationBox = { inner -> NumericFieldBox(value, placeholder, textAlign, inner) },
@@ -102,7 +102,7 @@ fun CompactNumericField(
         keyboardActions = KeyboardActions(onDone = { onDone() }),
         modifier = modifier
             .onFocusChanged { focused = it.isFocused; onFocusChange(it.isFocused) }
-            .height(34.dp)
+            .height(Metrics.Touch)
             .clip(RoundedCornerShape(7.dp))
             .background(Color.White.copy(alpha = .07f)),
         decorationBox = { inner -> NumericFieldBox(value, placeholder, textAlign, inner) },
@@ -127,7 +127,7 @@ private fun NumericFieldBox(value: String, placeholder: String?, textAlign: Text
  * flotantes. Nada de botones grandes con texto; el espacio es del viewport (§10).
  */
 
-/** Botón de icono. Área táctil de 44 dp aunque el icono mida 20. */
+/** Botón de icono. Área táctil de 48 dp aunque el icono mida 20. */
 @Composable
 fun IconAction(
     icon: ImageVector,
@@ -177,7 +177,7 @@ fun PillButton(
     }
     Box(
         modifier
-            .height(34.dp)
+            .height(Metrics.Touch)
             .clip(RoundedCornerShape(9.dp))
             .background(background)
             .then(if (selected) Modifier.border(1.dp, Ink.Accent.copy(alpha = .5f), RoundedCornerShape(9.dp)) else Modifier)
@@ -233,14 +233,48 @@ fun ToolRail(
 fun StepperButton(label: String, enabled: Boolean = true, onClick: () -> Unit) {
     Box(
         Modifier
-            .width(28.dp)
-            .height(34.dp)
+            .size(Metrics.Touch)
             .clip(RoundedCornerShape(9.dp))
             .background(Color.White.copy(alpha = .05f))
             .repeatingClick(enabled, onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = if (enabled) Ink.Muted else Ink.Faint, fontSize = 15.sp)
+        Text(label, color = if (enabled) Ink.Muted else Ink.Faint, fontSize = 16.sp)
+    }
+}
+
+/**
+ * Un estado con varias opciones se muestra como el icono de la opción activa; al
+ * tocarlo se abre su selector. Sustituye a las pastillas «etiqueta: valor».
+ */
+@Composable
+fun <T> ChoiceIcon(
+    options: List<T>,
+    selected: T,
+    description: String,
+    icon: (T) -> ImageVector,
+    label: (T) -> String,
+    active: Boolean = false,
+    enabled: Boolean = true,
+    multicolor: Boolean = false,
+    onSelect: (T) -> Unit,
+) {
+    if (options.isEmpty()) return
+    var open by remember(options) { mutableStateOf(false) }
+    Box {
+        IconAction(icon(selected), "$description · ${label(selected)}", selected = active, enabled = enabled,
+            tint = if (multicolor) Color.Unspecified else null) { open = true }
+        androidx.compose.material3.DropdownMenu(open, onDismissRequest = { open = false }) {
+            options.forEach { option ->
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(label(option)) },
+                    leadingIcon = { Icon(icon(option), null,
+                        tint = if (multicolor) Color.Unspecified else if (option == selected) Ink.Accent else Ink.Muted) },
+                    trailingIcon = { if (option == selected) Icon(AppIcons.Checked, null, tint = Ink.Accent) },
+                    onClick = { open = false; if (option != selected) onSelect(option) },
+                )
+            }
+        }
     }
 }
 

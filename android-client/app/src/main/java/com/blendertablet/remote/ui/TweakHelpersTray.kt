@@ -32,7 +32,7 @@ fun TweakHelpersTray(
     proportionalRadiusStep: Double,
     onProportional: () -> Unit,
     onProportionalRadius: (Double) -> Unit,
-    onProportionalFalloff: () -> Unit,
+    onProportionalFalloff: (String) -> Unit,
     onSlide: (TweakMotion) -> Unit,
     onSnapType: (SnapType) -> Unit,
     onSnapStep: (Double) -> Unit,
@@ -57,7 +57,7 @@ fun TweakHelpersTray(
             if (!slide && editSettings.proportional) {
                 ProportionalRadiusInput(editSettings.radius, unitScaleLength, lengthUnit,
                     proportionalRadiusStep, onProportionalRadius)
-                PillButton("Perfil: ${falloffLabel(editSettings.falloff)}", onClick = onProportionalFalloff)
+                FalloffChoice(editSettings.falloff, onProportionalFalloff)
             }
             PillButton("GG", selected = slide, enabled = canSlide) {
                 onSlide(if (slide) TweakMotion.FREE else TweakMotion.SLIDE)

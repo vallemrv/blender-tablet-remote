@@ -681,7 +681,7 @@ fun BoxScope.CadWorkspace(state: AppUiState, vm: MainViewModel, stackOpen: Boole
             if (!editing && !cad.sessionActive && "CUT" in capabilities.features) {
                 var expanded by remember { mutableStateOf(false) }
                 Box {
-                    PillButton("Destino: ${cad.bodies.firstOrNull { it.id == target?.bodyId }?.name ?: "elegir cuerpo"}", enabled = connected && targets.isNotEmpty()) { expanded = true }
+                    PillButton("${cad.bodies.firstOrNull { it.id == target?.bodyId }?.name ?: "Elegir cuerpo"} ▾", enabled = connected && targets.isNotEmpty()) { expanded = true }
                     DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
                         targets.forEach { item -> DropdownMenuItem(text = { Text(cad.bodies.firstOrNull { it.id == item.bodyId }?.name ?: item.name) }, onClick = { cutTarget = item.bodyId; expanded = false }) }
                     }
@@ -1064,7 +1064,7 @@ private fun CadRelationalDimensions(cad: CadState, available: List<String>, unit
     var draft by remember(cad.selection, type) { mutableStateOf<Double?>(null) }
     var menu by remember { mutableStateOf(false) }
     Box {
-        PillButton("Cota: ${cadLabel(type)} ▾", enabled = enabled) { menu = true }
+        PillButton("${cadLabel(type)} ▾", enabled = enabled) { menu = true }
         DropdownMenu(menu, { menu = false }) {
             options.forEach { next -> DropdownMenuItem(text = { Text(cadLabel(next)) },
                 onClick = { chosen = next; menu = false }) }
@@ -1311,7 +1311,7 @@ private fun CadOperationFields(controls: CadOperationControls, unit: LengthUnit,
                 val current = if (field.type == "MULTI") field.ids?.size?.toString() ?: "Todos"
                     else field.options.firstOrNull { it.first == field.value }?.second ?: field.value
                 Box {
-                    PillButton("${field.label}: $current", enabled = enabled) { open = true }
+                    PillButton("$current ▾", enabled = enabled) { open = true }
                     DropdownMenu(open, onDismissRequest = { open = false }) {
                         if (field.type == "MULTI") DropdownMenuItem(text = { Text("Todos") }, onClick = { change(mapOf(field.key to if (field.allNull) null else field.options.map { it.first })); open = false })
                         field.options.forEach { (id, label) ->

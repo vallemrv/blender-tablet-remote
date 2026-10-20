@@ -168,24 +168,24 @@ private fun ToolControl(id: String, session: ToolSession, scale: Double, unit: L
     }
     when (id) {
         "position" -> PositionStepper(session, change)
-        "remove_loop" -> IconAction(AppIcons.Undo, "Quitar último corte", onClick = pop)
-        "even" -> PillButton("Seguir la arista", selected = session.flag(id)) { change(id, !session.flag(id)) }
-        "flip" -> PillButton("Invertir", selected = session.flag(id)) { change(id, !session.flag(id)) }
-        "clamp" -> PillButton("No salir de la cara", selected = session.flag(id, true)) { change(id, !session.flag(id, true)) }
-        "falloff" -> PillButton("Perfil: ${session.falloff().label}") { change(id, session.falloff().next().wire) }
-        "miter_outer" -> PillButton("Esquinas: ${session.miterOuter().label}") { change(id, session.miterOuter().next().wire) }
-        "constraint" -> Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            listOf("FREE" to "Libre", "X" to "X", "Y" to "Y", "Z" to "Z").forEach { (wire, label) ->
-                PillButton(label, selected = (session.parameters[id] ?: "FREE") == wire) { change(id, wire) }
-            }
+        "remove_loop" -> IconAction(AppIcons.trayToggle(id)!!, "Quitar último corte", onClick = pop)
+        "even" -> ToolToggle(id, "Seguir la arista", session.flag(id)) { change(id, !session.flag(id)) }
+        "flip" -> ToolToggle(id, "Invertir lado", session.flag(id)) { change(id, !session.flag(id)) }
+        "clamp" -> ToolToggle(id, "No salir de la cara", session.flag(id, true)) { change(id, !session.flag(id, true)) }
+        "falloff" -> ChoiceIcon(LoopFalloff.entries, session.falloff(), "Perfil", { AppIcons.falloff(it.wire) }, { it.label }) {
+            change(id, it.wire)
         }
-        "orientation" -> Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            listOf("GLOBAL" to "Global", "LOCAL" to "Local", "VIEW" to "Vista").forEach { (wire, label) ->
-                PillButton(label, selected = (session.parameters[id] ?: "GLOBAL") == wire) { change(id, wire) }
-            }
+        "miter_outer" -> ChoiceIcon(com.blendertablet.remote.model.BevelMiter.entries, session.miterOuter(), "Esquinas",
+            { AppIcons.miter(it.wire) }, { it.label }) { change(id, it.wire) }
+        "constraint" -> {
+            val current = com.blendertablet.remote.model.Constraint.entries
+                .firstOrNull { it.name == (session.parameters[id] ?: "FREE") } ?: com.blendertablet.remote.model.Constraint.FREE
+            ConstraintChoice(ExtrudeConstraints, current, onSelect = { change(id, it.name) })
         }
-        "boundary" -> PillButton("Conservar borde abierto", selected = !session.flag(id, true)) { change(id, !session.flag(id, true)) }
-        "merge" -> PillButton("Fusionar", selected = session.flag(id)) { change(id, !session.flag(id)) }
+        "orientation" -> ChoiceIcon(listOf("GLOBAL", "LOCAL", "VIEW"), (session.parameters[id] as? String) ?: "GLOBAL",
+            "Orientación", AppIcons::orientation, ::orientationLabel, active = true) { change(id, it) }
+        "boundary" -> ToolToggle(id, "Conservar borde abierto", !session.flag(id, true)) { change(id, !session.flag(id, true)) }
+        "merge" -> ToolToggle(id, "Fusionar", session.flag(id)) { change(id, !session.flag(id)) }
         "snap" -> Column {
             SnapControl(session.availableSnapTypes, session.snapType, onSelect = { change("snap_type", it.name) })
             if (session.snapType in setOf(SnapType.INCREMENT, SnapType.GRID)) {
@@ -206,9 +206,10 @@ fun KnifeTray(session: ToolSession, onKnifePop: () -> Unit, onKnifeNewStroke: ()
     SingleLineTray("Cuchillo", onCancel, onConfirm, session.points.size >= 2 || session.strokes.isNotEmpty(), modifier,
         help = knifeInstruction(session.points.size)) {
         contents.visible.forEach { id -> when (id) {
-            "undo_point" -> PillButton("Deshacer punto", enabled = session.points.isNotEmpty() || session.strokes.isNotEmpty(), onClick = onKnifePop)
-            "new_cut" -> PillButton("Nuevo corte", enabled = session.points.size >= 2, onClick = onKnifeNewStroke)
-            "close_cut" -> PillButton("Cerrar", selected = session.closed, onClick = onKnifeClose)
+            "undo_point" -> IconAction(AppIcons.trayToggle(id)!!, "Deshacer punto",
+                enabled = session.points.isNotEmpty() || session.strokes.isNotEmpty(), onClick = onKnifePop)
+            "new_cut" -> IconAction(AppIcons.trayToggle(id)!!, "Nuevo corte", enabled = session.points.size >= 2, onClick = onKnifeNewStroke)
+            "close_cut" -> ToolToggle(id, "Cerrar corte", session.closed, onClick = onKnifeClose)
             "more" -> ToolMoreMenu(knifeInstruction(session.points.size)) {
                 AdvancedToolOption("Atrae el corte a puntos y aristas cercanos al lápiz.") {
                     KnifeSnapControl(session.flag("snap", true), (session.parameters["snap_mode"] as? String ?: "AUTO").uppercase()) { mode ->
@@ -231,8 +232,9 @@ fun BisectTray(session: ToolSession, onParameter: (String, Any?) -> Unit, onConf
     val contents = com.blendertablet.remote.model.toolTrayContents(session)
     SingleLineTray(session.tool.label, onCancel, if (session.active) onConfirm else null, modifier = modifier, help = help) {
         if (session.active) contents.visible.forEach { id -> when (id) {
-            "clear_inner", "clear_outer" -> PillButton(if (id == "clear_inner") "Vaciar interior" else "Vaciar exterior", selected = session.flag(id)) { onParameter(id, !session.flag(id)) }
-            "fill" -> PillButton("Rellenar", selected = session.flag("fill")) { onParameter("fill", !session.flag("fill")) }
+            "clear_inner", "clear_outer" -> ToolToggle(id, if (id == "clear_inner") "Vaciar interior" else "Vaciar exterior",
+                session.flag(id)) { onParameter(id, !session.flag(id)) }
+            "fill" -> ToolToggle(id, "Rellenar", session.flag("fill")) { onParameter("fill", !session.flag("fill")) }
             "more" -> ToolMoreMenu(help) {
                 AdvancedToolOption("Atrae los extremos de la línea a la geometría cercana.") {
                     PillButton("Snap", selected = session.flag("snap", true)) { onParameter("snap", !session.flag("snap", true)) }
@@ -286,6 +288,11 @@ private fun ParamStepper(
         integer = spec.isInt, min = spec.min ?: if (spec.isInt) 1.0 else null, max = spec.max,
         quickValues = quickValues, onCommit = onCommit)
 }
+
+/** Interruptor de herramienta: su dibujo propio, coloreado solo si está activo. */
+@Composable
+private fun ToolToggle(id: String, description: String, active: Boolean, onClick: () -> Unit) =
+    IconAction(AppIcons.trayToggle(id)!!, description, selected = active, onClick = onClick)
 
 /** Extruir lleva su variante en el rótulo; el resto, el nombre de la herramienta. */
 internal fun trayTitle(tool: EditTool, variantLabel: String): String =

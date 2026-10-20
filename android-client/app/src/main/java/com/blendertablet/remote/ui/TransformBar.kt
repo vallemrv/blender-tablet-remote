@@ -108,7 +108,7 @@ fun TransformBar(
     onFlatten: (String) -> Unit,
     onValue: (List<Double>?, Double?, List<Double>?) -> Unit,
     onProportionalRadiusValue: (Double) -> Unit,
-    onProportionalFalloff: () -> Unit,
+    onProportionalFalloff: (String) -> Unit,
     proportionalAvailable: Boolean,
     onProportional: () -> Unit,
     onConfirm: () -> Unit,
@@ -137,9 +137,7 @@ fun TransformBar(
                             ProportionalRadiusInput(session.proportionalRadius, unitScaleLength,
                                 proportionalUnit, proportionalRadiusStep, onProportionalRadiusValue)
                         }
-                        PillButton("Perfil: ${falloffLabel(session.proportionalFalloff)}") {
-                            onProportionalFalloff()
-                        }
+                        FalloffChoice(session.proportionalFalloff, onProportionalFalloff)
                     }
                     Divider()
                     if (session.mode == TransformMode.MOVE) {
@@ -485,6 +483,33 @@ internal fun ProportionalRadiusInput(
     )
     Text(unit.short, color = Ink.Muted, fontSize = 11.sp)
     PillButton("+", repeatOnHold = true) { adjust(1) }
+}
+
+internal val ExtrudeConstraints = listOf(Constraint.FREE, Constraint.X, Constraint.Y, Constraint.Z)
+
+/** Restricción de ejes: el trípode muestra en color los ejes activos y abre la lista. */
+@Composable
+internal fun ConstraintChoice(options: List<Constraint>, selected: Constraint, enabled: Boolean = true,
+                              onSelect: (Constraint) -> Unit) {
+    ChoiceIcon(options, selected, "Restricción", AppIcons::constraint, ::constraintLabel,
+        enabled = enabled, multicolor = true, onSelect = onSelect)
+}
+
+internal fun constraintLabel(value: Constraint) = when (value) {
+    Constraint.FREE -> "Libre"
+    Constraint.X, Constraint.Y, Constraint.Z -> "Solo eje ${value.name}"
+    else -> "Plano ${value.name}"
+}
+
+internal fun orientationLabel(wire: String) = when (wire) {
+    "LOCAL" -> "Local"; "VIEW" -> "Vista"; "NORMAL" -> "Normal"; else -> "Global"
+}
+
+/** Perfil de la edición proporcional: el icono es su curva; al tocarlo se elige otro. */
+@Composable
+internal fun FalloffChoice(selected: String, onSelect: (String) -> Unit, enabled: Boolean = true) {
+    ChoiceIcon(com.blendertablet.remote.model.ProportionalFalloffs, selected, "Perfil", AppIcons::falloff,
+        ::falloffLabel, enabled = enabled, onSelect = onSelect)
 }
 
 internal fun falloffLabel(value: String) = when (value) {

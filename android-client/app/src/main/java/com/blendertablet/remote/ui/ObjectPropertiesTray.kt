@@ -150,12 +150,12 @@ private fun PropertyControl(field: ObjectPropertyField, value: Any?, draft: Bool
             StepperButton("+", enabled) { nudge(1) }
             Text(suffix, color = Ink.Muted, fontSize = 12.sp)
         }
-        "bool" -> PillButton("${field.label}: ${if (value == true) "Sí" else "No"}",
+        "bool" -> PillButton(field.label,
             selected = value == true, enabled = enabled) { onChange(value != true) }
         "enum" -> {
             var open by remember(field.id) { mutableStateOf(false) }
             Box {
-                PillButton("${field.label}: ${field.choices[value] ?: value}", enabled = enabled) { open = true }
+                PillButton("${field.choices[value] ?: value} ▾", enabled = enabled) { open = true }
                 DropdownMenu(open, { open = false }) {
                     field.choices.forEach { (key, label) -> DropdownMenuItem(text = { Text(label) },
                         onClick = { open = false; onChange(key) }) }
