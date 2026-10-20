@@ -128,7 +128,7 @@ class WebSocketRemoteBlenderClient(
 
         /** Comandos cuya respuesta ES el estado de la sesión de herramienta. */
         val TOOL_COMMANDS = setOf(
-            "tool.begin", "tool.parameter", "tool.nudge", "tool.status",
+            "tool.begin", "tool.parameter", "tool.nudge", "tool.extrude_drag", "tool.status",
             "tool.loop_pick", "tool.loop_pop", "tool.knife_drag", "tool.knife_point", "tool.knife_pop",
             "tool.knife_new_stroke", "tool.knife_close",
             "tool.drag_line", "tool.snap_candidate", "tool.face_pick",
@@ -240,6 +240,7 @@ class WebSocketRemoteBlenderClient(
         _remoteFiles.value = RemoteFiles()
         pendingNudge = 0.0
         nudgeInFlight = false
+        pendingExtrudeDrag = null; extrudeDragInFlight = false
         _connection.value = ConnectionStatus.DISCONNECTED
     }
 
@@ -403,6 +404,7 @@ class WebSocketRemoteBlenderClient(
         sessionRequests.retire()
         duplicateRequests.retire()
         pendingNudge = 0.0; nudgeInFlight = false
+        pendingExtrudeDrag = null; extrudeDragInFlight = false
         pendingToolSnap = null; toolSnapInFlight.set(false)
         pendingKnifeDrag = null; knifeDragInFlight.set(false)
         pendingTransformSnap = null; transformSnapInFlight.set(false)
@@ -911,6 +913,31 @@ class WebSocketRemoteBlenderClient(
         command("tool.nudge", JSONObject().put("delta", delta))
     }
 
+    /** Como `tool.nudge`: una petición en vuelo y solo el último punto pendiente. */
+    private var extrudeDragInFlight = false
+    private var pendingExtrudeDrag: Pair<Double, Double>? = null
+
+    override fun toolExtrudeDrag(phase: GesturePhase, u: Double, v: Double) {
+        if (!_toolSession.value.planarDrag) return
+        if (phase == GesturePhase.BEGIN) {
+            // El inicio nunca se descarta: fija el plano y el punto de partida.
+            pendingExtrudeDrag = null
+            extrudeDragInFlight = true
+            command("tool.extrude_drag", JSONObject().put("phase", "BEGIN").put("u", u).put("v", v))
+            return
+        }
+        pendingExtrudeDrag = u to v
+        flushExtrudeDrag()
+    }
+
+    private fun flushExtrudeDrag() {
+        val point = pendingExtrudeDrag ?: return
+        if (extrudeDragInFlight || !_toolSession.value.active) return
+        pendingExtrudeDrag = null
+        extrudeDragInFlight = true
+        command("tool.extrude_drag", JSONObject().put("phase", "UPDATE").put("u", point.first).put("v", point.second))
+    }
+
     override fun toolConfirm() = command("tool.confirm")
     override fun toolCancel() = command("tool.cancel")
 
@@ -1045,6 +1072,7 @@ class WebSocketRemoteBlenderClient(
                 // El hueco queda libre incluso si el nudge falló: si no, un error
                 // dejaría la herramienta sorda al arrastre para siempre.
                 if (command == "tool.nudge") nudgeInFlight = false
+                if (command == "tool.extrude_drag") extrudeDragInFlight = false
                 if (command == "tool.snap_candidate") toolSnapInFlight.set(false)
                 if (command == "tool.knife_drag") knifeDragInFlight.set(false)
                 if (command == "transform.snap_candidate") transformSnapInFlight.set(false)
@@ -1240,6 +1268,7 @@ class WebSocketRemoteBlenderClient(
                         }
                         // Lo que se acumuló mientras el servidor pensaba sale ahora.
                         flushNudge()
+                        flushExtrudeDrag()
                     }
                     // Sondeo del menú radial: no cambia nada de la escena, solo
                     // cuenta qué hay bajo el dedo.

@@ -403,7 +403,8 @@ internal fun ProportionalRadiusInput(
     }
 }
 
-internal val ExtrudeConstraints = listOf(Constraint.FREE, Constraint.X, Constraint.Y, Constraint.Z)
+/** Extruir admite un eje o un plano (XY, XZ, YZ), como Mover. */
+internal val ExtrudeConstraints = Constraint.entries.toList()
 
 /** Restricción de ejes: el trípode muestra en color los ejes activos y abre la lista. */
 @Composable

@@ -1211,6 +1211,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         val tool = client.toolSession.value
+        if (tool.active && tool.planarDrag && !tool.snapType.geometric) {
+            client.toolExtrudeDrag(GesturePhase.UPDATE, u.toDouble(), v.toDouble())
+            return
+        }
         if (tool.active && tool.snapType.geometric) {
             client.toolSnapCandidate(u.toDouble(), v.toDouble(), tool.snapType, lock = false)
             return
@@ -1835,6 +1839,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // sube/baja el parámetro primario (offset, grosor o cortes) y no orbita.
         val tool = client.toolSession.value
         if (tool.active) {
+            if (tool.planarDrag && !tool.snapType.geometric) {
+                // Extruir en plano sigue al dedo: el punto absoluto llega por toolPointer.
+                if (phase == GesturePhase.BEGIN) dragStartPoint?.let { (u, v) ->
+                    client.toolExtrudeDrag(GesturePhase.BEGIN, u.toDouble(), v.toDouble())
+                }
+                return
+            }
             if (tool.acceptsViewportNudge && !tool.snapType.geometric &&
                 (phase == GesturePhase.UPDATE || phase == GesturePhase.END)
             ) {

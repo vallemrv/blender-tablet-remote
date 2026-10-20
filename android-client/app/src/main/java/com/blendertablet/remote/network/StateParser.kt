@@ -486,6 +486,7 @@ object StateParser {
             active = active, armed = armed, tool = tool, parameters = values,
             sessionId = json.optString("session_id").takeIf { it.isNotBlank() && it != "null" },
             input = json.optString("input", "PARAMETRIC"),
+            planarDrag = json.optBoolean("planar_drag", false),
             controls = editParameters(json.optJSONArray("controls")),
             instruction = json.optString("instruction"),
             canConfirm = json.optBoolean("can_confirm", true),

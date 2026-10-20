@@ -247,6 +247,55 @@ class EditToolsTests(unittest.TestCase):
         self.begin('EXTRUDE', offset=1, constraint='Z')
         self.assertEqual((len(bm.verts),len(bm.edges),len(bm.faces)),(4,4,1))
 
+    def flat_edge(self):
+        bm = bmesh.from_edit_mesh(self.obj.data)
+        bm.clear()
+        a,b = [bm.verts.new(co) for co in ((-1,0,0),(1,0,0))]
+        bpy.context.scene.tool_settings.mesh_select_mode = (False,True,False)
+        bm.select_mode = {'EDGE'}
+        bm.edges.new((a,b)).select_set(True)
+        bmesh.update_edit_mesh(self.obj.data)
+
+    def drag(self, start, end):
+        u0,v0 = camera.project(Vector(start),self.rv3d)
+        u1,v1 = camera.project(Vector(end),self.rv3d)
+        tools.extrude_drag(dict(phase='BEGIN',u=u0,v=v0))
+        return tools.extrude_drag(dict(phase='UPDATE',u=u1,v=v1))
+
+    def test_free_edge_extrusion_follows_the_finger_in_the_view_plane(self):
+        self.flat_edge()
+        state = self.begin('EXTRUDE', offset=0)
+        self.assertTrue(state['planar_drag'])
+        self.drag((0,0,0),(0,1,0))
+        new = [v.co for v in bmesh.from_edit_mesh(self.obj.data).verts if v.select]
+        self.assertEqual(len(new),2)
+        for co in new:
+            self.assertAlmostEqual(co.z,0,places=5)
+            self.assertAlmostEqual(co.y,1,places=4)
+        # Un segundo gesto continúa desde donde quedó el primero.
+        self.drag((0,1,0),(0.5,1,0))
+        new = sorted(v.co.x for v in bmesh.from_edit_mesh(self.obj.data).verts if v.select)
+        self.assertAlmostEqual(new[0],-.5,places=4)
+        tools.confirm({})
+
+    def test_faces_follow_normal_in_free_and_slide_in_a_chosen_plane(self):
+        state = self.begin('EXTRUDE', offset=0)
+        self.assertFalse(state['planar_drag'])
+        state = tools.parameter({'parameters':{'constraint':'XY','orientation':'GLOBAL'}})
+        self.assertTrue(state['planar_drag'])
+        self.drag((0,0,1),(1,0,1))
+        new = [v.co for v in bmesh.from_edit_mesh(self.obj.data).verts if v.select]
+        self.assertEqual(len(new),4)
+        self.assertTrue(all(abs(co.z-1) < 1e-5 for co in new))
+        self.assertAlmostEqual(max(co.x for co in new),2,places=4)
+        # Volver a un eje olvida la dirección del plano y extruye por ese eje.
+        state = tools.parameter({'parameters':{'constraint':'Z'}})
+        self.assertFalse(state['planar_drag'])
+        tools.parameter({'parameters':{'offset':.5}})
+        new = [v.co for v in bmesh.from_edit_mesh(self.obj.data).verts if v.select]
+        self.assertTrue(all(abs(co.z-1.5) < 1e-5 for co in new))
+        tools.cancel({})
+
     def test_invalid_extrude_variant_keeps_existing_preview(self):
         bpy.context.scene.tool_settings.mesh_select_mode = (False,True,False)
         self.begin('EXTRUDE', variant='REGION', offset=.5)

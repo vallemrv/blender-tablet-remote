@@ -317,6 +317,9 @@ interface RemoteBlenderClient {
     fun toolFacePick(u: Double, v: Double, role: String, phase: String)
     fun toolParameter(parameters: Map<String, Any?>)
     fun toolNudge(delta: Double)
+
+    /** Extruir en plano: punto absoluto del dedo (0..1); BEGIN fija el inicio del gesto. */
+    fun toolExtrudeDrag(phase: GesturePhase, u: Double, v: Double)
     fun toolSnapCandidate(u: Double, v: Double, snapType: SnapType, lock: Boolean = false)
     fun toolConfirm()
     fun toolCancel()

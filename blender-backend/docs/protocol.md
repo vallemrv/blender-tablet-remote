@@ -571,6 +571,16 @@ confirmar y continuar con Escalar, conservando fija la base.
 disolución de bordes coplanares e intersección de los nuevos. Comparte los ejes,
 orientación, distancia y snap de Región, dentro de la misma sesión reversible.
 
+`constraint` admite `FREE`, un eje (`X`/`Y`/`Z`) o un plano (`XY`/`XZ`/`YZ`) en la
+`orientation` elegida; un plano quita de la dirección su componente normal en el
+mundo. En la sesión `tool.*` de Extruir Región/Manifold, `planar_drag: true`
+anuncia que el gesto sigue al dedo en un plano —el elegido o, en `FREE` cuando la
+selección de partida no tiene caras, el de la vista, como E en aristas/vértices—
+mediante `tool.extrude_drag` (`phase` `BEGIN`/`UPDATE`, `u`, `v` 0..1). BEGIN fija
+el plano por el centro de la selección y el punto inicial; cada UPDATE suma el
+recorrido al vector previo y guarda `direction` (local) y `offset`. Con caras en
+`FREE` sigue la normal y `tool.nudge`. Cambiar `constraint` olvida la dirección.
+
 `mesh.loop_cut` replica el modal Ctrl+R con parámetros explícitos. `factor` es el
 deslizamiento: 0 deja el corte en la mitad del anillo, ±1 lo lleva a los extremos.
 Con `clamp: false` (def. true) admite hasta ±2 y extrapola más allá del borde,

@@ -82,8 +82,20 @@ def _edge_components(edges: list) -> list[list]:
     return components
 
 
+EXTRUDE_PLANES = {"XY": "Z", "XZ": "Y", "YZ": "X"}
+
+
+def extrude_plane_normal_world(payload: dict, obj) -> Vector | None:
+    """Normal MUNDIAL del plano XY/XZ/YZ elegido en su orientación, o None si no es un plano."""
+    constraint = str(payload.get("constraint", "FREE")).upper()
+    if constraint not in EXTRUDE_PLANES:
+        return None
+    local = _resolve_extrude_direction(dict(payload, constraint=EXTRUDE_PLANES[constraint]), obj)
+    return (obj.matrix_world.to_3x3() @ local).normalized()
+
+
 def _resolve_extrude_direction(payload: dict, obj) -> Vector | None:
-    """Vector unitario LOCAL para la restricción X/Y/Z, o None para FREE.
+    """Vector unitario LOCAL para la restricción X/Y/Z, o None para FREE o un plano.
 
     - LOCAL: ejes del objeto (en BMesh ya son locales).
     - GLOBAL: eje mundial convertido a local con la 3×3 inversa de `matrix_world`
@@ -92,10 +104,10 @@ def _resolve_extrude_direction(payload: dict, obj) -> Vector | None:
       la cámara de la tablet y convertidos a local. Nunca se toca `rv3d`.
     """
     constraint = str(payload.get("constraint", "FREE")).upper()
-    if constraint == "FREE":
+    if constraint == "FREE" or constraint in EXTRUDE_PLANES:
         return None
     if constraint not in {"X", "Y", "Z"}:
-        raise BadPayload("'constraint' must be FREE, X, Y or Z")
+        raise BadPayload("'constraint' must be FREE, X, Y, Z, XY, XZ or YZ")
     orientation = str(payload.get("orientation", "GLOBAL")).upper()
     if orientation not in {"GLOBAL", "LOCAL", "VIEW"}:
         raise BadPayload("'orientation' must be GLOBAL, LOCAL or VIEW")
@@ -148,11 +160,23 @@ def extrude(payload: dict) -> dict:
         raise BadPayload("'direction' is incompatible with ALONG_NORMALS")
 
     axis = _resolve_extrude_direction(payload, obj)
-    if axis is not None:
+    plane_normal = extrude_plane_normal_world(payload, obj)
+    if axis is not None or plane_normal is not None:
         if variant not in {"REGION", "MANIFOLD"}:
             raise CommandError("'constraint' only applies to REGION or MANIFOLD", code="incompatible_parameter")
-        if _custom_direction(payload) is not None:
+        if axis is not None and _custom_direction(payload) is not None:
             raise BadPayload("'direction' and 'constraint' are mutually exclusive")
+
+    def in_plane(local: Vector) -> Vector:
+        """Un plano restringe la dirección: se quita su componente normal en el mundo."""
+        if plane_normal is None:
+            return local
+        m3 = obj.matrix_world.to_3x3()
+        world = m3 @ local
+        world -= plane_normal * world.dot(plane_normal)
+        if world.length < 1e-12:
+            world = plane_normal.orthogonal()
+        return (m3.inverted() @ world.normalized()).normalized()
 
     original_verts = set(bm.verts)
     if face_mode:
@@ -165,7 +189,7 @@ def extrude(payload: dict) -> dict:
         normal = normal.normalized() if normal.length > 0 else Vector((0.0, 0.0, 1.0))
 
         if variant == "MANIFOLD":
-            delta = obj.matrix_world.to_3x3() @ ((axis or _custom_direction(payload) or normal) * offset)
+            delta = obj.matrix_world.to_3x3() @ ((axis or in_plane(_custom_direction(payload) or normal)) * offset)
             try:
                 result = bpy.ops.mesh.extrude_manifold(
                     'EXEC_DEFAULT', False,
@@ -220,7 +244,7 @@ def extrude(payload: dict) -> dict:
             for vert in new_verts:
                 vert.co += vert.normal * offset
         else:
-            bmesh.ops.translate(bm, verts=new_verts, vec=(axis or direction or normal) * offset)
+            bmesh.ops.translate(bm, verts=new_verts, vec=(axis or in_plane(direction or normal)) * offset)
 
     _deselect_all(bm)
     _select_geom(bm, new_verts)

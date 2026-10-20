@@ -747,6 +747,11 @@ nuevas superficies y la adaptación gradual de las existentes.
   expresa en ella sin alterarlo. Porcentajes, SLIDE de Tweak y CAD conservan su paso.
 - En Bisel, Ancho se muestra en la unidad elegida; deslizarlo resta/suma el
   paso activo.
+- Extruir Región/Manifold admite restricción a eje o a plano (XY/XZ/YZ) con el mismo
+  trípode que Mover. Libre sobre caras sigue su normal (como E en Blender); Libre
+  sobre aristas/vértices sigue al dedo en el plano de la vista, y un plano elegido
+  sigue al dedo dentro de él (`planar_drag`, `tool.extrude_drag`). Así un perfil
+  plano en XY con la vista superior se extruye en XY, nunca hacia la cámara.
 - Extruir Región desplaza y selecciona únicamente los vértices nuevos. Los vértices
   originales de las aristas/caras de conexión permanecen fijos, también al continuar
   otra extrusión desde el extremo seleccionado.

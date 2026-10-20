@@ -77,11 +77,22 @@ class ToolSession:
         self.snap_candidate = None
         self.scalar_value_exact = False
         self.loop_value_exact = False
+        self.baseline_faces = False  # Extruir: la selección de partida tenía caras
+        self.drag_anchor = None  # Extruir en plano: (punto inicial, plano, vector previo)
         self.alignment = None
         # Armado: familia/variante elegida, aún sin backup ni preview (B1/B3/B4).
         self.armed_tool = None
         self.armed_owner = None
         self.armed_params = {}
+
+    def planar_drag(self) -> bool:
+        """Extruir sigue al dedo en un plano: el elegido (XY/XZ/YZ) o, en Libre sin
+        caras, el de la vista, como E sobre aristas/vértices en Blender. Las caras
+        en Libre siguen su normal."""
+        if self.tool != "EXTRUDE" or str(self.params.get("variant", "REGION")).upper() not in {"REGION", "MANIFOLD"}:
+            return False
+        constraint = str(self.params.get("constraint", "FREE")).upper()
+        return constraint in mesh_commands.EXTRUDE_PLANES or (constraint == "FREE" and not self.baseline_faces)
 
     def arm(self, tool, owner, params):
         """Marca la herramienta como elegida, a la espera de un toque en el viewport."""
@@ -133,6 +144,7 @@ class ToolSession:
             # uniforme) o rotación sin aplicar sale torcido o desproporcionado.
             _flatten_transform(obj)
         bm = bmesh.from_edit_mesh(obj.data)
+        self.baseline_faces = any(face.select and not face.hide for face in bm.faces)
         if tool in {'EXTRUDE', 'BEVEL', 'INSET'}:
             from .units import detail_step
             params = dict(params)
@@ -357,6 +369,8 @@ class ToolSession:
             state["snap_type"] = str(self.params.get("snap_type", "NONE")).upper()
             state["snap_step"] = float(self.params.get("snap_step", 0.1))
             state["snap_candidate"] = self.snap_candidate
+            if self.tool == "EXTRUDE":
+                state["planar_drag"] = self.planar_drag()
             if self.tool == "REVOLVE":
                 state.update(input="PARAMETERS", controls=profile_tools.REVOLVE_CONTROLS,
                              instruction="Gira el perfil alrededor del eje y centro indicados")
@@ -546,6 +560,11 @@ def parameter(payload):
             tool_session.preview()
             raise
         return tool_session.status()
+    if tool_session.tool == "EXTRUDE" and "constraint" in params and \
+            str(params["constraint"]).upper() != str(tool_session.params.get("constraint", "FREE")).upper():
+        # Otra restricción empieza de nuevo su dirección; el siguiente arrastre la fija.
+        tool_session.params.pop("direction", None)
+        tool_session.drag_anchor = None
     tool_session.params.update(params)
     if EXACT_PRIMARY.get(tool_session.tool) in params:
         tool_session.snap_candidate = None  # El valor paramétrico sustituye al destino sondeado.
@@ -594,6 +613,72 @@ def snap_candidate(payload):
         return tool_session.status()
     tool_session.params["snap_type"] = snap_type
     tool_session.snap_candidate = candidate
+    tool_session.preview()
+    return tool_session.status()
+
+
+@command("tool.extrude_drag", mutating=True)
+def extrude_drag(payload):
+    """Extruir en plano: el extremo nuevo sigue al dedo sobre el plano elegido.
+
+    BEGIN fija el punto inicial sobre el plano que pasa por la selección; cada
+    UPDATE suma el recorrido del dedo al vector que ya tenía la extrusión, así un
+    segundo gesto continúa desde donde quedó el primero. Nunca escribe en rv3d.
+    """
+    tool_session.require(payload.get("_client_id"))
+    if not tool_session.planar_drag():
+        raise CommandError("Esta extrusión sigue su normal; arrastra en vertical", code="wrong_tool")
+    try:
+        u, v = float(payload["u"]), float(payload["v"])
+    except (KeyError, TypeError, ValueError):
+        raise BadPayload("'u' and 'v' must be numbers")
+    phase = str(payload.get("phase", "UPDATE")).upper()
+    found = find_view3d()
+    if found is None:
+        raise CommandError("No 3D viewport available", code="no_viewport")
+    rv3d = found[3]
+    camera.sync_from_region(rv3d)
+    obj = tool_session.obj
+    m3 = obj.matrix_world.to_3x3()
+    params = tool_session.params
+
+    def hit(plane_co, plane_no):
+        from mathutils.geometry import intersect_line_plane
+        origin, direction = camera.ray(u, v, rv3d)
+        return intersect_line_plane(origin, origin + direction, plane_co, plane_no)
+
+    if phase == "BEGIN" or tool_session.drag_anchor is None:
+        tool_session.restore_preview_base()
+        bm = bmesh.from_edit_mesh(obj.data)
+        selected = [vert.co for vert in bm.verts if vert.select and not vert.hide]
+        if not selected:
+            raise CommandError("No vertices selected", code="empty_selection")
+        centroid = Vector((0.0, 0.0, 0.0))
+        for co in selected:
+            centroid += co
+        plane_co = obj.matrix_world @ (centroid / len(selected))
+        plane_no = mesh_commands.extrude_plane_normal_world(params, obj)
+        if plane_no is None:
+            plane_no = (camera.rotation @ Vector((0.0, 0.0, -1.0))).normalized()
+        direction = params.get("direction")
+        previous = (m3 @ Vector(direction)) * float(params.get("offset", 0.0)) if direction else Vector((0.0, 0.0, 0.0))
+        start = hit(plane_co, plane_no)
+        tool_session.drag_anchor = None if start is None else (start, plane_co, plane_no, previous)
+        tool_session.preview()
+        return tool_session.status()
+    start, plane_co, plane_no, previous = tool_session.drag_anchor
+    point = hit(plane_co, plane_no)
+    if point is None:
+        return tool_session.status()
+    local = m3.inverted() @ (previous + (point - start))
+    if local.length < 1e-12:
+        params.pop("direction", None)
+        params["offset"] = 0.0
+    else:
+        params["direction"] = list(local.normalized())
+        params["offset"] = local.length
+    tool_session.scalar_value_exact = False
+    tool_session.snap_candidate = None
     tool_session.preview()
     return tool_session.status()
 

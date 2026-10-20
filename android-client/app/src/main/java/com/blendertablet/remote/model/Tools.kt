@@ -105,6 +105,8 @@ data class ToolSession(
     val slideRange: Double = 0.0,
     val slideDistance: Double = 0.0,
     val input: String = "PARAMETRIC",
+    /** Extruir sigue al dedo en un plano (Libre sin caras o XY/XZ/YZ) en vez de su normal. */
+    val planarDrag: Boolean = false,
     val controls: List<EditCatalogParameter> = emptyList(),
     val instruction: String = "",
     val canConfirm: Boolean = true,
