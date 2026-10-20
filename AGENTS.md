@@ -96,7 +96,7 @@ No existe `android-frontend`. El módulo Android es `:android-client:app`.
   deshacerlo conserva los Loop Cut ya confirmados.
 - El toque de Loop Cut elige el anillo y crea el corte a mitad de arista (Posición 0 %); cada nuevo
   corte comienza sin desplazamiento. La bandeja permite porcentaje o mm/cm/m desde
-  el centro; mantener pulsada la Posición vuelve al centro. Las medidas físicas incluyen la escala del
+  el centro; el doble toque en la Posición vuelve al centro. Las medidas físicas incluyen la escala del
   objeto y de escena; los cortes múltiples conservan su espaciado al desplazarse.
 - El toque de Loop Cut sondea la jaula viva del BMesh (no la malla evaluada, cuyos
   índices cambian con Mirror/bisect u otros modificadores); otros objetos solo ocluyen.
@@ -335,9 +335,9 @@ nuevas superficies y la adaptación gradual de las existentes.
   - Números (`ScrubNumber`): deslizar en horizontal avanza pasos enteros del paso o
     snap activo (14 dp por paso, el primero al superar el umbral táctil; admite trazo
     inclinado hasta ~63° y solo cede al panel un trazo claramente vertical); tocar
-    escribe con cuentas. Mantener pulsado «agarra» el número (se resalta): arrastrar
-    después desliza en cualquier dirección y soltar quieto restablece al neutro
-    (0, 0°, 100 %, centro) si lo hay; apoyar y esperar nunca pierde el arrastre.
+    escribe con cuentas; el doble toque restablece al neutro (0, 0°, 100 %, centro) si
+    lo hay. Mantener pulsado solo «agarra» el número (se resalta): arrastrar después
+    desliza en cualquier dirección y soltar quieto no cambia nada.
     Dos flechitas tenues en los bordes anuncian que se arrastra y cada paso da un
     toque háptico. El nombre corto y la unidad van dentro del campo. Confirmar suelta el foco.
     Ningún número de la app tiene botones `−/+`: pasos de «⋯ Más», modificadores,
@@ -435,7 +435,8 @@ función, no la norma; un cambio de norma lo decide el usuario y se anota aquí.
 | Doble toque | Volver a lo neutro: número a su valor por defecto, viewport encuadra | — |
 | Dos dedos | Navegar la vista; cancela el gesto pendiente | — |
 
-Un botón con opciones al mantenerlo muestra un triángulo pequeño en su esquina. Los modos
+Un botón con opciones al mantenerlo muestra un triángulo pequeño en su esquina. (`MoreOptionsMark`, en Seleccionar/Tweak y
+las familias del rail con variantes; sustituye a las letras de variante). Los modos
 que se quedan armados (Tweak, F2, Unir J, Dibujar…) son herramientas del rail: se arman
 tocando y se desarman tocando otra vez o con ×, nunca con pulsación larga.
 
@@ -600,7 +601,7 @@ pase: si no cabe, va a «⋯ Más»).
   herramientas ni sesiones: Posición XYZ, Rotación XYZ en grados y Tamaño.
   El título es la sección y su icono desplegable la cambia; la fila lleva solo sus
   números. En «⋯ Más» quedan el objeto y su selector (Referencia), Mostrar delante
-  y las opciones no numéricas de Imagen (Forma). Mantener pulsado un número vuelve
+  y las opciones no numéricas de Imagen (Forma). El doble toque en un número vuelve
   posición/giro a 0, escala a 1 y opacidad al 100 %. Ocultar/mostrar
   queda en el radial y Outliner, sin ojo duplicado en propiedades. No hay sección Visibilidad ni campos Visible en vista
   o Visible en render; las propiedades específicas de Imagen conservan su sección.
@@ -736,11 +737,12 @@ pase: si no cabe, va a «⋯ Más»).
 - Los atajos de Edit incluyen J para conectar vértices con la operación nativa
   `mesh.vert_connect_path`; requiere modo Vértices y al menos dos seleccionados,
   divide las caras atravesadas y registra un único undo.
-  Mantener J arma «Unir J» (`tool.begin`, `tool: CONNECT`, entrada `REPEAT_TAP`):
+  «Unir J» es una herramienta armable del pie, con su propio icono junto a J
+  (`tool.begin`, `tool: CONNECT`, entrada `REPEAT_TAP`); tocarla la arma:
   pasa a Vértices y vacía la selección; cada toque marca el vértice visible más
   cercano (repetirlo lo desmarca, fallar conserva el primero) y con dos los conecta
   igual que J, con un undo, y deselecciona todo para el siguiente par. Sin encadenar.
-  Repetir J, ×, otra herramienta o cambiar de modo lo desarman.
+  Tocarla otra vez, ×, otra herramienta o cambiar de modo la desarman.
 - Los parámetros viven en una bandeja común. Toda bandeja inferior empieza con
   `TrayTitle` (herramienta en mayúsculas, color de acento) y termina con `TrayExits`
   (Cancelar rojo y, si procede, Confirmar verde) fijos a la derecha; también los
@@ -799,8 +801,8 @@ pase: si no cabe, va a «⋯ Más»).
 - Rotar se presenta y se edita exclusivamente en grados; los radianes quedan limitados
   al cálculo interno y nunca se ofrecen como unidad en la interfaz.
 - Mover, Rotar y Escalar ofrecen Restablecer en Más · Precisión: restaura la preview a
-  `0`, `0°` y `100 %` sin cancelar ni reactivar la herramienta. Mantener pulsado un
-  eje restablece solo ese eje (en Escalar con cadena, los tres).
+  `0`, `0°` y `100 %` sin cancelar ni reactivar la herramienta. El doble toque en el
+  valor de un eje restablece solo ese eje (en Escalar con cadena, los tres).
 - X/Y/Z de Mover/Rotar/Escalar se deslizan con el paso de la sesión, con o sin snap;
   deslizar no aplana: el cero de Escalar se escribe. El paso y la unidad viven en
   Más · Precisión aunque el snap esté desactivado. En Propiedades las longitudes usan

@@ -39,8 +39,10 @@ internal val ScrubStep = 14.dp
  * - Deslizar en horizontal lo ajusta a pasos enteros ([onScrub] recibe los pasos
  *   acumulados desde que empezó el gesto; quien llama suma su paso o snap activo).
  * - Tocar abre la edición exacta del campo que se dibuja en [field].
- * - Mantener pulsado lo «agarra» (se resalta): arrastrar después desliza y soltar
- *   quieto lo restablece con [onReset], si existe un valor neutro.
+ * - Doble toque lo restablece con [onReset], si existe un valor neutro (norma de
+ *   controles: la pulsación larga solo ofrece «más opciones»).
+ * - Mantener pulsado lo «agarra» (se resalta) para deslizar después; soltarlo quieto
+ *   no cambia nada.
  * - Dos flechitas en los bordes indican que se arrastra; cada paso da un toque háptico.
  *
  * Mientras no se edita, una capa encima del campo recibe el gesto: el campo de
@@ -82,10 +84,8 @@ fun ScrubNumber(
                         if (!enabled) { consumeUntilUp(down.id); return@awaitEachGesture }
                         val slop = viewConfiguration.touchSlop
                         val holdMs = viewConfiguration.longPressTimeoutMillis
-                        // Mantener pulsado ya no restablece al instante: solo «agarra» el
-                        // número. Si después se arrastra, desliza; si se suelta quieto,
-                        // restablece. Antes, apoyar el lápiz y esperar antes de moverlo
-                        // borraba el valor y perdía el arrastre.
+                        // Mantener pulsado solo «agarra» el número para deslizarlo después;
+                        // soltarlo quieto no hace nada. Restablecer es un doble toque.
                         var held = false
                         var outcome = ScrubOutcome.TAP
                         while (true) {
@@ -96,7 +96,7 @@ fun ScrubNumber(
                             if (change == null) { outcome = ScrubOutcome.IGNORE; break }
                             if (!change.pressed) {
                                 change.consume()
-                                outcome = if (held && reset != null) ScrubOutcome.RESET else ScrubOutcome.TAP
+                                outcome = if (held) ScrubOutcome.IGNORE else ScrubOutcome.TAP
                                 break
                             }
                             val d = change.position - down.position
@@ -106,9 +106,18 @@ fun ScrubNumber(
                         }
                         grabbed = false
                         when (outcome) {
-                            ScrubOutcome.RESET -> { reset?.invoke(); haptics.performHapticFeedback(HapticFeedbackType.LongPress) }
-                            ScrubOutcome.TAP -> { focus.requestFocus(); keyboard?.show() }
-                            ScrubOutcome.IGNORE -> consumeUntilUp(down.id)
+                            ScrubOutcome.TAP -> {
+                                // Con valor neutro, un segundo toque cercano restablece; si no
+                                // llega a tiempo, el toque abre la escritura exacta.
+                                val second = if (reset == null) null else withTimeoutOrNull(viewConfiguration.doubleTapTimeoutMillis) {
+                                    awaitFirstDown(requireUnconsumed = false)
+                                }?.takeIf { (it.position - down.position).getDistance() < slop * 4 }
+                                if (second != null) {
+                                    second.consume(); consumeUntilUp(second.id)
+                                    reset?.invoke(); haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                } else { focus.requestFocus(); keyboard?.show() }
+                            }
+                            ScrubOutcome.IGNORE -> if (!held) consumeUntilUp(down.id)
                             ScrubOutcome.SCRUB -> {
                                 scrubbing = true
                                 start()
@@ -133,7 +142,7 @@ fun ScrubNumber(
     }
 }
 
-private enum class ScrubOutcome { TAP, SCRUB, RESET, IGNORE }
+private enum class ScrubOutcome { TAP, SCRUB, IGNORE }
 
 /**
  * ¿Empieza el deslizamiento? Basta con superar el umbral en horizontal aunque el

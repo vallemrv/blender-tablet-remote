@@ -19,7 +19,7 @@ fun ToolNumericInput(
     label: String, value: Double, step: Double, mode: com.blendertablet.remote.model.TransformMode,
     scale: Double, unit: com.blendertablet.remote.model.LengthUnit? = null,
     integer: Boolean = false, min: Double? = null, max: Double? = null,
-    /** Valor al mantener pulsado; null si la magnitud no tiene un neutro evidente. */
+    /** Valor del doble toque; null si la magnitud no tiene un neutro evidente. */
     neutral: Double? = null, onCommit: (Double) -> Unit,
 ) {
     var draft by remember(label, unit, scale) { mutableStateOf<String?>(null) }
@@ -59,4 +59,4 @@ fun ToolNumericInput(
 /** La misma frase para todos los números: así se aprende una vez. */
 internal fun numberHelp(resettable: Boolean) =
     "Arrastra a izquierda o derecha para ajustarlo a pasos (también tras mantenerlo pulsado) · toca para escribir un valor exacto" +
-        if (resettable) " · mantén pulsado y suelta sin mover para restablecerlo" else ""
+        if (resettable) " · doble toque para restablecerlo" else ""

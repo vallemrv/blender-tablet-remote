@@ -59,7 +59,7 @@ private data class ParamSpec(
     /** Rango cerrado, cuando el backend solo acepta una franja (perfil del bisel). */
     val min: Double? = null,
     val max: Double? = null,
-    /** Valor al mantener pulsado el número, si la magnitud tiene un neutro claro. */
+    /** Valor del doble toque en el número, si la magnitud tiene un neutro claro. */
     val neutral: Double? = null,
 )
 
@@ -289,7 +289,7 @@ private fun PositionStepper(session: ToolSession, onParameter: (String, Any?) ->
     }
     var base by remember { mutableStateOf(shown) }
     HoverHelp("Posición desde el centro", "0 % es el centro. Escribe un porcentaje o una distancia, por ejemplo 5mm. " +
-        "Desliza para moverlo de 1 % en 1 % · mantén pulsado para volver al centro.") {
+        "Desliza para moverlo de 1 % en 1 % · doble toque para volver al centro.") {
         ScrubNumber(onScrubStart = { base = read() ?: shown }, onScrub = { send(base + it * .01) }, onReset = { send(0.0) }) { field ->
             CompactNumericField(value = draft ?: "${formatToolDistance(shown * 100, MaxDecimals)} %",
                 onValueChange = { draft = it }, onDone = { read()?.let(::send) },

@@ -77,6 +77,7 @@ internal object StudioIcons {
         "OBJECT_MODE" to Glyph("Objeto", "Vista", "M3,7 L12,2 L21,7 L21,17 L12,22 L3,17 Z M3,7 L12,12 L21,7 M12,12 L12,22"),
         "EDIT_MODE" to Glyph("Edición", "Vista", "M3,4 L18,4 L18,9 M3,4 L3,19 L8,19 M3,10 L12,10 M9,4 L9,13 M11,21 L12,16 L19,9 L22,12 L15,19 Z"),
         "VIEWS" to Glyph("Vistas", "Vista", "M3,3 L9,3 L9,9 L3,9 Z M15,3 L21,3 L21,9 L15,9 Z M3,15 L9,15 L9,21 L3,21 Z M15,15 L21,15 L21,21 L15,21 Z M5,12 L19,12"),
+        "CONNECT_PAIRS" to Glyph("Unir J", "Malla", "M3,5 L21,5 L21,21 L3,21 Z M5,19 L19,7 M5,19 A1.8,1.8 0,1 1,5,18.99 M19,7 A1.8,1.8 0,1 1,19,6.99 M8,3 L8,1 M16,3 L16,1"),
         "AXIS_PLANE" to Glyph("Plano", "Vista", "M2,16 L9,9 L22,9 L15,16 Z M8,13 L16,13 M12,9 L12,2 M10,4 L12,2 L14,4"),
         "FACE_NORMALS" to Glyph("Normales", "Vista", "M3,15 L11,11 L21,15 L13,19 Z M12,15 L12,3 M9,6 L12,3 L15,6"),
         "WIREFRAME" to Glyph("Wireframe", "Vista", "M3,7 L12,2 L21,7 L21,17 L12,22 L3,17 Z M3,7 L21,17 M21,7 L3,17 M12,2 L12,22 M3,7 L12,12 L21,7 M3,17 L12,12 L21,17"),

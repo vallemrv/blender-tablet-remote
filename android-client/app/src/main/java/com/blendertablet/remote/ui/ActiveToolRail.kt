@@ -95,7 +95,7 @@ private fun FamilyToolButton(
         ) {
             Icon(icon, description, tint = if (selected) Ink.Accent else Ink.OnPanel)
             if (hasLongClickMenu(family)) {
-                VariantBadge(variantBadge(family.id, displayedVariant?.id), selected)
+                MoreOptionsMark(selected)
             }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -162,7 +162,7 @@ internal fun SelectTweakButton(activeTool: ActiveTool, selectSelected: Boolean, 
             contentAlignment = Alignment.Center,
         ) {
             Icon(icon, description, tint = if (selected) Ink.Accent else Ink.OnPanel)
-            VariantBadge(if (showTweak) "T" else "S", selected)
+            MoreOptionsMark(selected)
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             listOf(false to "Seleccionar", true to "Tweak").forEach { (tweak, label) ->
@@ -209,35 +209,15 @@ internal fun activeVariantOf(family: EditToolbarFamily, session: ToolSession): E
 }
 
 /**
- * Etiqueta corta de la variante armada, para la esquina del botón.
- *
- * Sustituye al chevrón, que era idéntico en todas las familias: anunciaba que había
- * menú pero no cuál de los modos estaba puesto, justo lo que hay que saber de un
- * vistazo. Devolver el badge sigue implicando que hay menú, porque solo se pinta en
- * familias con más de una variante.
+ * Marca de «más opciones» (norma de controles): un triángulo pequeño en la esquina de
+ * los botones que, al mantenerlos pulsados, ofrecen variantes.
  */
-internal fun variantBadge(familyId: String, variantId: String?): String = when {
-    variantId == null -> "·"
-    familyId == "EXTRUDE" && variantId == "ALONG_NORMALS" -> "N"
-    variantId == "REGION" -> "R"
-    variantId == "INDIVIDUAL" -> "I"
-    variantId == "KNIFE" -> "K"
-    variantId == "BISECT" -> "B"
-    else -> variantId.take(1).uppercase()
-}
-
 @Composable
-private fun BoxScope.VariantBadge(label: String, selected: Boolean) {
+internal fun BoxScope.MoreOptionsMark(selected: Boolean) {
     val color = if (selected) Ink.Accent else Ink.Muted
-    Box(
-        Modifier
-            .align(Alignment.BottomEnd)
-            .padding(2.dp)
-            .size(14.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(Ink.PanelSolid),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(label, color = color, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+    androidx.compose.foundation.Canvas(Modifier.align(Alignment.BottomEnd).padding(4.dp).size(7.dp)) {
+        drawPath(androidx.compose.ui.graphics.Path().apply {
+            moveTo(size.width, 0f); lineTo(size.width, size.height); lineTo(0f, size.height); close()
+        }, color)
     }
 }

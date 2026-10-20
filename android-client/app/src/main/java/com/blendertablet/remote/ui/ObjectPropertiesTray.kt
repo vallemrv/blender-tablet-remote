@@ -183,7 +183,7 @@ private fun PropertyControl(field: ObjectPropertyField, value: Any?, draft: Bool
     }
 }
 
-/** Valor al mantener pulsado: posición y giro a cero, escala a 1 y opacidad completa. */
+/** Valor del doble toque: posición y giro a cero, escala a 1 y opacidad completa. */
 internal fun objectPropertyNeutral(field: ObjectPropertyField): Double? = when {
     field.id.startsWith("location_") || field.id.startsWith("rotation_") -> 0.0
     field.id.startsWith("scale_") -> 1.0

@@ -9,6 +9,22 @@ class SurfaceCoherenceTest {
     private fun source(name: String) = File(System.getProperty("btr.repoRoot"),
         "android-client/app/src/main/java/com/blendertablet/remote/ui/$name.kt").readText()
 
+    /** Norma de controles: la pulsación larga solo ofrece «más opciones». */
+    @Test fun longPressOnlyLivesInRailVariantsRadialAndMenus() {
+        val allowed = setOf("ActiveToolRail.kt", "QuickMenu.kt", "InputSurface.kt", "BlenderTabletApp.kt")
+        val dir = File(System.getProperty("btr.repoRoot"), "android-client/app/src/main/java/com/blendertablet/remote")
+        val offenders = dir.walkTopDown().filter { it.extension == "kt" && it.name !in allowed }
+            .filter { f -> Regex("""combinedClickable|onLongClick|onLongPress""").containsMatchIn(f.readText()) }
+            .map { it.name }.toList()
+        assertEquals(emptyList<String>(), offenders)
+        // El número solo «agarra» al mantener: restablecer es doble toque y nunca al soltar quieto.
+        val scrub = source("ScrubNumber")
+        assertTrue(scrub.contains("doubleTapTimeoutMillis"))
+        assertFalse(scrub.contains("RESET"))
+        // Los botones con variantes llevan la marca triangular de «más opciones».
+        assertTrue(source("ActiveToolRail").contains("MoreOptionsMark(selected)"))
+    }
+
     @Test fun radialCannotRepeatSelectionControlsInObjectOrEdit() {
         val selection = EditSelectionBar.actions.toSet() + setOf(ActionId.SELECT_UNDER, ActionId.SELECT_ADD_UNDER,
             ActionId.SELECT_MORE, ActionId.SELECT_LESS)

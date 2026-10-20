@@ -192,7 +192,7 @@ fun TransformBar(
     SingleLineTray(
         title = session.mode.label, onCancel = onCancel, onConfirm = onConfirm, modifier = modifier,
         help = "Arrastra para ${session.mode.label.lowercase()} · desliza un número para afinarlo, tócalo para escribir " +
-            "y mantenlo para restablecer · cambiar de herramienta aplica el resultado",
+            "y doble toque para restablecer · cambiar de herramienta aplica el resultado",
         hintKey = "transform.${session.mode.name}", status = picking ?: candidate, more = more,
     ) {
         // Un único selector de ejes: cada celda une la restricción (pestaña de color) y

@@ -165,14 +165,14 @@ private fun EditKeys(
             NumKey("Y", "Split") { onAction(EditFooterAction.SPLIT) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            // Tocar une la selección; mantener deja J activo para unir pares seguidos.
-            NumKey("J", if (connectModeActive) "Unir J activo · toca para salir" else "Conectar vértices · mantener: unir pares seguidos",
-                selected = connectModeActive, onLongClick = onConnectMode) {
-                when {
-                    connectModeActive -> onConnectMode()
-                    connectVerticesEnabled && selectionMode == SelectionMode.VERTEX -> onAction(EditFooterAction.CONNECT_VERTICES)
-                }
+            // J une la selección; «Unir J» es una herramienta armable aparte: tocar la
+            // arma, tocar otra vez (o ×) la desarma. Ninguna depende de mantener pulsado.
+            NumKey("J", "Conectar vértices",
+                enabled = connectVerticesEnabled && selectionMode == SelectionMode.VERTEX) {
+                onAction(EditFooterAction.CONNECT_VERTICES)
             }
+            PageKey(AppIcons.ConnectPairs, if (connectModeActive) "Unir J activo · toca para salir" else "Unir J · pares seguidos",
+                selected = connectModeActive, onClick = onConnectMode)
             NumKey("N", "Normales", enabled = selectionMode == SelectionMode.FACE) { setNormalsPage(true) }
         }
     }
@@ -211,7 +211,6 @@ private fun NumKey(
     description: String,
     selected: Boolean = false,
     enabled: Boolean = true,
-    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val background = when {
@@ -230,7 +229,7 @@ private fun NumKey(
             .size(38.dp)
             .clip(RoundedCornerShape(9.dp))
             .background(background)
-            .then(if (!enabled) Modifier else if (onLongClick != null) Modifier.combinedClickableNoRipple(onClick, onLongClick) else Modifier.clickableNoRipple(onClick)),
+            .then(if (!enabled) Modifier else Modifier.clickableNoRipple(onClick)),
         contentAlignment = Alignment.Center,
     ) {
         Text(label, color = content, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
