@@ -592,8 +592,7 @@ nuevas superficies y la adaptación gradual de las existentes.
   Bisel e Inset comienzan en dos pasos. Los valores editados siguen siendo exactos.
   Bisel interpreta su ancho en mundo con escala sin aplicar, sin cambiar la matriz
   del objeto. Estos valores iniciales no cambian Mover ni Escalar.
-- Los botones del Paso de herramientas Edit siguen su orden de magnitud y nunca
-  muestran cero por falta de decimales. Sculpt muestra el radio métrico aproximado
+- Los botones del Paso de herramientas Edit siguen su orden de magnitud. Sculpt muestra el radio métrico aproximado
   del plano del pivote; su parámetro de gesto continúa siendo relativo a la pantalla.
 - La selección de Object/Edit vive en el rail helper vertical derecho (`SelectionHelperRail`),
   con el mismo `ToolRail` que las restricciones CAD. Muestra solo las acciones aplicables:
@@ -760,9 +759,11 @@ nuevas superficies y la adaptación gradual de las existentes.
 - Extruir identifica cada variante con su icono en rail/menú y su nombre en la
   bandeja. Respeta los modos del catálogo; una variante incompatible no cierra la
   preview anterior. Cambiar de sesión reinicia los borradores de Distancia y Paso.
-- Extruir muestra Distancia y Paso en mm normalmente con dos decimales, ampliándolos
-  para no mostrar cero en cotas subcentésimas, sin
-  redondear los valores enviados. Reset 0 fija la distancia exacta a cero, limpia
+- Por petición del usuario, todo número que muestra la app (campos, medidas, pasos,
+  propiedades, modificadores y CAD) tiene como máximo dos decimales, redondeados
+  (`formatToolDistance`, `MaxDecimals`), aunque una cota muy pequeña se lea 0. Los
+  valores escritos se envían tal cual; solo se redondea lo que se ve. Extruir
+  muestra Distancia y Paso así, sin redondear los valores enviados. Reset 0 fija la distancia exacta a cero, limpia
   el borrador y el destino geométrico, y conserva la sesión, variante y paso.
 - Extruir ofrece Manifold en Caras con la operación nativa de Blender: disuelve
   bordes coplanares e intersecta los nuevos. Comparte distancia, paso, ejes y snap

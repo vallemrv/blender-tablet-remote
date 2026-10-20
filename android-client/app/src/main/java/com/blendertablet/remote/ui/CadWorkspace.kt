@@ -1149,7 +1149,7 @@ private fun cadGearSummary(gear: CadEntity, unit: LengthUnit): String {
     val module = gear.values["module"] ?: return "Engranaje"
     val teeth = gear.values["teeth"] ?: 20.0
     val factor = when (unit) { LengthUnit.MILLIMETERS -> 1000.0; LengthUnit.CENTIMETERS -> 100.0; LengthUnit.METERS -> 1.0 }
-    fun text(meters: Double) = formatToolDistance(meters * factor, detailDecimalPlaces(meters * factor, 2)) + " " + unit.short
+    fun text(meters: Double) = formatToolDistance(meters * factor, 2) + " " + unit.short
     return "Engranaje · Ø primitivo ${text(module * teeth)} · Ø exterior ${text(module * (teeth + 2))} · paso ${text(Math.PI * module)} · " +
         "engrana con otro del mismo módulo y ángulo de presión"
 }
@@ -1231,7 +1231,7 @@ private fun CadDimension(
         val live = meters * factor
         Row(Modifier.width(width).height(Metrics.Touch).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(label, color = Ink.Faint, fontSize = 11.sp, maxLines = 1, modifier = Modifier.padding(end = 6.dp))
-            Text(formatToolDistance(live, detailDecimalPlaces(live, decimals)), color = Ink.OnPanel, fontSize = 16.sp,
+            Text(formatToolDistance(live, 2), color = Ink.OnPanel, fontSize = 16.sp,
                 maxLines = 1, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
             Text(suffix, color = Ink.Muted, fontSize = 11.sp, modifier = Modifier.padding(start = 3.dp))
         }
@@ -1250,7 +1250,7 @@ private fun CadDimension(
             scrubbed = steps
             next?.let { if (onNudge != null) onNudge(it) else onDraft(it) }
         }) { field ->
-            CompactNumericField(value = input.text ?: formatToolDistance(displayed, detailDecimalPlaces(displayed, decimals)),
+            CompactNumericField(value = input.text ?: formatToolDistance(displayed, 2),
                 onValueChange = { if (enabled) { input.text = it; onDraft(input.read(meters, factor, minimum, maximum)) } },
                 modifier = field.width(width), textAlign = TextAlign.End, placeholder = suffix, fontSize = 16.sp,
                 textColor = if (value == null) Ink.Bad else if (enabled) Ink.OnPanel else Ink.Faint, selectAllOnFocus = true,
@@ -1265,7 +1265,7 @@ private fun CadDimension(
 private fun CadConstraintRow(c: CadConstraint, sketch: CadSketch, unit: LengthUnit, enabled: Boolean, edit: () -> Unit, delete: () -> Unit) {
     val factor = when (unit) { LengthUnit.MILLIMETERS -> 1000.0; LengthUnit.CENTIMETERS -> 100.0; LengthUnit.METERS -> 1.0 }
     val value = c.value?.let { if (c.type == "ANGLE") " · ${formatToolDistance(it, 2)}°"
-        else " · ${formatToolDistance(it * factor, detailDecimalPlaces(it * factor, 2))} ${unit.short}" }.orEmpty()
+        else " · ${formatToolDistance(it * factor, 2)} ${unit.short}" }.orEmpty()
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         Column(Modifier.weight(1f)) {
             Text(cadLabel(c.type) + value, color = Ink.OnPanel, fontSize = 12.sp)
@@ -1331,16 +1331,16 @@ internal fun cadSurfaceSummary(cad: CadState, unit: LengthUnit): String {
     val factor = lengthFactor(unit)
     if (cad.surface.selection.size > 2 && cad.surface.selection.all { it.kind == "FACE" }) {
         val total = cad.surface.measurements.filter { it.unit == "AREA" }.sumOf { it.value } * factor * factor
-        return "${cad.surface.selection.size} caras · Área total: ${formatToolDistance(total, detailDecimalPlaces(total, 3))} ${unit.short}²"
+        return "${cad.surface.selection.size} caras · Área total: ${formatToolDistance(total, 2)} ${unit.short}²"
     }
     if (cad.surface.selection.size > 2 && cad.surface.selection.all { it.kind == "EDGE" }) {
         val total = cad.surface.measurements.filter { it.unit == "LENGTH" }.sumOf { it.value } * factor
-        return "${cad.surface.selection.size} aristas · Longitud total: ${formatToolDistance(total, detailDecimalPlaces(total, 3))} ${unit.short}"
+        return "${cad.surface.selection.size} aristas · Longitud total: ${formatToolDistance(total, 2)} ${unit.short}"
     }
     val measures = cad.surface.measurements.map { measurement ->
         val scale = when (measurement.unit) { "AREA" -> factor * factor; "ANGLE" -> 1.0; else -> factor }
         val suffix = when (measurement.unit) { "AREA" -> unit.short + "²"; "ANGLE" -> "°"; else -> unit.short }
-        "${measurement.label}: ${formatToolDistance(measurement.value * scale, detailDecimalPlaces(measurement.value * scale, 3))} $suffix"
+        "${measurement.label}: ${formatToolDistance(measurement.value * scale, 2)} $suffix"
     }
     return (listOf("${cad.surface.selection.size} referencias seleccionadas") + measures).joinToString(" · ")
 }

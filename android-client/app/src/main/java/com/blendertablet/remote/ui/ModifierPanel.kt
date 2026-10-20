@@ -415,7 +415,7 @@ internal fun parseModifierScalar(text: String, spec: ModifierParameterDescriptor
 }
 
 internal fun formatEditableModifierValue(value: Double): String =
-    BigDecimal.valueOf(value).round(MathContext(7)).stripTrailingZeros().toPlainString()
+    formatToolDistance(value, MaxDecimals)
 
 /** Fila con una opción elegible: etiqueta a la izquierda, valor pulsable a la derecha. */
 @Composable
@@ -479,7 +479,7 @@ private fun List<Double>.stepped(axis: Int, delta: Double, spec: ModifierParamet
 
 internal fun formatModifierValue(value: Double, isInt: Boolean, step: Double?): String {
     if (isInt) return value.roundToInt().toString()
-    val decimals = BigDecimal.valueOf(step ?: 0.1).stripTrailingZeros().scale().coerceIn(0, 8)
+    val decimals = BigDecimal.valueOf(step ?: 0.1).stripTrailingZeros().scale().coerceIn(0, MaxDecimals)
     return BigDecimal.valueOf(value)
         .setScale(decimals, RoundingMode.HALF_UP)
         .stripTrailingZeros()

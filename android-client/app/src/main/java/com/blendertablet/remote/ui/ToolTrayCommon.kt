@@ -40,7 +40,7 @@ fun ToolNumericInput(
     }
     var base by remember { mutableStateOf(shown) }
     val text = if (integer) kotlin.math.round(display).toLong().toString()
-        else formatToolDistance(display, detailDecimalPlaces(display, 3))
+        else formatToolDistance(display, 2)
     HoverHelp(label.ifBlank { "Valor" }, numberHelp(neutral != null)) {
         ScrubNumber(
             onScrubStart = { base = read() ?: shown },

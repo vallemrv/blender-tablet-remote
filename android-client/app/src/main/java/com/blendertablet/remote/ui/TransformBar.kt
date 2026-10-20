@@ -214,7 +214,7 @@ private fun MoveStepInput(
     hasReference: Boolean,
     onChange: (Double, TransformStepUnit) -> Unit,
 ) {
-    var text by remember(value) { mutableStateOf(format(value, 3)) }
+    var text by remember(value) { mutableStateOf(format(value)) }
     var expanded by remember { mutableStateOf(false) }
     fun commit(raw: String = text) {
         NumericExpression.evaluate(raw, value)?.takeIf { it > 0.0 }?.let { onChange(it, unit) }
@@ -289,10 +289,10 @@ private fun TransformAxisInputs(
         }
         var editing by remember(session.sessionId, axis) { mutableStateOf(false) }
         var text by remember(session.sessionId, axis, if (session.mode == TransformMode.SCALE) scaleUnit else null) {
-            mutableStateOf(format(displayed, 4))
+            mutableStateOf(format(displayed))
         }
         LaunchedEffect(displayed, editing) {
-            if (!editing) text = format(displayed, 4)
+            if (!editing) text = format(displayed)
         }
         fun send(value: Double) {
             if (session.mode == TransformMode.SCALE && value == 0.0 && onFlatten != null) {
@@ -386,7 +386,7 @@ internal fun ProportionalRadiusInput(
             send(next)
         }) { field ->
             CompactNumericField(
-                value = text ?: formatToolDistance(displayed, 3),
+                value = text ?: formatToolDistance(displayed, MaxDecimals),
                 onValueChange = { text = it },
                 placeholder = unit.short,
                 textAlign = TextAlign.End,
@@ -507,9 +507,4 @@ private fun StepPicker(mode: TransformMode, index: Int, onStep: (Int) -> Unit) {
     }
 }
 
-private fun format(value: Double, decimals: Int): String {
-    val factor = if (decimals == 1) 10.0 else 1000.0
-    val rounded = (value * factor).roundToInt() / factor
-    if (abs(rounded) < 1e-9) return "0"
-    return if (decimals == 1) "%.1f".format(rounded) else rounded.toString()
-}
+private fun format(value: Double): String = formatToolDistance(value, MaxDecimals)

@@ -140,7 +140,7 @@ private fun PropertyControl(field: ObjectPropertyField, value: Any?, draft: Bool
         "number" -> {
             val text = if (draft) value as? String ?: "" else (value as? Number)?.let {
                 val shown = objectPropertyDisplay(it, field, unit)
-                formatToolDistance(shown, if (field.unit == "count") 0 else detailDecimalPlaces(shown, 4))
+                formatToolDistance(shown, if (field.unit == "count") 0 else 2)
             }.orEmpty()
             val step = when (field.unit) {
                 "length" -> stepMeters / unit.transformStepUnit().meters

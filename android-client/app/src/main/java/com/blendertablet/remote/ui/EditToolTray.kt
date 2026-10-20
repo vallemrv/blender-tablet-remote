@@ -287,7 +287,7 @@ private fun PositionStepper(session: ToolSession, onParameter: (String, Any?) ->
     HoverHelp("Posición desde el centro", "0 % es el centro. Escribe un porcentaje o una distancia, por ejemplo 5mm. " +
         "Desliza para moverlo de 1 % en 1 % · mantén pulsado para volver al centro.") {
         ScrubNumber(onScrubStart = { base = read() ?: shown }, onScrub = { send(base + it * .01) }, onReset = { send(0.0) }) { field ->
-            CompactNumericField(value = draft ?: "${formatToolDistance(shown * 100, 3)} %",
+            CompactNumericField(value = draft ?: "${formatToolDistance(shown * 100, MaxDecimals)} %",
                 onValueChange = { draft = it }, onDone = { read()?.let(::send) },
                 modifier = field.width(128.dp), fontSize = 16.sp, selectAllOnFocus = true,
                 textAlign = TextAlign.End, caption = "Posición")

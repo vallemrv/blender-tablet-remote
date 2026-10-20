@@ -83,17 +83,16 @@ fun SnapStepControl(
 val DistanceSnapSteps = listOf("1mm" to .001, "1cm" to .01, "10cm" to .1, "1m" to 1.0)
 val FactorSnapSteps = listOf("1%" to .01, "5%" to .05, "10%" to .1, "25%" to .25)
 
-/** Redondeo de presentación; los valores de edición y envío conservan su precisión. */
-internal fun formatToolDistance(value: Double, decimals: Int?): String {
-    val number = value.toBigDecimal()
-    return (decimals?.let { number.setScale(it, java.math.RoundingMode.HALF_UP) } ?: number)
-        .stripTrailingZeros().toPlainString()
-}
+/** Todo número de la app se muestra con dos decimales como máximo, redondeados. */
+internal const val MaxDecimals = 2
 
-/** Fine distances must remain visible instead of rounding a real movement to zero. */
-internal fun detailDecimalPlaces(value: Double, normal: Int?): Int? =
-    if (normal == null || value == 0.0 || abs(value) >= Math.pow(10.0, -normal.toDouble())) normal
-    else maxOf(normal, 1 - kotlin.math.floor(kotlin.math.log10(abs(value))).toInt())
+/** Redondeo de presentación a [MaxDecimals] o menos; sin ceros sobrantes ni «-0». */
+internal fun formatToolDistance(value: Double, decimals: Int?): String {
+    if (!value.isFinite()) return value.toString()
+    val scale = (decimals ?: MaxDecimals).coerceIn(0, MaxDecimals)
+    val text = value.toBigDecimal().setScale(scale, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
+    return if (text.toBigDecimal().signum() == 0) "0" else text
+}
 
 /** Cantidad libre y unidad métrica; el consumidor recibe el paso en unidades Blender. */
 @Composable
@@ -101,7 +100,6 @@ internal fun DistanceSnapStepInput(
     step: Double,
     unitScaleLength: Double,
     defaultUnit: LengthUnit,
-    millimeterDecimals: Int? = null,
     onUnitChange: ((LengthUnit) -> Unit)? = null,
     onChange: (Double) -> Unit,
 ) {
@@ -140,7 +138,7 @@ internal fun DistanceSnapStepInput(
     PillButton("−", repeatOnHold = true) { adjustStep(-1.0) }
     CompactNumericField(
         value = text ?: formatToolDistance(displayed,
-            detailDecimalPlaces(displayed, if (unit == TransformStepUnit.MM) millimeterDecimals else null)),
+            2),
         onValueChange = { text = it }, modifier = Modifier.width(84.dp),
         textAlign = TextAlign.End, placeholder = "Cantidad", onDone = { commit() },
     )
@@ -204,8 +202,7 @@ internal fun ScaleUnitPicker(unit: TransformStepUnit, onSelect: (TransformStepUn
     }
 }
 
-private fun formatScaleStep(value: Double): String =
-    value.toBigDecimal().stripTrailingZeros().toPlainString()
+private fun formatScaleStep(value: Double): String = formatToolDistance(value, MaxDecimals)
 
 /** CAD is already in metres; the surrounding tray owns its shared display unit. */
 @Composable
@@ -216,5 +213,5 @@ internal fun CadSnapStepInput(
     onChange: (Double) -> Unit,
 ) {
     DistanceSnapStepInput(step = step, unitScaleLength = 1.0, defaultUnit = unit,
-        millimeterDecimals = 2, onUnitChange = onUnitChange, onChange = onChange)
+        onUnitChange = onUnitChange, onChange = onChange)
 }

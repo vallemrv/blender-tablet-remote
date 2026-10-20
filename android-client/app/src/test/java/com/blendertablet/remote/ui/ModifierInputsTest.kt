@@ -68,9 +68,9 @@ class ModifierInputsTest {
         assertNull(parseModifierScalar("1.1", profile, 1.0))
     }
 
-    @Test fun editableDisplayDoesNotRoundSmallWidthsToZeroOrToTheStepper() {
-        assertEquals("0.000012345", formatEditableModifierValue(.000012345))
-        assertEquals("2.34567", formatEditableModifierValue(2.345670022))
+    @Test fun editableDisplayShowsTwoRoundedDecimalsAtMost() {
+        assertEquals("0", formatEditableModifierValue(.000012345))
+        assertEquals("2.35", formatEditableModifierValue(2.345670022))
         assertEquals("0.1", formatEditableModifierValue(.10000000149))
     }
 

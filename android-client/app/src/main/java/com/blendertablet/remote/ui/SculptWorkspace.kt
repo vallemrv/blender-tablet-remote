@@ -39,8 +39,7 @@ fun BoxScope.SculptWorkspace(state: AppUiState, vm: MainViewModel, onTrayHeight:
     val metresPerFraction = sculpt.radiusMeters?.takeIf { sculpt.radius > 0f }?.let { it / sculpt.radius }
     fun radiusText(fraction: Double): String = metresPerFraction?.let { perFraction ->
         val value = moveValueForDisplay(perFraction * fraction, unit.transformStepUnit(), 1.0)
-        val decimals = (2 - kotlin.math.floor(kotlin.math.log10(value.coerceAtLeast(1e-12))).toInt()).coerceIn(2, 12)
-        formatToolDistance(value, decimals)
+        formatToolDistance(value, MaxDecimals)
     } ?: formatToolDistance(fraction * 100, 1)
     fun radiusFromText(text: String, fraction: Double): Double? {
         val number = com.blendertablet.remote.model.NumericExpression.evaluate(text,
